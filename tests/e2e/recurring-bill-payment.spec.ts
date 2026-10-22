@@ -20,7 +20,7 @@ const messages: Record<string, string> = JSON.parse(fs.readFileSync('lib/i18n/me
 const sources = Object.fromEntries([
   'components/finance/bill-payment-modal.tsx', 'components/ui/modal.tsx',
   'components/ui/input.tsx', 'components/ui/button.tsx', 'components/ui/toast.tsx', 'lib/hooks/use-media-query.ts',
-  'lib/a11y/use-dialog-behavior.ts', 'lib/finance/hub.ts',
+  'lib/a11y/use-dialog-behavior.ts', 'lib/finance/hub.ts', 'lib/finance/budget-periods.ts',
   'lib/finance/bill-schedule.ts', 'lib/finance/recurring.ts', 'lib/finance/bills.ts', 'lib/supabase/errors.ts',
   // The shared bills reader loads the actual counted reader and its closed graph.
   'lib/calendar/occurrences.ts', 'lib/calendar/recurrence.ts', 'lib/calendar/day.ts',

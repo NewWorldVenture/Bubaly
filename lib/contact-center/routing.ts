@@ -90,9 +90,10 @@ export function routeInbound(intent: InboundIntent): RouteAction {
 export function shouldPlanInbound(intent: string): boolean {
   return intent === 'appointment' || intent === 'delivery' || intent === 'personal'
     // School and sports mail is household work by definition — a form to sign,
-    // a fee to pay, a practice that moved. It reaches the planner on the same
-    // terms as the rest: a filed request, gated, with anything risky waiting
-    // for a parent. Nothing here executes.
+    // a fee to pay, a practice that moved. It is plannable on the same terms
+    // as the rest. Plannable is not planned: `routeInboundToPlanner` plans only
+    // a message from a member it can prove sent it, under that member's own
+    // authority; anyone else's stays in the inbox for a person to hand over.
     || intent === 'school' || intent === 'sports';
 }
 

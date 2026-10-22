@@ -224,7 +224,14 @@ begin
   perform pg_temp.sweep_expect(F, 'parent edits the W-2', pg_temp.sweep_try(uP, format('update public.tax_documents set note = ''checked'' where id = %L', taxFam)), 'ok');
   perform pg_temp.sweep_expect(F, 'parent adds a tax document', pg_temp.sweep_try(uP, format('insert into public.tax_documents (family_id, tax_year, name) values (%L, 2025, ''1098'')', fam)), 'ok');
   perform pg_temp.sweep_expect(F, 'parent deletes a tax document', pg_temp.sweep_try(uP, format('delete from public.tax_documents where id = %L', taxFam)), 'ok');
-  perform pg_temp.sweep_expect(F, 'child reads a document about them', pg_temp.sweep_count(uK, format('select count(*) from public.tax_documents where id = %L', taxK)), 'some');
+  -- The held 0508 makes tax documents a manager's (the owner's decision on
+  -- PROD-002), so where it is installed a child reads none, their own included.
+  if exists (select 1 from pg_policies p where p.schemaname = 'public' and p.tablename = 'tax_documents'
+               and p.policyname = 'Managers read tax_documents') then
+    perform pg_temp.sweep_expect(F, 'child reads no document, not even one about them (0508)', pg_temp.sweep_count(uK, format('select count(*) from public.tax_documents where id = %L', taxK)), 'zero');
+  else
+    perform pg_temp.sweep_expect(F, 'child reads a document about them', pg_temp.sweep_count(uK, format('select count(*) from public.tax_documents where id = %L', taxK)), 'some');
+  end if;
 
   -- ── chore_disputes (medium) ──────────────────────────────────────────────
   F := 'chore_disputes (medium)';

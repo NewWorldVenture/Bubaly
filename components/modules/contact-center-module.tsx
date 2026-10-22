@@ -41,9 +41,11 @@ const SMS_REPLY_COPY = {
   failed: ['contactSmsReply.failed', 'contactSmsReply.failedDetail'],
 } as const;
 
-export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, suggestedLocal, twilioReady, canManage }: {
+export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, suggestedLocal, twilioReady, canManage, canFile = false }: {
   channel: Channel; messages: InboxRow[]; suggestedLocal: string; twilioReady: boolean; canManage: boolean;
   smsReplyStatuses?: Record<string, SmsReplyStatus>;
+  /** A parent or adult: the only members who may mark a message read or archive it (the action refuses anyone else). */
+  canFile?: boolean;
 }) {
   const tr = useTranslations();
   // One time-ago, and it follows the reader. The ladder this replaced ended in a
@@ -86,7 +88,7 @@ export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, 
       {err && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{err}</p>}
 
       {/* Identity cards */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Email */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-3 flex items-center gap-2"><Mail className="h-4 w-4 text-brand-text" /><h2 className="text-sm font-bold">{t('contactCenter.familyEmailAddress')}</h2></div>
@@ -133,7 +135,7 @@ export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, 
               <input
                 value={areaCode} onChange={(e) => setAreaCode(e.target.value.replace(/\D/g, '').slice(0, 3))}
                 placeholder={t('contactCenter.areaCode')} inputMode="numeric" aria-label={t('contactCenter.preferredAreaCode')}
-                className="h-9 w-28 rounded-lg border border-border bg-bg px-3 text-sm outline-none" />
+                className="h-9 w-28 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
               <button
                 type="button" disabled={pending}
                 onClick={() => run(() => provisionNumberAction(areaCode))}
@@ -224,7 +226,7 @@ export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, 
                           <p className="mt-1">{t(replyCopy[1])}</p>
                         </div>
                       )}
-                      {!outbound && (
+                      {!outbound && canFile && (
                         <div className="mt-2 flex items-center gap-3">
                           {m.status !== 'read' && (
                             <button type="button" disabled={pending} onClick={() => run(() => setMessageStatusAction(m.id, 'read'))}

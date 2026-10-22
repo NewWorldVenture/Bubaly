@@ -251,7 +251,7 @@ export function MomentsView({ departures, departuresFailed = false, savedTicks, 
               {group.label}
               <span className="rounded-full bg-elevated px-1.5 text-[11px] font-semibold text-muted">{group.items.length}</span>
             </h2>
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {group.items.map(({ event, prep }) => {
             const CatIcon = CAT_ICON[prep.category];
             const doneIds = done[event.id] ?? [];

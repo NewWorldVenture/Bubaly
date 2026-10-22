@@ -54,7 +54,10 @@ describe('page snapshots use actual family-scoped records', () => {
     db.seed('calendar_events', Array.from({ length: 10 }, (_, i) => ({ id: `event-${i}`, family_id: 'ours', title: 'Class', starts_at: '2026-09-09T17:00:00Z', ends_at: '2026-09-09T18:00:00Z', all_day: false })));
     db.seed('calendar_events', [{ id: 'foreign', family_id: 'theirs', title: 'Private', starts_at: '2026-09-09T17:00:00Z', all_day: false }]);
     db.seed('todo_items', [{ id: 'todo', family_id: 'ours', title: 'Form', is_done: false, due_date: '2026-09-08' }]);
-    db.seed('grocery_items', [{ id: 'milk', family_id: 'ours', is_checked: false }, { id: 'foreign', family_id: 'theirs', is_checked: false }]);
+    // `list_id` is NOT NULL (0002), and only lists the family has not archived
+    // are counted (tests/an-archived-shopping-list-is-not-counted.test.ts).
+    db.seed('grocery_lists', [{ id: 'list', family_id: 'ours', is_archived: false, archived_at: null }, { id: 'their-list', family_id: 'theirs', is_archived: false, archived_at: null }]);
+    db.seed('grocery_items', [{ id: 'milk', family_id: 'ours', list_id: 'list', is_checked: false }, { id: 'foreign', family_id: 'theirs', list_id: 'their-list', is_checked: false }]);
     expect(snapshot(await Home())).toEqual({ eventsToday: 10, overdueTasks: 1, openGrocery: 1, birthdaysSoon: 1 });
   });
 

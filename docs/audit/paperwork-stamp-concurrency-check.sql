@@ -22,6 +22,14 @@ declare
   up  uuid := 'f0327000-0000-4000-8000-00000000c001';
   uk  uuid := 'f0327000-0000-4000-8000-00000000c002';
   item uuid := 'f0327000-0000-4000-8000-0000000000a1';
+  kid_item uuid := 'f0327000-0000-4000-8000-0000000000a2';
+  -- The held 0514 keeps a member's paperwork read to what they added. Read from
+  -- its policy, by name and exact predicate, so this holds on either schema.
+  held_0514 boolean := exists (
+    select 1 from pg_policy
+     where polrelid = 'public.paperwork_items'::regclass and polcmd = 'r' and polpermissive
+       and polname = 'Household money is read by a parent or adult'
+       and pg_get_expr(polqual, polrelid) = '(is_family_member(family_id) AND (can_manage_family(family_id) OR (created_by = auth.uid())))');
   seen_a jsonb; seen_b jsonb;   -- the copies two overlapping calls each read
   won boolean; n int; st text;
 begin
@@ -122,14 +130,26 @@ begin
 
   -- ── It is not a way around RLS ────────────────────────────────────────────
   -- SECURITY INVOKER, so a member of another family reaches nothing. A child of
-  -- THIS family still may stamp, because paperwork is family-wide by design and
-  -- this function must not quietly become an authorization change.
-  set local role authenticated;
-  perform set_config('request.jwt.claim.sub', uk::text, true);
+  -- THIS family still may stamp what their read admits, and this function must
+  -- not quietly become an authorization change: on the released schema that is
+  -- every item (paperwork is family-wide); under the held 0514, the items they
+  -- added, so there the parent's item stamps nothing and the child's own does.
   update public.paperwork_items set status = 'needs_action',
     actions = jsonb_build_array(jsonb_build_object('kind','sign','label','Sign','materialized_as',null,'materialized_id',null))
     where id = item;
-  if public.paperwork_stamp_action(item, 0, 'reminder', 'reminder-10') is not true then
+  insert into public.paperwork_items (id, family_id, title, kind, status, created_by, actions)
+    values (kid_item, fam, 'Club sign-up', 'permission_slip', 'needs_action', uk,
+            jsonb_build_array(jsonb_build_object('kind','sign','label','Sign','materialized_as',null,'materialized_id',null)));
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', uk::text, true);
+  if public.paperwork_stamp_action(kid_item, 0, 'reminder', 'reminder-10') is not true then
+    raise exception '0415: a member of the family can no longer stamp their own paperwork — the function changed who may write';
+  end if;
+  if held_0514 then
+    if public.paperwork_stamp_action(item, 0, 'reminder', 'reminder-11') is not false then
+      raise exception '0415: the held 0514 is installed, yet a child stamped a parent''s paperwork they cannot read';
+    end if;
+  elsif public.paperwork_stamp_action(item, 0, 'reminder', 'reminder-11') is not true then
     raise exception '0415: a member of the family can no longer stamp — the function changed who may write';
   end if;
   reset role;

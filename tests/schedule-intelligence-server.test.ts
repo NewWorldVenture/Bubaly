@@ -10,13 +10,25 @@ import { loadScheduleIntelligence } from '@/lib/schedule/intelligence-server';
 
 type Reply = { data: unknown; error: unknown };
 
-/** Every builder method returns the chain; awaiting it (or `Promise.all`) resolves the reply. */
+/**
+ * Every builder method returns the chain; awaiting it (or `Promise.all`)
+ * resolves the reply. Calendar events are read through the shared occurrence
+ * reader (series expanded), which pages with `or`/`neq`/`range` and asks for
+ * `count=exact`: a counted read answers with the number of rows it lists, as
+ * PostgREST does.
+ */
 function queryChain(reply: Reply, record: (method: string, args: unknown[]) => void) {
   const chain: Record<string, unknown> = {};
-  for (const method of ['select', 'eq', 'in', 'is', 'not', 'gt', 'gte', 'lt', 'lte', 'order', 'limit']) {
-    chain[method] = (...args: unknown[]) => { record(method, args); return chain; };
+  let counted = false;
+  for (const method of ['select', 'eq', 'neq', 'in', 'is', 'not', 'or', 'gt', 'gte', 'lt', 'lte', 'order', 'limit', 'range']) {
+    chain[method] = (...args: unknown[]) => {
+      record(method, args);
+      if (method === 'select' && (args[1] as { count?: string } | undefined)?.count === 'exact') counted = true;
+      return chain;
+    };
   }
-  chain.then = (resolve: (v: Reply) => unknown, reject?: (e: unknown) => unknown) => Promise.resolve(reply).then(resolve, reject);
+  chain.then = (resolve: (v: Reply & { count?: number }) => unknown, reject?: (e: unknown) => unknown) =>
+    Promise.resolve(counted && !reply.error ? { ...reply, count: Array.isArray(reply.data) ? reply.data.length : 0 } : reply).then(resolve, reject);
   return chain;
 }
 

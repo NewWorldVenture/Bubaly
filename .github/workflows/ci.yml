@@ -12,7 +12,39 @@ concurrency:
 
 jobs:
   quality:
+    # Keep the existing required status while independent jobs run concurrently.
     name: Typecheck · Lint · Test · Build
+    runs-on: ubuntu-latest
+    needs: [checks, unit, build]
+    if: ${{ always() }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Keep CI and local verification on the same declared Node release.
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Require every quality dependency to succeed
+        env:
+          CI_DEPENDENCIES: ${{ toJSON(needs) }}
+        run: |
+          node <<'NODE'
+          const results = JSON.parse(process.env.CI_DEPENDENCIES || '{}');
+          const required = ['checks', 'unit', 'build'];
+          if (Object.keys(results).sort().join(',') !== [...required].sort().join(',')) {
+            throw new Error('Missing or unexpected quality dependency');
+          }
+          for (const name of required) {
+            if (results[name]?.result !== 'success') {
+              throw new Error('Quality dependency did not succeed: ' + name);
+            }
+          }
+          NODE
+
+  checks:
+    name: Audits · Lint · i18n
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -61,39 +93,49 @@ jobs:
       - name: i18n gate (declared surfaces carry no hardcoded copy)
         run: npm run i18n:gate
 
+  unit:
+    name: Unit tests (${{ matrix.timezone }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        timezone:
+          - UTC
+          - America/Los_Angeles
+          - Asia/Tokyo
+    env:
+      TZ: ${{ matrix.timezone }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Keep CI and local verification on the same declared Node release.
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Each child runs the entire unchanged suite. Los Angeles preserves
+      # the DST boundary; Tokyo preserves the opposite calendar-offset sign.
       - name: Unit tests
         run: npm test
 
-      # The same suite on a DST-OBSERVING host. lib/capture/parse.ts does its
-      # date arithmetic on Date fields, and a Date built from LOCAL fields is
-      # normalised by the runtime's own DST rules: on the spring-forward morning
-      # a 02:30 appointment became 03:30 instead of moving to 03:00, the first
-      # minute that exists. Production runs UTC, so the whole suite passed on
-      # every run while the bridge was host-dependent — this job is the only
-      # thing that would have caught it, and is what keeps it caught.
-      - name: Unit tests (DST-observing host)
-        run: npm test
-        env:
-          TZ: America/Los_Angeles
+  build:
+    name: Build · Generated route typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-      # The same suite EAST of Greenwich. The two runs above are at and west of
-      # it, and that is not a stylistic gap — it is a blind spot with a sign.
-      # A module that builds a Date from LOCAL parts and reads the day back out
-      # with `toISOString().slice(0, 10)` re-expresses that moment at Greenwich,
-      # so the calendar day walks FORWARDS west of it and BACKWARDS east of it.
-      # Los Angeles catches the forward half. Nothing caught the backward half,
-      # and a full run at TZ=Asia/Tokyo failed 15 tests across 8 files that are
-      # green in both runs above: a budget period starting 31 May instead of
-      # 1 June, a marketplace return reported overdue on the day it was due, a
-      # trip exported to a calendar on the wrong days.
-      #
-      # Asia/Tokyo deliberately, not a DST zone: it is UTC+9 all year, so a
-      # failure here is unambiguously about the sign of the offset rather than
-      # about a transition. America/Los_Angeles above still carries the DST half.
-      - name: Unit tests (east of Greenwich)
-        run: npm test
-        env:
-          TZ: Asia/Tokyo
+      # Keep CI and local verification on the same declared Node release.
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
 
       # Build BEFORE Typecheck, deliberately. next.config.mjs turns off the
       # type-check and lint passes inside `next build` — they were a duplicate
@@ -307,11 +349,17 @@ jobs:
     # run the mobile-invariant + horizontal-overflow + public-route specs, so every
     # PR is gated on: no horizontal overflow and no sub-16px inputs at real device
     # viewports. (WebKit-native runs are opt-in via PW_WEBKIT=1 where installed.)
-    name: E2E (public · a11y · authenticated · mobile device matrix)
+    name: E2E shard (${{ matrix.shard }}/${{ matrix.shardTotal }})
     runs-on: ubuntu-latest
     # Slow isolated-stack/browser setup plus a full smoke run exceeded 35 minutes.
     # Leave time for the complete suite and cleanup without changing test limits.
     timeout-minutes: 60
+    # Each hosted runner owns its complete disposable stack and cleanup.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+        shardTotal: [4]
     steps:
       - uses: actions/checkout@v4
 
@@ -405,6 +453,9 @@ jobs:
 
       - name: Start isolated Supabase
         run: supabase start
+        env:
+          # Override the repository migration hold only for this owned local stack.
+          SUPABASE_DB_MIGRATIONS_ENABLED: 'true'
 
       - name: Capture immutable owned bill stack identities
         run: node scripts/ci-recurring-bill-anchor-fixture.mjs
@@ -465,7 +516,7 @@ jobs:
         run: npm run marketing:verify:assets:remote
 
       - name: Run E2E smoke tests
-        run: npm run test:e2e
+        run: npm run test:e2e -- --shard=${{ matrix.shard }}/${{ matrix.shardTotal }}
         env:
           # run-e2e.mjs runs `next build` first — same heap need as the Build step.
           NODE_OPTIONS: --max-old-space-size=4096
@@ -484,7 +535,7 @@ jobs:
           ANTHROPIC_API_KEY: ''
           OPENAI_API_KEY: ''
           NEXT_PUBLIC_SITE_URL: http://localhost:3107
-          E2E_AUTH_EMAIL: bubaly-e2e-${{ github.run_id }}-${{ github.run_attempt }}@example.test
+          E2E_AUTH_EMAIL: bubaly-e2e-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.shard }}@example.test
           E2E_AUTH_PASSWORD: Bubaly-E2E-2026!
           # tests/e2e/concierge.spec.ts drives "Plan our week" through the real
           # request → plan → run path with the scripted model
@@ -535,7 +586,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-failure-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          name: e2e-failure-evidence-${{ github.run_id }}-${{ github.run_attempt }}-shard-${{ matrix.shard }}
           path: |
             test-results/**/error-context.md
             test-results/**/*.png
@@ -566,3 +617,32 @@ jobs:
         run: node scripts/ci-recurring-bill-anchor-fixture.mjs
         env:
           BUBALY_BILL_STACK_PHASE: cleanup
+
+  e2e-results:
+    # Preserve the original required E2E status; no failed/cancelled child passes.
+    name: E2E (public · a11y · authenticated · mobile device matrix)
+    runs-on: ubuntu-latest
+    needs: [e2e]
+    if: ${{ always() }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Require every E2E shard and its owned cleanup to succeed
+        env:
+          CI_DEPENDENCIES: ${{ toJSON(needs) }}
+        run: |
+          node <<'NODE'
+          const results = JSON.parse(process.env.CI_DEPENDENCIES || '{}');
+          const required = ['e2e'];
+          if (Object.keys(results).sort().join(',') !== required.join(',')) {
+            throw new Error('Missing or unexpected E2E dependency');
+          }
+          if (results.e2e?.result !== 'success') {
+            throw new Error('E2E shard or owned cleanup did not succeed');
+          }
+          NODE

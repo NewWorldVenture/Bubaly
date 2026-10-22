@@ -5,7 +5,9 @@ import { CalendarHeart, MapPin, Search, ExternalLink, Star, Clock, Navigation, S
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { settle } from '@/lib/supabase/settle';
+import { settle, settleAll } from '@/lib/supabase/settle';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { localPartsAt } from '@/lib/time/zoned';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { useConfirm } from '@/components/ui/confirm';
@@ -22,6 +24,20 @@ type Event = Tables<'weekend_events'>;
 type Plan = Tables<'weekend_plans'>;
 type SearchRow = Tables<'weekend_searches'>;
 type Feed = Tables<'weekend_feeds'>;
+
+/** The furthest a search looks ahead (the discover route's own limit), so the list holds every window the picker offers. */
+const MAX_WINDOW_DAYS = 30;
+/** Upcoming events the planner lists, soonest first; past this many the list is the soonest ones. */
+const MAX_LISTED_EVENTS = 2000;
+const GRACE_MS = 3_600_000;
+
+/** Not over yet: it starts, or ends, within the grace before `now`. An all-day event runs to its end. */
+function stillOn(e: Pick<Event, 'starts_at' | 'ends_at'>, now: number): boolean {
+  if (!e.starts_at) return false;
+  const start = new Date(e.starts_at).getTime();
+  const end = e.ends_at ? new Date(e.ends_at).getTime() : Number.NaN;
+  return Math.max(start, Number.isNaN(end) ? start : end) >= now - GRACE_MS;
+}
 
 function sourceLabel(source: string): string {
   if (source === 'ticketmaster') return 'Ticketmaster';
@@ -40,15 +56,47 @@ export function WeekendModule() {
   const clock = useFamilyClock();
   const dayKey = (iso: string) => clock.dayKeyOf(iso);
   const fmtDay = (key: string) => format.fmtDate(key, 'EEEE, MMM d');
-  const fmtTime = (iso: string | null) => (iso ? format.fmtTime(iso) : 'Time TBA');
   const t = useTranslations();
+  // An all-day event (a date with no time: midnight to midnight where the
+  // family is) says so, rather than "12:00 AM".
+  const isMidnight = (iso: string) => {
+    try { const p = localPartsAt(new Date(iso), clock.timeZone); return p.hour === 0 && p.minute === 0; } catch { return false; }
+  };
+  const allDay = (e: Pick<Event, 'starts_at' | 'ends_at'>) => !!e.starts_at && !!e.ends_at && e.ends_at > e.starts_at
+    && isMidnight(e.starts_at) && isMidnight(e.ends_at);
+  const fmtTime = (iso: string | null) => (iso ? format.fmtTime(iso) : 'Time TBA');
+  const fmtWhen = (e: Pick<Event, 'starts_at' | 'ends_at'>) => (allDay(e) ? t('firstBriefDisplay.allDay') : fmtTime(e.starts_at));
   const askConfirm = useConfirm();
   const { familyId, userId } = useApp();
-  const { success, error: toastError } = useToast();
+  const { success, error: toastError, toast } = useToast();
 
   const { data: events, loading: eventsLoading, error: eventsError, refresh: refreshEvents } = useRealtimeQuery<Event>({
     table: 'weekend_events', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('weekend_events').select('*').eq('family_id', familyId),
+    // The table only grows (every search adds up to ~200 events, and nothing
+    // prunes it), and the read was unbounded and unordered: past 1,000 rows
+    // PostgREST returned an arbitrary 1,000, the upcoming list could be empty
+    // while upcoming events existed, and a shortlisted event fell out of "Your
+    // shortlist". Now: the events not yet over within the furthest window,
+    // soonest first, paged; and every event a plan points at, wherever it is.
+    fetcher: async (sb) => {
+      const now = Date.now();
+      const lo = new Date(now - GRACE_MS).toISOString();
+      const hi = new Date(now + MAX_WINDOW_DAYS * 86_400_000).toISOString();
+      const [upcoming, planned] = await settleAll([
+        readAllAsQuery<Event>((from, to) => sb.from('weekend_events').select('*').eq('family_id', familyId)
+          .or(`starts_at.gte.${lo},ends_at.gte.${lo}`).lte('starts_at', hi)
+          .order('starts_at').order('id').range(from, to), { max: MAX_LISTED_EVENTS, failOnMax: false }),
+        // Embedded through weekend_plans.event_id → weekend_events.id (0071),
+        // a relation the generated types do not declare.
+        readAllAsQuery<{ id: string; event: Event | null }>((from, to) => sb.from('weekend_plans').select('id, event:weekend_events(*)')
+          .eq('family_id', familyId).order('id').range(from, to) as unknown as PromiseLike<{ data: { id: string; event: Event | null }[] | null; error: { message: string } | null }>),
+      ]);
+      if (upcoming.error) return { data: null, error: upcoming.error };
+      if (planned.error) return { data: null, error: planned.error };
+      const byId = new Map((upcoming.data ?? []).map((e) => [e.id, e]));
+      for (const plan of planned.data ?? []) if (plan.event && !byId.has(plan.event.id)) byId.set(plan.event.id, plan.event);
+      return { data: [...byId.values()], error: null };
+    },
   });
   const { data: plans, loading: plansLoading, error: plansError, refresh: refreshPlans } = useRealtimeQuery<Plan>({
     table: 'weekend_plans', familyId, deps: [familyId],
@@ -91,7 +139,7 @@ export function WeekendModule() {
     const now = Date.now();
     const horizon = now + days * 86_400_000;
     const upcoming = events
-      .filter((e) => e.starts_at && new Date(e.starts_at).getTime() >= now - 3_600_000 && new Date(e.starts_at).getTime() <= horizon)
+      .filter((e) => e.starts_at && stillOn(e, now) && new Date(e.starts_at).getTime() <= horizon)
       .sort((a, b) => (a.starts_at! < b.starts_at! ? -1 : 1));
     const m = new Map<string, Event[]>();
     for (const e of upcoming) { const k = clock.dayKeyOf(e.starts_at!); if (!m.has(k)) m.set(k, []); m.get(k)!.push(e); }
@@ -110,7 +158,19 @@ export function WeekendModule() {
       const res = await fetch('/api/weekend/discover', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ zip, radius, days }) });
       const data = await res.json();
       if (!res.ok) toastError(data.error || 'Search failed');
-      else success(data.count === 1 ? t('weekend.foundOneEventNear', { zip: data.zip }) : data.count > 0 ? t('weekend.foundEventsNear', { n: data.count, zip: data.zip }) : t('weekend.noEventsNear', { zip: data.zip, days: data.days }));
+      else {
+        success(data.count === 1 ? t('weekend.foundOneEventNear', { zip: data.zip }) : data.count > 0 ? t('weekend.foundEventsNear', { n: data.count, zip: data.zip }) : t('weekend.noEventsNear', { zip: data.zip, days: data.days }));
+        // A source that did not answer is not a weekend with nothing on: say
+        // the list may be missing what it would have found. Saved feeds left
+        // for the next search (over the per-search cap, or past its deadline)
+        // were not tried, so they are not called unreachable.
+        const failed = data.errors && typeof data.errors === 'object' ? Object.keys(data.errors) : [];
+        if (failed.some((source) => source !== 'feedsSkipped')) toastError(t('weekend.someSourcesUnreachable'));
+        if (failed.includes('feedsSkipped')) toast(t('weekend.someFeedsLeftForNextSearch'), 'info');
+      }
+      // The events it found and each saved feed's last status, without a reload:
+      // these weekend tables are not published to realtime.
+      refresh();
     } catch { toastError(t('weekendModule.networkError')); }
     setBusy(false);
   }
@@ -235,7 +295,7 @@ export function WeekendModule() {
                 <li key={plan.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-surface/60 p-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{categoryMeta(event.category).emoji} {event.title}</p>
-                    <p className="text-xs text-muted">{event.starts_at ? `${fmtDay(dayKey(event.starts_at))} · ${fmtTime(event.starts_at)}` : 'Date TBA'}{event.venue_name ? ` · ${event.venue_name}` : ''}</p>
+                    <p className="text-xs text-muted">{event.starts_at ? `${fmtDay(dayKey(event.starts_at))} · ${fmtWhen(event)}` : 'Date TBA'}{event.venue_name ? ` · ${event.venue_name}` : ''}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <select aria-label={t('fieldName.status')} value={plan.status} onChange={(e) => setStatus(event, e.target.value as WeekendPlanStatus)} className="h-8 rounded-lg border border-border bg-surface px-2 text-xs">
@@ -277,7 +337,7 @@ export function WeekendModule() {
                           <span className="rounded-full bg-elevated px-2 py-0.5 text-[10px] text-muted">{sourceLabel(e.source)}</span>
                         </div>
                         <p className="line-clamp-2 font-semibold">{e.title}</p>
-                        <p className="mt-1 text-xs text-muted">{fmtTime(e.starts_at)}{e.venue_name ? ` · ${e.venue_name}` : ''}</p>
+                        <p className="mt-1 text-xs text-muted">{fmtWhen(e)}{e.venue_name ? ` · ${e.venue_name}` : ''}</p>
                         <p className="mt-0.5 flex items-center gap-2 text-xs text-muted">
                           {e.distance_miles != null && <span className="flex items-center gap-0.5"><Navigation className="h-3 w-3" /> {e.distance_miles} mi</span>}
                           {price && <span>· {price}</span>}

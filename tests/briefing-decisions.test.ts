@@ -182,8 +182,11 @@ describe('readBriefDecisions', () => {
     if (!res.ok) return;
     const bad = res.data.items.find((i) => i.id === 'recommendation:rec-bad');
     const rel = res.data.items.find((i) => i.id === 'recommendation:rec-rel');
-    expect(bad).toMatchObject({ href: '/dashboard/needs-you' });
-    expect(rel).toMatchObject({ href: '/dashboard/needs-you' });
+    // Since N14 the recommendation mapper itself (lib/home/needs-sources.ts)
+    // refuses an off-app `cta_href`, for Home and Needs You as well as the
+    // brief, and points the card at the page that lists recommendations.
+    expect(bad).toMatchObject({ href: '/dashboard/autonomous-family-management' });
+    expect(rel).toMatchObject({ href: '/dashboard/autonomous-family-management' });
     // The well-formed rows are untouched.
     expect(res.data.items.find((i) => i.id === 'run:run-q')).toMatchObject({ href: '/dashboard/concierge/runs/run-q' });
     // And the whole list still satisfies the schema the client enforces.

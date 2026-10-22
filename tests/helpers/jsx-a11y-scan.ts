@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import ts from 'typescript';
 
 // A small JSX walker for the two accessibility properties the lint rule cannot
@@ -11,9 +11,9 @@ import ts from 'typescript';
 
 export type Site = { file: string; line: number; what: string };
 
-export function sourceFiles(): string[] {
-  return execSync("git ls-files 'app/**/*.tsx' 'components/**/*.tsx'", { encoding: 'utf8' })
-    .trim().split('\n').filter((f) => f && !f.includes('.test.'));
+export function sourceFiles(repositoryRoot: string = process.cwd()): string[] {
+  return execFileSync('git', ["ls-files","-z","app/**/*.tsx","components/**/*.tsx"], { cwd: repositoryRoot, encoding: 'utf8' })
+    .split('\0').filter(Boolean).filter((f) => f && !f.includes('.test.'));
 }
 
 function parse(file: string, text = readFileSync(file, 'utf8')) {

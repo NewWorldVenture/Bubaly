@@ -37,8 +37,9 @@ export default async function InboxPage() {
   const { locale } = await getLocaleContext();
   const ctx = await requireFeature('/dashboard/inbox');
   const supabase = await createServer();
-  // The queue's paperwork snippets carry money; they are written for this reader.
-  const queue = await loadInboxQueue(supabase, ctx.active.familyId, { locale: locale.code, t });
+  // The queue's paperwork snippets carry money; they are written for this reader,
+  // and list only the paperwork this member may read (the held 0514).
+  const queue = await loadInboxQueue(supabase, ctx.active.familyId, { locale: locale.code, t }, { role: ctx.active.role, userId: ctx.user.id });
 
   if (queue.allFailed) {
     return <ErrorState message={t('inbox.couldNotLoadTheHouseholdInbox')} />;

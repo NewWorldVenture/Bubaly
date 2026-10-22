@@ -25,6 +25,7 @@ import type { Tables, VacDocKind } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
 import { describeDbError } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
+import { isFamilyDocumentPath } from '@/lib/storage/documents';
 import { recordActivitySafely } from '../activity';
 import { dayKeyInTz, scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
@@ -172,6 +173,11 @@ export async function readDocument(scope: ServiceScope, documentId: string, inpu
   if (!data) return fail('That document could not be found.', { code: SERVICE_CODES.notFound });
   if (isSensitiveDocument(data) && !canReadSensitive(scope)) {
     return fail('That document is private to the adults in this family.', { code: SERVICE_CODES.denied });
+  }
+  // The row's family does not constrain its stored path. Runs use a service
+  // client, which can sign another family's bytes if we trust that pointer.
+  if (!isFamilyDocumentPath(scope.familyId, data.storage_path)) {
+    return fail('That document could not be found.', { code: SERVICE_CODES.notFound });
   }
 
   const ttl = Math.min(Math.max(Math.round(input.expiresInSeconds ?? DEFAULT_URL_TTL_SECONDS), 30), MAX_URL_TTL_SECONDS);

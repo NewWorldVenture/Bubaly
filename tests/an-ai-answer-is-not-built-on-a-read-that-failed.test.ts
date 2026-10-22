@@ -1,4 +1,11 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const file = dir + '/' + entry.name;
+    return entry.isDirectory() ? sourceFiles(file) : entry.isFile() ? [file] : [];
+  });
+}
+
 import { describe, expect, it } from 'vitest';
 import { at, bodyOf } from './helpers/source-order';
 
@@ -45,9 +52,14 @@ describe('the savings route does not answer "On track" from a failed read (C1-S9
     // `.limit(N)` is not a bound — PostgREST caps at db-max-rows regardless —
     // so an understated over-budget figure would still be stated as fact.
     const read = bodyOf(savings, 'const [txnsResult', ']);');
-    expect(read).toContain('readAllAsQuery');
+    // Paged on the id with a real ceiling (M11-RATCHET: a year of spending is
+    // many pages, and offsets shift when a row is written between two). The one
+    // `.limit()` left is the page size the id-paged reader asks for.
+    expect(read).toContain('readAllByIdAsQuery');
     expect(read).toContain('{ max: 20_000 }');
-    expect(read).not.toMatch(/from\('transactions'\)[\s\S]{0,200}?\.limit\(/);
+    expect(read).toContain("if (after) query = query.gt('id', after);");
+    expect(read).toContain("return query.order('id').limit(limit);");
+    expect(read.replace("return query.order('id').limit(limit);", '')).not.toMatch(/\.limit\(/);
   });
 });
 
@@ -623,8 +635,7 @@ describe('every auth.getUser() in the API denies on a null user (C1-S9-42)', () 
 });
 
 function globSyncRoutes(): string[] {
-  const { execSync } = require('node:child_process') as typeof import('node:child_process');
-  return execSync('find app/api -name route.ts', { encoding: 'utf8' }).trim().split('\n');
+  return sourceFiles('app/api').filter(file => file.endsWith('/route.ts'));
 }
 
 /**

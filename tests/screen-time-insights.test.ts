@@ -33,9 +33,9 @@ describe('totals', () => {
     expect(minutesOnDate(entries, '2026-06-24')).toBe(50);
   });
   it('minutesInWindow', () => {
-    const now = new Date('2026-06-24T12:00:00Z');
-    expect(minutesInWindow(entries, 7, now)).toBe(110);
-    expect(minutesInWindow(entries, 1, now)).toBe(50);
+    const today = '2026-06-24'; // the family's day
+    expect(minutesInWindow(entries, 7, today)).toBe(110);
+    expect(minutesInWindow(entries, 1, today)).toBe(50);
   });
 });
 
@@ -60,9 +60,9 @@ describe('limitProgress', () => {
 
 describe('underLimitStreak', () => {
   it('counts days at/under the limit ending today', () => {
-    const now = new Date('2026-06-24T12:00:00Z');
+    const today = '2026-06-24'; // the family's day
     const entries = [e('2026-06-24', 100, 'gaming'), e('2026-06-23', 90, 'gaming'), e('2026-06-22', 200, 'gaming')];
-    expect(underLimitStreak(entries, 120, now)).toBe(2); // 24 ok, 23 ok, 22 over
-    expect(underLimitStreak(entries, 0, now)).toBe(0);   // no limit
+    expect(underLimitStreak(entries, 120, today)).toBe(2); // 24 ok, 23 ok, 22 over
+    expect(underLimitStreak(entries, 0, today)).toBe(0);   // no limit
   });
 });

@@ -52,8 +52,26 @@ function callArgs(source: string, name: string): string[][] {
  * matches past the end of the first one and invents hrefs that are not there.
  */
 function pageHrefs(file: string): string[] {
-  const hrefs = callArgs(read(file), 'requireFeature').flat().filter((a) => a.startsWith('/'));
+  const hrefs = [file, ...ancestorLayouts(file)]
+    .flatMap((f) => callArgs(read(f), 'requireFeature').flat().filter((a) => a.startsWith('/')));
   return [...new Set(hrefs)];
+}
+
+/**
+ * Every layout.tsx above a page, up to app/. A layout's gate is the page's
+ * gate: /dashboard/home calls `requireFeature` in its LAYOUT and only
+ * `requirePlanLevel` in its page, so a walk of page.tsx alone never saw it, the
+ * 'home' insight went unmapped, and a Free family could POST {"kind":"home"}
+ * for a Plus answer while this test passed.
+ */
+function ancestorLayouts(file: string): string[] {
+  const out: string[] = [];
+  for (let dir = path.dirname(file); dir.startsWith('app'); dir = path.dirname(dir)) {
+    const layout = `${dir}/layout.tsx`;
+    if (existsSync(path.join(ROOT, layout))) out.push(layout);
+    if (dir === 'app') break;
+  }
+  return out;
 }
 
 function resolveImport(spec: string, from: string): string | null {
@@ -116,6 +134,10 @@ describe('the pages are readable at all', () => {
     // If a refactor breaks the walk, every assertion below would pass vacuously.
     expect(GATED_PAGES.length).toBeGreaterThan(50);
     expect(INSIGHT_KINDS.size).toBeGreaterThan(40);
+  });
+
+  it('reads a gate a page inherits from its layout', () => {
+    expect(GATED_PAGES.find((p) => p.file === 'app/(app)/dashboard/home/page.tsx')?.hrefs).toEqual(['/dashboard/home']);
   });
 });
 

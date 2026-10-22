@@ -10,6 +10,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument, DOCUMENT_MAX_BYTES, DOCUMENT_MAX_MB } from '@/lib/storage/documents';
 import { useToast } from '@/components/ui/toast';
@@ -152,7 +153,12 @@ export function DocumentsModule() {
 
   const { data, loading, error, refresh } = useRealtimeQuery<Document>({
     table: 'documents', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('documents').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
+    // Paged to the end: one select stops at db-max-rows (1,000) and says
+    // nothing, so past it the oldest files fell out of the list, the search,
+    // the folder counts and "storage used". Past the ceiling readAll answers
+    // an error, and the screen says so.
+    fetcher: (sb) => readAllAsQuery<Document>((from, to) => sb.from('documents').select('*').eq('family_id', familyId)
+      .order('created_at', { ascending: false }).order('id').range(from, to), { max: 20_000 }),
   });
 
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -331,7 +337,7 @@ export function DocumentsModule() {
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder={tr('documents.searchFiles')}
                   aria-label={tr('documents.searchFiles')}
-                  className="h-9 w-40 rounded-xl border border-border bg-surface/60 pl-9 pr-3 text-sm outline-none placeholder:text-muted focus:border-brand/50 sm:w-56"
+                  className="h-9 w-40 rounded-xl border border-border bg-surface/60 pl-9 pr-3 text-sm outline-none placeholder:text-muted focus:border-brand sm:w-56"
                 />
               </div>
             </div>
@@ -661,10 +667,10 @@ export function DocumentsModule() {
               <datalist id="folder-options">{folders.map((f) => <option key={f.name} value={f.name} />)}</datalist>
             </>
           )}</Field>
-          <Field label={tr('documents.visibility')}>{(id) => (
+          <Field label={tr('family.member')}>{(id) => (
             <Select id={id} value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))}>
-              <option value="">{tr('documents.sharedWithFamily')}</option>
-              {members.map((m) => <option key={m.id} value={m.id}>{tr('documents.private')} {m.display_name}</option>)}
+              <option value="">{tr('family.family')}</option>
+              {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </Select>
           )}</Field>
           <Field label={tr('documents.expiresOptional')} hint={tr('documentsModule.forPassportsInsuranceRegistrationsBubaly')}>{(id) => <Input id={id} type="date" value={form.expires_at} onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))} />}</Field>

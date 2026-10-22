@@ -82,15 +82,24 @@ begin
   set local role authenticated;
 
   -- 1. Cannot delete a sibling's login. This is the denial of service.
-  delete from public.child_logins where username = 'accesssib';
-  get diagnostics n = row_count;
+  --    Refused either way: filtered to 0 rows by 0297's manager policy, or,
+  --    where the held 0504 makes child_logins server-written, denied outright
+  --    (42501). Any other error is not this boundary answering.
+  begin
+    delete from public.child_logins where username = 'accesssib';
+    get diagnostics n = row_count;
+  exception when insufficient_privilege then n := 0;
+  end;
   if n <> 0 then
     raise exception 'a child deleted a sibling''s login';
   end if;
 
   -- 2. Nor rewrite one, nor mint one.
-  update public.child_logins set username = 'stolen' where username = 'accesssib';
-  get diagnostics n = row_count;
+  begin
+    update public.child_logins set username = 'stolen' where username = 'accesssib';
+    get diagnostics n = row_count;
+  exception when insufficient_privilege then n := 0;
+  end;
   if n <> 0 then
     raise exception 'a child rewrote a sibling''s login';
   end if;

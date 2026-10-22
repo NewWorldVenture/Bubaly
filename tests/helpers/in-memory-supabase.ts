@@ -49,6 +49,16 @@ export type InMemoryOptions = {
    * existing test assumes.
    */
   maxRows?: number;
+  /**
+   * How `like`/`ilike` read their pattern. Unset keeps this fake's historical
+   * reading: `%` and `_` are wildcards and every other character, a backslash
+   * included, is literal. `'postgrest'` reads it as the real transport does:
+   * PostgREST first turns EVERY `*` into `%` (its alias, escaped or not), then
+   * PostgreSQL's LIKE applies, where `\` makes the next character literal — so
+   * `escapeLike('50%')` matches "50%", and an escaped star matches a literal
+   * percent sign, not a star (lib/supabase/escape-like.ts).
+   */
+  likeSyntax?: 'postgrest';
 };
 
 /**
@@ -109,6 +119,21 @@ function jsonContains(value: unknown, wanted: unknown): boolean {
   return looseEq(value, wanted);
 }
 
+/** PostgREST's `*` alias, then PostgreSQL LIKE with `\` as its escape (InMemoryOptions.likeSyntax). */
+function postgrestLike(column: string, pattern: string, flags: string): Predicate {
+  const aliased = pattern.replace(/\*/g, '%');
+  let source = '';
+  for (let i = 0; i < aliased.length; i++) {
+    const char = aliased[i];
+    if (char === '\\' && i + 1 < aliased.length) source += aliased[++i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    else if (char === '%') source += '[\\s\\S]*';
+    else if (char === '_') source += '[\\s\\S]';
+    else source += char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+  const re = new RegExp(`^${source}$`, flags);
+  return (row) => typeof row[column] === 'string' && re.test(row[column] as string);
+}
+
 function operatorPredicate(column: string, op: string, wanted: unknown): Predicate {
   if (column.includes('->')) {
     const path = /^([a-zA-Z_]\w*)((?:->>?[a-zA-Z_]\w*)+)$/.exec(column);
@@ -142,6 +167,32 @@ function operatorPredicate(column: string, op: string, wanted: unknown): Predica
         ? wanted
         : String(wanted).replace(/^\(/, '').replace(/\)$/, '').split(',').map((v) => parseFilterValue(v.trim().replace(/^"|"$/g, '')));
       return (row) => values.some((v) => looseEq(row[column], v));
+    }
+    case 'imatch': {
+      // Only an escaped literal: anchored at both ends (CRM email lookups:
+      // equal) or at neither (searches: contains). Unsupported ARE syntax must
+      // fail rather than silently model a regex.
+      if (typeof wanted !== 'string') throw new Error('[in-memory-supabase] unsupported imatch pattern');
+      const anchored = wanted.startsWith('^') && wanted.endsWith('$') && !/(^|[^\\])(\\\\)*\\\$$/.test(wanted);
+      const body = anchored ? wanted.slice(1, -1) : wanted;
+      const specials = '.*+?^$' + '{}()|[]' + String.fromCharCode(92);
+      let literal = '';
+      for (let index = 0; index < body.length; index++) {
+        const char = body[index];
+        if (char === String.fromCharCode(92)) {
+          const escaped = body[++index];
+          if (escaped === undefined || !specials.includes(escaped)) {
+            throw new Error('[in-memory-supabase] unsupported imatch pattern');
+          }
+          literal += escaped;
+        } else {
+          if (specials.includes(char)) throw new Error('[in-memory-supabase] unsupported imatch pattern');
+          literal += char;
+        }
+      }
+      return (row) => typeof row[column] === 'string' && (anchored
+        ? (row[column] as string).toLowerCase() === literal.toLowerCase()
+        : (row[column] as string).toLowerCase().includes(literal.toLowerCase()));
     }
     case 'like':
     case 'ilike': {
@@ -223,7 +274,13 @@ function parseOr(expression: string, mode: 'or' | 'and' = 'or'): Predicate {
     const column = body.slice(0, first);
     const op = body.slice(first + 1, second);
     const raw = body.slice(second + 1);
-    const wanted = op === 'in' ? raw : parseFilterValue(raw);
+    // An array operator's value is a PostgreSQL array literal (`tags.cs.{beach}`),
+    // which PostgREST hands to the database as an array; read it as one, or
+    // `cs` would compare the whole `{beach}` string against each element.
+    const arrayLiteral = (op === 'cs' || op === 'ov') && /^\{.*\}$/.test(raw);
+    const wanted = op === 'in' ? raw
+      : arrayLiteral ? raw.slice(1, -1).split(',').map((v) => v.trim().replace(/^"|"$/g, '')).filter((v) => v !== '')
+        : parseFilterValue(raw);
     const predicate = operatorPredicate(column, op, wanted);
     return negated ? (row: Row) => !predicate(row) : predicate;
   });
@@ -351,7 +408,10 @@ class QueryBuilder implements PromiseLike<Reply> {
   in(column: string, values: unknown[]) { this.predicates.push(operatorPredicate(column, 'in', values)); return this; }
   is(column: string, value: unknown) { this.predicates.push(this.embedPredicate(column, 'is', value) ?? operatorPredicate(column, 'is', value)); return this; }
   like(column: string, pattern: string) { this.predicates.push(operatorPredicate(column, 'like', pattern)); return this; }
-  ilike(column: string, pattern: string) { this.predicates.push(operatorPredicate(column, 'ilike', pattern)); return this; }
+  ilike(column: string, pattern: string) {
+    this.predicates.push(this.db.likeSyntax === 'postgrest' ? postgrestLike(column, pattern, 'i') : operatorPredicate(column, 'ilike', pattern));
+    return this;
+  }
   contains(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'contains', value)); return this; }
   overlaps(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'overlaps', value)); return this; }
   not(column: string, op: string, value: unknown) {
@@ -505,6 +565,7 @@ export class InMemorySupabase {
 
   /** The server's per-response row ceiling, or undefined for no cap. */
   get maxRows(): number | undefined { return this.options.maxRows; }
+  get likeSyntax(): InMemoryOptions['likeSyntax'] { return this.options.likeSyntax; }
 
   from(table: string): QueryBuilder {
     this.log.push({ table });

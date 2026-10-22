@@ -18,7 +18,7 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { createNote, deleteNote, updateNote, MAX_TITLE } from '@/lib/services/notes';
+import { createNote, deleteNote, updateNote, MAX_TITLE, NOTE_CONFLICT } from '@/lib/services/notes';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { describeActionError } from '@/lib/supabase/errors';
 
@@ -41,15 +41,19 @@ async function noteScope() {
  */
 export async function saveNoteAction(
   noteId: string | null,
-  input: { title: string | null; body: string },
+  // `base` is the title and body the editor OPENED with: an edit is saved only
+  // if the note still holds them, so a partner's save in the meantime is not
+  // silently overwritten (lib/services/notes `UpdateNoteInput.base`).
+  input: { title: string | null; body: string; base?: { title: string | null; body: string } | null },
 ): Promise<NoteActionResult> {
   const t = await getTranslations();
   const scope = await noteScope();
 
   try {
     const result = noteId
-      ? await updateNote(scope, noteId, { title: input.title, body: input.body })
+      ? await updateNote(scope, noteId, { title: input.title, body: input.body, ...(input.base ? { base: input.base } : {}) })
       : await createNote(scope, { title: input.title, body: input.body });
+    if (!result.ok && result.code === NOTE_CONFLICT) return { ok: false, error: t('actions.thisNoteChangedSinceYouOpenedIt') };
     if (!result.ok) return { ok: false, error: result.error };
 
     revalidatePath(PATH);

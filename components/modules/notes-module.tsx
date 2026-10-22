@@ -157,7 +157,7 @@ export function NotesModule() {
         description={t('notesModule.sharedFamilyNotesChecklistsIdeas')}
         action={
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2">
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
               <Search className="h-3.5 w-3.5 text-muted" />
               <input value={search} onChange={(e) => setSearch(e.target.value)}
                 placeholder={t('notes.searchNotes')}
@@ -407,6 +407,10 @@ function NoteModal({ note, onClose, onSaved }: {
   const [selectedColor, setSelectedColor] = useState((note as Record<string, unknown> | null)?.color as string ?? 'default');
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [bodyValue, setBodyValue] = useState(note?.body ?? '');
+  // What the note held when this editor OPENED — captured once, so a newer copy
+  // of the note arriving while the editor is open does not quietly become the
+  // version this save is allowed to replace.
+  const [base] = useState(() => (note ? { title: note.title ?? null, body: note.body ?? '' } : null));
   const [aiLoading, setAiLoading] = useState(false);
   const [insights, setInsights] = useState<NotesInsights | null>(null);
 
@@ -450,7 +454,7 @@ function NoteModal({ note, onClose, onSaved }: {
     if (!body && !title) return toastError(t('notesModule.noteMustHaveContent'));
     setLoading(true);
     try {
-      const res = await saveNoteAction(note?.id ?? null, { title, body: body ?? '' });
+      const res = await saveNoteAction(note?.id ?? null, { title, body: body ?? '', ...(base ? { base } : {}) });
       if (!res.ok) {
         if (active.current) toastError(res.error);
         return;

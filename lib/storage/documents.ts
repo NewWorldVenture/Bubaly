@@ -21,17 +21,57 @@ export function buildFamilyPath(familyId: string, folder: string, fileName: stri
   return `${familyId}/${folder}/${Date.now()}-${sanitizeFileName(fileName)}`;
 }
 
+function hasSafeDocumentSegments(path: unknown): path is string {
+  return typeof path === 'string' &&
+    !/[\\?#%\u0000-\u001f\u007f]/.test(path) &&
+    path.split('/').every(segment => !!segment && segment !== '.' && segment !== '..');
+}
+
+/** PostgreSQL accepts braces and optional hyphens after each four hex digits. */
+function documentFamilyIdentity(value: string): string | null {
+  return /^(?:\{[0-9a-f]{4}(?:-?[0-9a-f]{4}){7}\}|[0-9a-f]{4}(?:-?[0-9a-f]{4}){7})$/i.test(value)
+    ? value.replace(/[{}-]/g, '').toLowerCase()
+    : null;
+}
+
+/**
+ * Bind a stored object name to the family whose document row was authorized.
+ * Background reads may hold a service client, so Storage RLS is not this check.
+ * UUID aliases compare by identity, but the caller must sign the ORIGINAL path:
+ * changing its spelling would request a different object. A terminal space is
+ * refused because URL parsing strips it (and can then normalize a dot segment).
+ */
+export function isFamilyDocumentPath(familyId: string, path: unknown): path is string {
+  if (!hasSafeDocumentSegments(path) || path.endsWith(' ')) return false;
+  const segments = path.split('/');
+  if (segments.length < 2) return false;
+  if (segments[0] === familyId) return true;
+  const expected = documentFamilyIdentity(familyId);
+  return expected !== null && documentFamilyIdentity(segments[0]) === expected;
+}
+
+/** A preallocated upload keeps its exact family/folder prefix, without alias normalization. */
+export function isReservedDocumentPath(familyId: string, folder: string, path: string): boolean {
+  return path.startsWith(`${familyId}/${folder}/`) && hasSafeDocumentSegments(path);
+}
+
 export async function uploadFamilyDocument(
   supabase: SupabaseBrowser,
-  { familyId, folder, file }: { familyId: string; folder: string; file: File },
+  { familyId, folder, file, reservedPath }: { familyId: string; folder: string; file: File; reservedPath?: string },
 ): Promise<{ path: string | null; error: string | null }> {
   if (file.size > MAX_BYTES) {
     return { path: null, error: 'File is too large (25 MB limit).' };
   }
-  const path = buildFamilyPath(familyId, folder, file.name);
+  // FilesHub reserves its protective documents row before bytes move. A retry
+  // may replace only that same reservation's bytes, after rechecking the row.
+  // All other callers retain their existing new-object-only upload behavior.
+  if (reservedPath !== undefined && !isReservedDocumentPath(familyId, folder, reservedPath)) {
+    return { path: null, error: 'The upload destination is invalid.' };
+  }
+  const path = reservedPath ?? buildFamilyPath(familyId, folder, file.name);
   const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
     contentType: file.type || 'application/octet-stream',
-    upsert: false,
+    upsert: reservedPath !== undefined,
   });
   if (error) return { path: null, error: describeActionError(error) };
   return { path, error: null };

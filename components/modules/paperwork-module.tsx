@@ -63,7 +63,8 @@ function parseActions(j: Json): StoredAction[] {
   return Array.isArray(j) ? (j as unknown as StoredAction[]) : [];
 }
 
-export function PaperworkModule({ items }: { items: Item[] }) {
+/** `ownOnly`: the viewer reads only the paperwork they added (the held 0514). */
+export function PaperworkModule({ items, ownOnly = false }: { items: Item[]; ownOnly?: boolean }) {
   const t = useTranslations();
   // The row's stored `summary` is an en-US record; the card re-renders it, and
   // each action's amount, for the member looking at it (I18N-003).
@@ -151,6 +152,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
             <Inbox className="h-6 w-6 text-brand-text" /> {t('paperwork.paperworkInbox')}
           </h1>
           <p className="mt-1 max-w-xl text-sm text-muted">{t('paperworkModule.pasteAnySlipFormOr')}</p>
+          {ownOnly && <p className="mt-1 max-w-xl text-xs text-muted">{t('householdMoney.onlyWhatYouAdded')}</p>}
         </div>
         <button
           ref={composerToggle}

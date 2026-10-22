@@ -131,7 +131,19 @@ export type UpdateNoteInput = {
   title?: string | null;
   body?: string;
   pinned?: boolean;
+  /**
+   * The title and body the EDITOR opened with, exactly as stored. Without it the
+   * content write below is conditional on what this function itself just read,
+   * which only guards the milliseconds between that read and the write: A opens
+   * the note, B saves, A saves, and B's words are gone with "Note saved". With
+   * it, a note that changed since the editor opened is refused as a conflict and
+   * the editor keeps its text.
+   */
+  base?: { title: string | null; body: string };
 };
+
+/** `code` on a refusal because the note changed after the editor opened it. */
+export const NOTE_CONFLICT = 'conflict';
 
 export async function updateNote(
   scope: ServiceScope,
@@ -172,6 +184,12 @@ export async function updateNote(
     return fail('A note needs something written in it.', { code: SERVICE_CODES.invalidInput });
   }
 
+  const contentEdit = patch.title !== undefined || patch.body !== undefined;
+  const base = contentEdit ? input.base : undefined;
+  if (base && (existing.data.title !== base.title || existing.data.body !== base.body)) {
+    return fail('This note changed since you opened it. Copy your text, reopen the note and add it again.', { code: NOTE_CONFLICT });
+  }
+
   // The family filter on this statement and on the delete below is
   // belt-and-braces, and NO TEST DISTINGUISHES EITHER: `noteForWrite` has
   // already read the row family-scoped and returned not-found for a foreign id,
@@ -183,13 +201,19 @@ export async function updateNote(
     .update(patch)
     .eq('id', noteId)
     .eq('family_id', scope.familyId);
-  if (patch.title !== undefined || patch.body !== undefined) {
-    if (existing.data.title === null) write.is('title', null);
-    else write.eq('title', existing.data.title);
-    write.eq('body', existing.data.body);
+  if (contentEdit) {
+    // The editor's base when it sent one (checked equal to the read above), so
+    // a change landing between that read and this write is refused as well.
+    const expected = base ?? { title: existing.data.title, body: existing.data.body };
+    if (expected.title === null) write.is('title', null);
+    else write.eq('title', expected.title);
+    write.eq('body', expected.body);
   }
   const { data, error } = await write.select('*').maybeSingle();
 
+  if (!error && !data && base) {
+    return fail('This note changed since you opened it. Copy your text, reopen the note and add it again.', { code: NOTE_CONFLICT });
+  }
   if (error || !data) {
     console.error('[service:notes] update failed', error);
     return fail(describeDbError(error, 'Could not save that note.'), { code: SERVICE_CODES.db });

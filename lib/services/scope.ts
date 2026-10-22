@@ -22,6 +22,7 @@ import type { Database } from '@/lib/database.types';
 import type { requireUserContext } from '@/lib/supabase/auth';
 import type { ServiceScope } from './types';
 import { dayKeyIn } from '@/lib/time/zoned';
+import { familyInstant } from '@/lib/time/civil';
 
 /** Fallback when a family row somehow carries no timezone (0002 defaults it to 'UTC'). */
 const DEFAULT_TZ = 'UTC';
@@ -97,6 +98,21 @@ export async function systemScopeForFamily(
     return null;
   }
   return scopeForSystem(db, data, extra);
+}
+
+/**
+ * A time a family NAMED, as the ISO instant it means on their clock — the one
+ * reading `lib/time/civil.ts` gives every zone-less value (`2026-10-16T17:00:00`,
+ * a bare `2026-10-20`, the planner's `localTime(...)`); a value with `Z` or an
+ * offset is kept as written. Null when it cannot be read.
+ *
+ * For a service that WRITES such a value into a `timestamptz` or bounds a read
+ * with it. Raw, Postgres read it in its own zone and `Date.parse` on the host's
+ * — UTC both — so "Friday 5pm" for a Los Angeles family was stored as 10am.
+ */
+export function familyInstantIso(value: string | null | undefined, tz: string): string | null {
+  const at = familyInstant(value, tz);
+  return at ? at.toISOString() : null;
 }
 
 /** The scope's clock. Tests inject `now`; production reads the real one. */
@@ -207,6 +223,13 @@ export function zonedTimeMs(dayKey: string, hour: number, minute: number, tz: st
 
 /** Start (inclusive) and end (exclusive) of a family-local day, as epoch ms. */
 export function zonedDayBoundsMs(dayKey: string, tz: string): { start: number; end: number } {
+  // Resolve the calendar readings before the legacy fallback: a midnight gap
+  // must begin on this civil day, not at the previous evening's offset.
+  const civilStart = familyInstant(dayKey, tz);
+  const civilEnd = familyInstant(addDaysToDayKey(dayKey, 1), tz);
+  if (civilStart && civilEnd && civilEnd.getTime() > civilStart.getTime()) {
+    return { start: civilStart.getTime(), end: civilEnd.getTime() };
+  }
   const start = zonedTimeMs(dayKey, 0, 0, tz);
   // Adding 24h to the previous midnight and re-resolving keeps the bound on a
   // real local midnight across the 23- and 25-hour DST days.

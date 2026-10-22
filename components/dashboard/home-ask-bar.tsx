@@ -3,13 +3,14 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sparkles, ArrowUp } from 'lucide-react';
-import { buildAssistantUrl } from '@/lib/ai/prefill';
+import { stageAssistantHandoff } from '@/lib/ai/prefill';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 /**
- * Home-screen "ask anything" bar. Routes to the AI Assistant with the question
- * as a deep link (?q=…), which the assistant auto-sends — so a family can ask
- * from the home screen without an extra hop.
+ * Home-screen "ask anything" bar. Hands the question to the AI Assistant as an
+ * in-app hand-off (lib/ai/prefill.ts), which the assistant sends on arrival —
+ * so a family can ask from the home screen without an extra hop. Not a `?q=`
+ * link: those only fill the draft box, because anyone can write one.
  */
 export function HomeAskBar() {
   const t = useTranslations();
@@ -19,13 +20,13 @@ export function HomeAskBar() {
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!q.trim()) return;
-    router.push(buildAssistantUrl(q));
+    router.push(stageAssistantHandoff(q));
   }
 
   return (
     <form
       onSubmit={submit}
-      className="flex items-center gap-2 rounded-full border border-border bg-surface/60 px-4 py-2.5 shadow-sm transition focus-within:border-brand/50 focus-within:ring-1 focus-within:ring-brand/30"
+      className="flex items-center gap-2 rounded-full border border-border bg-surface/60 px-4 py-2.5 shadow-sm transition focus-within:border-brand focus-within:ring-1 focus-within:ring-brand/30"
     >
       <Sparkles className="h-4 w-4 shrink-0 text-brand-text" />
       <input

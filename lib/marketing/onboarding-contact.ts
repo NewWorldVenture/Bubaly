@@ -1,10 +1,27 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { escapeLike } from '@/lib/supabase/escape-like';
+import { literalCaseInsensitivePattern } from '@/lib/supabase/escape-like';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
 type DB = SupabaseClient<Database>;
+
+/**
+ * Whether a family's contact is this user's own: they own it, created it, or
+ * an earlier onboarding of theirs recorded them as its subject.
+ */
+function contactBelongsTo(
+  contact: { owner_id: string | null; created_by?: string | null; notes?: string | null },
+  userId: string,
+): boolean {
+  if (contact.owner_id === userId || contact.created_by === userId) return true;
+  try {
+    const notes: unknown = contact.notes ? JSON.parse(contact.notes) : null;
+    return !!notes && typeof notes === 'object' && (notes as { onboarding_user_id?: unknown }).onboarding_user_id === userId;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Feed the marketing engine from onboarding: create — or enrich, on re-run — a
@@ -59,33 +76,48 @@ export async function upsertOnboardingContact(admin: DB, p: {
   // falls through to the INSERT, and crm_contacts has no unique key on email to
   // refuse the second row — so a failed read forked this person into two
   // contacts. Only a returned list may say "none"; anything else stops here.
-  let existingId: string | null = null;
+  let existing: { id: string; email: string | null; owner_id: string | null; family_id: string | null } | null = null;
   if (email) {
-    const { data, error } = await admin.from('crm_contacts').select('id').ilike('email', escapeLike(email)).limit(1);
+    const { data, error } = await admin.from('crm_contacts').select('id, email, owner_id, family_id').filter('email', 'imatch', literalCaseInsensitivePattern(email)).limit(1);
     if (error || !Array.isArray(data)) {
       console.error('[onboarding-contact] contact lookup by email failed', { error: error ?? 'no result list' });
       return;
     }
-    existingId = data[0]?.id ?? null;
+    existing = data[0] ?? null;
+    if (existing && (typeof existing.email !== 'string' || existing.email.trim().toLowerCase() !== email)) {
+      console.error('[onboarding-contact] contact email did not match');
+      return;
+    }
   }
-  if (!existingId && p.familyId) {
-    const { data, error } = await admin.from('crm_contacts').select('id').eq('family_id', p.familyId).limit(1);
+  // The family fallback finds only THIS caller's own contact. It used to take
+  // whichever contact the family had — the owner's, made by finalize — so a
+  // child, teen or co-parent with no contact of their own who saved the setup
+  // questionnaire rewrote the owner's CRM identity (name, email, phone, and a
+  // 'parent' role) through the service role. A family contact that belongs to
+  // someone else is left alone, and this caller gets a contact of their own.
+  if (!existing && p.familyId) {
+    const { data, error } = await admin.from('crm_contacts').select('id, email, owner_id, family_id, created_by, notes')
+      .eq('family_id', p.familyId).order('id').limit(50);
     if (error || !Array.isArray(data)) {
       console.error('[onboarding-contact] contact lookup by family failed', { familyId: p.familyId, error: error ?? 'no result list' });
       return;
     }
-    existingId = data[0]?.id ?? null;
+    existing = data.find((contact) => contactBelongsTo(contact, p.userId)) ?? null;
   }
 
   // Both results are read. This function decides who a CRM contact IS — the
   // same row the identity fix was about — so a write that did not land leaves
   // the record saying something other than what the caller just established,
   // with nothing to say so.
-  if (existingId) {
+  if (existing) {
     // "A write that did not land" includes one that matched nothing — a
     // contact deleted since the read. Audit C1-S9-67.
-    const { data: updated, error } = await admin.from('crm_contacts').update(row).eq('id', existingId).select('id');
-    if (error || wroteNoRows(updated)) console.error('[onboarding-contact] contact update failed', { contactId: existingId, error: error ?? 'no rows updated' });
+    let update = admin.from('crm_contacts').update(row).eq('id', existing.id);
+    update = existing.email == null ? update.is('email', null) : update.eq('email', existing.email);
+    update = existing.owner_id == null ? update.is('owner_id', null) : update.eq('owner_id', existing.owner_id);
+    update = existing.family_id == null ? update.is('family_id', null) : update.eq('family_id', existing.family_id);
+    const { data: updated, error } = await update.select('id');
+    if (error || wroteNoRows(updated)) console.error('[onboarding-contact] contact update failed or identity changed', { contactId: existing.id, error: error ?? 'no rows updated' });
   } else {
     const { error } = await admin.from('crm_contacts').insert({ ...row, created_by: p.userId });
     if (error) console.error('[onboarding-contact] contact insert failed', error);

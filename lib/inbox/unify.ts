@@ -137,6 +137,13 @@ export type UnifyInput = {
   paperwork?: PaperworkRow[] | null;
   communications?: CommunicationRow[] | null;
   now?: Date;
+  /**
+   * Whether the reader may file a message with Bubaly (a parent or adult). The
+   * action refuses anyone else; offering them "Handle it" only to say no was
+   * how a teen came to file a request and be told it failed. Unset keeps the
+   * button for callers that do not know the reader.
+   */
+  canFile?: boolean;
 };
 
 const SNIPPET_MAX = 160;
@@ -201,7 +208,7 @@ export function rankFor(reason: InboxReason): number {
   return REASON_RANK[reason];
 }
 
-function messageItem(row: InboxMessageRow, now: Date): UnifiedInboxItem {
+function messageItem(row: InboxMessageRow, now: Date, canFile: boolean): UnifiedInboxItem {
   const unread = row.status === 'new';
   const reason = reasonFor({ intent: row.ai_intent, unread, now });
   return {
@@ -224,7 +231,7 @@ function messageItem(row: InboxMessageRow, now: Date): UnifiedInboxItem {
     dueOn: null,
     // Outbound rows are the concierge's own replies; there is nothing to hand
     // to the planner, and an already-handled row must not be handled twice.
-    canHandle: row.direction === 'inbound' && row.ai_handled !== true,
+    canHandle: canFile && row.direction === 'inbound' && row.ai_handled !== true,
     canImportDocument: row.direction === 'inbound' && row.channel === 'email',
     href: '/dashboard/contact-center',
   };
@@ -292,7 +299,7 @@ function timeOf(iso: string): number {
 export function unifyInbox(input: UnifyInput): UnifiedInboxItem[] {
   const now = input.now ?? new Date();
   const items: UnifiedInboxItem[] = [
-    ...(input.messages ?? []).map((row) => messageItem(row, now)),
+    ...(input.messages ?? []).map((row) => messageItem(row, now, input.canFile !== false)),
     ...(input.paperwork ?? []).map((row) => paperworkItem(row, now)),
     ...(input.communications ?? []).map((row) => communicationItem(row, now)),
   ];

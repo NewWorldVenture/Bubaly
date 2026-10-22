@@ -8,13 +8,20 @@
 // this module turns it into a grounded prompt and parses the reply.
 
 import { parseModelJSON } from '@/lib/meals/nutrition';
+import { allergenConflict, applySubstitutions, parseConstraintText } from '@/lib/meals/substitutions';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 
 export interface ChefContext {
   /** Free-form user request. */
   request: string;
-  /** Household dietary constraints / allergies (e.g. "vegetarian", "no peanuts"). */
+  /** Household dietary constraints / allergies (e.g. "vegetarian", "no peanuts"), as typed into the dialog. */
   dietary?: string[];
+  /** Allergies the household has RECORDED (medical profiles, preference facts). Never served. */
+  allergies?: string[];
+  /** Diets the household has recorded ("vegetarian", "halal"). */
+  diet?: string[];
+  /** Foods someone in the household will not eat. */
+  dislikes?: string[];
   /** Weekly food budget in dollars, if set. */
   weeklyBudget?: number | null;
   /** Dish names already in the family's library (prefer these). */
@@ -79,6 +86,11 @@ export function buildChefUser(ctx: ChefContext): string {
   if (ctx.weeklyBudget != null) lines.push(`Weekly food budget: $${ctx.weeklyBudget}`);
   // Row-derived context is fenced (§44); the request, window, dietary rules and
   // budget above are what the person asking typed into this dialog.
+  // Recorded household facts are row data, so they are fenced like the rest;
+  // the rule they carry is still strict.
+  if (ctx.allergies?.length) lines.push(`Recorded household allergies (strict: never serve, never put on the grocery list): ${fenceUntrustedBlock('allergies', ctx.allergies.join(', '), 2_000)}`);
+  if (ctx.diet?.length) lines.push(`Recorded household diets (strict): ${fenceUntrustedBlock('diets', ctx.diet.join(', '), 2_000)}`);
+  if (ctx.dislikes?.length) lines.push(`Foods the family will not eat (avoid): ${fenceUntrustedBlock('dislikes', ctx.dislikes.join(', '), 2_000)}`);
   if (ctx.busyNights?.length) lines.push(`Busy evenings (keep dinner quick): ${fenceUntrustedBlock('busy_nights', ctx.busyNights.join('; '), 4_000)}`);
   if (ctx.leftovers?.length) lines.push(`Leftovers to use first: ${fenceUntrustedBlock('leftovers', ctx.leftovers.join(', '), 2_000)}`);
   if (ctx.expiringItems?.length) lines.push(`Pantry items expiring soon (use these): ${fenceUntrustedBlock('expiring_pantry', ctx.expiringItems.join(', '), 2_000)}`);
@@ -124,6 +136,22 @@ export function parseChefReply(text: string): ChefReply | null {
 
   if (meals.length === 0 && !message && groceryAdds.length === 0) return null;
   return { message: message || 'Here\'s a plan based on what your family has going on.', meals, groceryAdds, tips };
+}
+
+/**
+ * Hold a plan to the household's recorded allergies: a dish that runs into one
+ * is left out, and a grocery add is swapped for its safe stand-in or dropped
+ * (the shopping list's own rule, `applySubstitutions`). `removed` counts what
+ * the family will not see, so the reply can say something was left out.
+ */
+export function screenChefReply(reply: ChefReply, allergies: string[]): { reply: ChefReply; removed: number } {
+  const terms = (allergies ?? []).flatMap((note) => parseConstraintText(note));
+  if (terms.length === 0) return { reply, removed: 0 };
+  const meals = reply.meals.filter((meal) => !allergenConflict(meal.dish, terms));
+  const groceries = applySubstitutions(reply.groceryAdds.map((name) => ({ name })), { allergies: terms });
+  const groceryAdds = groceries.items.map((item) => item.name);
+  const dropped = groceries.substitutions.filter((swap) => swap.to === null).length;
+  return { reply: { ...reply, meals, groceryAdds }, removed: reply.meals.length - meals.length + dropped };
 }
 
 /** Sum the estimated cost of a plan in cents (ignoring meals without an estimate). */

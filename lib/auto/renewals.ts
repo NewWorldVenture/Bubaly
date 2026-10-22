@@ -7,18 +7,30 @@ export type Tone = 'danger' | 'warning' | 'success' | 'neutral' | 'brand';
 
 const DAY = 86_400_000;
 
-export function daysUntil(dateStr: string | null | undefined): number | null {
+/**
+ * Whole days from the family's today to a date-only expiry, both as day keys.
+ *
+ * `expires_on` is a DATE column: a day on the family's wall, not an instant.
+ * Parsing it as UTC midnight and comparing with `Date.now()` (rounded up)
+ * moved every badge a day for part of every day — "Expired 1d ago" on the
+ * expiry day itself from 5pm in Los Angeles, and "Renew in 0d" for a Sydney
+ * registration that expired yesterday. `todayKey` is the family's day
+ * (`todayKeyFor(ctx)` on the server, `useFamilyClock().todayKey()` in a
+ * client), and the answer is a calendar-day difference with nothing to round.
+ */
+export function daysUntil(dateStr: string | null | undefined, todayKey: string): number | null {
   if (!dateStr) return null;
-  const t = new Date(dateStr).getTime();
-  if (Number.isNaN(t)) return null;
-  return Math.ceil((t - Date.now()) / DAY);
+  const target = Date.parse(`${dateStr.slice(0, 10)}T00:00:00Z`);
+  const today = Date.parse(`${todayKey.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(target) || Number.isNaN(today)) return null;
+  return Math.round((target - today) / DAY);
 }
 
 export type RenewalStatus = { tone: Tone; label: string; daysLeft: number | null; expired: boolean };
 
-/** Status for any renewal/expiry date. ≤0 expired, ≤30d due soon, else valid. */
-export function renewalStatus(expiresOn: string | null | undefined): RenewalStatus {
-  const days = daysUntil(expiresOn);
+/** Status for any renewal/expiry date on the family's `todayKey`. <0 expired, ≤30d due soon, else valid. */
+export function renewalStatus(expiresOn: string | null | undefined, todayKey: string): RenewalStatus {
+  const days = daysUntil(expiresOn, todayKey);
   if (days === null) return { tone: 'neutral', label: 'No date', daysLeft: null, expired: false };
   if (days < 0) return { tone: 'danger', label: `Expired ${Math.abs(days)}d ago`, daysLeft: days, expired: true };
   if (days <= 30) return { tone: 'warning', label: `Renew in ${days}d`, daysLeft: days, expired: false };
@@ -60,13 +72,15 @@ const KIND_HREF: Record<RenewalKind, string> = {
 };
 
 /** Build one chronological list of everything that needs renewing, soonest first.
- *  `subjectFor` resolves a vehicle/holder name for each source row. */
+ *  `subjectFor` resolves a vehicle/holder name for each source row; `todayKey`
+ *  is the family's day the statuses are counted from. */
 export function buildRenewals(sources: {
   licenses: { id: string; holder_name: string; expires_on: string | null }[];
   registrations: { id: string; vehicle_id: string | null; expires_on: string | null }[];
   inspections: { id: string; vehicle_id: string | null; expires_on: string | null; inspection_type: string }[];
   policies: { id: string; provider: string | null; vehicle_id: string | null; expires_on: string | null }[];
   vehicleName: (id: string | null) => string | null;
+  todayKey: string;
 }): RenewalItem[] {
   const items: RenewalItem[] = [];
   const push = (kind: RenewalKind, id: string, expiresOn: string | null, subject: string | null, extra?: string) => {
@@ -74,7 +88,7 @@ export function buildRenewals(sources: {
     items.push({
       kind, id, expiresOn, subject,
       label: extra ? `${KIND_LABEL[kind]} · ${extra}` : KIND_LABEL[kind],
-      status: renewalStatus(expiresOn),
+      status: renewalStatus(expiresOn, sources.todayKey),
       href: KIND_HREF[kind],
     });
   };

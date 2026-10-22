@@ -11,9 +11,11 @@
 -- surface and not only a record.
 --
 -- What a member may still do is asserted alongside what they may not: a child
--- still READS the family's medications, and still marks a dose taken or skipped
--- — `medication_doses` is deliberately left member-writable, because the person
--- taking the medicine is the one who records it.
+-- still READS the family's medications (under the held 0511, the owner's
+-- decision, only the ones prescribed to them: the parent's saved with no member
+-- is a manager's or a caregiver's), and still marks their own dose taken or
+-- skipped — `medication_doses` is deliberately left member-writable, because
+-- the person taking the medicine is the one who records it.
 grant usage on schema public to authenticated;
 -- No blanket `grant ... on all tables in schema public` here. The bootstrap's
 -- `alter default privileges` already gives `authenticated` full DML on every
@@ -30,6 +32,10 @@ declare
   child_mid  uuid;
   med_id     uuid;
   sched_id   uuid;
+  kid_med    uuid;
+  kid_sched  uuid;
+  narrowed   boolean := exists (select 1 from pg_policy where polrelid = 'public.medications'::regclass
+                                  and polname = 'A medication is read by a manager, its member or a caregiver');
   blocked    boolean;
   n          int;
 begin
@@ -57,6 +63,11 @@ begin
   returning id into med_id;
   insert into public.medication_schedules (family_id, medication_id, time_of_day)
   values (fam, med_id, '08:00') returning id into sched_id;
+  -- And one prescribed to the child, as the page saves it with "For" set.
+  insert into public.medications (family_id, member_id, name, dosage, is_active, created_by)
+  values (fam, child_mid, 'Cetirizine', '5mg', true, parent_uid) returning id into kid_med;
+  insert into public.medication_schedules (family_id, medication_id, time_of_day)
+  values (fam, kid_med, '19:00') returning id into kid_sched;
 
   update public.medications set dosage = '75mg' where id = med_id;
   get diagnostics n = row_count;
@@ -101,17 +112,21 @@ begin
     raise exception 'a child inserted a medication';
   end if;
 
-  -- 5. READS are unchanged.
+  -- 5. READS: the family's medications, or under the held 0511 the child's own.
   select count(*) into n from public.medications where family_id = fam;
-  if n <> 1 then
+  if n <> (case when narrowed then 1 else 2 end) then
     raise exception 'a child can no longer see the family medications (%)', n;
+  end if;
+  select count(*) into n from public.medications where id = kid_med;
+  if n <> 1 then
+    raise exception 'a child can no longer see the medication prescribed to them (%)', n;
   end if;
 
   -- 6. And a member still records a dose. Manager-only here would break
   --    adherence tracking: the person taking the medicine is the one who marks
   --    it, and the module's buttons are rendered for everyone.
   insert into public.medication_doses (family_id, medication_id, schedule_id, member_id, scheduled_for, status, logged_by)
-  values (fam, med_id, sched_id, child_mid, now(), 'taken', child_uid);
+  values (fam, kid_med, kid_sched, child_mid, now(), 'taken', child_uid);
   get diagnostics n = row_count;
   if n <> 1 then
     raise exception 'a member can no longer record a dose (%)', n;
@@ -132,5 +147,5 @@ begin
     raise exception '% stray permissive write policy(ies) on the prescription tables', n;
   end if;
 
-  raise notice 'OK prescriptions: a child cannot write or delete a medication or its schedule, still reads them, and still records a dose';
+  raise notice 'OK prescriptions: a child cannot write or delete a medication or its schedule, still reads them (under the held 0511, the ones prescribed to them), and still records their own dose';
 end $$;

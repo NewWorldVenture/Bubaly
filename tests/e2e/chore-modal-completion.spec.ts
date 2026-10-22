@@ -37,11 +37,11 @@ async function fixture(page:Page,strict=false){
   window.addEventListener('error',e=>p.errors.push(e.message));window.addEventListener('unhandledrejection',e=>{p.errors.push(String(e.reason));e.preventDefault();});
   const tables:Record<string,any[]>={chore_assignments:[],chores:[],rewards:[]};
   const member={id:'member-A',user_id:'user-A',family_id:'family-A',display_name:'Alex',role:'parent',color:null};
-  const from=(table:string)=>{const filters:any[]=[];return {select(){return this;},eq(k:string,v:any){filters.push([k,v]);return this;},in(){return this;},order(){return this;},then(resolve:any,reject:any){p.reads.push({table});return Promise.resolve({data:structuredClone(tables[table]??[]).filter((r:any)=>filters.every(([k,v])=>r[k]===v)),error:null}).then(resolve,reject);}};};
+  const from=(table:string)=>{const filters:any[]=[];let after:any=null,max=Infinity;return {select(){return this;},eq(k:string,v:any){filters.push([k,v]);return this;},gt(_k:string,v:any){after=v;return this;},in(){return this;},order(){return this;},limit(n:number){max=n;return this;},then(resolve:any,reject:any){p.reads.push({table});return Promise.resolve({data:structuredClone(tables[table]??[]).filter((r:any)=>filters.every(([k,v])=>r[k]===v)&&(after===null||r.id>after)).slice(0,max),error:null}).then(resolve,reject);}};};
   const db={from,channel:()=>({on(){return this;},subscribe(){return this;}}),removeChannel:async()=>{}};
   const tr=(key:string,vars:Record<string,unknown>={})=>Object.entries(vars).reduce((s,[k,v])=>s.split('{'+k+'}').join(String(v)),messages[key]||key);
   const fail=()=>{throw Error('Unrelated action must remain inert');};
-  const bridge={createChoreAction:(input:any)=>{p.calls.push(structuredClone(input));return new Promise((resolve,reject)=>p.pending.push({resolve,reject}));},setChoreStatusAction:fail,deleteChoreAssignmentAction:fail};
+  const bridge={createChoreAction:(input:any)=>{p.calls.push(structuredClone(input));return new Promise((resolve,reject)=>p.pending.push({resolve,reject}));},setChoreStatusAction:fail,deleteChoreAssignmentAction:fail,rejectChoreAssignmentAction:fail};
   p.settle=(outcome:string)=>{const pending=p.pending.shift();if(!pending)throw Error('No pending chore save');if(outcome==='transport')pending.reject(Error('Synthetic chore response unavailable'));else pending.resolve(outcome==='refuse'?{ok:false,error:'Synthetic chore refused'}:outcome==='already_saved'?{ok:false,code:'already_saved',error:'Synthetic earlier chore already saved'}:{ok:true});};
   const clock={todayKey:()=> '2026-10-02',dayStart:()=>new Date('2026-10-02T00:00:00Z'),dayKeyOf:()=> '2026-10-02',timeZone:'UTC'};
   const format={fmtDate:()=> 'Synthetic date',fmtTime:()=> 'Synthetic time'};

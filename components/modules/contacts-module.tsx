@@ -12,6 +12,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { isValidEmail, isValidPhone } from '@/lib/utils/validation';
 import { contactPayload } from '@/lib/contacts/payload';
@@ -69,6 +70,9 @@ function avatarStyle(name: string) {
   return AVATAR_COLORS[idx];
 }
 
+/** More contacts than a household keeps; a read past it is a failed read, never a silent prefix. */
+const CONTACTS_MAX = 20_000;
+
 export function ContactsModule() {
   const t = useTranslations();
   const format = useFormat();
@@ -82,12 +86,19 @@ export function ContactsModule() {
   const [editing, setEditing] = useState<Contact | null>(null);
   const [addOpen, setAddOpen] = useState(false);
 
+  // Read whole, a page at a time. One unbounded select stopped at PostgREST's
+  // db-max-rows (1,000) without a word — and a single phone or vCard import
+  // can bring in 2,000 — so the contacts past it were missing from the list,
+  // the "All (N)" count, the category tabs and search, which then said "No
+  // contacts found" for someone the family has. Past the ceiling the read
+  // fails and the screen says so, rather than showing a prefix as the book.
   const { data: contacts, loading, error, refresh } = useRealtimeQuery<Contact>({
     table: 'family_contacts', familyId, deps: [familyId],
-    fetcher: (sb) =>
+    fetcher: (sb) => readAllAsQuery<Contact>((from, to) =>
       sb.from('family_contacts').select('*').eq('family_id', familyId)
         .order('is_emergency', { ascending: false })
-        .order('name', { ascending: true }),
+        .order('name', { ascending: true })
+        .order('id').range(from, to), { max: CONTACTS_MAX }),
   });
 
   const filtered = useMemo(() => {
@@ -137,7 +148,7 @@ export function ContactsModule() {
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="contacts" iconOnly />
-            <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2">
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
               <Search className="h-4 w-4 text-muted" />
               <input value={search} onChange={(e) => setSearch(e.target.value)}
                 placeholder={t('contacts.searchContacts')}
@@ -528,7 +539,7 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
           <Field label={t('contacts.birthdayMonth')}>
             {(id) => (
               <select id={id} name="birthday_month" defaultValue={contact?.birthday_month ?? ''}
-                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
+                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand focus:outline-none">
                 <option value="">{t('contacts.month')}</option>
                 {months.map((month, i) => (
                   <option key={i} value={i + 1}>{month}</option>

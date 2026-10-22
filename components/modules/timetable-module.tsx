@@ -14,6 +14,7 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
+import { mayAskInsight } from '@/lib/ai/insights';
 import { cn } from '@/lib/utils/cn';
 import {
   buildWeekGrid, weekParity, WEEKDAYS, WEEKDAY_LABELS,
@@ -47,7 +48,10 @@ const blankForm = {
 export function TimetableModule() {
   const t = useTranslations();
   const askConfirm = useConfirm();
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, role } = useApp();
+  // The route refuses a guest the timetable summary (INSIGHT_READ_DOMAINS), so
+  // the button is not offered to one.
+  const canAskInsight = mayAskInsight('timetable', role);
   const { success, error: toastError } = useToast();
 
   // weekParity reads UTC fields, so it is handed the FAMILY's day as UTC
@@ -137,13 +141,13 @@ export function TimetableModule() {
       <PageHeader
         title={t('timetable.timetable')}
         description={t('timetableModule.aVisualMonFriClass')}
-        action={<div className="flex items-center gap-2"><AiInsight kind="timetable" iconOnly /><Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('timetable.addClass')}</Button></div>}
+        action={<div className="flex items-center gap-2">{canAskInsight && <AiInsight kind="timetable" iconOnly />}<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('timetable.addClass')}</Button></div>}
       />
 
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 mb-5">
         {/* Member filter */}
-        <Select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} aria-label={t('timetable.student')} className="h-9 w-auto">
+        <Select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} aria-label={t('timetable.student')} className="h-9 w-auto min-w-0 max-w-full">
           <option value="all">{t('timetable.allStudents')}</option>
           {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
         </Select>

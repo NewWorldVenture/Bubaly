@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
-import { settleAll } from '@/lib/supabase/settle';
+import { settle, settleAll } from '@/lib/supabase/settle';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -20,7 +20,7 @@ import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
-import { MANAGER_ROLES, assignableMemberRoles, canRemoveMember, type MemberRole } from '@/lib/constants/roles';
+import { MANAGER_ROLES, assignableMemberRoles, canRemoveMember, rolesForAKidLogin, type MemberRole } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
 import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat, type FamilyClock, useFamilyCalendarToday } from '@/components/i18n/use-format';
@@ -29,7 +29,7 @@ import { isValidTimezone } from '@/lib/time/zoned';
 import { localDayKey } from '@/lib/time/local-day';
 import { ageOn, nextBirthday } from '@/lib/utils/birthday';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
-import { removeFamilyMemberAction } from '@/app/(app)/family/member-actions';
+import { removeFamilyMemberAction, updateFamilyMemberAction } from '@/app/(app)/family/member-actions';
 
 type Family = Tables<'families'>;
 type Member = Tables<'family_members'>;
@@ -312,7 +312,7 @@ export function FamilyModule() {
         </div>
 
         {/* Family Calendar + Highlights */}
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-semibold">{t('family.familyCalendar')}</h2>
@@ -490,6 +490,9 @@ export function FamilyModule() {
               // scheduled clears it (the retention sweep that would is held):
               // said, like the login that stayed live.
               else if (!res.locationForgotten) toastError(t('familyModule.removedButLocationStillVisible'));
+              // And a pending invite to them that could not be revoked would
+              // let them straight back in.
+              else if (!res.invitesRevoked) toastError(t('familyModule.removedButInviteStillOpen'));
               else success(t('familyModule.memberRemoved'));
               void refreshMembers();
             }}>{t('family.remove')}</Button>
@@ -535,8 +538,21 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
 }) {
   const t = useTranslations();
   const { role: actorRole } = useApp();
+  // A member who signs in with a kid PIN is never offered parent or adult (the
+  // held 0512 refuses it): the PIN login is removed in Kid Logins first.
+  const [hasKidLogin, setHasKidLogin] = useState(false);
+  useEffect(() => {
+    if (!member) return;
+    let live = true;
+    // Unread, the editor offers what it would without a kid login; the
+    // database still refuses the promotion (0512) and says why.
+    void settle(createClient().from('child_logins').select('id').eq('member_id', member.id).eq('family_id', familyId).limit(1))
+      .then(({ data }) => { if (live) setHasKidLogin((data ?? []).length > 0); });
+    return () => { live = false; };
+  }, [member, familyId]);
   // An adult may not grant `parent` or change a parent's role (F: adult -> parent self-promotion).
-  const roleOptions = assignableMemberRoles(actorRole, member?.role ?? null);
+  const assignable = assignableMemberRoles(actorRole, member?.role ?? null);
+  const roleOptions = hasKidLogin ? rolesForAKidLogin(assignable, member?.role ?? null) : assignable;
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState(member?.display_name ?? '');
@@ -550,24 +566,35 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
     if (!name.trim()) return;
     if (!roleOptions.includes(mrole)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     setSaving(true);
-    const sb = createClient();
     const payload = {
       display_name: name.trim(), role: mrole,
       birthday: birthday || null, email: email.trim() || null, phone: phone.trim() || null,
     };
-    // Same manager gate as the removal above: an UPDATE the policy filters comes
-    // back `error: null` with nothing changed. The INSERT needs no readback —
-    // RLS refuses an insert with an error rather than filtering it away.
-    const { data: savedRows, error: err } = member
-      ? await sb.from('family_members').update(payload).eq('id', member.id).eq('family_id', familyId).select('id')
-      : await sb.from('family_members').insert({
-          ...payload, family_id: familyId, is_active: true,
-          color: MEMBER_COLORS[Math.floor(Math.random() * MEMBER_COLORS.length)],
-        }).select('id');
+    if (member) {
+      // An edit goes through the server action Settings uses too: it refuses
+      // a member another manager removed (this list may be stale), writes only
+      // the columns that changed while the row is still the one opened here,
+      // and decides the roles a kid login may hold itself.
+      const res = await updateFamilyMemberAction({ memberId: member.id, expectedUpdatedAt: member.updated_at ?? null, changes: payload })
+        .catch(() => null);
+      setSaving(false);
+      if (!res) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+      if (!res.ok) { toastError(res.error); return; }
+      success(t('familyModule.memberUpdated'));
+      onSaved();
+      return;
+    }
+    const sb = createClient();
+    // The INSERT needs no readback for refusal — RLS refuses an insert with an
+    // error rather than filtering it away — and reads its row back anyway.
+    const { data: savedRows, error: err } = await sb.from('family_members').insert({
+      ...payload, family_id: familyId, is_active: true,
+      color: MEMBER_COLORS[Math.floor(Math.random() * MEMBER_COLORS.length)],
+    }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(savedRows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
-    success(member ? t('familyModule.memberUpdated') : t('familyModule.memberAdded'));
+    success(t('familyModule.memberAdded'));
     onSaved();
   }
 
@@ -575,7 +602,7 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
     <Modal open title={member ? t('dialogTitle.editMember') : t('dialogTitle.addMember')} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
         <Field label={t('family.name')} required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('family.eGEllaParker')} required />}</Field>
-        <Field label={t('family.role')}>{(id) => (
+        <Field label={t('family.role')} hint={hasKidLogin ? t('familyModule.aKidLoginCannotBeAManager', { name: member?.display_name ?? '' }) : undefined}>{(id) => (
           <Select id={id} value={mrole} onChange={(e) => setMrole(e.target.value as MemberRole)}>
             {roleOptions.map((r) => <option key={r} value={r}>{t(ROLE_LABEL_KEY[r])}</option>)}
           </Select>

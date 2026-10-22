@@ -11,9 +11,11 @@ import { buildConciergeDigest, digestToPromptLines, type ConciergeSnapshot } fro
 import { formatConciergeDigest } from '@/lib/concierge/digest-display';
 import { buildBrief, type BriefNotice } from '@/lib/briefing/build';
 import { listUnread } from '@/lib/services/notifications';
+import { isManager } from '@/lib/constants/roles';
 import { readBriefDecisions } from '@/lib/briefing/decisions';
 import { medicationsDueOn, weekdayOf, type MedicationScheduleRow } from '@/lib/briefing/sources';
 import { viewerFor } from '@/lib/ai/context/policy';
+import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
 import { countHandledThisWeek } from '@/lib/metric/time-saved-server';
 import type { AiActivityRow, CompletedRunRow } from '@/lib/home/today';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -26,6 +28,7 @@ import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
 import { qualifyBriefEvents, briefEventIsOccupied } from '@/lib/onboarding/first-brief';
 import { readDisplayCalendarOccurrences, type CalendarDisplayOccurrence } from '@/lib/calendar/display-occurrences';
 import { projectCalendarDay, projectCalendarWindow } from '@/lib/calendar/consumer-spans';
+import { openGroceryListIds } from '@/lib/services/groceries';
 
 function normalizeBriefTimezone(candidate: string): string {
   try {
@@ -116,19 +119,19 @@ export async function POST(req: NextRequest) {
       { data: members },
       todayEventsResult,
       tomorrowEventsResult,
-      { data: choresDue },
+      { data: choresDue, error: choresError },
       { data: schoolEvents },
       { data: sportsEvents },
-      { data: groceryItems },
+      groceryResult,
       { data: reminders },
       { data: mealPlans },
       { data: appointments },
-      { data: bills },
-      { data: medSchedules },
-      { data: maintenance },
-      { data: warranties },
-      { data: trips },
-      { data: pantry },
+      { data: bills, error: billsError },
+      { data: medSchedules, error: medsError },
+      { data: maintenance, error: maintenanceError },
+      { data: warranties, error: warrantiesError },
+      { data: trips, error: tripsError },
+      { data: pantry, error: pantryError },
       { data: completedRuns },
       { data: agentActivity },
     ] = await settleAll([
@@ -140,8 +143,20 @@ export async function POST(req: NextRequest) {
       supabase.from('chore_assignments').select('status, due_at, member_id').eq('family_id', familyId).in('status', ['todo', 'in_progress']).lte('due_at', todayEnd),
       supabase.from('school_events').select('title, starts_at, event_type, notes, member_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', weekEnd).order('starts_at').limit(10),
       supabase.from('sports_events').select('title, starts_at, sport, team, location, member_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', weekEnd).order('starts_at').limit(10),
-      supabase.from('grocery_items').select('name, category').eq('family_id', familyId).eq('is_checked', false).limit(15),
-      supabase.from('reminders').select('title, notes, remind_at').eq('family_id', familyId).eq('is_done', false).lte('remind_at', weekEnd).order('remind_at').limit(8),
+      // Only items on a list the family has not archived (openGroceryListIds).
+      (async () => {
+        const lists = await openGroceryListIds(supabase, familyId);
+        if (!lists.ok) return { data: null, error: lists.error };
+        return supabase.from('grocery_items').select('name, category').eq('family_id', familyId).in('list_id', lists.ids).eq('is_checked', false).limit(15);
+      })(),
+      // A reminder an Autopilot card made goes into this reader's brief only if
+      // the card would (lib/autopilot/reminder-cards.ts): "Renew Passport" is
+      // not a guest's, a policy's renewal is the managers' and its member's.
+      readVisibleReminders((from, to) => supabase.from('reminders').select('id, title, notes, remind_at, related_type, related_id')
+        .eq('family_id', familyId).eq('is_done', false).lte('remind_at', weekEnd).order('remind_at').order('id').range(from, to),
+      { limit: 8, viewer: { role: ctx.active.role, memberId: ctx.active.member?.id ?? null }, cards: reminderCardsReader(supabase, familyId, {
+        onError: (error) => console.error('[briefing] autopilot reminder cards read failed', error),
+      }) }),
       supabase.from('meal_plans').select('plan_date, meal_type, meals(name)').eq('family_id', familyId).gte('plan_date', today).lte('plan_date', weekEndKey).order('plan_date').limit(14),
       supabase.from('appointments').select('title, starts_at, provider, location, member_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', weekEnd).order('starts_at').limit(6),
       // ── Cross-domain concierge signals (previously invisible to the briefing) ──
@@ -153,7 +168,8 @@ export async function POST(req: NextRequest) {
         : withheld<MedicationScheduleRow>(),
       // On an open repeating task, completed_at records the last completion.
       supabase.from('maintenance_tasks').select('title, due_at, status, completed_at').eq('family_id', familyId).in('status', ['todo', 'in_progress']).not('due_at', 'is', null).lte('due_at', `${horizon}T23:59:59.999Z`).order('due_at').limit(20),
-      supabase.from('home_warranties').select('name, expires_on').eq('family_id', familyId).not('expires_on', 'is', null).lte('expires_on', horizon).order('expires_on').limit(20),
+      // A deleted warranty is soft-deleted (`deleted_at`), like on every other reader of this table.
+      supabase.from('home_warranties').select('name, expires_on').eq('family_id', familyId).is('deleted_at', null).not('expires_on', 'is', null).lte('expires_on', horizon).order('expires_on').limit(20),
       supabase.from('vacations').select('title, destination, start_date, end_date, status').eq('family_id', familyId).not('status', 'in', '("completed","cancelled")').not('start_date', 'is', null).limit(20),
       supabase.from('pantry_items').select('name, expires_at').eq('family_id', familyId).not('expires_at', 'is', null).lte('expires_at', horizon).order('expires_at').limit(25),
       // What Bubaly actually finished. Not for the prompt — for the answer:
@@ -172,6 +188,26 @@ export async function POST(req: NextRequest) {
       console.error('[api/ai/briefing] calendar read failed', { today: todayEventsResult.error, upcoming: tomorrowEventsResult.error });
       return NextResponse.json({ error: tr('briefing.failedToGenerateBriefing') }, { status: 503 });
     }
+    // The same for groceries: a list the brief could not read is unavailable,
+    // not "None" still needed. A returned error and a rejected read (settled
+    // above) both arrive here, before any model is asked.
+    if (groceryResult.error) {
+      console.error('[api/ai/briefing] grocery read failed', groceryResult.error);
+      return NextResponse.json({ error: tr('briefing.failedToGenerateBriefing') }, { status: 503 });
+    }
+    // And for the chores and the concierge digest the brief states as facts:
+    // a failed read became "CHORES DUE TODAY (0)" and a digest with nothing in
+    // it ("You're all caught up"), at 200. The cron's delivery
+    // (lib/briefing/deliver.ts) already fails closed on every digest read.
+    const householdReadError = choresError ?? billsError ?? medsError ?? maintenanceError ?? warrantiesError ?? tripsError ?? pantryError;
+    if (householdReadError) {
+      console.error('[api/ai/briefing] household read failed', {
+        chores: Boolean(choresError), bills: Boolean(billsError), medications: Boolean(medsError), maintenance: Boolean(maintenanceError),
+        warranties: Boolean(warrantiesError), trips: Boolean(tripsError), pantry: Boolean(pantryError), error: householdReadError,
+      });
+      return NextResponse.json({ error: tr('briefing.failedToGenerateBriefing') }, { status: 503 });
+    }
+    const groceryItems = groceryResult.data;
     const todayEvents = projectCalendarDay(todayEventsResult.data??[],today,tz);
     const tomorrowBounds=briefingCalendarBounds(today,tz,1,7);
     const tomorrowEvents = projectCalendarWindow(tomorrowEventsResult.data??[],tomorrowBounds.allDayFromDay,tomorrowBounds.allDayToDay,tz).slice(0,8);
@@ -507,11 +543,17 @@ ${UNTRUSTED_CONTENT_RULE}
     // response shows — marking the whole unread queue read here would silently
     // swallow notices the family never saw.
     if (brief.alsoToday.length > 0) {
+      // Only the reader's own rows, unless they manage the family. A legacy
+      // family-wide row (user_id NULL) has ONE is_read for everyone, so a
+      // child or guest opening the brief marked it read for every parent too;
+      // the generator writes one row per member now, and what is left of the
+      // shared ones is a manager's to clear.
+      const own = isManager(ctx.active.role) ? `user_id.eq.${ctx.user.id},user_id.is.null` : `user_id.eq.${ctx.user.id}`;
       // Rows deliberately not checked — reason below. Audit C1-S9-62.
       const { error: markError } = await supabase
         .from('notifications')
         .update({ is_read: true })
-        .eq('family_id', familyId)
+        .eq('family_id', familyId).or(own)
         .in('id', brief.alsoToday.map(item => item.id));
       // A brief that showed the notices is still a correct brief; failing to
       // mark them read only means they appear again tomorrow. Deliberately NOT

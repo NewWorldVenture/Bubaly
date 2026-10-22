@@ -32,11 +32,17 @@ import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import type { Format } from '@/lib/utils/format';
 import { categoryLabel } from '@/lib/finance/category-label';
+import { budgetByCategory, monthlyBudgetShare, periodWindow } from '@/lib/finance/budget-periods';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { todayInZone } from '@/lib/schedule/zoned';
 
 type Account = Tables<'financial_accounts'>;
 type Txn = Tables<'transactions'>;
+/** The columns every month figure below is summed from. */
+type MonthTxn = Pick<Txn, 'id' | 'type' | 'amount' | 'category' | 'member_id' | 'date'>;
+/** A real ceiling: a month past it is a failed read, never a smaller total. */
+const MONTH_TXN_MAX = 50_000;
 type Budget = Tables<'budgets'>;
 type Bill = Tables<'bills'>;
 type Goal = Tables<'savings_goals'>;
@@ -108,10 +114,32 @@ export function FinancesModule() {
     table: 'financial_accounts', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('financial_accounts').select('*').eq('family_id', familyId).order('created_at'),
   });
+  // The FAMILY's month (TIME-003), both ends.
+  const thisMonth = periodWindow('monthly', clock.todayKey());
+  // The LIST: the newest transactions, as Recent shows them. Nothing is summed from it.
   const { data: txns, loading: lt, error: txnsError, refresh: refreshTxns } = useRealtimeQuery<Txn>({
     table: 'transactions', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('transactions').select('*').eq('family_id', familyId).order('date', { ascending: false }).limit(500),
   });
+  // The FIGURES: every transaction dated in the family's month, read whole.
+  // They were summed from the list above, the newest 500 by date, where next
+  // month's scheduled rows come first: past 500, "Expenses · this month", the
+  // net, the donut and the budget bar added up part of the month, and the
+  // manage view of the same page said otherwise. Bounded at both ends, so next
+  // month's rent recorded today is not this month's, and paged on the id, so a
+  // row written between pages is not counted twice. Past the ceiling the read
+  // fails and the screen shows its error, not a smaller total.
+  const { data: monthTxns, loading: lm, error: monthTxnsError, refresh: refreshMonthTxns } = useRealtimeQuery<MonthTxn>({
+    table: 'transactions', familyId, deps: [familyId, thisMonth.from, thisMonth.to],
+    fetcher: (sb) => readAllByIdAsQuery<MonthTxn>((after, limit) => {
+      let query = sb.from('transactions').select('id, type, amount, category, member_id, date')
+        .eq('family_id', familyId).gte('date', thisMonth.from).lte('date', thisMonth.to);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: MONTH_TXN_MAX }),
+  });
+  // A saved transaction changes both: the list and the figures.
+  const refreshTransactions = () => { void refreshTxns(); void refreshMonthTxns(); };
   const { data: budgets, loading: lb, error: budgetsError, refresh: refreshBudgets } = useRealtimeQuery<Budget>({
     table: 'budgets', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('budgets').select('*').eq('family_id', familyId),
@@ -127,13 +155,12 @@ export function FinancesModule() {
 
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  // The FAMILY's month (TIME-003).
-  const monthStartStr = `${clock.todayKey().slice(0, 7)}-01`;
-
-  const monthTxns = useMemo(() => txns.filter((t) => t.date >= monthStartStr), [txns, monthStartStr]);
   const income = useMemo(() => monthTxns.filter((t) => t.type === 'income').reduce((s, t) => s + num(t.amount), 0), [monthTxns]);
   const expenses = useMemo(() => monthTxns.filter((t) => t.type === 'expense').reduce((s, t) => s + num(t.amount), 0), [monthTxns]);
-  const totalBalance = useMemo(() => accounts.reduce((s, a) => s + num(a.balance), 0), [accounts]);
+  // A credit account's balance is money OWED: it lowers the total, as on Family
+  // CFO. Added as positive cash, one account raised this page's total and
+  // lowered the CFO's.
+  const totalBalance = useMemo(() => accounts.reduce((s, a) => s + (a.type === 'credit' ? -num(a.balance) : num(a.balance)), 0), [accounts]);
   const savingsBalance = useMemo(() => {
     const sav = accounts.filter((a) => a.type === 'savings').reduce((s, a) => s + num(a.balance), 0);
     return sav > 0 ? sav : goals.reduce((s, g) => s + num(g.current_amount), 0);
@@ -159,7 +186,18 @@ export function FinancesModule() {
       return `${color} ${start}% ${end}%`;
     }).join(', ');
   }, [spendByCat]);
-  const budgetTotal = useMemo(() => budgets.reduce((s, b) => s + num(b.amount), 0), [budgets]);
+  // This month's budget: each limit as its monthly share. The raw sum of
+  // weekly, monthly and yearly limits set against a month of spending made one
+  // yearly budget enough to read an overspent month as "On track". One budget
+  // per category, the one the finance service edits (budgetByCategory: the
+  // oldest row), as the manage view, Family CFO and budgetVsActual count them:
+  // a legacy duplicate's limit added to the month's budget, and an overspent
+  // month read as on track beside the manage view's "over".
+  const budgetTotal = useMemo(
+    () => [...budgetByCategory(budgets.map((b) => ({ ...b, amount: num(b.amount) }))).values()]
+      .reduce((s, b) => s + monthlyBudgetShare(b.amount, b.period), 0),
+    [budgets],
+  );
   const budgetPct = budgetTotal > 0 ? Math.round((expenses / budgetTotal) * 100) : 0;
 
   const recent = txns.slice(0, 8);
@@ -187,10 +225,10 @@ export function FinancesModule() {
     return tr('financesModule.tipBiggestCategory', { category: categoryLabel(tr, top.category), amount: usd(top.total) });
   }, [spendByCat, usd, tr]);
 
-  const readError = accountsError || txnsError || budgetsError || billsError || goalsError;
-  const loading = la || lt || lb || lbi || lg || (billsStale && !readError);
+  const readError = accountsError || txnsError || monthTxnsError || budgetsError || billsError || goalsError;
+  const loading = la || lt || lm || lb || lbi || lg || (billsStale && !readError);
   if (loading) return <SkeletonList count={6} />;
-  if (readError) return <ErrorState message={tr('financesModule.couldNotLoadFinancialData')} onRetry={() => { void refreshAccounts(); void refreshTxns(); void refreshBudgets(); void refreshBills(); void refreshGoals(); }} />;
+  if (readError) return <ErrorState message={tr('financesModule.couldNotLoadFinancialData')} onRetry={() => { void refreshMonthTxns(); void refreshAccounts(); void refreshTxns(); void refreshBudgets(); void refreshBills(); void refreshGoals(); }} />;
 
   const STATS = [
     { label: tr('financesModule.stat.totalBalance'), value: usd(totalBalance), sub: tr('financesModule.amountThisMonth', { amount: usd(Math.abs(netThisMonth)) }), up: netThisMonth >= 0, icon: Wallet, tint: 'bg-brand text-brand-fg' },
@@ -502,7 +540,7 @@ export function FinancesModule() {
 
       {addOpen && (
         <AddTransactionModal familyId={familyId} userId={userId} selfId={selfId} accounts={accounts} members={members}
-          onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); void refreshTxns(); success(tr('financesModule.transactionAdded')); }}
+          onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); refreshTransactions(); success(tr('financesModule.transactionAdded')); }}
           onError={toastError} />
       )}
       {linkOpen && (

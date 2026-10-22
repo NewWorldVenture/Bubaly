@@ -121,13 +121,16 @@ function runRow(): Record<string, unknown> {
   return rows[0];
 }
 
+/** The plan as planAcceptedAction files it with the ask: what the approval and the queued run are about. */
+const FILED_PLAN = { title: 'Saturday swim meet', description: 'Drive + snacks', location: 'Aquatic centre', planned_for: '2026-09-12' };
+
 /** An approval the inbox will close on a single yes. */
 function seedQueuedRun(): void {
   store.seed('approval_requests', [{
     id: APPROVAL, family_id: FAMILY, domain: 'scheduling', capability: 'automate',
     requested_by_kind: 'ai', requested_by_member_id: null, agent: 'Concierge',
     title: 'Materialize: Saturday swim meet', summary: null,
-    payload: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'] },
+    payload: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'], plan: FILED_PLAN },
     payload_kind: 'concierge_plan', amount_cents: null, confidence: 0.9, policy_id: null,
     reasoning: 'risk tier', approval_model: 'single', required_approvals: 1, approvals: [],
     status: 'pending', priority: 'normal', decided_by: null, decided_at: null,
@@ -135,11 +138,15 @@ function seedQueuedRun(): void {
     request_id: null, run_id: null, plan_step_id: null, plan_step_ids: [],
     consequences: [], evidence: null, edited_payload: null, reviewed_by: null, review_note: null,
   }]);
+  // The trust engine's own filing line (evaluateTrust, written by the service
+  // role only, 0260): the proof that Bubaly filed this row, without which a
+  // concierge plan approval runs nothing (lib/services/approvals `filedByBubaly`).
+  store.seed('trust_audit_logs', [{ family_id: FAMILY, actor_kind: 'ai_agent', actor_id: 'concierge', approval_id: APPROVAL, decision: 'require_approval' }]);
   store.seed('family_automation_runs', [{
     id: RUN, family_id: FAMILY, trigger_type: 'plan_accepted', status: 'pending',
     state: 'awaiting_approval', requested_by_member_id: MUM,
     summary: 'Waiting for approval: Materialize: Saturday swim meet', result: {},
-    metadata: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'], approval_id: APPROVAL },
+    metadata: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'], approval_id: APPROVAL, plan: FILED_PLAN },
     created_by: 'auth-mum', created_at: new Date().toISOString(), completed_at: null,
   }]);
 }
@@ -150,7 +157,7 @@ function seedUngatedQueuedRun(): void {
     id: RUN, family_id: FAMILY, trigger_type: 'plan_accepted', status: 'pending',
     state: 'awaiting_approval', requested_by_member_id: MUM,
     summary: 'Waiting for approval: Materialize: Saturday swim meet', result: {},
-    metadata: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'], approval_id: null },
+    metadata: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'], approval_id: null, plan: FILED_PLAN },
     created_by: 'auth-mum', created_at: new Date().toISOString(), completed_at: null,
   }]);
 }

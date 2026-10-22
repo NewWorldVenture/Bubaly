@@ -121,8 +121,8 @@ export function checkRedirectUris(env, { appUrl } = {}) {
       continue;
     }
     const localhost = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
-    if (url.protocol !== 'https:' && !localhost) {
-      out.push(finding('error', key, 'is not https — Google refuses a non-https redirect URI for anything but localhost'));
+    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && localhost)) {
+      out.push(finding('error', key, 'must use https, or http on localhost or 127.0.0.1 — other callback transports are not supported'));
     }
     if (url.pathname !== path) {
       out.push(finding('error', key, `path is "${url.pathname}" but the route is "${path}" — the callback will 404 or mismatch`));
@@ -150,7 +150,13 @@ export function checkAppUrl(env) {
     return out;
   }
   if (!value) return out;
-  if (!/^https?:\/\/\S+$/.test(value)) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    // A scheme-shaped prefix alone does not make a parseable absolute URL.
+  }
+  if (!/^https?:\/\/\S+$/.test(value) || !url?.hostname) {
     out.push(finding('error', 'NEXT_PUBLIC_APP_URL', 'is not an absolute http(s) URL — it is interpolated into redirect URIs verbatim'));
   } else if (value.endsWith('/')) {
     out.push(finding('warn', 'NEXT_PUBLIC_APP_URL', 'has a trailing slash — harmless here (it is stripped) but not in every consumer'));

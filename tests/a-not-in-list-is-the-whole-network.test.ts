@@ -259,6 +259,11 @@ const BOUNDED_NOT_IN: { file: string; list: string; why: string }[] = [
     list: 'DIGEST_NOTIFICATION_TYPES',
     why: 'a module constant of notification type names',
   },
+  {
+    file: 'app/(app)/dashboard/needs-you/page.tsx',
+    list: 'SENSITIVE_MEMORY_CATEGORIES',
+    why: 'a module constant of the two fact categories a non-manager is not shown (lib/memory/facts.ts)',
+  },
 ];
 
 function handBuiltNotIn(): { file: string; list: string }[] {

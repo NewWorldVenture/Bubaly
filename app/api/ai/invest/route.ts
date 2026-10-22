@@ -3,6 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
+import { isWithheldFromGuest } from '@/lib/auth/guest-scope';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext, dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
@@ -22,6 +23,12 @@ export async function POST(req: NextRequest) {
   const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
+    // Every /wallet page sends a guest away (lib/auth/guest-scope.ts, the held
+    // 0509); the mentor reads a child's portfolio value, on the family's metered
+    // coach quota, so it answers to the same rule.
+    if (ctx.active.role === 'guest' && isWithheldFromGuest('/wallet')) {
+      return NextResponse.json({ error: t('householdMoney.keptByParents') }, { status: 403 });
+    }
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
 

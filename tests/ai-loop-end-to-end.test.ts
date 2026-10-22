@@ -99,6 +99,9 @@ function scope(): ServiceScope {
 
 beforeAll(() => {
   db.seed('families', [{ id: FAMILY, name: 'The Hughens', timezone: 'America/New_York', created_by: USER }]);
+  // Family Basic: a run is Ask Bubaly's work, and `continueRun` executes only
+  // a family that has it (N8; tests/no-kick-runs-a-lapsed-familys-run.test.ts).
+  db.seed('subscriptions', [{ id: 'sub-hughens', family_id: FAMILY, plan: 'basic', status: 'active', current_period_end: '2099-01-01T00:00:00Z' }]);
   db.seed('family_members', [
     { id: PARENT, family_id: FAMILY, user_id: USER, display_name: 'Dan', role: 'parent', is_active: true, birthdate: null },
     { id: CHILD, family_id: FAMILY, user_id: null, display_name: 'Maya', role: 'child', is_active: true, birthdate: '2016-03-02' },
@@ -207,12 +210,14 @@ describe('Ask Bubaly → plan → run → household rows → run page (scripted 
     // Every WRITE went through the ledger under this family and the run — one
     // row per act tool, each closed as succeeded, each under its own
     // idempotency key. Reads are deliberately not ledgered (`executeTool`
-    // skips the reservation for read-only tools), so four rows is exact.
+    // skips the reservation for read-only tools), so five rows is exact: the
+    // four act tools and the family notification, which a notify step now
+    // delivers as `notifications.notify` through the same gate and ledger.
     const ledger = db.table('ai_tool_calls');
-    expect(ledger).toHaveLength(4);
+    expect(ledger).toHaveLength(5);
     expect(ledger.every((c) => c.family_id === FAMILY && c.run_id === runId && c.state === 'succeeded')).toBe(true);
     expect(new Set(ledger.map((c) => c.idempotency_key)).size).toBe(ledger.length);
-    expect(ledger.map((c) => c.tool_name).sort()).toEqual(['groceries.addFromMealPlan', 'meals.planWeek', 'reminders.create', 'tasks.createTodo']);
+    expect(ledger.map((c) => c.tool_name).sort()).toEqual(['groceries.addFromMealPlan', 'meals.planWeek', 'notifications.notify', 'reminders.create', 'tasks.createTodo']);
     expect(ledger.every((c) => typeof c.plan_step_id === 'string' && c.request_id === requestId)).toBe(true);
 
     // …and left household rows behind: three dinners, their groceries, the
@@ -265,9 +270,12 @@ describe('Ask Bubaly → plan → run → household rows → run page (scripted 
     expect(db.table('family_automation_runs').find((r) => r.id === runId)).toMatchObject({ state: 'completed', lease_owner: null, error: null });
     expect(db.table('ai_requests').find((r) => r.id === requestId)).toMatchObject({ status: 'completed' });
     expect(db.table('ai_plan_steps').filter((s) => s.plan_id === planId).every((s) => s.status === 'completed')).toBe(true);
-    // No tool ran again — the four earlier writes are the whole ledger — and
-    // the only new household row is the mid-week reminder to the parents.
-    expect(db.table('ai_tool_calls')).toHaveLength(before);
+    // No tool ran again — the earlier writes are all still the only ones — and
+    // the only new write is the mid-week reminder to the parents, delivered as
+    // `notifications.notify` through the gate like every notify step.
+    expect(db.table('ai_tool_calls')).toHaveLength(before + 1);
+    expect(db.table('ai_tool_calls').slice(before).map((c) => [c.tool_name, (c.inputs as Record<string, unknown>).title]))
+      .toEqual([['notifications.notify', 'Bubaly follow-up']]);
     expect(db.table('meal_plans').filter((m) => m.family_id === FAMILY)).toHaveLength(3);
     const notifications = db.table('notifications').filter((n) => n.family_id === FAMILY);
     expect(notifications).toHaveLength(2);

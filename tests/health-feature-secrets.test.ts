@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join as nativeJoin } from 'node:path';
+const join = (...parts: string[]): string => nativeJoin(...parts).replace(/\\/g, '/');
 import { describe, expect, it } from 'vitest';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import {
@@ -237,17 +238,13 @@ describe('a secret that silently kills a subsystem is on the list', () => {
   it('neither push gate has an admin-console fallback', () => {
     // The exclusion test FEATURE_ENV applies to the AI keys, applied to these:
     // a stored fallback would make absence from env stop proving anything.
-    const { execSync } = require('node:child_process') as typeof import('node:child_process');
     for (const name of ['VAPID_PRIVATE_KEY', 'FCM_PRIVATE_KEY', 'APNS_PRIVATE_KEY']) {
       // The name, not `process.env.${name}`: the two private keys are read
       // through `privateKeyEnv(name)`, which indexes `process.env` by argument
       // so it can undo the literal `\n` a PEM picks up in a dashboard field.
       // Grepping the dotted spelling reported both as "read nowhere" — a guard
       // passing on an empty base, which is the failure this file is about.
-      const hits = execSync(
-        `grep -rn "${name}" app lib --include=*.ts --include=*.tsx || true`,
-        { encoding: 'utf8' },
-      );
+      const hits = lines.filter(line => line.includes(name)).join('\n');
       expect(hits.trim().length, `${name} is read nowhere`).toBeGreaterThan(0);
       expect(
         /(stored|cfg|settings|config)\.\w+\s*(\|\||\?\?)\s*process\.env\./.test(hits),

@@ -26,6 +26,7 @@ import {
 import type { Tables, RideStatus } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { useConfirm } from '@/components/ui/confirm';
 
 type Ride = Tables<'rides'>;
@@ -59,9 +60,14 @@ export function RidesModule() {
   const [form, setForm] = useState(() => ({ ...blankRide, ride_date: clock.todayKey() }));
   const [saving, setSaving] = useState(false);
 
+  // Every ride, page by page. One unbounded select is capped at db-max-rows
+  // (1,000) and returns the OLDEST rides first, so a family past that saw an
+  // empty Upcoming list and never saw a ride it had just added. readAll pages
+  // through and reports a read past its ceiling as an error, not a prefix.
   const { data: rides, loading, error } = useRealtimeQuery<Ride>({
     table: 'rides', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('rides').select('*').eq('family_id', familyId).order('ride_date').order('pickup_time', { nullsFirst: false }),
+    fetcher: (sb) => readAllAsQuery<Ride>((from, to) => sb.from('rides').select('*').eq('family_id', familyId)
+      .order('ride_date').order('pickup_time', { nullsFirst: false }).order('id').range(from, to), { max: 20_000 }),
   });
 
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;

@@ -399,6 +399,126 @@ function isUnsafe(name: string, rules: AllergenRule[]): boolean {
   return findAllergyHit(name, rules) !== null;
 }
 
+// ── screening food text against the household's allergies ───────────────────
+
+/**
+ * Each word lowercased with ITS OWN trailing plural dropped. `normalize` above
+ * strips only the last letter of the whole string, which is right for one
+ * grocery name and wrong for a sentence: "peanuts and rice" never mentioned
+ * "peanut" under it.
+ */
+function wordsOf(text: string): string[] {
+  return (text ?? '').toLowerCase().replace(/[^a-z0-9\s%]/g, ' ').split(/\s+/).filter(Boolean)
+    .map((word) => word.replace(/(\w)s$/, '$1'));
+}
+
+/** The same words as `wordsOf`, index for index, as written (no plural dropped). */
+function rawWordsOf(text: string): string[] {
+  return (text ?? '').toLowerCase().replace(/[^a-z0-9\s%]/g, ' ').split(/\s+/).filter(Boolean);
+}
+
+/** Every index at which `needle` runs in `haystack`. */
+function runsAt(haystack: string[], needle: string[]): number[] {
+  const starts: number[] = [];
+  if (needle.length === 0 || needle.length > haystack.length) return starts;
+  for (let i = 0; i + needle.length <= haystack.length; i += 1) {
+    if (needle.every((word, j) => haystack[i + j] === word)) starts.push(i);
+  }
+  return starts;
+}
+
+/** Words that end the modifier in front of a food: "the rice IN butter" is butter. */
+const NOT_A_MODIFIER = new Set(['in', 'on', 'into', 'onto', 'over', 'under', 'to', 'of', 'for', 'at', 'from', 'the', 'a', 'an',
+  'then', 'until', 'some', 'your', 'its', 'their', 'this', 'that', 'add', 'stir', 'cook', 'serve', 'simmer', 'top', 'toss', 'use']);
+
+/**
+ * The words an exemption may speak for: the match itself, up to two words
+ * directly in front of it ("oat milk", "dairy free cream cheese", "sunflower
+ * seed butter") and the one word after it ("butter lettuce"). Not the whole
+ * clause: "Simmer the rice in whole milk" is milk, whatever the rice is.
+ */
+function windowAround(raw: string[], start: number, length: number): string {
+  let from = start;
+  while (from > start - 2 && from > 0 && !NOT_A_MODIFIER.has(raw[from - 1])) from -= 1;
+  const after = raw[start + length];
+  const to = after && !NOT_A_MODIFIER.has(after) ? start + length + 1 : start + length;
+  return raw.slice(from, to).join(' ');
+}
+
+function containsRun(haystack: string[], needle: string[]): boolean {
+  if (needle.length === 0 || needle.length > haystack.length) return false;
+  for (let i = 0; i + needle.length <= haystack.length; i += 1) {
+    if (needle.every((word, j) => haystack[i + j] === word)) return true;
+  }
+  return false;
+}
+
+/** Words a note uses to say what KIND of entry it is ("peanut allergy"), not which food. */
+const NOT_THE_ALLERGEN = /\b(?:allerg\w*|intoleran\w*|sensitiv\w*|anaphyla\w*|reactions?|epipen)\b/gi;
+
+/**
+ * The phrases an exemption is judged against. "Toss with oat milk and top with
+ * cheese" makes two claims, and the "oat" that makes the first one safe for a
+ * dairy allergy says nothing about the second.
+ */
+function phrasesOf(text: string): string[] {
+  return (text ?? '').split(/[.,;:!?\n()[\]{}&+]|\band\b|\bwith\b|\bor\b|\bplus\b/i).map((part) => part.trim()).filter(Boolean);
+}
+
+/**
+ * The household allergy a piece of food text runs into — a dish name, an
+ * ingredient, a recipe's method — as the family wrote it (less "allergy",
+ * "severe" and anything in brackets), or null.
+ *
+ * A raw substring test, which is what the Fridge Chef guard was, misses the
+ * allergies families actually write: "Peanuts" is not a substring of "peanut
+ * butter", "Tree nuts" names no almond, and "Severe peanut allergy (EpiPen)" is
+ * a substring of nothing a recipe says. This reads each note through
+ * `parseConstraintText`, matches word runs with every word singularised, and
+ * switches on the same allergen table the grocery swaps use — its triggers,
+ * its ingredients and its exemptions, so "oat milk" is not dairy and "pine
+ * nuts" is a tree nut.
+ */
+export function allergenConflict(texts: string | string[], allergies: string[]): string | null {
+  const terms = (allergies ?? [])
+    .flatMap((note) => parseConstraintText(note))
+    .map((term) => term.replace(NOT_THE_ALLERGEN, ' ').replace(/\s+/g, ' ').trim() || term.trim())
+    .map((label) => ({ label, words: wordsOf(label) }))
+    .filter((term) => term.words.length > 0);
+  if (terms.length === 0) return null;
+  const phrases = (Array.isArray(texts) ? texts : [texts]).flatMap((text) => phrasesOf(text ?? ''));
+  if (phrases.length === 0) return null;
+
+  for (const term of terms) {
+    const rules = ALLERGEN_RULES.filter((rule) =>
+      rule.triggers.some((trigger) => containsRun(term.words, wordsOf(trigger))));
+    for (const phrase of phrases) {
+      const words = wordsOf(phrase);
+      const raw = rawWordsOf(phrase);
+      // An exemption speaks for the words around ONE mention, never the clause.
+      const exemptAt = (rule: AllergenRule, start: number, length: number) =>
+        rule.exempt?.test(windowAround(raw, start, length)) ?? false;
+      // Every mention in this clause — the food as the family named it (for
+      // allergies the table has no rule for), and each rule's triggers and
+      // ingredients — longest first. A mention is cleared when the words in
+      // front of IT say so, or when it sits inside a longer mention that was
+      // ("cheese" in "dairy free cream cheese"). One left standing is a conflict.
+      const named = [
+        ...runsAt(words, term.words).map((start) => ({ start, length: term.words.length, by: rules })),
+        ...rules.flatMap((rule) => [...rule.triggers, ...rule.swaps.map((swap) => swap.ingredient)].map(wordsOf)
+          .flatMap((name) => runsAt(words, name).map((start) => ({ start, length: name.length, by: [rule] })))),
+      ].sort((a, b) => b.length - a.length);
+      const cleared: { start: number; length: number }[] = [];
+      for (const mention of named) {
+        const inside = cleared.some((c) => c.start <= mention.start && mention.start + mention.length <= c.start + c.length);
+        if (!inside && !mention.by.some((rule) => exemptAt(rule, mention.start, mention.length))) return term.label;
+        cleared.push(mention);
+      }
+    }
+  }
+  return null;
+}
+
 function isDisliked(name: string, dislikes: string[]): string | null {
   for (const dislike of dislikes ?? []) {
     const term = dislike.trim();

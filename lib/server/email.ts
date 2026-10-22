@@ -4,6 +4,7 @@
 // No-ops gracefully (logs) when RESEND_API_KEY is unset, so local/dev flows
 // never break — production just adds the key.
 import { FROM_EMAIL, emailEnabled } from '@/lib/email';
+import { isChildLoginEmail } from '@/lib/onboarding/child-login';
 import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 
@@ -70,6 +71,15 @@ type SendArgs = {
    * is not exactly-once.
    */
   idempotencyKey?: string;
+  /**
+   * Extra message headers, sent as Resend's `headers` object. The Contact
+   * Center's auto-reply marks itself automatic with them (`Auto-Submitted`,
+   * `X-Auto-Response-Suppress`, `Precedence`) so a remote responder does not
+   * answer it and start a loop (audit N6). Names and values are our own
+   * constants; a caller never puts request text here. Omitted from the body
+   * when absent, so every other caller's bytes are what they were.
+   */
+  headers?: Readonly<Record<string, string>>;
 };
 
 /** Each ask's own deadline, as it always was. */
@@ -134,16 +144,26 @@ function assertIdempotencyKey(key: unknown): asserts key is string {
   }
 }
 
-export async function sendEmail({ to, subject, html, replyTo, from, idempotencyKey }: SendArgs): Promise<SendEmailResult> {
+export async function sendEmail({ to, subject, html, replyTo, from, idempotencyKey, headers: messageHeaders }: SendArgs): Promise<SendEmailResult> {
   // Before anything else, so a malformed key is a visible bug in every
   // environment, and never becomes a provider 400 or a silently changed header.
   if (idempotencyKey !== undefined) assertIdempotencyKey(idempotencyKey);
+  // Never to a kid login's synthetic address (lib/onboarding/child-login.ts):
+  // nothing is ever delivered there, and the domain is not Bubaly's. Refused
+  // before the provider is asked; sendReactEmail refuses it the same way.
+  if (isChildLoginEmail(to)) {
+    console.error('[email refused — a kid login address is never mailed]', { subject });
+    return { ok: false, reason: 'rejected' };
+  }
   if (!emailEnabled()) {
     console.info(`[email skipped — no RESEND_API_KEY] to=${to} subject="${subject}"`);
     return { ok: true, skipped: true };
   }
   // The same bytes on every ask: the key's promise holds only while they are identical.
-  const body = JSON.stringify({ from: from || FROM_EMAIL, to, subject, html, reply_to: replyTo });
+  const body = JSON.stringify({
+    from: from || FROM_EMAIL, to, subject, html, reply_to: replyTo,
+    ...(messageHeaders && Object.keys(messageHeaders).length ? { headers: messageHeaders } : {}),
+  });
   const headers = {
     authorization: `Bearer ${process.env.RESEND_API_KEY}`,
     'content-type': 'application/json',
