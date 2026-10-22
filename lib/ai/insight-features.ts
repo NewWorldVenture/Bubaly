@@ -31,6 +31,7 @@ export const INSIGHT_FEATURE_HREFS: Partial<Record<InsightKind, readonly string[
   celebrations: ['/dashboard/celebrations'],
   closet: ['/dashboard/closet'],
   declutter: ['/dashboard/declutter'],
+  documents: ['/dashboard/documents'],
   expenses: ['/dashboard/expenses'],
   goals: ['/dashboard/goals'],
   // Gated in its LAYOUT (app/(app)/dashboard/home/layout.tsx), which the
