@@ -55,6 +55,7 @@ const UNIQUE_KEYS: Record<string, { columns: string[]; why: string }[]> = {
   network_aggregates: [{ columns: ['scope', 'cohort_key', 'metric', 'value'], why: '0135: `unique (scope, cohort_key, metric, value)`' }],
   network_consent: [{ columns: ['family_id'], why: '0132: `family_id uuid primary key`' }],
   network_contributions: [{ columns: ['family_id'], why: '0135: `family_id uuid primary key`' }],
+  push_deliveries: [{ columns: ['notification_id', 'device_id'], why: '0440: line 32, `primary key (notification_id, device_id)`' }],
   super_admins: [{ columns: ['email'], why: '0008: `email text PRIMARY KEY`' }],
   user_preferences: [{ columns: ['user_id'], why: '0002: line 490, `user_id uuid primary key`' }],
 };

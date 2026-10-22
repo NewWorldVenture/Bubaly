@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import ts from 'typescript';
 
 // A small JSX walker for the two accessibility properties the lint rule cannot
@@ -11,9 +11,9 @@ import ts from 'typescript';
 
 export type Site = { file: string; line: number; what: string };
 
-export function sourceFiles(): string[] {
-  return execSync("git ls-files 'app/**/*.tsx' 'components/**/*.tsx'", { encoding: 'utf8' })
-    .trim().split('\n').filter((f) => f && !f.includes('.test.'));
+export function sourceFiles(repositoryRoot: string = process.cwd()): string[] {
+  return execFileSync('git', ["ls-files","-z","app/**/*.tsx","components/**/*.tsx"], { cwd: repositoryRoot, encoding: 'utf8' })
+    .split('\0').filter(Boolean).filter((f) => f && !f.includes('.test.'));
 }
 
 function parse(file: string, text = readFileSync(file, 'utf8')) {
@@ -65,8 +65,10 @@ export function unnamedIconButtons(file: string, text?: string): Site[] {
   const out: Site[] = [];
   const visit = (node: ts.Node) => {
     // Links as well as buttons: an icon-only back link on the send-money page
-    // had no name, and this looked only at buttons (P-35).
-    if (ts.isJsxElement(node) && ['button', 'Button', 'a', 'Link'].includes(node.openingElement.tagName.getText())) {
+    // had no name, and this looked only at buttons (P-35). And a <details>
+    // disclosure's <summary>: each reminder's snooze clock was announced as an
+    // unnamed disclosure, 193 times on a populated reminders page (A11Y-001).
+    if (ts.isJsxElement(node) && ['button', 'Button', 'a', 'Link', 'summary'].includes(node.openingElement.tagName.getText())) {
       const names = attrNames(node.openingElement.attributes);
       const named = names.some((n) => n === 'aria-label' || n === 'aria-labelledby' || n === 'title' || n === '...') || insideLabel(node);
       const kids = meaningfulChildren(node.children);

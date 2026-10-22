@@ -6,7 +6,7 @@ import { ActionError, useActionError } from '@/components/ui/action-error';
 import { IdCard, Plus, Pencil, Trash2 } from 'lucide-react';
 import { saveLicenseAction, deleteLicenseAction } from '@/app/(app)/dashboard/auto/actions';
 import { renewalStatus } from '@/lib/auto/renewals';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import type { Tables } from '@/lib/database.types';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +22,8 @@ type Member = { id: string; display_name: string | null };
 
 export function LicensesClient({ licenses, members }: { licenses: License[]; members: Member[] }) {
   const { fmtDate } = useFormat();
+  // The family's day: `expires_on` is a DATE (lib/auto/renewals.ts).
+  const todayKey = useFamilyClock().todayKey();
   const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<License | null>(null);
@@ -41,7 +43,7 @@ export function LicensesClient({ licenses, members }: { licenses: License[]; mem
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {licenses.map((l) => {
-            const s = renewalStatus(l.expires_on);
+            const s = renewalStatus(l.expires_on, todayKey);
             return (
               <Card key={l.id}>
                 <div className="flex items-start justify-between gap-2">

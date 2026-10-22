@@ -35,26 +35,25 @@ vi.mock('@/lib/supabase/read-all', () => ({
 vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: () => ({
     from: () => {
-      // The mark is a claim — `.eq('session_id', id).eq('status', 'pending')
-      // .select(...)` — so the write resolves at `select`, answering the row it
-      // moved, or the refusal.
       const b: Row = {};
+      // The status write is a claim guarded on `pending` and confirmed by the
+      // rows it returns, so the fake answers it with the claimed row.
+      let updating = false;
       let sessionId = '';
       Object.assign(b, {
-        select: () => {
-          if (!sessionId) return b;
-          state.marked.push(sessionId);
-          return state.markFails.has(sessionId)
-            ? Promise.resolve({ data: null, error: { message: 'could not write checkout_sessions' } })
-            : Promise.resolve({ data: [{ session_id: sessionId }], error: null });
-        },
+        select: () => b,
         eq: (c: string, v: unknown) => {
-          if (c === 'session_id') sessionId = String(v);
+          if (c === 'session_id') { sessionId = String(v); state.marked.push(sessionId); }
           return b;
         },
-        update: () => b,
+        update: () => { updating = true; return b; },
         order: () => b, range: () => b, limit: () => b,
-        then: (resolve: (v: unknown) => void) => resolve({ data: state.sessions, error: null }),
+        then: (resolve: (v: unknown) => void) => {
+          if (!updating) return resolve({ data: state.sessions, error: null });
+          return resolve(state.markFails.has(sessionId)
+            ? { data: null, error: { message: 'could not write checkout_sessions' } }
+            : { data: [{ session_id: sessionId }], error: null });
+        },
       });
       return b;
     },
@@ -110,7 +109,7 @@ describe('the abandoned-checkout sweep reports its own failures', () => {
     expect(res.status, 'a session left pending forever was recorded as a clean run').toBe(502);
     // Still marks the second: the failure is that row's, not the sweep's.
     expect(state.marked).toEqual(['cs_1', 'cs_2']);
-    // The refused row was not claimed, so it is nudged by the run that claims it.
+    // The claim comes first, so the row it could not claim is not nudged.
     expect(state.fired).toEqual(['cs_2']);
   });
 });

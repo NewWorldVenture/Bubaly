@@ -25,10 +25,22 @@ export type ExitOfferLike = {
   created_at?: string;
 };
 
+/**
+ * Whether an offer's audience can be decided for this visitor without visit
+ * history it does not have. An offer for returning visitors only, or for new
+ * visitors only, needs to know which this visitor is; with `returning` unknown
+ * (no personalisation consent) it is neither, never "new by default" —
+ * ruleMatches reads a missing `returning` as false, which is right for a
+ * personalisation slot with a fallback variant and wrong here.
+ */
+function audienceDecidable(match: AudienceMatch | null | undefined, ctx: VisitorContext): boolean {
+  return typeof match?.returning !== 'boolean' || typeof ctx.returning === 'boolean';
+}
+
 /** Best active, matching offer for a visitor: priority desc, then oldest first. */
 export function resolveExitIntent<T extends ExitOfferLike>(offers: T[], ctx: VisitorContext): T | null {
   const candidates = offers.filter(
-    (o) => o.status === 'active' && !o.deleted_at && ruleMatches(o.match, ctx),
+    (o) => o.status === 'active' && !o.deleted_at && audienceDecidable(o.match, ctx) && ruleMatches(o.match, ctx),
   );
   candidates.sort((a, b) => b.priority - a.priority || (a.created_at ?? '').localeCompare(b.created_at ?? ''));
   return candidates[0] ?? null;

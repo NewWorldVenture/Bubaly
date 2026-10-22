@@ -7,13 +7,12 @@ import { PageHeader } from '@/components/app/page-header';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import {
-  computeWorkload, shareTrend, isoWeekStart,
+  computeWorkload, shareTrend,
   type WorkloadChoreAssignment, type RebalanceSuggestion,
 } from '@/lib/workload/balance';
 import { moveAssignmentAction, saveWorkloadSnapshotAction } from '@/app/(app)/dashboard/workload/actions';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFamilyClock } from '@/components/i18n/use-format';
 
 type Member = { id: string; display_name: string; role: string; color: string | null; user_id: string | null };
 
@@ -57,18 +56,14 @@ export function WorkloadModule({
     );
   }, [members, assignments, chores, todos, events]);
 
-  // Persist this week's computed loads once per view (idempotent upsert).
-  const clock = useFamilyClock();
+  // Ask the server to file this ISO week's loads once per view (idempotent
+  // upsert). It computes the week over its own bounds: this page's report is
+  // the rolling seven days, which is not the week the row is filed under.
   const saved = useRef(false);
   useEffect(() => {
     if (saved.current || report.loads.every(l => l.sharePct === 0)) return;
     saved.current = true;
-    // isoWeekStart reads UTC fields: hand it the FAMILY's day (TIME-003).
-    const weekStart = isoWeekStart(new Date(`${clock.todayKey()}T00:00:00Z`));
-    void saveWorkloadSnapshotAction(report.loads.map(l => ({
-      memberId: l.memberId, weekStart, choreMinutes: l.choreMinutes, choreCount: l.choreCount,
-      taskCount: l.taskCount, eventCount: l.eventCount, loadScore: l.loadScore, sharePct: l.sharePct,
-    }))).then((res) => {
+    void saveWorkloadSnapshotAction().then((res) => {
       if (!res.ok) toastError(res.error);
     }).catch((error: unknown) => {
       // Background persistence of the week's loads: a rejected call is logged
@@ -77,7 +72,7 @@ export function WorkloadModule({
       console.error('[workload] snapshot save failed', error);
       toastError(error instanceof Error && error.message ? error.message : 'Could not save this week’s workload.');
     });
-  }, [report, toastError, clock]);
+  }, [report, toastError]);
 
   const trend = useMemo(() => shareTrend(
     snapshots.map(s => ({ memberId: s.member_id, weekStart: s.week_start, sharePct: Number(s.share_pct) })),

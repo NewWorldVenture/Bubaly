@@ -35,7 +35,7 @@
 // checks: an English joined diagnostic is allowed to exist ONLY on a page behind
 // the super-admin gate. Move one of those pages out from behind the gate, or add
 // a joined English diagnostic to a family page, and this fails by name.
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -63,8 +63,8 @@ const OPERATOR_PAGES = [
 ];
 
 const sourceFiles = () =>
-  execSync("git ls-files 'app/**/*.ts' 'app/**/*.tsx'", { encoding: 'utf8' })
-    .split('\n')
+  execFileSync('git', ["ls-files","-z","app/**/*.ts","app/**/*.tsx"], { encoding: 'utf8' })
+    .split('\0').filter(Boolean)
     .filter(Boolean);
 
 const read = (file: string) => readFileSync(file, 'utf8');

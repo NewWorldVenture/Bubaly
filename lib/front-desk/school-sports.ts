@@ -791,7 +791,13 @@ export function buildProposal(
       subject,
       args: {
         title: subject,
-        starts_at: `${date}T${time ?? '00:00'}:00`,
+        // The tool contract (lib/ai/tools/calendar.ts): a timed start is a
+        // family-local ISO clock, an all-day start is the bare civil DATE.
+        // `${date}T00:00:00` with `all_day: true` read as the family's
+        // midnight — 07:00Z in Los Angeles — and `createEvent` refuses an
+        // all-day start that is not UTC midnight of its date, so every
+        // approved all-day proposal failed for every family outside UTC.
+        starts_at: time === null ? date : `${date}T${time}:00`,
         all_day: time === null,
         category: classification.domain === 'sports' ? 'sports' : 'school',
         ...(assignee ? { assignee_id: assignee } : {}),

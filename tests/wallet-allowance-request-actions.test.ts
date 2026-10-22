@@ -153,10 +153,20 @@ describe('requestAllowanceAction (ACTION-8AA29BB74838)', () => {
     expect(approvals()).toHaveLength(0);
   });
 
-  it.each(NON_MANAGERS)('a %s may ask for their own wallet', async (role) => {
+  it.each(NON_MANAGERS.filter((role) => role !== 'guest'))('a %s may ask for their own wallet', async (role) => {
     harness.role = role;
     expect(await ask()).toEqual({ ok: true });
     expect(approvals()).toHaveLength(1);
+  });
+
+  // The /wallet pages send a guest away (the held 0509), and wallet activation
+  // provisions children only; a guest holding a wallet from before is refused
+  // here too, rather than filing into the parents' queue (M10).
+  it('a guest may not ask, even on a wallet they hold', async () => {
+    harness.role = 'guest';
+    expect(await ask()).toEqual({ ok: false, error: t('actions.notAuthorized') });
+    expect(approvals()).toHaveLength(0);
+    expect(harness.revalidatePath).not.toHaveBeenCalled();
   });
 
   it.each(NON_MANAGERS)('a %s may not ask on a sibling’s wallet', async (role) => {

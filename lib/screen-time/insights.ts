@@ -34,15 +34,23 @@ export function minutesOnDate(entries: ScreenEntryLike[], date: string): number 
   return entries.reduce((sum, e) => (e.entry_date === date ? sum + (e.minutes ?? 0) : sum), 0);
 }
 
-/** Total minutes within the last `days` days (inclusive of today). */
-export function minutesInWindow(entries: ScreenEntryLike[], days: number, now = new Date()): number {
-  const cutoff = new Date(now.getTime());
-  cutoff.setUTCHours(0, 0, 0, 0);
-  const from = cutoff.getTime() - (days - 1) * 86_400_000;
-  return entries.reduce((sum, e) => {
-    const t = new Date(e.entry_date + 'T00:00:00.000Z').getTime();
-    return t >= from ? sum + (e.minutes ?? 0) : sum;
-  }, 0);
+/** The day key `n` calendar days from `key` (negative = earlier). */
+function addDayKeys(key: string, n: number): string {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
+
+/**
+ * Total minutes within the last `days` days, ending on `todayKey` inclusive.
+ *
+ * `todayKey` is the FAMILY's day (`useFamilyClock().todayKey()`), the one
+ * `entry_date` is written in. Anchored on Greenwich's midnight, the week
+ * dropped the oldest family day every Los Angeles evening and added an eighth
+ * every Tokyo morning.
+ */
+export function minutesInWindow(entries: ScreenEntryLike[], days: number, todayKey: string): number {
+  const from = addDayKeys(todayKey, -(days - 1));
+  return entries.reduce((sum, e) => (e.entry_date >= from ? sum + (e.minutes ?? 0) : sum), 0);
 }
 
 /** Minutes per category (descending). */
@@ -74,18 +82,18 @@ export function limitProgress(usedToday: number, limit: number): LimitProgress {
   return { used: usedToday, limit, pct, over: usedToday > limit, remaining: Math.max(0, limit - usedToday) };
 }
 
-/** Consecutive days (ending today) at or under the daily limit. Days with no
- *  logged time count as under-limit. Stops at the first over-limit day. */
-export function underLimitStreak(entries: ScreenEntryLike[], limit: number, now = new Date()): number {
+/** Consecutive days (ending on the family's `todayKey`) at or under the daily
+ *  limit. Days with no logged time count as under-limit. Stops at the first
+ *  over-limit day. Stepped in calendar day keys from the family's day: from
+ *  Greenwich's, a Los Angeles evening started on an empty "tomorrow" and a
+ *  Tokyo morning skipped today's entries altogether. */
+export function underLimitStreak(entries: ScreenEntryLike[], limit: number, todayKey: string): number {
   if (!limit || limit <= 0) return 0;
   const byDay = new Map<string, number>();
   for (const e of entries) byDay.set(e.entry_date, (byDay.get(e.entry_date) ?? 0) + (e.minutes ?? 0));
   let streak = 0;
-  const cursor = new Date(now.getTime());
-  cursor.setUTCHours(0, 0, 0, 0);
   for (let i = 0; i < 366; i++) {
-    const k = new Date(cursor.getTime() - i * 86_400_000).toISOString().slice(0, 10);
-    if ((byDay.get(k) ?? 0) > limit) break;
+    if ((byDay.get(addDayKeys(todayKey, -i)) ?? 0) > limit) break;
     streak++;
   }
   return streak;

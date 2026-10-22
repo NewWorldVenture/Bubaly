@@ -9,6 +9,7 @@ import { resolveCompleteness } from '@/lib/server/onboarding-progress';
 import { CompleteSetupForm } from '@/components/onboarding/complete-setup';
 import { getTranslations } from '@/lib/i18n/server';
 import { ErrorState } from '@/components/ui/states';
+import { isManager } from '@/lib/constants/roles';
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getTranslations())('completeSetupCopy.title') };
@@ -35,7 +36,14 @@ export default async function CompleteSetupPage() {
   const admin = createServiceClient();
   const familyId = ctx.active.familyId;
 
-  const { result, progress } = await resolveCompleteness(admin, ctx.user.id, familyId);
+  const { result, progress, readFailures } = await resolveCompleteness(admin, ctx.user.id, familyId);
+  // A score built on reads that did not answer is not this account's score:
+  // the progress card says it could not check instead of showing one.
+  const completenessUnknown = (readFailures?.length ?? 0) > 0;
+  // The household questionnaire is the family's, and the action behind it
+  // refuses anyone but a parent or adult (saveFamilyDetailsAction); a child,
+  // teen, caregiver or guest is told so rather than shown a form that fails.
+  const mayAnswer = isManager(ctx.active.role);
 
   // Pre-fill the questionnaire from any existing family_onboarding row.
   //
@@ -86,6 +94,7 @@ export default async function CompleteSetupPage() {
       <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
         <div className="space-y-5">
           <SectionCard title={t('dashboardSetup.setupProgress')}>
+            {completenessUnknown ? <ErrorState message={t('dashboardSetup.couldNotCheckYourSetup')} /> : (
             <div className="flex flex-col items-center gap-4">
               <ScoreRing pct={result.score} label={t(result.isComplete ? 'completeSetupCopy.scoreComplete' : 'completeSetupCopy.scoreSetup')} />
               <p className="text-center text-xs text-muted">
@@ -96,6 +105,7 @@ export default async function CompleteSetupPage() {
                     : t('completeSetupCopy.fewThingsLeft')}
               </p>
             </div>
+            )}
           </SectionCard>
 
           <SectionCard title={t('dashboardSetup.whatsLeft')}>
@@ -128,9 +138,11 @@ export default async function CompleteSetupPage() {
             <Sparkles className="h-3.5 w-3.5 shrink-0 text-brand-text" />
             <span>{t('dashboardSetup.savedToYourExistingFamily')} <span className="font-medium text-fg">{ctx.active.family.name}</span>.</span>
           </div>
-          {foError
-            ? <ErrorState message={t('dashboardSetup.couldNotLoadYourAnswers')} />
-            : <CompleteSetupForm familyId={familyId} initial={initial} />}
+          {mayAnswer ? (
+            <>{foError
+              ? <ErrorState message={t('dashboardSetup.couldNotLoadYourAnswers')} />
+              : <CompleteSetupForm familyId={familyId} initial={initial} />}</>
+          ) : <p className="text-sm text-muted">{t('dashboardSetup.onlyAManagerCanAnswer')}</p>}
         </SectionCard>
       </div>
     </div>

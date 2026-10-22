@@ -19,6 +19,7 @@ import { encodeStepInput, type Plan, type PlanStep } from '@/lib/ai/planner/sche
 import { autonomyBehaviorFor, catalogueNames, dominantBehavior, dryRunGate, maxRisk, resolveFollowupAt, validatePlan, type ValidationInputs } from '@/lib/ai/planner/validate';
 import { getTool, listTools } from '@/lib/ai/tools/registry';
 import { loadScripts, ScriptedProvider } from '@/lib/ai/provider-stub';
+import { at } from './helpers/source-order';
 
 const ledgerHolder = vi.hoisted(() => ({ client: null as SupabaseClient<Database> | null }));
 vi.mock('@/lib/supabase/server', () => ({
@@ -240,6 +241,55 @@ describe('validatePlan: the graph', () => {
     expect(resolveFollowupAt('2026-09-10T09:00:00', NOW, 'America/New_York')).toBe('2026-09-10T13:00:00.000Z');
     expect(resolveFollowupAt('2026-09-10T09:00:00Z', NOW, 'America/New_York')).toBe('2026-09-10T09:00:00.000Z');
     expect(resolveFollowupAt('soon', NOW, 'America/New_York')).toBeNull();
+  });
+
+  it.each(['100000000000000d', `${'9'.repeat(400)}w`])('drops an overflowing relative follow-up (%s) without losing valid steps', (after) => {
+    const result = validatePlan(plan([
+      step({ key: 'read', tool_name: 'family.listMembers' }),
+    ], { followups: [{ after, prompt: 'Check later' }] }), inputsWith());
+    expect(result.ok && result.steps.map((s) => s.key)).toEqual(['read']);
+    expect(result.issues.map((i) => i.code)).toEqual(['invalid_followup']);
+  });
+
+  it.each([1e300, 144_000_000_000])('drops an unrepresentable numeric follow-up delay (%s) and its dependents', (delayMinutes) => {
+    const result = validatePlan(plan([
+      step({ key: 'read', tool_name: 'family.listMembers' }),
+      step({ key: 'wait', step_type: 'followup', input: JSON.stringify({ delayMinutes }), depends_on: ['read'] }),
+      step({ key: 'after', tool_name: 'family.listMembers', depends_on: ['wait'] }),
+    ]), inputsWith());
+    expect(result.ok && result.steps.map((s) => s.key)).toEqual(['read']);
+    expect(result.issues.map((i) => i.code)).toEqual(['invalid_followup', 'dependency_dropped']);
+  });
+
+  it.each([
+    ['2026-09-10T09:00:37', 'America/New_York', '2026-09-10T13:00:37.000Z'],
+    ['2026-09-10T09:00:37.125', 'America/New_York', '2026-09-10T13:00:37.125Z'],
+    ['2026-09-10T09:00:37.125', 'Asia/Tokyo', '2026-09-10T00:00:37.125Z'],
+    ['2026-09-10', 'America/New_York', '2026-09-10T13:00:00.000Z'],
+    ['2026-09-10T09:00:37.125+09:00', 'America/New_York', '2026-09-10T00:00:37.125Z'],
+  ])('keeps the precision and family clock of %s in %s', (after, tz, expected) => {
+    const result = validatePlan(plan([
+      step({ key: 'wait', step_type: 'followup', input: JSON.stringify({ runAfter: after }) }),
+    ]), inputsWith({ tz }));
+    expect(result.ok && result.steps[0].input).toEqual({ runAfter: expected });
+  });
+
+  it.each(['2027-02-30T09:00:00', '2027-02-30T09:00:00Z', '2026-09-10T24:00:00', '2026-09-10T09:00:60'])('drops the impossible follow-up clock %s', (runAfter) => {
+    const result = validatePlan(plan([
+      step({ key: 'read', tool_name: 'family.listMembers' }),
+      step({ key: 'wait', step_type: 'followup', input: JSON.stringify({ runAfter }), depends_on: ['read'] }),
+    ]), inputsWith());
+    expect(result.ok && result.steps.map((s) => s.key)).toEqual(['read']);
+    expect(result.issues.map((i) => i.code)).toEqual(['invalid_followup']);
+  });
+
+  it('preserves usable numeric delays and absolute times when an unused delay overflows', () => {
+    const result = validatePlan(plan([
+      step({ key: 'wait', step_type: 'followup', input: '{"delayMinutes":120}' }),
+      step({ key: 'absolute', step_type: 'followup', input: '{"runAfter":"2026-09-10T09:00:00Z","delayMinutes":1e300}', depends_on: ['wait'] }),
+    ]), inputsWith());
+    expect(result.ok && result.steps.map((s) => s.input)).toEqual([{ delayMinutes: 120 }, { runAfter: '2026-09-10T09:00:00.000Z' }]);
+    expect(result.issues).toEqual([]);
   });
 
   it('fails a plan with nothing runnable', () => {
@@ -543,8 +593,15 @@ describe('planRequest with the scripted provider', () => {
     expect(rows.map((r) => r.step_type)).toContain('verify');
     expect(rows.map((r) => r.step_type)).toContain('followup');
 
+    // The run is created where nothing can claim it, and opened — `ready`, from
+    // `planning` only — after the request settled on this attempt (N3).
     const runInsert = ledger.calls.find((c) => c.table === 'family_automation_runs' && c.kind === 'insert')!;
-    expect(runInsert.payload).toMatchObject({ family_id: 'fam-1', request_id: 'req-1', plan_id: 'ai_plans-1', state: 'ready', run_type: 'concierge' });
+    expect(runInsert.payload).toMatchObject({ family_id: 'fam-1', request_id: 'req-1', plan_id: 'ai_plans-1', state: 'planning', run_type: 'concierge' });
+    const runOpened = ledger.calls.find((c) => c.table === 'family_automation_runs' && c.kind === 'update')!;
+    expect(runOpened.payload).toMatchObject({ state: 'ready' });
+    expect(runOpened.filters).toMatchObject({ 'eq:id': 'family_automation_runs-2', 'eq:state': 'planning', 'eq:family_id': 'fam-1' });
+    const settledReady = ledger.calls.find((c) => c.table === 'ai_requests' && c.kind === 'update' && (c.payload as Row).status === 'ready')!;
+    expect(at(ledger.calls, runOpened)).toBeGreaterThan(at(ledger.calls, settledReady));
     expect(ledger.calls.find((c) => c.table === 'ai_run_events' && c.kind === 'insert')!.payload).toMatchObject({ event_type: 'planned', family_id: 'fam-1' });
 
     const requestUpdates = ledger.calls.filter((c) => c.table === 'ai_requests' && c.kind === 'update').map((c) => (c.payload as Row).status).filter(Boolean);
@@ -601,7 +658,12 @@ describe('planRequest with the scripted provider', () => {
     expect(result.ok && result.data.kind === 'plan' && result.data.requiresApproval).toBe(true);
     const rows = ledger.calls.find((c) => c.table === 'ai_plan_steps' && c.kind === 'insert')!.payload as Row[];
     expect(rows.filter((r) => r.step_type === 'act').every((r) => r.approval_required === true)).toBe(true);
-    expect(rows.filter((r) => r.step_type !== 'act').every((r) => r.approval_required === false)).toBe(true);
+    // A notification is a write too: it is delivered as `notifications.notify`
+    // through the same gate, so under "prepare" it waits like the acts do.
+    const notifies = rows.filter((r) => r.step_type === 'notify');
+    expect(notifies.length).toBeGreaterThan(0);
+    expect(notifies.every((r) => r.approval_required === true)).toBe(true);
+    expect(rows.filter((r) => r.step_type !== 'act' && r.step_type !== 'notify').every((r) => r.approval_required === false)).toBe(true);
     expect(ledger.calls.find((c) => c.table === 'ai_plans' && c.kind === 'insert')!.payload).toMatchObject({ requires_approval: true });
   });
 

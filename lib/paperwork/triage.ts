@@ -10,6 +10,7 @@
 
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { formatCents } from '@/lib/wallet/ledger';
+import { dayKeyIn } from '@/lib/time/zoned';
 
 export type PaperworkKind =
   | 'permission_slip' | 'school_notice' | 'medical_form' | 'sports'
@@ -110,12 +111,40 @@ function pad(n: number): string { return String(n).padStart(2, '0'); }
 function toYmd(y: number, m: number, d: number): string { return `${y}-${pad(m)}-${pad(d)}`; }
 
 /**
- * Pull explicit dates out of prose: "March 5", "Mar 5, 2026", "3/5", "3/5/26".
- * Years are inferred forward: a month/day already past this year rolls to next.
+ * THE FAMILY'S TODAY, as a `YYYY-MM-DD` day key.
+ *
+ * A slip's "by 10/13" has no year, so the year — and whether the date is
+ * already past and rolls to next year — is read against TODAY, and so is how
+ * many days are left. That has to be the family's today. Read off a bare
+ * instant at Greenwich, a Los Angeles parent filing at 18:00 PDT on the 13th
+ * (01:00Z on the 14th) had "sign and return by 10/13" filed as due a YEAR out,
+ * at urgency 'normal', with its calendar event a year away. Every writer
+ * passes its family's key (`dayKeyInTz(now, tz)`); a `Date` is still read at
+ * Greenwich, which is right only for a UTC family.
  */
-export function extractDates(text: string, now: Date = new Date()): string[] {
+export type TriageToday = Date | string;
+
+const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Midnight UTC of the family's day, the anchor every date below is compared with. */
+function todayAnchorMs(today: TriageToday): number {
+  if (typeof today !== 'string') return startOfDayUTC(today).getTime();
+  if (!DAY_KEY.test(today)) {
+    throw new TypeError(`[paperwork/triage] today must be a family day key (YYYY-MM-DD), got ${JSON.stringify(today)}`);
+  }
+  const [y, m, d] = today.split('-').map((part) => Number.parseInt(part, 10));
+  return Date.UTC(y, m - 1, d);
+}
+
+/**
+ * Pull explicit dates out of prose: "March 5", "Mar 5, 2026", "3/5", "3/5/26".
+ * Years are inferred forward: a month/day already past the family's today rolls
+ * to next year.
+ */
+export function extractDates(text: string, today: TriageToday = new Date()): string[] {
   const out = new Set<string>();
-  const year = now.getUTCFullYear();
+  const anchor = todayAnchorMs(today);
+  const year = new Date(anchor).getUTCFullYear();
 
   // "March 5" / "Mar 5, 2026"
   const nameRx = new RegExp(`\\b(${MONTH_RX})[a-z]*\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s*(\\d{4}))?`, 'gi');
@@ -124,7 +153,7 @@ export function extractDates(text: string, now: Date = new Date()): string[] {
     const day = parseInt(m[2], 10);
     if (mi < 1 || day < 1 || day > 31) continue;
     let y = m[3] ? parseInt(m[3], 10) : year;
-    if (!m[3] && new Date(Date.UTC(y, mi - 1, day)) < startOfDayUTC(now)) y += 1;
+    if (!m[3] && Date.UTC(y, mi - 1, day) < anchor) y += 1;
     out.add(toYmd(y, mi, day));
   }
 
@@ -136,7 +165,7 @@ export function extractDates(text: string, now: Date = new Date()): string[] {
     if (mi < 1 || mi > 12 || day < 1 || day > 31) continue;
     let y = m[3] ? parseInt(m[3], 10) : year;
     if (y < 100) y += 2000;
-    if (!m[3] && new Date(Date.UTC(y, mi - 1, day)) < startOfDayUTC(now)) y += 1;
+    if (!m[3] && Date.UTC(y, mi - 1, day) < anchor) y += 1;
     out.add(toYmd(y, mi, day));
   }
 
@@ -167,8 +196,8 @@ const ACTION_SIGNALS: [PaperworkActionKind, RegExp, string][] = [
   ['provide',  /bring|provide|send in|pack|supply|donate/i,           'Send in what’s needed'],
 ];
 
-export function extractActions(text: string, now: Date = new Date()): PaperworkAction[] {
-  const dates = extractDates(text, now);
+export function extractActions(text: string, today: TriageToday = new Date()): PaperworkAction[] {
+  const dates = extractDates(text, today);
   const dueOn = dates[0] ?? null;
   const amount = extractAmount(text);
 
@@ -189,10 +218,10 @@ export function extractActions(text: string, now: Date = new Date()): PaperworkA
 }
 
 // ── Urgency ──────────────────────────────────────────────────────────────────
-export function urgencyOf(dueOn: string | null, now: Date = new Date()): Urgency {
+export function urgencyOf(dueOn: string | null, today: TriageToday = new Date()): Urgency {
   if (!dueOn) return 'normal';
   const due = new Date(`${dueOn}T00:00:00Z`);
-  const days = Math.round((due.getTime() - startOfDayUTC(now).getTime()) / 86_400_000);
+  const days = Math.round((due.getTime() - todayAnchorMs(today)) / 86_400_000);
   if (days <= 2) return 'urgent';
   if (days <= 7) return 'soon';
   return 'normal';
@@ -222,12 +251,12 @@ export function deriveTitle(text: string, fallback = 'Untitled paperwork'): stri
   return line.replace(/\s+/g, ' ').slice(0, 90);
 }
 
-export function triagePaperwork(text: string, now: Date = new Date()): TriageResult {
+export function triagePaperwork(text: string, today: TriageToday = new Date()): TriageResult {
   const kind = classifyPaperwork(text);
-  const actions = extractActions(text, now);
+  const actions = extractActions(text, today);
   const dueOn = actions.map((a) => a.due_on).find((d) => d) ?? null;
   const amount = extractAmount(text);
-  const urgency = urgencyOf(dueOn, now);
+  const urgency = urgencyOf(dueOn, today);
 
   // The stored RECORD, in the source language — see RECORD_LOCALE. Nothing a
   // person reads prints this string: the two screens that show a summary (the
@@ -269,8 +298,14 @@ export async function paperworkInsertRow(input: {
   text: string;
   sender?: string | null;
   now?: Date;
+  /**
+   * The family's IANA zone (`families.timezone`). A slip's yearless date and
+   * its urgency are read against the FAMILY's today — see `TriageToday`.
+   */
+  timeZone?: string | null;
 }) {
-  const t = triagePaperwork(input.text, input.now ?? new Date());
+  const now = input.now ?? new Date();
+  const t = triagePaperwork(input.text, input.timeZone ? dayKeyIn(now, input.timeZone) : now);
   const fields = paperworkKindFields(t.kind);
   return {
     family_id: input.familyId,

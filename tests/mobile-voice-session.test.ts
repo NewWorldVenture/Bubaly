@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
-import { VoiceSession, VoiceSessionError, type VoiceContext, type VoiceSessionDependencies } from '../mobile/src/lib/voice-session';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { VOICE_COMMAND_MAX_BYTES } from '@/lib/ai/voice';
+import { VOICE_RECORDING_MAX_MS, VoiceSession, VoiceSessionError, type VoiceContext, type VoiceSessionDependencies } from '../mobile/src/lib/voice-session';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -191,5 +192,52 @@ describe('phone turn ownership', () => {
     await flow.startRecording(); await flow.stopAndSend(); expect(deps.ask).not.toHaveBeenCalled();
     expect(deps.error).toHaveBeenCalledWith(error); expect(flow.phase).toBe('idle');
     await flow.startRecording(); await flow.stopAndSend(); expect(deps.ask).toHaveBeenCalledTimes(1);
+  });
+});
+
+// N17: the phone recorded until someone pressed stop. At the ~16 KB/s it
+// records, anything past about two minutes outgrew the 2 MB the transcription
+// route takes, was uploaded in full and refused with a 413 — and what was said
+// was lost. It now stops and sends itself at the web recorder's minute.
+describe('a phone recording is a spoken request, not an open microphone', () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('stops and sends itself at the cap', async () => {
+    vi.useFakeTimers();
+    const { flow, deps } = setup();
+    await flow.startRecording();
+
+    await vi.advanceTimersByTimeAsync(VOICE_RECORDING_MAX_MS - 1);
+    expect(deps.stop).not.toHaveBeenCalled(); expect(flow.phase).toBe('recording');
+
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.waitFor(() => expect(deps.reply).toHaveBeenCalledWith(reply));
+    expect(deps.stop).toHaveBeenCalledTimes(1); expect(deps.transcribe).toHaveBeenCalledTimes(1);
+    expect(deps.user).toHaveBeenCalledWith('Buy milk'); expect(flow.phase).toBe('idle');
+  });
+
+  it('keeps a recording within the minute the route accepts', () => {
+    // 128 kbps AAC (RecordingPresets.HIGH_QUALITY) is 16 KB a second.
+    expect((VOICE_RECORDING_MAX_MS / 1000) * 16 * 1024).toBeLessThan(VOICE_COMMAND_MAX_BYTES);
+  });
+
+  it('control: a recording stopped by hand is sent once, and the cap then does nothing', async () => {
+    vi.useFakeTimers();
+    const { flow, deps } = setup();
+    await flow.startRecording(); await flow.stopAndSend();
+
+    await vi.advanceTimersByTimeAsync(VOICE_RECORDING_MAX_MS * 2);
+
+    expect(deps.stop).toHaveBeenCalledTimes(1); expect(deps.transcribe).toHaveBeenCalledTimes(1); expect(deps.ask).toHaveBeenCalledTimes(1);
+  });
+
+  it('control: a reset recording is not sent when the cap comes round', async () => {
+    vi.useFakeTimers();
+    const { flow, deps } = setup();
+    await flow.startRecording(); flow.invalidate(); await flow.settled();
+
+    await vi.advanceTimersByTimeAsync(VOICE_RECORDING_MAX_MS * 2);
+
+    expect(deps.transcribe).not.toHaveBeenCalled(); expect(deps.ask).not.toHaveBeenCalled();
   });
 });

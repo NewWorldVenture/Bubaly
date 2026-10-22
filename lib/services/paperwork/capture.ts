@@ -9,6 +9,7 @@ import { isPaperworkExtractionPartial } from '@/lib/paperwork/extraction';
 import type { DocumentCaptureResult } from '@/lib/capture/document-upload';
 import type { ServiceScope } from '@/lib/services/types';
 import { enrichPaperworkEntities } from '@/lib/services/paperwork';
+import { dayKeyInTz } from '@/lib/services/scope';
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 export function capturedDocumentId(familyId: string, userId: string, captureId: string): string {
@@ -59,7 +60,8 @@ export async function captureDocument(scope: ServiceScope, input: { captureId: s
     if (!extracted.ok) return { ok: false, reason: extracted.reason, retryable: extracted.retryable };
     const text = extracted.text.replace(/\u0000/g, '');
     if (!text.trim() && !extracted.truncated) return { ok: false, reason: 'empty_document', retryable: false };
-    const triage = triagePaperwork(text, scope.now ?? new Date());
+    // A yearless due date and its urgency are read on the family's day.
+    const triage = triagePaperwork(text, dayKeyInTz(scope.now ?? new Date(), scope.tz));
     const fields = paperworkKindFields(triage.kind);
     const inserted = await scope.db.from('paperwork_items').insert({
       id, family_id: scope.familyId, created_by: scope.userId,

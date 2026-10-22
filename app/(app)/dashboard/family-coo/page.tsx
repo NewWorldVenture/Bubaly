@@ -13,6 +13,7 @@ import { ErrorState } from '@/components/ui/states';
 import { firstName } from '@/lib/utils/format';
 import { getFormat } from '@/lib/utils/format-server';
 import { getTranslations } from '@/lib/i18n/server';
+import { readOnOpenGroceryLists } from '@/lib/services/groceries';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -41,7 +42,8 @@ export default async function FamilyCooPage() {
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     supabase.from('chore_assignments').select('id, due_at, status, member_id, chore_id').eq('family_id', familyId).in('status', ['todo', 'in_progress']).order('due_at').limit(8),
     supabase.from('calendar_events').select('id, title, starts_at, all_day').eq('family_id', familyId).gte('starts_at', now).lte('starts_at', in7).order('starts_at').limit(6),
-    supabase.from('grocery_items').select('id, name').eq('family_id', familyId).eq('is_checked', false).limit(8),
+    // Only lists the family has not archived (readOnOpenGroceryLists).
+    readOnOpenGroceryLists(supabase, familyId, (lists) => supabase.from('grocery_items').select('id, name').eq('family_id', familyId).in('list_id', lists).eq('is_checked', false).limit(8)),
     supabase.from('family_routines').select('*').eq('family_id', familyId).eq('status', 'active').order('created_at'),
     supabase.from('maintenance_tasks').select('id, title, due_at, status').eq('family_id', familyId).in('status', ['todo', 'in_progress']).order('due_at').limit(5),
   ]);
@@ -100,7 +102,7 @@ export default async function FamilyCooPage() {
         <StatTile href="/dashboard/home" label={tr('dashboardFamilyCoo.maintenance')} value={maint?.length ?? 0} icon={Wrench} accent="bg-orange-500" sublabel="Home" />
       </div>
 
-      <div className="grid gap-5 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <SectionCard title={tr('dashboardFamilyCoo.taskAssignments')} viewAllHref="/dashboard/chores">
           {openChores && openChores.length > 0 ? (
             <ul className="divide-y divide-border">
@@ -141,7 +143,7 @@ export default async function FamilyCooPage() {
         </SectionCard>
       </div>
 
-      <div className="grid gap-5 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <SectionCard title={tr('dashboardFamilyCoo.thisWeek')} viewAllHref="/dashboard/calendar">
           {events && events.length > 0 ? (
             <ul className="space-y-2.5">

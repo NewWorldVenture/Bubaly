@@ -8,7 +8,7 @@ import { walletTierForPlanLevel, walletFeatureEnabled } from '@/lib/wallet/tiers
 import { isMissingRelationError } from '@/lib/supabase/errors';
 import type { Split } from '@/lib/wallet/ledger';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
-import { readAll } from '@/lib/supabase/read-all';
+import { readAll, readAllAsQuery } from '@/lib/supabase/read-all';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 
 export const runtime = 'nodejs';
@@ -63,14 +63,29 @@ export async function GET(req: NextRequest) {
     // reaches a database — or after any future policy drift — would still be
     // paid. A rule whose author is not an active manager of its family is not
     // paid, and says so in the response rather than being silently dropped.
+    //
+    // Read in chunks of families, each paged to its end. One `.in()` over every
+    // due family built a URL of ~40 bytes per id, so past roughly 200 families
+    // the request line outgrew the gateway and the whole run answered 500,
+    // paying nobody; below that, past 1,000 manager rows the response stopped at
+    // db-max-rows and the families whose managers did not come back had every
+    // rule skipped as "unauthored" in a run reported ok. A read that fails, or
+    // cannot be completed, fails the run instead: each chunk is paged to its
+    // end (readAllAsQuery), and a chunk's error is the read's.
     const authorKeys = new Set<string>();
     if (families.length > 0) {
-      const { data: managers, error: managersError } = await supabase
-        .from('family_members')
-        .select('family_id, user_id, role, is_active')
-        .in('family_id', families)
-        .in('role', ['parent', 'adult'])
-        .eq('is_active', true);
+      type ManagerRow = { id: string; family_id: string; user_id: string | null; role: string; is_active: boolean };
+      const { data: managers, error: managersError } = await readInChunks<ManagerRow, { message: string }>(
+        families,
+        (families) => readAllAsQuery<ManagerRow>((from, to) => supabase
+          .from('family_members')
+          .select('id, family_id, user_id, role, is_active')
+          .in('family_id', families)
+          .in('role', ['parent', 'adult'])
+          .eq('is_active', true)
+          .order('id')
+          .range(from, to)),
+      );
       if (managersError) throw managersError;
       for (const m of managers ?? []) {
         if (m.user_id) authorKeys.add(`${m.family_id}:${m.user_id}`);

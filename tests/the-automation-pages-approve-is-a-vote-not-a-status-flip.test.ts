@@ -100,12 +100,15 @@ function seedFamilyAndPlan(): void {
   }]);
 }
 
+/** The plan as planAcceptedAction files it with the ask: what the approval and the queued line are about. */
+const FILED_PLAN = { title: 'Soccer Saturday', description: 'At the park', location: 'Riverside Park', planned_for: '2026-09-06' };
+
 /** The approval planAcceptedAction files when the family chose "Two parents". */
 function seedTwoParentApproval(over: Record<string, unknown> = {}): void {
   store.seed('approval_requests', [{
     id: APPROVAL, family_id: FAMILY, domain: 'scheduling', capability: 'automate', requested_by_kind: 'ai',
     requested_by_member_id: null, agent: 'Concierge', title: 'Materialize: Soccer Saturday', summary: null,
-    payload: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'] }, payload_kind: null,
+    payload: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'], plan: FILED_PLAN }, payload_kind: null,
     amount_cents: null, confidence: null, policy_id: null, reasoning: 'two parents',
     approval_model: 'two_parent', required_approvals: 1, approvals: [], status: 'pending', priority: 'normal',
     decided_by: null, decided_at: null, expires_at: '2099-01-01T00:00:00Z', executed_at: null, execution_result: null,
@@ -113,6 +116,10 @@ function seedTwoParentApproval(over: Record<string, unknown> = {}): void {
     reviewed_by: null, review_note: null, created_at: '2026-09-05T10:00:00Z',
     ...over,
   }]);
+  // The trust engine's own filing line (evaluateTrust, written by the service
+  // role only, 0260): the proof that Bubaly filed this row, without which a
+  // concierge plan approval runs nothing (lib/services/approvals `filedByBubaly`).
+  store.seed('trust_audit_logs', [{ family_id: FAMILY, actor_kind: 'ai_agent', actor_id: 'concierge', approval_id: APPROVAL, decision: 'require_approval' }]);
 }
 
 /** The Autopilot line planAcceptedAction writes beside it, exactly as the server writes it. */
@@ -120,7 +127,7 @@ function seedQueuedPlanRun(over: Record<string, unknown> = {}): void {
   store.seed('family_automation_runs', [{
     id: RUN, family_id: FAMILY, trigger_type: 'plan_accepted', status: 'pending', state: 'awaiting_approval',
     requested_by_member_id: MUM, summary: 'Waiting for approval: Materialize: Soccer Saturday', result: {},
-    metadata: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'], approval_id: APPROVAL, basis: 'policy', reason: 'two parents' },
+    metadata: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'], approval_id: APPROVAL, basis: 'policy', reason: 'two parents', plan: FILED_PLAN },
     approved_by: null, approved_at: null, completed_at: null,
     created_by: 'auth-mum',
     ...over,
@@ -422,7 +429,7 @@ describe('a run the executor parked on a step’s approval', () => {
 describe('what nothing governs', () => {
   it('a concierge line with no approval behind it is carried out, not left "approved" with nothing done', async () => {
     seedFamilyAndPlan();
-    seedQueuedPlanRun({ metadata: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'], approval_id: null } });
+    seedQueuedPlanRun({ metadata: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'], approval_id: null, plan: FILED_PLAN } });
     actAs(AS_MUM);
 
     const res = await resolveAutomationRun(RUN, 'approved');

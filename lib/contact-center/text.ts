@@ -23,3 +23,16 @@ export function safeContactText(value: string, max: number): string {
 export function safeSmsReplyText(value: string, max = 1599): string {
   return boundedText(value, max, true);
 }
+
+/**
+ * A subject line built from caller text. Control characters and the Unicode
+ * line separators are removed, whitespace is collapsed, and the result is
+ * bounded. The inbound Subject was echoed verbatim into the auto-reply's
+ * subject, so a 1,000-character sentence, CR/LF and U+2028 included, left as a
+ * Bubaly-signed subject line (audit N2). Empty when nothing printable remains,
+ * so the caller falls back to its fixed wording.
+ */
+export function safeSubjectText(value: string, max: number): string {
+  const flat = value.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return safeContactText(flat, max).trim();
+}

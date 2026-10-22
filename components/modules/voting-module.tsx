@@ -12,7 +12,9 @@ import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { datetimeLocalToInstant } from '@/lib/time/datetime-local';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { tallyPoll, voterCount, memberSelections, isPollClosed, type VoteLike, type OptionLike } from '@/lib/voting/polls';
 import { facilitateConsensus, budgetCapForCategory, type ConsensusOption } from '@/lib/voting/consensus';
 import { WhyThis } from '@/components/ai/why-this';
@@ -48,9 +50,20 @@ const parseTags = (s: string): string[] =>
 // so the money is USD. The reader's locale decides only where the symbol goes and
 // how the digits group (I18N-003).
 const CURRENCY = 'USD';
+/**
+ * Every option and vote the family has, read in id order to the end. The tally,
+ * "N voted", the consensus and the member's own selections are all SUMS over
+ * these rows; an unpaged read hands back an arbitrary 1,000 once a family's
+ * history passes that, which understated the newest poll and could drop the
+ * member's own vote (so tapping it inserted a duplicate instead of removing
+ * it). Past this ceiling the read fails and the page says so, rather than
+ * counting a prefix.
+ */
+const POLL_ROWS_MAX = 50_000;
 
 export function VotingModule() {
-  const { fmtDate } = useFormat();
+  const { fmtDateTime } = useFormat();
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const locale = useLocale();
   const money = (cents: number) => formatCents(cents, CURRENCY, locale.code);
@@ -64,11 +77,19 @@ export function VotingModule() {
   });
   const { data: options, loading: optionsLoading, error: optionsError, refresh: refreshOptions } = useRealtimeQuery<Option>({
     table: 'family_poll_options', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('family_poll_options').select('*').eq('family_id', familyId),
+    fetcher: (sb) => readAllByIdAsQuery<Option>((after, limit) => {
+      let q = sb.from('family_poll_options').select('*').eq('family_id', familyId);
+      if (after) q = q.gt('id', after);
+      return q.order('id').limit(limit);
+    }, { max: POLL_ROWS_MAX }),
   });
   const { data: votes, loading: votesLoading, error: votesError, refresh: refreshVotes } = useRealtimeQuery<VoteRow>({
     table: 'family_poll_votes', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('family_poll_votes').select('*').eq('family_id', familyId),
+    fetcher: (sb) => readAllByIdAsQuery<VoteRow>((after, limit) => {
+      let q = sb.from('family_poll_votes').select('*').eq('family_id', familyId);
+      if (after) q = q.gt('id', after);
+      return q.order('id').limit(limit);
+    }, { max: POLL_ROWS_MAX }),
   });
   const { data: vacations, loading: vacationsLoading, error: vacationsError, refresh: refreshVacations } = useRealtimeQuery<VacationLite>({
     table: 'vacations', familyId, deps: [familyId],
@@ -115,6 +136,11 @@ export function VotingModule() {
       if (!form || !form.question.trim()) return;
       const opts = form.options.filter((o) => o.label.trim());
       if (opts.length < 2) return toastError(tr('votingModule.addAtLeastTwoOptions'));
+      // The deadline is typed on the FAMILY's clock. `new Date(value)` read it
+      // in the device's zone, so a New York family's 8:00 PM set from a phone
+      // in Los Angeles closed the poll at 11:00 PM Eastern (TIME-003).
+      const closesAt = form.closes_at ? datetimeLocalToInstant(form.closes_at, clock.timeZone) : null;
+      if (form.closes_at && !closesAt) return toastError(tr('errors.thatTimeIsNotOnTheFamilysClock'));
       const supabase = createClient();
       const { data: poll, error } = await supabase.from('family_polls').insert({
         family_id: familyId,
@@ -125,7 +151,7 @@ export function VotingModule() {
         decision_category: form.decision_category,
         budget_cents: form.budget ? Math.round(Number(form.budget) * 100) : null,
         required_tags: parseTags(form.required_tags),
-        closes_at: form.closes_at ? new Date(form.closes_at).toISOString() : null,
+        closes_at: closesAt,
         created_by: userId,
       }).select('id').single();
       if (error || !poll) return toastError(describeDbError(error, tr('votingModule.couldNotCreate')));
@@ -137,7 +163,18 @@ export function VotingModule() {
           tags: parseTags(o.tags),
         })),
       );
-      if (oErr) return toastError(describeDbError(oErr));
+      if (oErr) {
+        // The poll row is already committed. Left in place it showed as a poll
+        // nobody could vote on, and pressing Create again (the form stays open)
+        // added a second one. Take it back before reporting, and confirm that
+        // it went.
+        const { data: rolledBack, error: rollbackError } = await supabase.from('family_polls')
+          .delete().eq('id', poll.id).eq('family_id', familyId).select('id');
+        if (rollbackError || wroteNoRows(rolledBack)) {
+          console.error('[voting] could not remove a poll whose options failed', { pollId: poll.id, error: rollbackError ?? 'no rows deleted' });
+        }
+        return toastError(describeDbError(oErr));
+      }
       success(tr('votingModule.pollCreated'));
       setForm(null);
     } finally {
@@ -147,7 +184,24 @@ export function VotingModule() {
 
   async function vote(poll: Poll, optionId: string) {
     if (!meId) return toastError(tr('votingModule.joinTheFamilyAsA'));
+    // `closed` on the button is worked out when the page rendered, and nothing
+    // re-renders it at `closes_at`: a page opened at 7:55 still took a vote at
+    // 8:05 on a poll that closed at 8:00. Asked again at the tap.
+    if (isPollClosed(poll.status, poll.closes_at, new Date())) return toastError(tr('votingModule.thisPollIsClosed'));
     const supabase = createClient();
+    // And asked of the DATABASE, not only of this screen: family_polls is not
+    // in the realtime publication, so a poll a parent closed on another phone
+    // still reads 'open' here until a reload, and nothing in the database
+    // refuses a vote on a closed poll. Read its status and deadline now; a read
+    // that fails writes nothing.
+    const { data: current, error: currentError } = await supabase.from('family_polls')
+      .select('status, closes_at').eq('id', poll.id).eq('family_id', familyId).maybeSingle();
+    if (currentError || !current) return toastError(describeDbError(currentError, tr('errors.thatChangeWasNotSaved')));
+    if (isPollClosed(current.status, current.closes_at, new Date())) {
+      toastError(tr('votingModule.thisPollIsClosed'));
+      void refreshPolls();
+      return;
+    }
     const pollVotes = votesByPoll.get(poll.id) ?? [];
     const mine = memberSelections(pollVotes as VoteLike[], meId);
     // These two are keyed by member and option, not by id, and are left
@@ -182,11 +236,20 @@ export function VotingModule() {
     }
   }
 
-  async function setStatus(id: string, status: string) {
+  async function setStatus(poll: Poll, status: string) {
+    // A poll closed by its deadline stays closed whatever its status says, so
+    // reopening one also clears the deadline — writing status alone was a
+    // click that changed nothing.
+    const reopenPastDeadline = status === 'open' && !!poll.closes_at && isPollClosed('open', poll.closes_at, new Date());
+    const patch = reopenPastDeadline ? { status, closes_at: null } : { status };
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
-    const { data: updated, error } = await createClient().from('family_polls').update({ status }).eq('id', id).select('id');
+    const { data: updated, error } = await createClient().from('family_polls').update(patch).eq('id', poll.id).eq('family_id', familyId).select('id, status, closes_at');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(updated)) toastError(tr('errors.thatChangeWasNotSaved'));
+    else if (status === 'open' && updated?.[0] && isPollClosed(updated[0].status, updated[0].closes_at, new Date())) toastError(tr('errors.thatChangeWasNotSaved'));
+    // family_polls is not in the realtime publication: the screen re-reads, so
+    // its own Close takes effect here without a reload.
+    void refreshPolls();
   }
   async function remove(id: string) {
     if (!confirm(tr('votingModule.deleteThisPoll'))) return;
@@ -262,13 +325,13 @@ export function VotingModule() {
                     ? tr('voting.budgetFromYourBudget', { amount: money(budgetCents) })
                     : tr('voting.budgetAmount', { amount: money(budgetCents) })}</> : ''}
                   {requiredTags.length > 0 ? <> · <Leaf className="inline h-3 w-3" /> {requiredTags.join(', ')}</> : ''}
-                  {p.closes_at ? ` · closes ${fmtDate(p.closes_at)}` : ''}
+                  {p.closes_at ? ` · closes ${fmtDateTime(p.closes_at)}` : ''}
                   {closed && <span className="ml-1 inline-flex items-center gap-1 text-amber-500"><Lock className="h-3 w-3" /> closed</span>}
                 </p>
                 {p.description && <p className="mt-1 text-sm text-muted">{p.description}</p>}
               </div>
               <div className="flex shrink-0 items-center gap-2 text-xs">
-                <button onClick={() => setStatus(p.id, closed ? 'open' : 'closed')} className="text-muted hover:text-fg hover:underline">{closed ? 'Reopen' : 'Close'}</button>
+                <button onClick={() => setStatus(p, closed ? 'open' : 'closed')} className="text-muted hover:text-fg hover:underline">{closed ? 'Reopen' : 'Close'}</button>
                 <button onClick={() => remove(p.id)} className="text-muted hover:text-danger" aria-label={tr('voting.delete')}><Trash2 className="h-4 w-4" /></button>
               </div>
             </div>
@@ -381,7 +444,7 @@ export function VotingModule() {
                       </div>
                       <div className="mt-2 grid grid-cols-3 gap-2">
                         <Input type="number" min="0" value={opt.cost} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], cost: e.target.value }; setForm({ ...form, options: o }); }} placeholder={tr('voting.cost')} aria-label={tr('voting.optionNCost', { n: i + 1 })} />
-                        <Input type="number" min="0" value={opt.travel} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], travel: e.target.value }; setForm({ ...form, options: o }); }} placeholder={tr('voting.travelMin')} aria-label={tr('voting.optionNTravel', { n: i + 1 })} />
+                        <Input type="number" min="0" max="2147483647" value={opt.travel} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], travel: e.target.value }; setForm({ ...form, options: o }); }} placeholder={tr('voting.travelMin')} aria-label={tr('voting.optionNTravel', { n: i + 1 })} />
                         <Input value={opt.tags} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], tags: e.target.value }; setForm({ ...form, options: o }); }} placeholder="tags" aria-label={tr('voting.optionNTags', { n: i + 1 })} />
                       </div>
                     </div>

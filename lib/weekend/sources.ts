@@ -1,7 +1,7 @@
 // Additional Weekend Planner sources: SeatGeek (keyed, nationwide) and
 // standards-based ICS / RSS feeds (family-curated local calendars). All pure +
 // unit-tested; network fetching happens in the API route.
-import type { NormalizedEvent } from './normalize';
+import { civilDayStart, type NormalizedEvent } from './normalize';
 import { instantForIcsLocalTime, isValidTimezone } from '@/lib/time/zoned';
 
 const toCents = (n: unknown): number | null => {
@@ -84,13 +84,18 @@ function unescapeICS(v: string): string {
  *                                 the discovery route, so the instant is the
  *                                 same there and now does not depend on where
  *                                 the code runs.
- *   20260625                    → midnight UTC of that date.
+ *   20260625                    → the start of that date in `dateZone`, the
+ *                                 FAMILY's zone. A date-only DTSTART is an
+ *                                 all-day event, a civil date with no instant,
+ *                                 and it read as UTC midnight: 5 PM the day
+ *                                 before in California, filed under the wrong
+ *                                 day. UTC when no zone is given.
  *
  * A TZID this runtime does not know (Windows names) falls back to the floating
  * rule rather than dropping the event; this is discovery, not the family's own
  * calendar, and an event an hour off beats one missing. The limit is stated.
  */
-export function parseICSDate(val: string, tzid: string | null = null): string | null {
+export function parseICSDate(val: string, tzid: string | null = null, dateZone: string | null = null): string | null {
   const v = val.trim();
   // 20260625T180000Z  | 20260625T180000 | 20260625
   let m = v.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z?)$/);
@@ -103,8 +108,18 @@ export function parseICSDate(val: string, tzid: string | null = null): string | 
     return `${y}-${mo}-${d}T${h}:${mi}:${s}Z`;
   }
   m = v.match(/^(\d{4})(\d{2})(\d{2})$/);
-  if (m) return `${m[1]}-${m[2]}-${m[3]}T00:00:00Z`;
+  if (m) return civilDayStart(`${m[1]}-${m[2]}-${m[3]}`, dateZone);
   return null;
+}
+
+/** `YYYYMMDD`, the value of an all-day (VALUE=DATE) DTSTART or DTEND. */
+const isDateOnly = (val: string | undefined) => !!val && /^\d{8}$/.test(val.trim());
+
+/** The civil date after an all-day value: where an all-day event with no DTEND ends (RFC 5545 §3.6.1). */
+function nextDateKey(val: string): string {
+  const v = val.trim();
+  const next = new Date(Date.UTC(+v.slice(0, 4), +v.slice(4, 6) - 1, +v.slice(6, 8) + 1));
+  return next.toISOString().slice(0, 10).replace(/-/g, '');
 }
 
 /**
@@ -130,7 +145,12 @@ function splitContentLine(line: string): { key: string; tzid: string | null; val
   return { key: rawKey.toUpperCase(), tzid, value: line.slice(colon + 1) };
 }
 
-export function parseICS(text: string, source = 'feed'): NormalizedEvent[] {
+/**
+ * `timeZone` is the family's: an all-day event (a date-only DTSTART) starts
+ * at its midnight and, with no DTEND, ends at the next one, so the event is
+ * filed under its own day and stays discoverable through it.
+ */
+export function parseICS(text: string, source = 'feed', timeZone: string | null = null): NormalizedEvent[] {
   const lines = unfoldICS(text);
   const events: NormalizedEvent[] = [];
   let cur: Record<string, string> | null = null;
@@ -138,7 +158,9 @@ export function parseICS(text: string, source = 'feed'): NormalizedEvent[] {
     if (line === 'BEGIN:VEVENT') { cur = {}; continue; }
     if (line === 'END:VEVENT') {
       if (cur && (cur.SUMMARY || cur.summary)) {
-        const start = cur.DTSTART != null ? parseICSDate(cur.DTSTART, cur['DTSTART;TZID'] ?? null) : null;
+        const start = cur.DTSTART != null ? parseICSDate(cur.DTSTART, cur['DTSTART;TZID'] ?? null, timeZone) : null;
+        const end = cur.DTEND != null ? parseICSDate(cur.DTEND, cur['DTEND;TZID'] ?? null, timeZone)
+          : start && isDateOnly(cur.DTSTART) ? parseICSDate(nextDateKey(cur.DTSTART), null, timeZone) : null;
         events.push({
           source, external_id: cur.UID || null,
           title: unescapeICS(cur.SUMMARY ?? 'Event'),
@@ -147,7 +169,7 @@ export function parseICS(text: string, source = 'feed'): NormalizedEvent[] {
           venue_name: cur.LOCATION ? unescapeICS(cur.LOCATION) : null,
           address: cur.LOCATION ? unescapeICS(cur.LOCATION) : null,
           city: null, region: null, postal_code: null, latitude: null, longitude: null,
-          starts_at: start, ends_at: cur.DTEND ? parseICSDate(cur.DTEND, cur['DTEND;TZID'] ?? null) : null,
+          starts_at: start, ends_at: end,
           url: cur.URL || null, image_url: null,
           price_min_cents: null, price_max_cents: null, currency: 'USD',
           distance_miles: null, is_family_friendly: /family|kid|children/i.test(`${cur.SUMMARY} ${cur.CATEGORIES ?? ''}`),
@@ -167,19 +189,115 @@ export function parseICS(text: string, source = 'feed'): NormalizedEvent[] {
 }
 
 // ---------------- RSS / Atom ----------------
+// Every scan below is LINEAR: one forward `indexOf` pass, never a lazy regex.
+// A feed is any URL a family member saves, read in full (up to 1 MiB), and
+// `/<item[\s\S]*?<\/item>/` rescans to the end of the text from EVERY `<item`
+// that is never closed — quadratic, about a minute of blocked event loop for
+// one megabyte of `<item`, per feed, per search. The tag, CDATA and markup
+// passes had the same shape inside one oversized item.
+
+/** Items read from one feed, and the longest text kept from any one field. */
+const MAX_RSS_ITEMS = 500;
+const MAX_RSS_FIELD_CHARS = 4000;
+
+/**
+ * ASCII-only lowercase, so every index into it is an index into the original:
+ * `toLowerCase()` turns some letters into two code units ('İ' → 'i̇'), and a
+ * slice taken by its offsets would be off by one for each.
+ */
+const asciiLower = (text: string) => text.replace(/[A-Z]+/g, (run) => run.toLowerCase());
+
+/** The character after a tag name: the name ends there, so `<item` is not `<itemref`. */
+const endsName = (ch: string | undefined) => ch === undefined || ch === '>' || ch === '/' || /\s/.test(ch);
+
+/** `<![CDATA[…]]>` unwrapped, in one pass. An unterminated section is left as it is. */
+function unwrapCdata(text: string): string {
+  let out = '';
+  let from = 0;
+  for (;;) {
+    const open = text.indexOf('<![CDATA[', from);
+    if (open === -1) return out + text.slice(from);
+    const close = text.indexOf(']]>', open + 9);
+    if (close === -1) return out + text.slice(from);
+    out += text.slice(from, open) + text.slice(open + 9, close);
+    from = close + 3;
+  }
+}
+
+/** Markup removed, in one pass: `<…>` with something inside. A `<` never closed is text. */
+function stripTags(text: string): string {
+  let out = '';
+  let from = 0;
+  for (;;) {
+    const lt = text.indexOf('<', from);
+    if (lt === -1) return out + text.slice(from);
+    const gt = text.indexOf('>', lt + 1);
+    if (gt === -1) return out + text.slice(from);
+    if (gt === lt + 1) { out += text.slice(from, gt + 1); from = gt + 1; continue; }
+    out += text.slice(from, lt);
+    from = gt + 1;
+  }
+}
+
+/** The text of the first `<name …>…</name>` in a block, case-insensitively, or null. */
 const tag = (block: string, name: string): string | null => {
-  const m = block.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)</${name}>`, 'i'));
-  if (!m) return null;
-  return m[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]+>/g, '').trim() || null;
+  const lower = asciiLower(block);
+  const open = `<${asciiLower(name)}`;
+  const close = `</${asciiLower(name)}>`;
+  for (let from = 0; ;) {
+    const start = lower.indexOf(open, from);
+    if (start === -1) return null;
+    if (!endsName(lower[start + open.length])) { from = start + open.length; continue; }
+    const gt = lower.indexOf('>', start + open.length);
+    if (gt === -1) return null;
+    const end = lower.indexOf(close, gt + 1);
+    // No closing tag after this one means none after any later one either.
+    if (end === -1) return null;
+    return stripTags(unwrapCdata(block.slice(gt + 1, end).slice(0, MAX_RSS_FIELD_CHARS))).trim() || null;
+  }
 };
+
+/** Each `<name …>…</name>` block, in order, stopping at the first one never closed. */
+function blocksOf(text: string, lower: string, name: string): string[] {
+  const open = `<${name}`;
+  const close = `</${name}>`;
+  const out: string[] = [];
+  for (let from = 0; out.length < MAX_RSS_ITEMS;) {
+    const start = lower.indexOf(open, from);
+    if (start === -1) break;
+    if (!endsName(lower[start + open.length])) { from = start + open.length; continue; }
+    const end = lower.indexOf(close, start + open.length);
+    if (end === -1) break;
+    out.push(text.slice(start, end + close.length));
+    from = end + close.length;
+  }
+  return out;
+}
+
+/** The `href` of the first `<link …>` (Atom's form), scanning each tag once. */
+function linkHref(block: string): string | null {
+  const lower = asciiLower(block);
+  for (let from = 0; ;) {
+    const start = lower.indexOf('<link', from);
+    if (start === -1) return null;
+    if (!endsName(lower[start + 5])) { from = start + 5; continue; }
+    const gt = lower.indexOf('>', start + 5);
+    if (gt === -1) return null;
+    const href = /href="([^"]+)"/i.exec(block.slice(start + 5, gt))?.[1];
+    if (href) return href.slice(0, MAX_RSS_FIELD_CHARS);
+    from = gt + 1;
+  }
+}
 
 export function parseRSS(text: string, source = 'feed'): NormalizedEvent[] {
   const out: NormalizedEvent[] = [];
-  const items = text.match(/<item[\s\S]*?<\/item>/gi) ?? text.match(/<entry[\s\S]*?<\/entry>/gi) ?? [];
+  const lower = asciiLower(text);
+  const rssItems = blocksOf(text, lower, 'item');
+  const items = rssItems.length ? rssItems : blocksOf(text, lower, 'entry');
   for (const block of items) {
-    const title = tag(block, 'title');
+    const title = tag(block, 'title')?.slice(0, 300) ?? null;
     if (!title) continue;
-    const link = tag(block, 'link') ?? (block.match(/<link[^>]*href="([^"]+)"/i)?.[1] ?? null);
+    const link = tag(block, 'link') ?? linkHref(block);
     const dateStr = tag(block, 'pubDate') ?? tag(block, 'published') ?? tag(block, 'updated') ?? tag(block, 'dc:date');
     const parsed = dateStr ? new Date(dateStr) : null;
     out.push({
@@ -198,14 +316,21 @@ export function parseRSS(text: string, source = 'feed'): NormalizedEvent[] {
 }
 
 // ---------------- shared helpers ----------------
-/** Keep events that start within [now - grace, now + days]. */
+/**
+ * Keep events that start by `now + days` and are not over: they start, or
+ * end, after `now - grace`. An all-day event starts at midnight and runs all
+ * day, so its start alone dropped it an hour into its own day — and, read as
+ * UTC midnight, from 6 PM the evening before in California.
+ */
 export function withinWindow(events: NormalizedEvent[], days: number, now: Date = new Date()): NormalizedEvent[] {
   const lo = now.getTime() - 3_600_000;
   const hi = now.getTime() + days * 86_400_000;
   return events.filter((e) => {
     if (!e.starts_at) return false;
     const t = new Date(e.starts_at).getTime();
-    return !Number.isNaN(t) && t >= lo && t <= hi;
+    if (Number.isNaN(t) || t > hi) return false;
+    const end = e.ends_at ? new Date(e.ends_at).getTime() : Number.NaN;
+    return Math.max(t, Number.isNaN(end) ? t : end) >= lo;
   });
 }
 

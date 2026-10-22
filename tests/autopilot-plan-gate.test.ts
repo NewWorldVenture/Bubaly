@@ -295,6 +295,16 @@ describe('the on-demand Autopilot scan runs only for entitled families', () => {
     expect(scannedZones()).toEqual(['America/Los_Angeles']);
   });
 
+  it('runs as the member who asked, so it writes only the cards they may read (0486); the cron writes every card', async () => {
+    state.activeFamilyId = PLUS;
+    await onDemand();
+    expect((scan.run.mock.calls[0] as unknown[])[7]).toEqual({ role: 'parent', memberId: 'member-1' });
+
+    scan.run.mockClear();
+    await cron(cronRequest() as never);
+    expect((scan.run.mock.calls[0] as unknown[])[7] ?? null).toBeNull();
+  });
+
   it('lets a super administrator preview it past their plan, as the page does (C1-S9-98)', async () => {
     // requireFeature lets a super admin onto /dashboard/autopilot whatever
     // their family pays for. The scan behind it refused them, and the screen

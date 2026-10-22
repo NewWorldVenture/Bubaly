@@ -227,6 +227,7 @@ export async function POST(req: NextRequest) {
     const input: AssistantTurnInput = {
       supabase, familyId, userId: ctx.user.id, role: ctx.active.role,
       familyName: ctx.active.family.name, tz, conversationId, message,
+      signal: req.signal,
     };
     const prepared = await prepareAssistantTurn(input);
     if (!prepared.ok) return NextResponse.json({ error: prepared.error }, { status: 500 });

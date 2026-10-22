@@ -83,8 +83,10 @@ export function DeclutterModule() {
   const todayIso = isoDate(today);
   const activeZones = useMemo(() => zones.data.filter((z) => z.is_active), [zones.data]);
   const visibleZones = showArchived ? zones.data : activeZones;
-  const summary = useMemo(() => declutterSummary(zones.data, missions.data, sessions.data, today), [zones.data, missions.data, sessions.data, today]);
-  const plan = useMemo(() => weeklyPlan(zones.data, missions.data, members.map((m) => m.id), today, 2, locale.code), [zones.data, missions.data, members, today, locale.code]);
+  // Instants (completed_at, started_at, last_reset_at) are counted on the
+  // family's day, the day `today` already is — not Greenwich's.
+  const summary = useMemo(() => declutterSummary(zones.data, missions.data, sessions.data, today, clock.timeZone), [zones.data, missions.data, sessions.data, today, clock.timeZone]);
+  const plan = useMemo(() => weeklyPlan(zones.data, missions.data, members.map((m) => m.id), today, 2, locale.code, clock.timeZone), [zones.data, missions.data, members, today, locale.code, clock.timeZone]);
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
   const zoneOf = (id: string | null) => zones.data.find((z) => z.id === id) ?? null;
 
@@ -99,13 +101,19 @@ export function DeclutterModule() {
   async function planWeek() {
     if (!plan.length) return toastError(tr('declutterModule.everyZoneAlreadyHasA'));
     setPlanning(true);
-    const { error } = await createClient().from('declutter_missions').insert(plan.map((p) => ({
+    // The rows come back and join the list BEFORE the button is live again.
+    // `plan` is computed from the missions on screen, and declutter_missions has
+    // no unique key, so a second click in the gap before the realtime refetch
+    // used to insert a second planned mission for every zone.
+    const { data: planned, error } = await createClient().from('declutter_missions').insert(plan.map((p) => ({
       family_id: familyId, zone_id: p.zone.id, title: templateTitle(tr, p.zone.kind, p.template.title), minutes: p.template.minutes, points: p.template.points,
       assignee_id: p.assigneeId, scheduled_for: p.day, status: 'planned' as const, created_by: userId,
-    })));
+    }))).select('*');
+    if (error) { setPlanning(false); return toastError(describeDbError(error)); }
+    if (!planned || wroteNoRows(planned)) { setPlanning(false); return toastError(tr('errors.thatChangeWasNotSaved')); }
+    missions.setData((rows) => [...rows.filter((row) => !planned.some((p) => p.id === row.id)), ...planned]);
     setPlanning(false);
-    if (error) return toastError(describeDbError(error));
-    success(plural('declutter.missionsPlanned', plan.length));
+    success(plural('declutter.missionsPlanned', planned.length));
   }
 
   async function skipMission(m: Mission) {
@@ -128,6 +136,10 @@ export function DeclutterModule() {
     const { data: removed, error } = await createClient().from('declutter_missions').delete().eq('id', m.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // declutter_missions is published without REPLICA IDENTITY FULL, so the
+    // family_id-filtered channel never hears a DELETE: the confirmed delete
+    // drops the row here, or it stays on screen until a reload.
+    missions.setData((rows) => rows.filter((row) => row.id !== m.id));
     success(tr('declutterModule.missionDeleted'));
   }
 
@@ -241,11 +253,11 @@ export function DeclutterModule() {
           ) : (
             <ul className="space-y-2">
               {visibleZones.map((z) => {
-                const h = zoneHealth(z, today);
+                const h = zoneHealth(z, today, clock.timeZone);
                 const meta = zoneKindMeta(z.kind);
                 const openHere = open.filter((m) => m.zone_id === z.id).length;
                 return (
-                  <li key={z.id} className={cn('rounded-2xl border border-border bg-surface/40 p-4', !z.is_active && 'opacity-60')}>
+                  <li key={z.id} className={cn('rounded-2xl border border-border bg-surface/40 p-4', !z.is_active && 'border-dashed')}>
                     <div className="flex items-start gap-3">
                       <span className="text-2xl" aria-hidden>{meta.emoji}</span>
                       <div className="min-w-0 flex-1">
@@ -310,7 +322,7 @@ export function DeclutterModule() {
               }) : tr('declutter.addZoneFirst')}</p>
               {plan.length > 0 && (
                 <ul className="mt-3 grid gap-1 text-xs text-muted sm:grid-cols-2">
-                  {plan.slice(0, 6).map((p) => <li key={`${p.day}-${p.zone.id}`}>{p.dayLabel}: {zoneKindMeta(p.zone.kind).emoji} {templateTitle(tr, p.zone.kind, p.template.title)} <span className="opacity-70">({p.zone.name}{p.assigneeId ? `, ${nameOf(p.assigneeId)}` : ''})</span></li>)}
+                  {plan.slice(0, 6).map((p) => <li key={`${p.day}-${p.zone.id}`}>{p.dayLabel}: {zoneKindMeta(p.zone.kind).emoji} {templateTitle(tr, p.zone.kind, p.template.title)} <span>({p.zone.name}{p.assigneeId ? `, ${nameOf(p.assigneeId)}` : ''})</span></li>)}
                 </ul>
               )}
             </div>

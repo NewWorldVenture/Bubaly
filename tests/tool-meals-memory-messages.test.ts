@@ -372,6 +372,7 @@ describe('messages tools', () => {
   });
   it('accepts the legacy create_announcement shape and reports both author columns were set', async () => {
     const { db, calls } = makeDb((call) => {
+      if (call.table === 'family_members') return { data: MEMBERS[0], error: null };
       if (call.table === 'agent_activity') return { data: { id: 'activity-1' }, error: null };
       return call.kind === 'insert'
         ? { data: { ...(call.payload as Record<string, unknown>), id: 'ann-1', created_at: NOW.toISOString(), updated_at: NOW.toISOString() }, error: null }

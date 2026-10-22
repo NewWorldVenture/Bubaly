@@ -25,6 +25,10 @@ import type { HandledToday } from '@/components/display/handled-today-tile';
 import { DisplayShellClient } from '@/components/display/display-shell-client';
 import { addDaysToDayKey, dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import type { AudienceViewer } from '@/lib/autopilot/audience';
+import { reminderCardsReader, visibleReminders } from '@/lib/autopilot/reminder-cards';
+import { suggestionReminderKey, suggestionSourceTag } from '@/lib/services/autopilot';
+import { readOnOpenGroceryLists } from '@/lib/services/groceries';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -40,7 +44,10 @@ function emptyDisplay(familyName: string, now: Date, timezone: unknown): Display
   return {
     familyName,
     timezone: calendar.timezone, dayKey: calendar.dayKey, timezoneFallback: calendar.timezoneFallback,
-    loadStatus: { events: 'error', upcoming: 'error', monthEvents: 'error', reminders: 'error' },
+    loadStatus: {
+      events: 'error', upcoming: 'error', monthEvents: 'error', reminders: 'error',
+      meals: 'error', grocery: 'error', chores: 'error', members: 'error', notes: 'error',
+    },
     members: [], events: [], upcoming: [], chores: [], meals: [],
     grocery: { items: [], count: 0 }, reminders: [], birthdays: [],
     notes: [], featured: [], photos: [],
@@ -129,11 +136,30 @@ async function loadDisplay(
   timezone: unknown,
   untitledRun: string,
   locale: LocaleCode,
+  viewer: AudienceViewer,
 ): Promise<LoadedDisplay> {
   const calendar = familyDisplayCalendar(now, timezone);
   const { start, end } = calendar.todayWindow;
   const in14 = calendar.upcomingWindow.end;
   const todayDate = calendar.dayKey;
+
+  // A reminder an Autopilot card made goes on the wall only for the card's
+  // readers (lib/autopilot/reminder-cards.ts), as on the dashboard: an accepted
+  // insurance card's "Renew dental insurance (Smile Co)" is the managers' and
+  // the member the policy names, a renewal's is not a guest's. Read whole, as
+  // the tile always read; the cards only when a reminder could be one's.
+  const readTileReminders = async () => {
+    const read = await supabase.from('family_reminders').select('id, title, remind_at, status, snoozed_until, idempotency_key, tags')
+      .eq('family_id', familyId).in('status', ['active', 'snoozed']).not('remind_at', 'is', null)
+      .lt('remind_at', in14.toISOString()).order('remind_at');
+    if (read.error) return read;
+    const cards = reminderCardsReader(supabase, familyId, {
+      keyOf: (cardId) => suggestionReminderKey(familyId, cardId),
+      sourceTagOf: suggestionSourceTag,
+      onError: (error) => console.error('[display] autopilot reminder cards read failed', error),
+    });
+    return { data: await visibleReminders(read.data ?? [], viewer, cards), error: null };
+  };
 
   const results = await Promise.all([
     settle(supabase.from('family_members').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at')),
@@ -147,11 +173,10 @@ async function loadDisplay(
       .eq('family_id', familyId).in('status', ['todo', 'in_progress', 'submitted'])
       .lt('due_at', end.toISOString()).order('due_at')),
     settle(supabase.from('meal_plans').select('meal_type, meal_id').eq('family_id', familyId).eq('plan_date', todayDate)),
-    settle(supabase.from('grocery_items').select('id, name').eq('family_id', familyId).eq('is_checked', false).order('created_at').limit(8)),
-    settle(supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_checked', false)),
-    settle(supabase.from('family_reminders').select('id, title, remind_at, status, snoozed_until')
-      .eq('family_id', familyId).in('status', ['active', 'snoozed']).not('remind_at', 'is', null)
-      .lt('remind_at', in14.toISOString()).order('remind_at')),
+    // Only lists the family has not archived (readOnOpenGroceryLists).
+    settle(readOnOpenGroceryLists(supabase, familyId, (lists) => supabase.from('grocery_items').select('id, name').eq('family_id', familyId).in('list_id', lists).eq('is_checked', false).order('created_at').limit(8))),
+    settle(readOnOpenGroceryLists(supabase, familyId, (lists) => supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', familyId).in('list_id', lists).eq('is_checked', false))),
+    settle(readTileReminders()),
     settle(supabase.from('notes').select('id, title, body').eq('family_id', familyId).eq('is_pinned', true).order('updated_at', { ascending: false }).limit(6)),
     settle(supabase.from('family_recipes').select('name, category, photo_url').eq('family_id', familyId)
       .order('is_favorite', { ascending: false }).order('last_made_at', { ascending: false, nullsFirst: false }).limit(6)),
@@ -183,10 +208,12 @@ async function loadDisplay(
   // Resolve chore titles + today's meal names (no embedded joins in types).
   const choreIds = [...new Set((chores ?? []).map((c) => c.chore_id))];
   const mealIds = [...new Set((mealRows ?? []).map((m) => m.meal_id).filter(Boolean) as string[])];
-  const [{ data: choreRows }, { data: meals }] = await Promise.all([
-    choreIds.length ? settle(supabase.from('chores').select('id, title').in('id', choreIds)) : Promise.resolve({ data: [] as { id: string; title: string }[] }),
-    mealIds.length ? settle(supabase.from('meals').select('id, name').in('id', mealIds)) : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+  const [{ data: choreRows, error: choreTitlesError }, { data: meals, error: mealNamesError }] = await Promise.all([
+    choreIds.length ? settle(supabase.from('chores').select('id, title').in('id', choreIds)) : Promise.resolve({ data: [] as { id: string; title: string }[], error: null }),
+    mealIds.length ? settle(supabase.from('meals').select('id, name').in('id', mealIds)) : Promise.resolve({ data: [] as { id: string; name: string }[], error: null }),
   ]);
+  if (choreTitlesError) console.error('[display] query "choreTitles" failed:', choreTitlesError.message);
+  if (mealNamesError) console.error('[display] query "mealNames" failed:', mealNamesError.message);
   // Started AFTER the batch above and awaited immediately, so no promise is in
   // flight across an array literal where a throw could orphan it (§3).
   const handled = await loadHandledToday(supabase, familyId, start, end, untitledRun);
@@ -224,19 +251,36 @@ async function loadDisplay(
     .filter((row): row is { id: string; title: string; remind_at: string } => !!row.remind_at && Date.parse(row.remind_at) < in14.getTime())
     .sort((a, b) => a.remind_at.localeCompare(b.remind_at)).slice(0, 10);
 
+  // A failed meal, grocery or chore read is "unavailable", never an empty
+  // kitchen. Without these the wall said "No meals planned", "0 items · List is
+  // empty" and "All done" over reads that had not happened, beside calendar
+  // tiles that correctly said Unavailable. A meal plan whose dish names could
+  // not be read cannot say what is for dinner either, and chores whose titles
+  // could not be read cannot say what is due: every one of them reached the
+  // wall as a generic "Chore", with the tile and the banner saying all was
+  // well (HC3).
+  const mealsFailed = !!results[4].error || !!mealNamesError;
+  const groceryFailed = !!results[5].error || !!results[6].error || typeof groceryCount !== 'number';
+  const choresFailed = !!results[3].error || !!choreTitlesError;
+
   const data: DisplayData = {
     familyName,
     timezone: calendar.timezone, dayKey: calendar.dayKey, timezoneFallback: calendar.timezoneFallback,
     loadStatus: {
       events: eventsFailed ? 'error' : 'ok', upcoming: upcomingFailed ? 'error' : 'ok',
       monthEvents: monthFailed ? 'error' : 'ok', reminders: results[7].error ? 'error' : 'ok',
+      meals: mealsFailed ? 'error' : 'ok', grocery: groceryFailed ? 'error' : 'ok', chores: choresFailed ? 'error' : 'ok',
+      // The members read feeds the members tile AND the birthdays tile; the
+      // notes read the notes tile. Unreported, a failed read rendered "No
+      // birthdays this week" and "No pinned notes" all day, under no banner.
+      members: results[0].error ? 'error' : 'ok', notes: results[8].error ? 'error' : 'ok',
     },
     members: (members ?? []).map((m) => ({ id: m.id, display_name: m.display_name ?? 'Member', color: m.color, role: m.role })),
     events: eventsFailed?[]:visibleEvents.map(event=>event.kind==='native'?{...event,id:event.reference.eventId}:event),
     upcoming: upcomingFailed?[]:visibleUpcoming.map(event=>event.kind==='native'?{...event,id:event.reference.eventId}:event),
-    chores: (chores ?? []).map((c) => ({ id: c.id, status: c.status, member_id: c.member_id, title: choreTitle.get(c.chore_id) ?? 'Chore' })),
-    meals: todaysMeals,
-    grocery: { items: groceryItems ?? [], count: groceryCount ?? 0 },
+    chores: choresFailed ? [] : (chores ?? []).map((c) => ({ id: c.id, status: c.status, member_id: c.member_id, title: choreTitle.get(c.chore_id) ?? 'Chore' })),
+    meals: mealsFailed ? [] : todaysMeals,
+    grocery: groceryFailed ? { items: [], count: 0 } : { items: groceryItems ?? [], count: groceryCount ?? 0 },
     reminders: displayReminders,
     birthdays,
     notes: (notes ?? []).map((n) => ({ id: n.id, title: n.title, body: n.body })),
@@ -304,9 +348,9 @@ async function DisplayReconnect() {
           <div className="absolute -right-16 bottom-0 h-80 w-80 rounded-full bg-blue-600/40 blur-3xl" />
         </div>
         <div className="relative">
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/40">{t('display.bubalyKitchen')}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/70">{t('display.bubalyKitchen')}</p>
           <h1 className="mt-3 text-3xl font-black sm:text-4xl">{t('display.oneMoment')}</h1>
-          <p className="mx-auto mt-3 max-w-sm text-sm text-white/55">{t('display.reconnectingToYourFamilySpace')}</p>
+          <p className="mx-auto mt-3 max-w-sm text-sm text-white/70">{t('display.reconnectingToYourFamilySpace')}</p>
         </div>
       </div>
     </>
@@ -336,7 +380,8 @@ export default async function KitchenDisplayPage() {
   let loaded: LoadedDisplay;
   try {
     const supabase = await createServer();
-    loaded = await loadDisplay(supabase, familyId, familyName, now, ctx.active.family.timezone, t('displayHandled.untitledRun'), locale.code);
+    loaded = await loadDisplay(supabase, familyId, familyName, now, ctx.active.family.timezone, t('displayHandled.untitledRun'), locale.code,
+      { role: ctx.active.role, memberId: ctx.active.member?.id ?? null });
     // Serialization firewall: these props cross the server→client boundary
     // AFTER this function returns, so a single non-JSON value anywhere in the
     // rows (a BigInt from a numeric column, a circular ref) throws OUTSIDE any

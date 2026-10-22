@@ -1,0 +1,173 @@
+name: Kid login manager SQL runtime
+
+# The held 0512 (supabase/reserved/) refuses a parent or adult role for a
+# member whose login is a kid login (a child_logins row, the synthetic kid
+# address or the server's bubaly_kid_login mark), and a kid-login mapping for a
+# parent or adult. The owner decided it this way ("refuse until the PIN login
+# is gone"). Before it, a parent promoted a child who has a PIN login to adult
+# or parent and the PIN then guarded a manager's account.
+# Neither the Database job's replay nor `supabase db push` reads
+# supabase/reserved/, and the Database job's probe glob does not read
+# docs/audit/reserved/, so nothing else in CI exercises it. This job replays
+# every runnable migration with the Database job's bootstrap, then:
+#
+#   1. runs the held probe on that released schema and requires it to FAIL on
+#      the defect, with no control failing, so a green step 3 is the
+#      migration's and not a probe that can no longer see anything;
+#   2. applies the held migration twice (it is re-runnable);
+#   3. runs the probe again and requires it to pass;
+#   4. re-runs the released probes over member roles and kid logins.
+#
+# When 0512 is released into supabase/migrations/, its probe moves back to
+# docs/audit/ (the Database job then runs it) and this workflow is retired with
+# it. Throwaway database only; agents must not apply migrations to production.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - '.github/workflows/kid-login-manager-runtime.yml'
+      - 'supabase/reserved/0512_a_kid_login_is_never_a_parent_or_adult.sql'
+      - 'docs/audit/reserved/a-kid-login-is-never-a-parent-or-adult-check.sql'
+      - 'docs/audit/a-parent-is-made-unmade-and-invited-only-by-a-parent-check.sql'
+      - 'docs/audit/child-login-mapping-is-managers-only-check.sql'
+      - 'docs/audit/family-self-read-check.sql'
+      - 'docs/audit/gated-write-tables-check.sql'
+      - 'docs/audit/plpgsql-bodies-resolve-check.sql'
+      - 'docs/audit/rls-isolation-check.sql'
+      - 'docs/audit/sensitive-role-boundary-check.sql'
+      - 'docs/audit/ui-only-manager-gate-check.sql'
+      - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
+      - 'supabase/migrations/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kid-login-manager-runtime.yml'
+      - 'supabase/reserved/0512_a_kid_login_is_never_a_parent_or_adult.sql'
+      - 'docs/audit/reserved/a-kid-login-is-never-a-parent-or-adult-check.sql'
+      - 'docs/audit/a-parent-is-made-unmade-and-invited-only-by-a-parent-check.sql'
+      - 'docs/audit/child-login-mapping-is-managers-only-check.sql'
+      - 'docs/audit/family-self-read-check.sql'
+      - 'docs/audit/gated-write-tables-check.sql'
+      - 'docs/audit/plpgsql-bodies-resolve-check.sql'
+      - 'docs/audit/rls-isolation-check.sql'
+      - 'docs/audit/sensitive-role-boundary-check.sql'
+      - 'docs/audit/ui-only-manager-gate-check.sql'
+      - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
+      - 'supabase/migrations/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kid-login-manager-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kid-login-manager:
+    if: >-
+      github.repository == 'NewWorldVenture/Bubaly' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # No service container, for the reason invite-rejoin-role-runtime.yml gives:
+    # Docker Hub's unauthenticated pull limit refuses pgvector/pgvector:pg16
+    # before any SQL runs. PostgreSQL 16 and pgvector come from the runner's own
+    # apt sources, the major version and extension the Database job replays into.
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: ci-only-not-a-production-secret
+      PGDATABASE: bubaly
+    steps:
+      - name: Check out exact same-repository PR or main head without stored credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Start a job-owned PostgreSQL 16 with pgvector
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-16 postgresql-16-pgvector
+          sudo pg_ctlcluster 16 main start || true
+          port="$(pg_lsclusters --no-header | awk '$1 == 16 && $2 == "main" { print $3 }')"
+          [[ "$port" =~ ^[0-9]+$ ]]
+          [[ "$(pg_lsclusters --no-header | awk '$1 == 16 && $2 == "main" { print $4 }')" == online ]]
+          echo "PGPORT=$port" >> "$GITHUB_ENV"
+          sudo -u postgres psql -X -p "$port" -v ON_ERROR_STOP=1 -q \
+            -c "alter user postgres password 'ci-only-not-a-production-secret'"
+
+      - name: Create the database
+        run: |
+          [[ "$(PGDATABASE=postgres psql -X -Atc 'show server_version_num')" == 16* ]]
+          PGDATABASE=postgres psql -X -c 'create database bubaly'
+
+      - name: Replay every runnable migration
+        run: bash docs/audit/pg-bootstrap.sh
+
+      - name: The released schema lets a kid PIN login be made a parent or adult
+        shell: bash
+        run: |
+          set -euo pipefail
+          # GitHub runs bash steps with -e, so the expected failure is caught
+          # here rather than ending the step before it is examined.
+          status=0
+          out="$(psql -X -v ON_ERROR_STOP=1 -q -f docs/audit/reserved/a-kid-login-is-never-a-parent-or-adult-check.sql 2>&1)" || status=$?
+          printf '%s\n' "$out"
+          if [ "$status" -eq 0 ]; then
+            echo '::error::the held probe passed on the released schema, so it can no longer see the defect 0512 repairs'
+            exit 1
+          fi
+          for expected in \
+            "the parent made the PIN kid an adult (OK 1, not 42501)" \
+            "the parent made the kid known only by the mark an adult (OK 1, not 42501)" \
+            "the service role made the PIN kid an adult (OK 1, not 42501)" \
+            "the service role mapped a kid login onto the parent (OK 1, not 42501)" \
+            "the service role mapped a kid login for an account that is a parent of another household (OK 1, not 42501)" \
+            "the guard functions a_kid_login_is_never_a_manager() and a_manager_is_never_a_kid_login() are missing"; do
+            if ! grep -qF "$expected" <<<"$out"; then
+              echo "::error::the held probe failed on the released schema, but not on: $expected"
+              exit 1
+            fi
+          done
+          if grep -qF 'CONTROL' <<<"$out"; then
+            echo '::error::a control failed on the released schema, so the failure above is not only the defect'
+            exit 1
+          fi
+
+      - name: Apply the held migration, twice
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -q -f supabase/reserved/0512_a_kid_login_is_never_a_parent_or_adult.sql
+          psql -X -v ON_ERROR_STOP=1 -q -f supabase/reserved/0512_a_kid_login_is_never_a_parent_or_adult.sql
+
+      - name: A kid login is never a parent or adult
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$(psql -X -v ON_ERROR_STOP=1 -q -f docs/audit/reserved/a-kid-login-is-never-a-parent-or-adult-check.sql 2>&1)"
+          printf '%s\n' "$out"
+          grep -qF 'a-kid-login-is-never-a-parent-or-adult: OK' <<<"$out"
+
+      - name: The released probes over member roles and kid logins still hold
+        shell: bash
+        run: |
+          set -euo pipefail
+          for probe in \
+            docs/audit/a-parent-is-made-unmade-and-invited-only-by-a-parent-check.sql \
+            docs/audit/child-login-mapping-is-managers-only-check.sql \
+            docs/audit/family-self-read-check.sql \
+            docs/audit/gated-write-tables-check.sql \
+            docs/audit/plpgsql-bodies-resolve-check.sql \
+            docs/audit/rls-isolation-check.sql \
+            docs/audit/sensitive-role-boundary-check.sql \
+            docs/audit/ui-only-manager-gate-check.sql; do
+            echo "== $probe"
+            psql -X -v ON_ERROR_STOP=1 -q -f "$probe"
+          done

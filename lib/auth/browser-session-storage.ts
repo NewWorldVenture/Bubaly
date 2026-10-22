@@ -135,8 +135,9 @@ export function createBrowserSessionStorage(url: string) {
     const before = read();
     const expectedGeneration = generation(before, key);
     const expectedOwner = sessionOwner(before);
-    if (expectedGeneration && typeof init?.body === 'string') {
-      // A retry from an old SDK operation must not dispatch the retired token.
+    if (typeof init?.body === 'string') {
+      // A captured token belongs to its stored session even before the first
+      // logout. A later login or rotation retires its provider dispatch too.
       const request = JSON.parse(init.body) as { refresh_token?: unknown };
       if (payload(before, key)?.refresh_token !== request.refresh_token) return retryable();
     }

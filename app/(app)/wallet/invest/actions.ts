@@ -8,6 +8,7 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { householdPolicyBlocked } from '@/lib/trust/messages';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { isWithheldFromGuest } from '@/lib/auth/guest-scope';
 import { settleAll } from '@/lib/supabase/settle';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { createServer } from '@/lib/supabase/server';
@@ -75,6 +76,11 @@ export async function placeInvestOrderAction(input: { childWalletId: string; ass
   const t = await getTranslations();
   const tr = await getTranslations();
   const ctx = await requireUserContext();
+  // /wallet/invest sends a guest away (refuseGuest, the held 0509), and so does
+  // the action behind it: a guest given a wallet before activation was limited
+  // to children passed the own-wallet check below and queued orders. Not found,
+  // as every wallet is to them.
+  if (ctx.active.role === 'guest' && isWithheldFromGuest('/wallet/invest')) return { ok: false, error: tr('actions.childWalletNotFound') };
   const familyId = ctx.active.familyId;
   const shares = Math.floor(Number(input.shares) * 10000) / 10000;
   if (!Number.isFinite(shares) || shares <= 0) return { ok: false, error: tr('actions.enterANumberOfShares') };

@@ -1,7 +1,7 @@
 import { readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
-import { expect, test as base, type Browser, type BrowserContext } from '@playwright/test';
+import { expect, test as base, type Browser, type BrowserContext, type ConsoleMessage, type Response } from '@playwright/test';
 import { createOwnedAccount, type OwnedAccount } from './helpers/durable-session';
 
 // Every page in the app, opened by a signed-in parent who is also a super
@@ -66,6 +66,38 @@ const CATALOGUE_KEY = /\b[a-z][a-zA-Z0-9]*\.[a-z][a-z0-9]*[A-Z][a-zA-Z0-9]*\b/;
 // "X · Bubaly · Bubaly", and also "Welcome to Bubaly · Bubaly".
 const DOUBLED_BRAND = /(?:^|[\s·|—–:-])Bubaly\s*·\s*Bubaly\s*$/i;
 
+const DIAGNOSTIC_LIMIT = 8;
+const DIAGNOSTIC_PATHS = new Set([
+  '/_next/image', '/sw.js', '/favicon.ico', '/manifest.webmanifest',
+  '/api/exit-intent/resolve', '/api/exit-intent/track',
+  '/api/blog/search-index', '/api/blog/like', '/api/blog/save', '/api/blog/subscribe',
+  '/api/mkt/consent', '/api/mkt/track',
+]);
+
+// No credentials, query strings, fragments, or arbitrary object/file names.
+// The page path is from our filesystem sweep, including its synthetic ids.
+function diagnosticUrl(raw: string, localOrigin: string | undefined, pagePath: string): string | null {
+  if (!raw) return null;
+  try {
+    const url = new URL(raw, localOrigin);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    let path = '/[redacted]';
+    if (url.origin === localOrigin && (url.pathname === pagePath || DIAGNOSTIC_PATHS.has(url.pathname))) {
+      path = url.pathname;
+    } else if (url.origin === localOrigin && url.pathname.startsWith('/_next/static/')) {
+      path = '/_next/static/[redacted]';
+    } else if (url.pathname.startsWith('/storage/v1/object/')) {
+      path = '/storage/v1/object/[redacted]';
+    } else if (url.origin === 'https://upload.wikimedia.org') {
+      const prefix = /^\/wikipedia\/commons\/(?:thumb\/)?[0-9a-f]\/[0-9a-f]{2}\//.exec(url.pathname)?.[0];
+      if (prefix) path = `${prefix}[redacted]`;
+    }
+    return `${url.origin}${path}`.slice(0, 384);
+  } catch {
+    return null;
+  }
+}
+
 type Session = { account: OwnedAccount; state: Awaited<ReturnType<BrowserContext['storageState']>> };
 
 const test = base.extend<object, { session: Session }>({
@@ -120,6 +152,31 @@ test.describe('every page, signed in', () => {
       const consoleErrors: string[] = [];
       page.on('pageerror', (e) => pageErrors.push(String(e.message ?? e).slice(0, 300)));
       page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 300)); });
+      const localOrigin = testInfo.project.use.baseURL ? new URL(testInfo.project.use.baseURL).origin : undefined;
+      const failedResponses: { status: number; resourceType: string; url: string | null; image: string | null }[] = [];
+      const consoleLocations: { url: string | null; line: number; column: number }[] = [];
+      let omittedResponses = 0;
+      let omittedLocations = 0;
+      const onResponse = (response: Response) => {
+        if (response.status() < 400) return;
+        if (failedResponses.length >= DIAGNOSTIC_LIMIT) { omittedResponses += 1; return; }
+        const url = new URL(response.url());
+        failedResponses.push({
+          status: response.status(),
+          resourceType: response.request().resourceType(),
+          url: diagnosticUrl(response.url(), localOrigin, route.path),
+          image: url.origin === localOrigin && url.pathname === '/_next/image'
+            ? diagnosticUrl(url.searchParams.get('url') ?? '', localOrigin, route.path) : null,
+        });
+      };
+      const onConsoleLocation = (message: ConsoleMessage) => {
+        if (message.type() !== 'error') return;
+        if (consoleLocations.length >= DIAGNOSTIC_LIMIT) { omittedLocations += 1; return; }
+        const location = message.location();
+        consoleLocations.push({ url: diagnosticUrl(location.url, localOrigin, route.path), line: location.lineNumber, column: location.columnNumber });
+      };
+      page.on('response', onResponse);
+      page.on('console', onConsoleLocation);
       try {
         const response = await page.goto(route.path, { waitUntil: 'load', timeout: 45_000 });
         await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
@@ -145,7 +202,17 @@ test.describe('every page, signed in', () => {
         expect(facts.title, 'title').not.toMatch(DOUBLED_BRAND);
         expect(facts.text.match(CATALOGUE_KEY)?.[0] ?? null, 'a raw catalogue key on the page').toBeNull();
         expect(facts.overflow, 'horizontal overflow (px)').toBeLessThanOrEqual(1);
+      } catch (error) {
+        // Flaky retries do not currently upload attachments. Keep this bounded
+        // diagnostic in job stdout without changing the assertion or its error.
+        console.log('[signed-in-sweep-failure]', JSON.stringify({
+          route: route.path, retry: testInfo.retry,
+          failedResponses, consoleLocations, omittedResponses, omittedLocations,
+        }));
+        throw error;
       } finally {
+        page.off('response', onResponse);
+        page.off('console', onConsoleLocation);
         await context.close();
       }
     });

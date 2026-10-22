@@ -29,6 +29,7 @@ import { settle } from '@/lib/supabase/settle';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { remapBindings } from './bindings';
+import { decodeRunHistoryCursor } from './history-cursor';
 import {
   findDependencyCycle, legacyStatusFor, type RunState, type StepState,
 } from './states';
@@ -226,6 +227,58 @@ export async function updateRequestWhereStatus(
     .select('id');
   if (error) {
     console.error('[ai/runs] failed to update the request conditionally', error);
+    return fail(describeDbError(error, 'Could not update the request.'), { code: SERVICE_CODES.db });
+  }
+  return ok((data ?? []).length > 0);
+}
+
+/**
+ * A fresh planning-attempt mark for `ai_requests.started_at`.
+ *
+ * `planning` is a status a request returns to: an answer that timed out is
+ * parked at `awaiting_context` and answering again moves it back to
+ * `planning`. A planner that outlived its deadline therefore found the request
+ * `planning` again — the retry's — and its compare-and-set on the status
+ * alone succeeded: its late plan was kept and run while nobody watched, and
+ * the retry's own plan was thrown away (ABA). Each attempt writes its own
+ * mark here and keeps its result only while the mark is still there
+ * (`updateRequestForAttempt`), so a later attempt — or anything that moves the
+ * request on — retires every earlier one.
+ *
+ * It is an instant (the column is `timestamptz`, and it still says when
+ * planning started), made unique to the microsecond by a per-process counter:
+ * a frozen test clock, or two attempts in one millisecond, still get
+ * different marks.
+ */
+let attemptSequence = 0;
+export function planningAttemptMark(at: Date = new Date()): string {
+  attemptSequence = (attemptSequence + 1) % 1000;
+  return at.toISOString().replace(/Z$/, `${String(attemptSequence).padStart(3, '0')}Z`);
+}
+
+/**
+ * Compare-and-set for one planning attempt: patches the request only while it
+ * is still `planning` under `attemptMark` (`planningAttemptMark`). `false`
+ * means the attempt was given up on — the intake's deadline, a cancellation,
+ * a newer attempt — and whatever it produced must not be kept.
+ */
+export async function updateRequestForAttempt(
+  scope: ServiceScope,
+  requestId: string,
+  attemptMark: string,
+  patch: Database['public']['Tables']['ai_requests']['Update'],
+  opts?: StoreOpts,
+): Promise<ServiceResult<boolean>> {
+  const { data, error } = await ledgerClient(scope, opts)
+    .from('ai_requests')
+    .update(patch)
+    .eq('id', requestId)
+    .eq('family_id', scope.familyId)
+    .eq('status', 'planning')
+    .eq('started_at', attemptMark)
+    .select('id');
+  if (error) {
+    console.error('[ai/runs] failed to update the request for its planning attempt', error);
     return fail(describeDbError(error, 'Could not update the request.'), { code: SERVICE_CODES.db });
   }
   return ok((data ?? []).length > 0);
@@ -581,7 +634,13 @@ export async function updateRunWhereState(
 
 // ─── Leases ─────────────────────────────────────────────────────────────────
 
-export type ClaimedRun = { id: string; familyId: string; leaseOwner: string | null };
+export type ClaimedRun = {
+  id: string;
+  familyId: string;
+  leaseOwner: string | null;
+  /** The attempt counter as the claim left it — already counting this claim. */
+  attempt: number;
+};
 
 /**
  * Lease a batch of due runs through the 0250 RPC. `for update skip locked`
@@ -604,13 +663,13 @@ export async function claimRuns(
 
   const { data: rows, error: readError } = await db
     .from('family_automation_runs')
-    .select('id, family_id, lease_owner')
+    .select('id, family_id, lease_owner, attempt')
     .in('id', ids);
   if (readError) {
     console.error('[ai/runs] failed to read the claimed runs', readError);
     return fail(describeDbError(readError, 'Bubaly could not read the claimed runs.'), { code: SERVICE_CODES.db, retryable: true });
   }
-  return ok((rows ?? []).map((r) => ({ id: r.id, familyId: r.family_id, leaseOwner: r.lease_owner })));
+  return ok((rows ?? []).map((r) => ({ id: r.id, familyId: r.family_id, leaseOwner: r.lease_owner, attempt: r.attempt })));
 }
 
 /**
@@ -684,18 +743,23 @@ export async function heartbeatRun(
   leaseOwner: string,
   leaseSeconds = 120,
 ): Promise<boolean> {
-  const { data, error } = await db
-    .from('family_automation_runs')
-    .update({ lease_expires_at: new Date(Date.now() + leaseSeconds * 1000).toISOString() })
-    .eq('id', runId)
-    .eq('lease_owner', leaseOwner)
-    .select('id')
-    .maybeSingle();
-  if (error) {
+  // An ERROR is asked once more before it is taken as a lost lease. The slice
+  // stops on `false` ('lease_lost') and leaves the run `executing` until its
+  // lease runs out, and the recovery that follows costs an attempt — too much
+  // for one dropped connection. Zero rows is an answer (another worker holds
+  // the run now) and is not asked again.
+  for (let tries = 0; tries < 2; tries += 1) {
+    const { data, error } = await db
+      .from('family_automation_runs')
+      .update({ lease_expires_at: new Date(Date.now() + leaseSeconds * 1000).toISOString() })
+      .eq('id', runId)
+      .eq('lease_owner', leaseOwner)
+      .select('id')
+      .maybeSingle();
+    if (!error) return !!data;
     console.error('[ai/runs] heartbeat failed', error);
-    return false;
   }
-  return !!data;
+  return false;
 }
 
 /**
@@ -814,7 +878,7 @@ export type ListRunsOptions = {
   statuses?: readonly string[] | null;
   /** The mirror of `statuses`: legacy `status` values to leave out. */
   excludeStatuses?: readonly string[] | null;
-  /** Paging cursor: rows created strictly before this ISO instant. */
+  /** Exact timestamp/ID cursor; legacy ISO-only bookmarks remain strict-before. */
   before?: string | null;
   limit?: number;
 };
@@ -837,6 +901,10 @@ export async function listRuns(
 ): Promise<ServiceResult<RunRow[]>> {
   const db = opts?.db ?? scope.db;
   const limit = Math.max(1, Math.min(options.limit ?? 50, LIST_RUNS_MAX));
+  const cursor = options.before ? decodeRunHistoryCursor(options.before) : null;
+  if (options.before && !cursor) {
+    return fail('The run-history page cursor is invalid.', { code: SERVICE_CODES.invalidInput });
+  }
   try {
     let query = db.from('family_automation_runs').select('*').eq('family_id', scope.familyId);
     if (options.states && options.states.length) query = query.in('state', [...options.states]);
@@ -844,8 +912,12 @@ export async function listRuns(
     if (options.excludeStatuses && options.excludeStatuses.length) {
       query = query.not('status', 'in', `(${options.excludeStatuses.join(',')})`);
     }
-    if (options.before) query = query.lt('created_at', options.before);
-    const { data, error } = await query.order('created_at', { ascending: false }).limit(limit);
+    if (cursor && cursor.id !== null) {
+      query = query.or(`created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.gt.${cursor.id})`);
+    } else if (cursor) {
+      query = query.lt('created_at', cursor.createdAt);
+    }
+    const { data, error } = await query.order('created_at', { ascending: false }).order('id', { ascending: true }).limit(limit);
     if (error) {
       console.error('[ai/runs] failed to list the runs', error);
       return fail(describeDbError(error, 'Bubaly could not read your run history.'), { code: SERVICE_CODES.db, retryable: true });

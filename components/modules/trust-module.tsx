@@ -13,6 +13,7 @@ import { Field, Input, Select, Textarea } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { PageHeader } from '@/components/app/page-header';
+import { ErrorState } from '@/components/ui/states';
 import { ApprovalCard } from '@/components/approvals/approval-card';
 import { cn } from '@/lib/utils/cn';
 import { toApprovalCardData, type TrustApproval } from '@/lib/approvals/card-data';
@@ -63,6 +64,8 @@ export type TrustData = {
   activityError?: string | null;
   /** Context slice names per APPROVAL id, for the card's "Based on" expander. */
   basedOn?: Record<string, BasedOn>;
+  /** Already-translated copy when the trust ledger could not be read: the Audit tab says so rather than "No activity yet". */
+  auditError?: string | null;
 };
 
 const EFFECT_STYLES: Record<string, string> = {
@@ -127,7 +130,10 @@ export function TrustModule({ data, canManage, needsYouHref }: { data: TrustData
   const tr = useTranslations();
   const [tab, setTab] = useState<Tab>('approvals');
   const pendingApprovals = data.approvals.filter(a => a.status === 'pending');
-  const activeEmergency = data.emergencies[0] ?? null;
+  // Every open, unexpired session (the page reads only those), newest first.
+  // Two managers can each have one open; the engine applies the union, so the
+  // banner names each rather than the first row's domains.
+  const openEmergencies = data.emergencies;
 
   const TABS: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }>; badge?: number }[] = [
     { key: 'approvals', label: tr('trustModule.tab.approvals'), icon: Inbox, badge: pendingApprovals.length || undefined },
@@ -147,17 +153,17 @@ export function TrustModule({ data, canManage, needsYouHref }: { data: TrustData
         action={<div className="hidden sm:flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand-text"><ShieldCheck className="h-3.5 w-3.5" /> {tr('trust.trustEngine')}</div>}
       />
 
-      {/* Emergency banner */}
-      {activeEmergency && (
-        <div className="mb-4 flex items-center gap-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4">
+      {/* Emergency banner, one per open session */}
+      {openEmergencies.map((emergency) => (
+        <div key={emergency.id} className="mb-4 flex items-center gap-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4">
           <Siren className="h-5 w-5 flex-shrink-0 text-rose-400 animate-pulse" />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold text-rose-300">{tr('trust.emergencyModeActive')} {emergencyKindLabel(tr, activeEmergency.kind)}</p>
-            <p className="text-xs text-muted">{tr('trust.permissionsAreTemporarilyElevatedFor')} {activeEmergency.elevated_domains.map(d => domainLabel(tr, d)).join(', ')}{tr('trust.everyActionIsLogged')}</p>
+            <p className="text-sm font-bold text-rose-300">{tr('trust.emergencyModeActive')} {emergencyKindLabel(tr, emergency.kind)}</p>
+            <p className="text-xs text-muted">{tr('trust.permissionsAreTemporarilyElevatedFor')} {emergency.elevated_domains.map(d => domainLabel(tr, d)).join(', ')}{tr('trust.everyActionIsLogged')}</p>
           </div>
-          {canManage && <EndEmergencyButton id={activeEmergency.id} />}
+          {canManage && <EndEmergencyButton id={emergency.id} />}
         </div>
-      )}
+      ))}
 
       {/* Stat row */}
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -192,8 +198,8 @@ export function TrustModule({ data, canManage, needsYouHref }: { data: TrustData
       {tab === 'permissions' && <PermissionsTab members={data.members} grants={data.grants} canManage={canManage} />}
       {tab === 'delegations' && <TrustSharingSection members={data.members} grants={data.grants} delegations={data.delegations} canManage={canManage} />}
       {tab === 'delegations' && <DelegationsTab delegations={data.delegations} members={data.members} canManage={canManage} />}
-      {tab === 'emergency' && <EmergencyTab active={activeEmergency} canManage={canManage} />}
-      {tab === 'audit' && <AuditTab audit={data.audit} members={data.members} policies={data.policies} />}
+      {tab === 'emergency' && <EmergencyTab open={openEmergencies} canManage={canManage} />}
+      {tab === 'audit' && <AuditTab audit={data.audit} error={data.auditError ?? null} members={data.members} policies={data.policies} />}
     </div>
   );
 }
@@ -314,7 +320,7 @@ function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; mem
       ) : (
         <div className="space-y-2">
           {policies.map(p => (
-            <div key={p.id} className={cn('rounded-2xl border bg-surface/40 p-4', p.enabled ? 'border-border' : 'border-border/50 opacity-60')}>
+            <div key={p.id} className={cn('rounded-2xl border bg-surface/40 p-4', p.enabled ? 'border-border' : 'border-dashed border-border')}>
               <div className="flex items-start gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -549,7 +555,7 @@ function PermissionsTab({ members, grants, canManage }: { members: Member[]; gra
           <button key={m.id} onClick={() => setSelected(m.id)}
             className={cn('flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition',
               selected === m.id ? 'border-brand/50 bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
-            <Avatar name={m.name} color={m.color ?? undefined} size={18} /> {m.name} <span className="text-[10px] capitalize opacity-70">({m.role})</span>
+            <Avatar name={m.name} color={m.color ?? undefined} size={18} /> {m.name} <span className="text-[10px] font-normal capitalize">({m.role})</span>
           </button>
         ))}
       </div>
@@ -578,10 +584,10 @@ function PermissionsTab({ members, grants, canManage }: { members: Member[]; gra
                           className={cn('inline-flex h-7 w-7 items-center justify-center rounded-lg border text-[10px] font-bold transition',
                             state === 'allow' && 'border-green-500/40 bg-green-500/15 text-green-400',
                             state === 'deny' && 'border-red-500/40 bg-red-500/15 text-red-400',
-                            state === 'default-allow' && 'border-border bg-surface text-green-400/50',
-                            state === 'default-approval' && 'border-border bg-surface text-amber-400/60',
-                            state === 'default-deny' && 'border-border bg-surface text-muted/40',
-                            canManage && 'hover:brightness-125 cursor-pointer')}>
+                            state === 'default-allow' && 'border-border bg-surface text-green-400',
+                            state === 'default-approval' && 'border-border bg-surface text-amber-400',
+                            state === 'default-deny' && 'border-border bg-surface text-muted',
+                            canManage && 'hover:shadow-md cursor-pointer')}>
                           {busy === `${domain}__${cap}` ? <Loader2 className="h-3 w-3 animate-spin" />
                             : state === 'allow' || state === 'default-allow' ? <Check className="h-3.5 w-3.5" />
                             : state === 'deny' || state === 'default-deny' ? <X className="h-3.5 w-3.5" />
@@ -599,8 +605,8 @@ function PermissionsTab({ members, grants, canManage }: { members: Member[]; gra
       <div className="flex flex-wrap items-center gap-3 text-[10px] text-muted">
         <span className="flex items-center gap-1"><span className="inline-flex h-4 w-4 items-center justify-center rounded border border-green-500/40 bg-green-500/15 text-green-400"><Check className="h-3 w-3" /></span> allowed</span>
         <span className="flex items-center gap-1"><span className="inline-flex h-4 w-4 items-center justify-center rounded border border-red-500/40 bg-red-500/15 text-red-400"><X className="h-3 w-3" /></span> blocked</span>
-        <span className="flex items-center gap-1"><span className="text-amber-400/60">~</span> {tr('trust.needsApprovalRoleDefault')}</span>
-        <span>{tr('trust.fadedRoleDefaultSolidExplicitOverride')}{canManage ? ' (tap to change)' : ''}</span>
+        <span className="flex items-center gap-1"><span className="font-bold text-amber-400">~</span> {tr('trust.needsApprovalRoleDefault')}</span>
+        <span>{tr('trust.plainRoleDefaultTintedExplicitOverride')}{canManage ? ' (tap to change)' : ''}</span>
       </div>
     </div>
   );
@@ -716,7 +722,7 @@ function DelegationModal({ members, onClose, onSaved }: { members: Member[]; onC
 }
 
 // ─── Emergency ────────────────────────────────────────────────────────────────
-function EmergencyTab({ active, canManage }: { active: Emergency | null; canManage: boolean }) {
+function EmergencyTab({ open, canManage }: { open: Emergency[]; canManage: boolean }) {
   const fmtWhen = fmtWhenWith(useFormat().fmtDate);
   const tr = useTranslations();
   const router = useRouter();
@@ -735,26 +741,30 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
     if (!res.ok) return toastError(res.error ?? tr('trustModule.couldNot.activate'));
     success(tr('trustModule.emergencyModeActivated')); router.refresh();
   }
-  async function end() {
-    if (!active || loading) return;
+  async function end(id: string) {
+    if (loading) return;
     setLoading(true);
-    const res = await endEmergencyAction({ id: active.id });
+    const res = await endEmergencyAction({ id });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? tr('trustModule.couldNot.end'));
     success(tr('trustModule.emergencyModeEnded')); router.refresh();
   }
 
-  if (active) {
+  if (open.length > 0) {
     return (
-      <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-6 text-center">
-        <Siren className="mx-auto mb-3 h-10 w-10 text-rose-400 animate-pulse" />
-        <p className="text-lg font-bold text-rose-300">{tr('trust.emergencyModeIsActive')}</p>
-        <p className="mt-1 text-sm text-muted capitalize">{emergencyKindLabel(tr, active.kind)} {tr('trust.since')} {fmtWhen(active.activated_at)}</p>
-        <p className="mt-2 text-xs text-muted">{tr('trustModule.elevated')} {active.elevated_domains.map(d => domainLabel(tr, d)).join(', ')}</p>
-        {/* Elevation outranks every other rule, so when it stops is part of what
-            is active — not a detail to discover later. */}
-        {active.expires_at && <p className="mt-1 text-xs text-muted">{tr('trust.endsOnItsOwn')} {fmtWhen(active.expires_at)}</p>}
-        {canManage && <button onClick={end} disabled={loading} className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-rose-500/20 px-4 py-2 text-sm font-semibold text-rose-300 hover:bg-rose-500/30 transition">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />} {tr('trust.endEmergencyMode')}</button>}
+      <div className="space-y-3">
+        {open.map((active) => (
+          <div key={active.id} className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-6 text-center">
+            <Siren className="mx-auto mb-3 h-10 w-10 text-rose-400 animate-pulse" />
+            <p className="text-lg font-bold text-rose-300">{tr('trust.emergencyModeIsActive')}</p>
+            <p className="mt-1 text-sm text-muted capitalize">{emergencyKindLabel(tr, active.kind)} {tr('trust.since')} {fmtWhen(active.activated_at)}</p>
+            <p className="mt-2 text-xs text-muted">{tr('trustModule.elevated')} {active.elevated_domains.map(d => domainLabel(tr, d)).join(', ')}</p>
+            {/* Elevation outranks every other rule, so when it stops is part of what
+                is active — not a detail to discover later. */}
+            {active.expires_at && <p className="mt-1 text-xs text-muted">{tr('trust.endsOnItsOwn')} {fmtWhen(active.expires_at)}</p>}
+            {canManage && <button onClick={() => end(active.id)} disabled={loading} className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-rose-500/20 px-4 py-2 text-sm font-semibold text-rose-300 hover:bg-rose-500/30 transition">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />} {tr('trust.endEmergencyMode')}</button>}
+          </div>
+        ))}
       </div>
     );
   }
@@ -801,11 +811,15 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
 }
 
 // ─── Audit ────────────────────────────────────────────────────────────────────
-function AuditTab({ audit, members, policies }: { audit: Audit[]; members: Member[]; policies: Policy[] }) {
+function AuditTab({ audit, error, members, policies }: { audit: Audit[]; error: string | null; members: Member[]; policies: Policy[] }) {
   const fmtWhen = fmtWhenWith(useFormat().fmtDate);
   const tr = useTranslations();
+  const router = useRouter();
   const nameById = useMemo(() => new Map(members.map(m => [m.id, m.name])), [members]);
   const policyById = useMemo(() => new Map(policies.map(p => [p.id, p])), [policies]);
+  // A ledger nobody could read is not an empty one: "No activity yet" here
+  // would claim no trust decision — no emergency override — was ever made.
+  if (error) return <ErrorState message={error} onRetry={() => router.refresh()} />;
   if (audit.length === 0) return <EmptyCard icon={ScrollText} title={tr('trust.noActivityYet')} sub={tr('trustModule.auditEmptySub')} />;
   // A decision that cites a policy the family still holds is explained by that
   // policy — for one accepted out of an Autopilot suggestion, by the day the

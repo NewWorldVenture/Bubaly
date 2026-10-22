@@ -40,6 +40,7 @@ on:
       - 'docs/audit/economy-redemption-price-check.sql'
       - 'docs/audit/economy-invest-decision-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
       - 'supabase/migrations/**'
   push:
     branches: [main]
@@ -56,6 +57,7 @@ on:
       - 'docs/audit/economy-redemption-price-check.sql'
       - 'docs/audit/economy-invest-decision-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
       - 'supabase/migrations/**'
 
 permissions:
@@ -71,7 +73,7 @@ jobs:
       github.repository == 'NewWorldVenture/Bubaly' &&
       ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
        (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     # No service container, for the reason invite-rejoin-role-runtime.yml gives:
     # Docker Hub's unauthenticated pull limit refuses pgvector/pgvector:pg16

@@ -12,6 +12,8 @@ import { gatherSignalsResult } from '@/lib/family/signals';
 import { PageHeader } from '@/components/app/page-header';
 import { SectionCard, MiniEmpty, StatTile, LevelBadge } from '@/components/family/shell';
 import { RecommendationActions, AutomationApproval } from '@/components/family/record-actions';
+import { RunOutcomeIcon } from '@/components/family/run-outcome';
+import { RUN_OUTCOME_FILTER, runOutcome } from '@/lib/ai/runs/outcome';
 import { getFormat } from '@/lib/utils/format-server';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
@@ -53,7 +55,10 @@ export default async function AutonomousManagementPage() {
     settle(supabase.from('family_ai_recommendations').select('*').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(8)),
     settle(supabase.from('family_automation_rules').select('id, name, is_enabled').eq('family_id', familyId).eq('is_enabled', true)),
     settle(supabase.from('family_automation_runs').select('*').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(6)),
-    settle(supabase.from('family_automation_runs').select('*').eq('family_id', familyId).in('status', ['approved', 'executed']).order('created_at', { ascending: false }).limit(6)),
+    // Runs that have STOPPED, by the §10 state (lib/ai/runs/outcome.ts): the
+    // legacy status called a blocked, paused or mid-flight run 'approved' and
+    // a partly done one 'executed', and never listed a failed one.
+    settle(supabase.from('family_automation_runs').select('*').eq('family_id', familyId).or(RUN_OUTCOME_FILTER).order('created_at', { ascending: false }).limit(6)),
   ]);
 
   const readError = signals.error ?? recs.error ?? rules.error ?? pendingRuns.error ?? doneRuns.error;
@@ -109,14 +114,21 @@ export default async function AutonomousManagementPage() {
         <SectionCard title={t('dashboardAutonomousFamilyManagement.whatAiRecommends')} description={t('autonomousFamilyManagement.storedDerivedNextBestActions')} className="lg:col-span-2">
           {(recs.data && recs.data.length > 0) || actions.length > 0 ? (
             <ul className="space-y-2.5">
+              {/* A pending recommendation is a parent's decision, and its body is
+                  the request's reasoning and "What Bubaly would do" — which can
+                  touch money or documents the proactive context withholds from
+                  anyone else. So everyone else reads its title and cannot resolve
+                  it: Accept / Dismiss are drawn for a manager only, as the
+                  briefing and Needs attention draw them, and as AutomationApproval
+                  is below. */}
               {(recs.data ?? []).map((r) => (
                 <li key={r.id} className="flex items-start gap-3 rounded-xl bg-surface/40 p-3">
                   <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-brand-text" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium">{r.title}</p>
-                    {r.body && <p className="text-xs text-muted">{r.body}</p>}
+                    {manager && r.body && <p className="text-xs text-muted">{r.body}</p>}
                   </div>
-                  <RecommendationActions id={r.id} />
+                  {manager ? <RecommendationActions id={r.id} /> : <span className="text-xs text-muted">{t('autonomousFamilyManagement.awaitingParent')}</span>}
                 </li>
               ))}
               {actions.map((a) => (
@@ -163,16 +175,22 @@ export default async function AutonomousManagementPage() {
           </ul>
         </SectionCard>
 
-        <SectionCard title={t('dashboardAutonomousFamilyManagement.completedAutomations')} viewAllHref="/dashboard/family-automation">
+        {/* How each run ENDED, in its own word and mark: only a completed run
+            carries the green check. */}
+        <SectionCard title={t('dashboardFamilyAutomation.recentRuns')} viewAllHref="/dashboard/family-automation">
           {doneRuns.data && doneRuns.data.length > 0 ? (
             <ul className="divide-y divide-border">
-              {doneRuns.data.map((run) => (
-                <li key={run.id} className="flex items-center gap-3 py-2.5 text-sm">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                  <span className="min-w-0 flex-1 truncate">{run.summary ?? 'Automation run'}</span>
-                  <span className="text-xs text-muted">{fmtRelative(run.created_at)}</span>
-                </li>
-              ))}
+              {doneRuns.data.map((run) => {
+                const outcome = runOutcome(run);
+                return (
+                  <li key={run.id} className="flex items-center gap-3 py-2.5 text-sm">
+                    {outcome && <RunOutcomeIcon state={outcome.state} />}
+                    <span className="min-w-0 flex-1 truncate">{run.summary ?? 'Automation run'}</span>
+                    {outcome && <span className="text-xs text-muted">{t(outcome.labelKey)}</span>}
+                    <span className="text-xs text-muted">{fmtRelative(run.created_at)}</span>
+                  </li>
+                );
+              })}
             </ul>
           ) : <MiniEmpty icon={Zap} text={t('autonomousFamilyManagement.noAutomationsHaveRunYet')} />}
         </SectionCard>

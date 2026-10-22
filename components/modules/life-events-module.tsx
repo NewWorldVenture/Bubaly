@@ -34,6 +34,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { LIFE_EVENT_TEMPLATES } from '@/lib/life-events/templates';
 import { launchDateFor, type LifeEventSuggestion } from '@/lib/life-events/detect';
+import { factsVisibleTo } from '@/lib/memory/facts';
 import { launchLifeEventAction, setLifeEventStatusAction } from '@/app/(app)/dashboard/life-event-actions';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -75,7 +76,7 @@ export function LifeEventsModule({
   const fmt = useFormat();
   const fmtDate = fmtDateIn(fmt);
   const fmtFullDate = fmtFullDateIn(fmt);
-  const { familyId, userId } = useApp();
+  const { familyId, userId, role } = useApp();
   const { success, error: toastError } = useToast();
 
   const { data: facts, loading: factsLoading, error: factsError, refresh: refreshFacts } = useRealtimeQuery<Fact>({
@@ -101,9 +102,15 @@ export function LifeEventsModule({
   const [suggestedDate, setSuggestedDate] = useState<string | null>(null);
   const [launching, setLaunching] = useState(false);
 
+  // The facts this reader may see come first, the category filter second. RLS
+  // (0264) hides only the medical and account categories; the sensitive TERMS
+  // (a password, an allergy, a bank detail) are code only, and 'important',
+  // the Add form's default, is one of the categories listed here — so a child
+  // or guest was shown a parent's "Wi-Fi password" on this page while Family
+  // Memory, recall, search and insights withheld it. One rule for all of them.
   const learned = useMemo(
-    () => (facts ?? []).filter((f) => (LEARNED_CATEGORIES as readonly string[]).includes(f.category)),
-    [facts],
+    () => factsVisibleTo(role, facts ?? []).filter((f) => (LEARNED_CATEGORIES as readonly string[]).includes(f.category)),
+    [role, facts],
   );
   const itemsByPlan = useMemo(() => {
     const m = new Map<string, Item[]>();
@@ -187,7 +194,7 @@ export function LifeEventsModule({
                     <p className="mt-0.5 text-sm text-muted">{f.value}</p>
                     {f.notes && <p className="mt-1 text-xs text-muted">{f.notes}</p>}
                   </div>
-                  <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+                  <div className="flex shrink-0 items-center gap-0.5 opacity-100 sm:opacity-0 transition sm:group-hover:opacity-100 coarse:opacity-100 focus-within:opacity-100">
                     <button onClick={() => togglePin(f)} aria-label={f.is_pinned ? tr('dialogTitle.unpin') : tr('dialogTitle.pin')} className="rounded-lg p-1.5 text-muted hover:text-brand-text">{f.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}</button>
                     <button onClick={() => setFactModal({ open: true, editing: f })} aria-label={tr('lifeEvents.edit')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
                     <button onClick={() => removeFact(f)} aria-label={tr('lifeEvents.remove')} className="rounded-lg p-1.5 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>

@@ -79,7 +79,7 @@ export function AutoServiceClient({ records, vehicles }: { records: AutoService[
           <div className="grid grid-cols-3 gap-3">
             <Field label={t('serviceClient.provider')}><Input name="provider" /></Field>
             <Field label={t('serviceClient.cost')}><Input type="number" name="cost" /></Field>
-            <Field label={t('serviceClient.mileage')}><Input type="number" name="mileage" /></Field>
+            <Field label={t('serviceClient.mileage')}><Input type="number" name="mileage" min="0" /></Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('serviceClient.nextDueDate')}><Input type="date" name="next_due_on" /></Field>

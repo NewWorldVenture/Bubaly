@@ -22,11 +22,17 @@ const { executeTool } = await import('@/lib/ai/tools/execute');
 const { getTool, listTools } = await import('@/lib/ai/tools/registry');
 const { toolInputSchema } = await import('@/lib/ai/tools/legacy-adapter');
 
-type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'delete'; filters: Record<string, unknown>; payload?: unknown };
+type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'delete'; filters: Record<string, unknown>; payload?: unknown; range?: [number, number] };
 type Reply = { data: unknown; error: unknown };
 
 function makeDb(respond: (call: Call) => Reply) {
   const calls: Call[] = [];
+  // `.range(from, to)` answers that slice of the rows, as PostgREST does, so a
+  // paged read reaches its empty last page instead of re-reading page one.
+  const answer = (call: Call): Reply => {
+    const reply = respond(call);
+    return call.range && Array.isArray(reply.data) ? { ...reply, data: reply.data.slice(call.range[0], call.range[1] + 1) } : reply;
+  };
   const from = (table: string) => {
     const call: Call = { table, kind: 'select', filters: {} };
     calls.push(call);
@@ -35,6 +41,7 @@ function makeDb(respond: (call: Call) => Reply) {
     const filter = (column: string, value: unknown) => { call.filters[column] = value; return b; };
     Object.assign(b, {
       select: chain, order: chain, limit: chain, or: chain,
+      range: (start: number, end: number) => { call.range = [start, end]; return b; },
       eq: filter, is: filter, in: filter,
       neq: (c: string, v: unknown) => filter(`neq:${c}`, v),
       ilike: (c: string, v: unknown) => filter(`ilike:${c}`, v),
@@ -46,9 +53,9 @@ function makeDb(respond: (call: Call) => Reply) {
       insert: (payload: unknown) => { call.kind = 'insert'; call.payload = payload; return b; },
       update: (payload: unknown) => { call.kind = 'update'; call.payload = payload; return b; },
       delete: () => { call.kind = 'delete'; return b; },
-      single: () => Promise.resolve(respond(call)),
-      maybeSingle: () => Promise.resolve(respond(call)),
-      then: (resolve: (value: Reply) => void) => resolve(respond(call)),
+      single: () => Promise.resolve(answer(call)),
+      maybeSingle: () => Promise.resolve(answer(call)),
+      then: (resolve: (value: Reply) => void) => resolve(answer(call)),
     });
     return b;
   };

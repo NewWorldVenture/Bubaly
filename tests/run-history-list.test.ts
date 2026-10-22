@@ -27,6 +27,8 @@ type DB = SupabaseClient<Database>;
 const FAM = 'fam-1';
 const OTHER = 'fam-2';
 const NOW = new Date('2026-09-05T14:00:00Z');
+/** Home is read by every role; a parent is shown every card (lib/autopilot/audience.ts). */
+const PARENT = { role: 'parent', memberId: 'member-parent' };
 
 function run(id: string, over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -40,7 +42,7 @@ function run(id: string, over: Record<string, unknown> = {}): Record<string, unk
 /** A client whose every read answers `error` — or throws — the way a lost connection does. */
 function failingDb(error: unknown, opts: { throws?: boolean } = {}): DB {
   const builder: Record<string, unknown> = {};
-  for (const m of ['select', 'eq', 'in', 'not', 'lt', 'gte', 'order', 'limit', 'maybeSingle']) builder[m] = () => builder;
+  for (const m of ['select', 'eq', 'in', 'not', 'lt', 'gte', 'order', 'limit', 'range', 'maybeSingle']) builder[m] = () => builder;
   builder.then = (resolve: (v: unknown) => void) => resolve({ data: null, error, count: null });
   return {
     from: () => {
@@ -374,7 +376,7 @@ describe('loadCompletedByBubaly', () => {
   }
 
   it('merges finished runs, done agent actions and auto-executed suggestions with source and reason, family-scoped', async () => {
-    const res = await loadCompletedByBubaly(seeded(), FAM, { now: NOW });
+    const res = await loadCompletedByBubaly(seeded(), FAM, { now: NOW, viewer: PARENT });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.data.map((i) => i.key)).toEqual(['run:r1', 'activity:su1', 'activity:a1', 'run:r2']);
@@ -395,12 +397,12 @@ describe('loadCompletedByBubaly', () => {
 
   it('fails closed on a read error — never a reassuring "nothing finished yet"', async () => {
     const err = quietErrors();
-    const res = await loadCompletedByBubaly(failingDb({ message: 'timeout' }), FAM, { now: NOW });
+    const res = await loadCompletedByBubaly(failingDb({ message: 'timeout' }), FAM, { now: NOW, viewer: PARENT });
     expect(res.ok).toBe(false);
     expect(!res.ok && res.retryable).toBe(true);
     expect(err.mock.calls.map((c) => String(c[0]))).toContain('[home] completed by Bubaly read failed');
 
-    const thrown = await loadCompletedByBubaly(failingDb(null, { throws: true }), FAM, { now: NOW });
+    const thrown = await loadCompletedByBubaly(failingDb(null, { throws: true }), FAM, { now: NOW, viewer: PARENT });
     expect(thrown.ok).toBe(false);
     err.mockRestore();
   });
@@ -446,7 +448,9 @@ describe('run history surfaces', () => {
 
   it('both Home variants read the ledger through the fail-closed loader and show its failure', () => {
     for (const page of [home, dashboardHome]) {
-      expect(page).toContain('loadCompletedByBubaly(supabase, familyId, { now, limit: 6 })');
+      // With the reader: an auto-executed card is listed only to the readers it
+      // is for (lib/autopilot/audience.ts), and both variants are every role's.
+      expect(page).toContain('loadCompletedByBubaly(supabase, familyId, { now, limit: 6, viewer: { role: ctx.active.role, memberId: ctx.active.member.id } })');
       expect(page).toContain('const completedError = completedRes.ok ? null : completedRes.error;');
       expect(page).toContain('error={completedError}');
       expect(page).not.toContain('mergeCompletedByBubaly(');

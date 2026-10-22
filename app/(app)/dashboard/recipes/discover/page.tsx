@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { DiscoverClient } from './discover-client';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -9,6 +9,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function DiscoverRecipesPage() {
-  await requireUserContext();
+  // Part of Recipes: it answers to that feature's tier, not just a session.
+  await requireFeature('/dashboard/recipes');
   return <DiscoverClient />;
 }

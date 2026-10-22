@@ -78,6 +78,9 @@ vi.mock('@/lib/services/ai-settings', () => ({
 }));
 vi.mock('@/lib/ai/runs/store', () => ({ createRequest: mocks.createRequest, createRun: mocks.createRun }));
 vi.mock('@/lib/ai/runs/continue', () => ({ kickRun: mocks.kickRun }));
+// Whether a family still has Ask Bubaly (N8) has its own cases in
+// tests/a-routine-is-planned-before-it-is-filed.test.ts; every family here has it.
+vi.mock('@/lib/ai/runs/entitlement', () => ({ agentRunEntitlementChecker: () => async () => 'entitled' }));
 vi.mock('@/lib/services/routines', async () => {
   const actual = await vi.importActual<typeof import('@/lib/services/routines')>('@/lib/services/routines');
   return { ...actual, nextRelativeFire: mocks.nextRelativeFire };

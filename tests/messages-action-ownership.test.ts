@@ -422,14 +422,16 @@ describe('render-owned delete, pin and reactions through actual SDK and acceptan
     const probe = messageActionFixture({ failure: 'wrong-result' }); await invokeMessageAction(probe.render(), action, probe.message);
     expect(probe.effects.filter(effect => effect.kind === 'messages')).toEqual([]); expect(probe.effects.filter(effect => effect.kind === 'toast')).toHaveLength(1);
   });
-  it('reaction without 0475 updates the message as before the build-out and accepts the saved row', async () => {
-    const probe = messageActionFixture({ failure: 'missing-rpc' }); await invokeMessageAction(probe.render(), 'reaction', probe.message);
-    expect(probe.requests.map(request => request.method)).toEqual(['POST', 'PATCH']);
-    expect(probe.requests[1].url.pathname).toBe('/rest/v1/family_messages');
-    expect(probe.requests[1].body).toEqual({ reactions: { '👍': [USER] } });
-    expect(probe.effects.filter(effect => effect.kind === 'toast')).toEqual([]);
-    expect(probe.effects.filter(effect => effect.kind === 'messages')).toHaveLength(1);
-    expect(probe.effects.filter(effect => effect.kind === 'legacy0475')).toHaveLength(1);
+  it('reaction without 0475 reports unavailable without raw writes or false confirmation', async () => {
+    const probe = messageActionFixture({ failure: 'missing-rpc' });
+    const before = JSON.stringify(probe.messagesRef.current);
+    await invokeMessageAction(probe.render(), 'reaction', probe.message);
+    expect(probe.requests.map(request => request.method)).toEqual(['POST']);
+    expect(probe.requests[0].url.pathname).toBe('/rest/v1/rpc/toggle_family_message_reaction');
+    expect(probe.effects.filter(effect => effect.kind === 'toast')).toHaveLength(1);
+    expect(probe.effects.filter(effect => ['messages', 'summaries', 'inbox', 'legacy0475'].includes(effect.kind))).toEqual([]);
+    expect(JSON.stringify(probe.messagesRef.current)).toBe(before);
+    expect(probe.messageActionFlight.current.size).toBe(0);
   });
   it('delete cannot dispatch a message owned by someone else, while pin and reaction keep participant semantics', async () => {
     const probe = messageActionFixture({ sender: 'other-user', role: 'child' }); await invokeMessageAction(probe.render(), 'delete', probe.message); expect(probe.requests).toEqual([]);

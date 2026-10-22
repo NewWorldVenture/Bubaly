@@ -9,8 +9,10 @@
 
 import type { BudgetPeriod } from '@/lib/database.types';
 import type { LocaleCode } from '@/lib/i18n/locales';
-import { periodWindowStart, type BudgetRow, type ExpenseRow } from '@/lib/operating-index/inputs';
+import { canonicalBudgets, type BudgetRow, type ExpenseRow } from '@/lib/operating-index/inputs';
+import { periodWindow } from '@/lib/finance/budget-periods';
 import { formatCents } from '@/lib/wallet/ledger';
+import { localPartsAt } from '@/lib/time/zoned';
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
@@ -80,12 +82,26 @@ export function detectIgnoredReminders(rows: ReminderRow[], now: Date): FamilySi
 // ── 2. Stress windows ────────────────────────────────────────────────────────
 export interface TimedRow { at: string }
 
-function bucketOf(iso: string): { dayType: 'weekday' | 'weekend'; part: 'morning' | 'afternoon' | 'evening' } | null {
+/**
+ * The family's weekday and hour at an instant. These were getUTCDay() and
+ * getUTCHours(): Greenwich's clock, so for a family in Los Angeles a Friday 6pm
+ * game was a Saturday 01:00 "weekend morning", and every evening counted as the
+ * next day's morning. An unusable zone reads Greenwich's rather than throwing.
+ */
+function localDayAndHour(instant: Date, tz: string): { dow: number; h: number } {
+  try {
+    const local = localPartsAt(instant, tz);
+    if ([local.year, local.month, local.day, local.hour].every(Number.isFinite)) {
+      return { dow: new Date(Date.UTC(local.year, local.month - 1, local.day)).getUTCDay(), h: local.hour };
+    }
+  } catch { /* an unusable zone: Greenwich's, below */ }
+  return { dow: instant.getUTCDay(), h: instant.getUTCHours() };
+}
+
+function bucketOf(iso: string, tz: string): { dayType: 'weekday' | 'weekend'; part: 'morning' | 'afternoon' | 'evening' } | null {
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return null;
-  const d = new Date(t);
-  const dow = d.getUTCDay();
-  const h = d.getUTCHours();
+  const { dow, h } = localDayAndHour(new Date(t), tz);
   return {
     dayType: dow === 0 || dow === 6 ? 'weekend' : 'weekday',
     part: h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening',
@@ -97,14 +113,15 @@ const DAY_LABEL = { weekday: 'Weekday', weekend: 'Weekend' };
 
 /**
  * When is the family most stretched? Bucket events, schedule clashes and overdue
- * items by day-type × part-of-day; the highest-pressure bucket (clashes weigh
- * most, then overdue, then raw density) is the stress window.
+ * items by day-type × part-of-day on the FAMILY's clock (`tz`); the
+ * highest-pressure bucket (clashes weigh most, then overdue, then raw density)
+ * is the stress window.
  */
-export function detectStressWindows(events: TimedRow[], conflicts: TimedRow[], overdue: TimedRow[], _now: Date): FamilySignal[] {
+export function detectStressWindows(events: TimedRow[], conflicts: TimedRow[], overdue: TimedRow[], _now: Date, tz: string): FamilySignal[] {
   const acc = new Map<string, { ev: number; cf: number; od: number; dayType: string; part: string }>();
   const add = (rows: TimedRow[], field: 'ev' | 'cf' | 'od') => {
     for (const r of rows ?? []) {
-      const b = bucketOf(r.at);
+      const b = bucketOf(r.at, tz);
       if (!b) continue;
       const key = `${b.dayType}:${b.part}`;
       const cur = acc.get(key) ?? { ev: 0, cf: 0, od: 0, dayType: b.dayType, part: b.part };
@@ -215,6 +232,13 @@ export function detectRoutineAdherence(routines: RoutineRow[], completions: Rout
 const norm = (c: string | null | undefined) => (c ?? '').trim().toLowerCase();
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/** The day before a `YYYY-MM-DD` key: date arithmetic, on no one's clock. */
+function dayBefore(dayKey: string): string {
+  const [y, m, d] = dayKey.split('-').map(Number);
+  const prev = new Date(Date.UTC(y, m - 1, d - 1));
+  return `${String(prev.getUTCFullYear()).padStart(4, '0')}-${String(prev.getUTCMonth() + 1).padStart(2, '0')}-${String(prev.getUTCDate()).padStart(2, '0')}`;
+}
+
 /**
  * A budget amount (`budgets.amount` and `transactions.amount` are DOLLARS) in the
  * reader's format. It was `$${v.toLocaleString('en-US')}` — the symbol written by
@@ -282,24 +306,32 @@ export function signalWordsFor(
  * PRIOR period was over too, i.e. the overspend is a pattern, not a one-off.
  * Complements FOI's overspent-budget count with a transparent, dismissable,
  * evidence-carrying signal the family can act on. Pure + deterministic.
+ *
+ * `today` is the FAMILY's day key. Each period is the budget's own on it, both
+ * ends (periodWindow: Sunday to Saturday, the month, the year), as FOI's count
+ * judges it: it began on Greenwich's day with Monday weeks and had no end, so
+ * next month's scheduled rent was this month's drift. One budget per category,
+ * the one the family keeps (canonicalBudgets); a legacy duplicate's smaller
+ * limit flagged a category its own budget was not over, under the same
+ * subject key as the real one.
  */
-export function detectBudgetDrift(budgets: BudgetRow[], expenses: ExpenseRow[], now: Date, locale: LocaleCode, t: Translate): FamilySignal[] {
+export function detectBudgetDrift(budgets: BudgetRow[], expenses: ExpenseRow[], today: string, locale: LocaleCode, t: Translate): FamilySignal[] {
   const out: FamilySignal[] = [];
-  for (const b of budgets) {
+  for (const b of canonicalBudgets(budgets)) {
     if (!b.amount || b.amount <= 0) continue;
     const cat = norm(b.category);
     if (!cat) continue;
 
-    const curStart = periodWindowStart(b.period, now);
-    const prevStart = periodWindowStart(b.period, new Date(Date.parse(curStart) - 86_400_000));
+    const cur = periodWindow(b.period, today);
+    const prev = periodWindow(b.period, dayBefore(cur.from));
 
     let spentNow = 0;
     let spentPrev = 0;
     for (const e of expenses) {
       if (norm(e.category) !== cat) continue;
       const amt = Number(e.amount) || 0;
-      if (e.date >= curStart) spentNow += amt;
-      else if (e.date >= prevStart) spentPrev += amt;
+      if (e.date >= cur.from && e.date <= cur.to) spentNow += amt;
+      else if (e.date >= prev.from && e.date <= prev.to) spentPrev += amt;
     }
 
     if (spentNow <= b.amount) continue; // only flag when currently over cap
@@ -310,7 +342,10 @@ export function detectBudgetDrift(budgets: BudgetRow[], expenses: ExpenseRow[], 
 
     out.push({
       kind: 'budget_drift',
-      subjectKey: `budget:${cat}`,
+      // The period is part of WHICH drift this is. Keyed on the category alone,
+      // acknowledging one month's overspend hid every later month's: a decided
+      // row is never reopened by a scan.
+      subjectKey: `budget:${cat}:${cur.from}`,
       ...budgetDriftText({ category: b.category, period: b.period, limit: b.amount, spent: spentNow, recurring }, locale, t),
       score,
       evidence: {
@@ -334,6 +369,10 @@ export interface HardSignalInputs {
   routineCompletions: RoutineCompletion[];
   budgets?: BudgetRow[];
   expenses?: ExpenseRow[];
+  /** The FAMILY's calendar day (YYYY-MM-DD) each budget's period is judged on. */
+  today: string;
+  /** The family's IANA zone: stress windows are the family's weekdays and hours. */
+  tz: string;
 }
 
 /**
@@ -344,9 +383,9 @@ export interface HardSignalInputs {
 export function buildHardSignals(inp: HardSignalInputs, now: Date, locale: LocaleCode, t: Translate): FamilySignal[] {
   return [
     ...detectIgnoredReminders(inp.reminders ?? [], now),
-    ...detectStressWindows(inp.events ?? [], inp.conflicts ?? [], inp.overdue ?? [], now),
+    ...detectStressWindows(inp.events ?? [], inp.conflicts ?? [], inp.overdue ?? [], now, inp.tz),
     ...detectChoreConflicts(inp.chores ?? []),
     ...detectRoutineAdherence(inp.routines ?? [], inp.routineCompletions ?? [], now),
-    ...detectBudgetDrift(inp.budgets ?? [], inp.expenses ?? [], now, locale, t),
+    ...detectBudgetDrift(inp.budgets ?? [], inp.expenses ?? [], inp.today, locale, t),
   ].sort((a, b) => b.score - a.score);
 }

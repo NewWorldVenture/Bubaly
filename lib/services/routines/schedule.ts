@@ -57,8 +57,28 @@ const DAYPART_HOURS: Record<string, number> = {
 
 const DEFAULT_HOUR = 9;
 
-/** `5pm`, `5:30pm`, `17:00`, `at 5` → minutes past midnight, or null. */
-export function parseClockTime(text: string): { hour: number; minute: number } | null {
+type ClockTime = { hour: number; minute: number };
+
+/** An invalid explicit clock must not become a missing clock's default hour. */
+function readClockTime(text: string): ClockTime | 'invalid' | null {
+  // Read whole numeric tokens before the supported-format searches below.
+  // Otherwise `5:6pm` can match its `6pm` suffix, or `17:99` can look absent.
+  const numeric = /(?<![\w:.+-])(at\s+)?([+-]?\d+(?:[:.]\d+)*)(?:\s*(am|pm)\b)?/gi;
+  for (const match of text.matchAll(numeric)) {
+    const [, at, token, meridiem] = match;
+    const rest = text.slice(match.index! + match[0].length);
+    // A completed `5pm: plan meals` or `17:00: plan meals` uses punctuation,
+    // while `5 :6pm` and another numeric segment still belong to the clock.
+    const completeClock = Boolean(meridiem) || token.includes(':');
+    const continuesClock = /^\s*:/.test(rest) && (!completeClock || /^\s*:\s*\d/.test(rest));
+    const hasColon = token.includes(':') || continuesClock;
+    if (!at && !hasColon && !meridiem) continue; // a date or relative day count
+    if (at && !hasColon && !meridiem && /^\s*(?:days?|weeks?|hours?)\b/i.test(rest)) continue;
+    if (continuesClock || /^\w/.test(rest) || !/^\d{1,2}(?::\d{2})?$/.test(token)) return 'invalid';
+    const [hour, minute = 0] = token.split(':').map(Number);
+    if (minute > 59 || hour > (meridiem ? 12 : 23) || (meridiem && hour < 1)) return 'invalid';
+  }
+
   const ampm = /\b(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i.exec(text);
   if (ampm) {
     let hour = Number(ampm[1]);
@@ -82,6 +102,12 @@ export function parseClockTime(text: string): { hour: number; minute: number } |
   return null;
 }
 
+/** `5pm`, `5:30pm`, `17:00`, `at 5` → clock fields, or null. */
+export function parseClockTime(text: string): ClockTime | null {
+  const time = readClockTime(text);
+  return time === 'invalid' ? null : time;
+}
+
 function numberFrom(word: string): number | null {
   const digits = Number(word);
   if (Number.isInteger(digits) && digits > 0) return digits;
@@ -99,6 +125,8 @@ export function parseSchedule(text: string, anchors: RoutineAnchor[] = []): Sche
   const said = text.trim();
   if (!said) return null;
   const q = said.toLowerCase();
+  const time = readClockTime(q);
+  if (time === 'invalid') return null;
 
   // ── Relative: "two days before every trip", "the night before each game" ──
   const relative = /\b(?:(\d+|a|an|one|two|three|four|five|six|seven|ten|fourteen)\s+)?(day|days|week|weeks|night)\s+(before|after)\s+(?:every|each|any|the)?\s*([a-z ]+?)\b/i.exec(q);
@@ -113,14 +141,12 @@ export function parseSchedule(text: string, anchors: RoutineAnchor[] = []): Sche
       if (anchor) {
         // "the night before" carries its own hour through DAYPART_HOURS
         // ('night' → 20:00), which is why there is no special case here.
-        const time = parseClockTime(q);
         return { kind: 'relative', anchor, offsetDays: direction * days, atHour: time?.hour ?? DEFAULT_HOUR, said };
       }
     }
   }
 
   // ── Cron: the wall-clock repeats ────────────────────────────────────────
-  const time = parseClockTime(q);
   const hour = time?.hour ?? DEFAULT_HOUR;
   const minute = time?.minute ?? 0;
 
@@ -141,10 +167,13 @@ export function parseSchedule(text: string, anchors: RoutineAnchor[] = []): Sche
     return { kind: 'cron', expr: `${minute} ${hour} * * *`, said };
   }
   // "on the 1st", "every month on the 15th"
-  const dom = /\b(?:every\s+month\s+)?(?:on\s+the\s+)?(\d{1,2})(?:st|nd|rd|th)\b/i.exec(q);
+  const dom = /\b(?:every\s+month\s+)?(?:on\s+the\s+)?(\d+)(?:st|nd|rd|th)\b/i.exec(q);
   if (dom && /\bmonth|monthly\b/i.test(q)) {
     const day = Number(dom[1]);
-    if (day >= 1 && day <= 28) return { kind: 'cron', expr: `${minute} ${hour} ${day} * *`, said };
+    if (dom[1].length <= 2 && day >= 1 && day <= 28) return { kind: 'cron', expr: `${minute} ${hour} ${day} * *`, said };
+    // This grammar supports 1–28. Later dates are valid in standard cron,
+    // but unsupported wording must not fall through to the day-one default.
+    return null;
   }
   if (/\bevery\s+month\b|\bmonthly\b/i.test(q)) return { kind: 'cron', expr: `${minute} ${hour} 1 * *`, said };
   if (/\bevery\s+week\b|\bweekly\b/i.test(q)) return { kind: 'cron', expr: `${minute} ${hour} * * 0`, said };

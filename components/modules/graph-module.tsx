@@ -12,6 +12,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -31,6 +32,10 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 type EntityRow = Tables<'graph_entities'>;
 type EdgeRow = Tables<'graph_edges'>;
 
+/** The ceilings loadFamilyGraph reads the same tables to (lib/reasoning/context.ts). */
+const GRAPH_ENTITY_MAX = 4000;
+const GRAPH_EDGE_MAX = 8000;
+
 const KINDS: EntityKind[] = ['person', 'activity', 'place', 'org', 'event', 'item', 'pet', 'topic', 'other'];
 const KIND_STYLE: Record<string, string> = {
   person: 'text-sky-300 bg-sky-500/10 border-sky-500/30',
@@ -49,13 +54,21 @@ export function GraphModule() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
+  // Read WHOLE, paged on the id, to the same ceilings as the server's graph
+  // read (lib/reasoning/context.ts loadFamilyGraph). One request each stopped at
+  // PostgREST's 1,000 rows, an arbitrary 1,000 with no order: a household the
+  // twin projector had given 3,709 entities read "Entities (1000)", and its
+  // hubs, links, impact and paths were worked out over a part of the graph.
+  // Past the ceiling the read fails, and the panel says it could not load.
   const { data: entityRows, loading: entityLoading, error: entityError, refresh: refreshEntities, refreshAndConfirm: confirmEntities } = useRealtimeQuery<EntityRow>({
     table: 'graph_entities', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('graph_entities').select('*').eq('family_id', familyId),
+    fetcher: (sb) => readAllAsQuery<EntityRow>((from, to) => sb.from('graph_entities').select('*')
+      .eq('family_id', familyId).order('id').range(from, to), { max: GRAPH_ENTITY_MAX }),
   });
   const { data: edgeRows, loading: edgeLoading, error: edgeError, refresh: refreshEdges, refreshAndConfirm: confirmEdges } = useRealtimeQuery<EdgeRow>({
     table: 'graph_edges', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('graph_edges').select('*').eq('family_id', familyId),
+    fetcher: (sb) => readAllAsQuery<EdgeRow>((from, to) => sb.from('graph_edges').select('*')
+      .eq('family_id', familyId).order('id').range(from, to), { max: GRAPH_EDGE_MAX }),
   });
   const loading = entityLoading || edgeLoading;
   const error = entityError || edgeError;

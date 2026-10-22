@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Languages, Plus, Check, Pencil, Trash2, Flame, Layers, Timer, Sparkles, RotateCcw, Wand2, PauseCircle, PlayCircle, Target, ChevronRight } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -73,6 +73,14 @@ export function LanguageModule() {
   const [reviewedCount, setReviewedCount] = useState(0);
   const [showArchived, setShowArchived] = useState(false);
   const [adding, setAdding] = useState(false);
+  // One review write at a time. A second tap on a grade, or on "log it as
+  // practice", landed while the first was still in flight: the grade ran twice
+  // from the same stale card and counted two reviews, and the log inserted two
+  // identical sessions — double the week's minutes and the level estimate's
+  // hours. The ref answers the second tap at once; the state disables the
+  // buttons for as long as the write is out.
+  const reviewWrite = useRef(false);
+  const [reviewBusy, setReviewBusy] = useState(false);
 
   // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
   // so handing them this makes their "today" the family's day, not the phone's.
@@ -92,22 +100,50 @@ export function LanguageModule() {
   const visibleGoals = goals.data.filter((g) => g.is_active || showArchived || g.id === goalId);
 
   async function gradeCard(c: Card, grade: Grade) {
-    const next = sm2(c, grade, clock.calendarToday());
-    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-80.
-    const { data: updated, error } = await createClient().from('vocab_cards').update(next).eq('id', c.id).select('id');
-    if (error) return toastError(describeDbError(error));
-    if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
-    setRevealed(false);
-    setReviewedCount((n) => n + 1);
+    if (reviewWrite.current) return;
+    reviewWrite.current = true;
+    setReviewBusy(true);
+    try {
+      const next = sm2(c, grade, clock.calendarToday());
+      // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-80.
+      const { data: updated, error } = await createClient().from('vocab_cards').update(next).eq('id', c.id).select('id');
+      if (error) return toastError(describeDbError(error));
+      if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
+      setRevealed(false);
+      setReviewedCount((n) => n + 1);
+    } finally {
+      reviewWrite.current = false;
+      setReviewBusy(false);
+    }
   }
 
   async function finishReview() {
-    if (!goal || !reviewedCount) return;
-    const minutes = Math.max(1, Math.round(reviewedCount / 4));
-    const { error } = await createClient().from('language_sessions').insert({ family_id: familyId, goal_id: goal.id, member_id: goal.member_id, kind: 'vocab', minutes, topic: `${reviewedCount} cards reviewed`, practiced_on: clock.todayKey(), created_by: userId });
-    if (error) return toastError(describeDbError(error));
-    success(tr('modules.cardsReviewed', { count: reviewedCount, minutes }));
+    if (!goal || !reviewedCount || reviewWrite.current) return;
+    reviewWrite.current = true;
+    setReviewBusy(true);
+    // Taken off the counter BEFORE the write, so nothing can log this sitting
+    // twice; handed back if the write does not land.
+    const count = reviewedCount;
     setReviewedCount(0);
+    try {
+      const minutes = Math.max(1, Math.round(count / 4));
+      const { data: logged, error } = await createClient().from('language_sessions').insert({ family_id: familyId, goal_id: goal.id, member_id: goal.member_id, kind: 'vocab', minutes, topic: `${count} cards reviewed`, practiced_on: clock.todayKey(), created_by: userId }).select('id');
+      if (error) {
+        setReviewedCount((n) => n + count);
+        return toastError(describeDbError(error));
+      }
+      if (wroteNoRows(logged)) {
+        setReviewedCount((n) => n + count);
+        return toastError(tr('errors.thatChangeWasNotSaved'));
+      }
+      success(tr('modules.cardsReviewed', { count, minutes }));
+    } catch (err) {
+      setReviewedCount((n) => n + count);
+      toastError(describeDbError(err));
+    } finally {
+      reviewWrite.current = false;
+      setReviewBusy(false);
+    }
   }
 
   async function toggleSuspend(c: Card) {
@@ -121,6 +157,10 @@ export function LanguageModule() {
     const { data: removed, error } = await createClient().from('vocab_cards').delete().eq('id', c.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    cards.setData((rows) => rows.filter((row) => row.id !== c.id));
     success(tr('languageModule.cardRemoved'));
   }
 
@@ -143,6 +183,10 @@ export function LanguageModule() {
     const { data: removed2, error } = await createClient().from('language_sessions').delete().eq('id', s.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed2)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    sessions.setData((rows) => rows.filter((row) => row.id !== s.id));
     success(tr('languageModule.sessionRemoved'));
   }
 
@@ -158,6 +202,13 @@ export function LanguageModule() {
     const { data: removed3, error } = await createClient().from('language_goals').delete().eq('id', g.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed3)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    // Its sessions and cards went with it (ON DELETE CASCADE, 0248).
+    goals.setData((rows) => rows.filter((row) => row.id !== g.id));
+    sessions.setData((rows) => rows.filter((row) => row.goal_id !== g.id));
+    cards.setData((rows) => rows.filter((row) => row.goal_id !== g.id));
     setGoalId('');
     success(tr('languageModule.goalDeleted'));
   }
@@ -190,8 +241,8 @@ export function LanguageModule() {
           {goals.data.length > 1 && (
             <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label={tr('language.languageGoal')}>
               {visibleGoals.map((g) => (
-                <button key={g.id} role="tab" aria-selected={g.id === goalId} onClick={() => { setGoalId(g.id); setRevealed(false); }} className={cn('rounded-full border px-3 py-1.5 text-sm transition coarse:min-h-11', g.id === goalId ? 'border-brand bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg', !g.is_active && 'opacity-60')}>
-                  {languageMeta(g.language_code).flag} {nameOf(g.member_id)} <span className="text-xs opacity-70">· {g.language_label}</span>
+                <button key={g.id} role="tab" aria-selected={g.id === goalId} onClick={() => { setGoalId(g.id); setRevealed(false); }} className={cn('rounded-full border px-3 py-1.5 text-sm transition coarse:min-h-11', g.id === goalId ? 'border-brand bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg', !g.is_active && 'border-dashed')}>
+                  {languageMeta(g.language_code).flag} {nameOf(g.member_id)} <span className="text-xs">· {g.language_label}</span>
                 </button>
               ))}
               {goals.data.some((g) => !g.is_active) && <button onClick={() => setShowArchived((v) => !v)} className="text-xs text-muted hover:text-fg">{showArchived ? 'Hide' : 'Show'} archived</button>}
@@ -257,7 +308,7 @@ export function LanguageModule() {
                       {current.example && <p className="mt-2 text-sm italic text-muted">{current.example}</p>}
                       <div className="mt-6 grid grid-cols-4 gap-2">
                         {GRADES.map((g) => (
-                          <button key={g.value} onClick={() => gradeCard(current, g.value)} className={cn('rounded-xl border px-2 py-3 text-sm coarse:min-h-12', g.value === 1 ? 'border-rose-500/30 hover:bg-rose-500/10' : g.value === 5 ? 'border-emerald-500/30 hover:bg-emerald-500/10' : 'border-border hover:bg-surface')}>
+                          <button key={g.value} onClick={() => gradeCard(current, g.value)} disabled={reviewBusy} className={cn('rounded-xl border px-2 py-3 text-sm coarse:min-h-12 disabled:opacity-60', g.value === 1 ? 'border-rose-500/30 hover:bg-rose-500/10' : g.value === 5 ? 'border-emerald-500/30 hover:bg-emerald-500/10' : 'border-border hover:bg-surface')}>
                             <span className="block font-semibold">{g.label}</span>
                             <span className="block text-[10px] text-muted">{sm2(current, g.value, today).interval_days}d</span>
                           </button>
@@ -268,13 +319,13 @@ export function LanguageModule() {
                     <Button className="mt-6" onClick={() => setRevealed(true)}><RotateCcw className="h-4 w-4" /> {tr('language.showAnswer')}</Button>
                   )}
                 </div>
-                {reviewedCount > 0 && <p className="mt-3 text-center text-xs text-muted">{reviewedCount} {tr('language.reviewedThisSitting')} <button onClick={finishReview} className="text-brand-text hover:underline">{tr('language.logItAsPractice')}</button></p>}
+                {reviewedCount > 0 && <p className="mt-3 text-center text-xs text-muted">{reviewedCount} {tr('language.reviewedThisSitting')} <button onClick={finishReview} disabled={reviewBusy} className="text-brand-text hover:underline disabled:opacity-60">{tr('language.logItAsPractice')}</button></p>}
               </div>
             ) : (
               <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-6 text-center">
                 <p className="font-semibold">{tr('language.deckClearForToday')}</p>
                 <p className="mt-1 text-sm text-muted">{deck.total === 0 ? tr('language.addStarterDeck') : (myCards.filter((c) => !c.is_suspended && c.due_on > isoDate(today)).sort((a, b) => a.due_on.localeCompare(b.due_on))[0]?.due_on ? tr('language.nextCardsDueOn', { date: fmtDate(myCards.filter((c) => !c.is_suspended && c.due_on > isoDate(today)).sort((a, b) => a.due_on.localeCompare(b.due_on))[0].due_on) }) : tr('language.nextCardsWhenMore'))}</p>
-                {reviewedCount > 0 && <Button className="mt-4" onClick={finishReview}><Check className="h-4 w-4" /> Log {reviewedCount} {tr('language.reviewsAsPractice')}</Button>}
+                {reviewedCount > 0 && <Button className="mt-4" onClick={finishReview} loading={reviewBusy}><Check className="h-4 w-4" /> Log {reviewedCount} {tr('language.reviewsAsPractice')}</Button>}
                 {deck.total === 0 && starterDeck(goal.language_code).length > 0 && <Button className="mt-4" onClick={addStarterDeck} loading={adding}><Wand2 className="h-4 w-4" /> {tr('language.addThe')} {goal.language_label} {tr('language.starterDeck')}</Button>}
               </div>
             )
@@ -286,7 +337,7 @@ export function LanguageModule() {
             ) : (
               <ul className="grid gap-2 sm:grid-cols-2">
                 {[...myCards].sort((a, b) => a.due_on.localeCompare(b.due_on) || a.term.localeCompare(b.term)).map((c) => (
-                  <li key={c.id} className={cn('flex items-center gap-3 rounded-xl border px-3 py-2', c.is_suspended ? 'border-border/60 bg-surface/30 opacity-70' : 'border-border bg-surface/60')}>
+                  <li key={c.id} className={cn('flex items-center gap-3 rounded-xl border px-3 py-2', c.is_suspended ? 'border-border/60 bg-surface/30' : 'border-border bg-surface/60')}>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm"><span className="font-medium">{c.term}</span> <span className="text-muted">— {c.translation}</span></p>
                       <p className="text-[11px] text-muted">{c.is_suspended ? 'Suspended' : c.due_on <= isoDate(today) ? 'Due now' : `Due ${fmtDate(c.due_on)}`} · {c.repetitions === 0 && c.lapses === 0 ? 'new' : `${c.interval_days}d interval · ease ${c.ease}`}{c.lapses ? ` · ${c.lapses} lapse${c.lapses === 1 ? '' : 's'}` : ''}</p>

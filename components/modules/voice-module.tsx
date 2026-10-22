@@ -25,6 +25,7 @@ import type { CaptureKind } from '@/lib/capture/parse';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { recordsInScope } from '@/lib/records/personal-scope';
 
 type VoiceCommand = Tables<'voice_commands'>;
 
@@ -62,7 +63,7 @@ function VoiceCaptureSession() {
   // toLocaleDateString(undefined, …) — the BROWSER's locale, not the family's.
   const { fmtTimeAgo } = useFormat();
   const fmtTimeAgo7 = (iso: string) => fmtTimeAgo(iso, { absoluteAfterDays: 7 });
-  const { familyId, userId, selfMember } = useApp();
+  const { familyId, userId, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
   const speech = useSpeechRecognition();
   const journey = useJourney('voice_command');
@@ -82,11 +83,14 @@ function VoiceCaptureSession() {
     if (speech.transcript && !operation.current.pending && !operation.current.uncertain) setText(speech.transcript);
   }, [speech.transcript]);
 
-  const { data: history, loading, error, refresh } = useRealtimeQuery<VoiceCommand>({
+  const { data: allHistory, loading, error, refresh } = useRealtimeQuery<VoiceCommand>({
     table: 'voice_commands', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('voice_commands').select('*').eq('family_id', familyId)
       .order('created_at', { ascending: false }).limit(20),
   });
+  // The held 0517: a verbatim command is a parent's, an adult's or its
+  // speaker's to read.
+  const history = useMemo(() => recordsInScope(allHistory, role, selfMember?.id), [allHistory, role, selfMember]);
 
   // Live routing preview for the current text.
   const preview = useMemo(() => {

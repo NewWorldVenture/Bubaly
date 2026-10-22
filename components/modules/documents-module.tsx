@@ -10,6 +10,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument, DOCUMENT_MAX_BYTES, DOCUMENT_MAX_MB } from '@/lib/storage/documents';
 import { useToast } from '@/components/ui/toast';
@@ -152,7 +153,12 @@ export function DocumentsModule() {
 
   const { data, loading, error, refresh } = useRealtimeQuery<Document>({
     table: 'documents', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('documents').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
+    // Paged to the end: one select stops at db-max-rows (1,000) and says
+    // nothing, so past it the oldest files fell out of the list, the search,
+    // the folder counts and "storage used". Past the ceiling readAll answers
+    // an error, and the screen says so.
+    fetcher: (sb) => readAllAsQuery<Document>((from, to) => sb.from('documents').select('*').eq('family_id', familyId)
+      .order('created_at', { ascending: false }).order('id').range(from, to), { max: 20_000 }),
   });
 
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -331,7 +337,7 @@ export function DocumentsModule() {
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder={tr('documents.searchFiles')}
                   aria-label={tr('documents.searchFiles')}
-                  className="h-9 w-40 rounded-xl border border-border bg-surface/60 pl-9 pr-3 text-sm outline-none placeholder:text-muted focus:border-brand/50 sm:w-56"
+                  className="h-9 w-40 rounded-xl border border-border bg-surface/60 pl-9 pr-3 text-sm outline-none placeholder:text-muted focus:border-brand sm:w-56"
                 />
               </div>
             </div>
@@ -456,11 +462,11 @@ export function DocumentsModule() {
                         <td className="py-3 pr-4 text-xs text-muted tabular-nums">{fmtSize(doc.size_bytes)}</td>
                         <td className="py-3">
                           <div className="flex items-center justify-end gap-1">
-                            <button onClick={() => toggleFavorite(doc)} aria-label={isFav(doc) ? tr('uiText.unstar') : tr('uiText.star')} className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-elevated">
+                            <button onClick={() => toggleFavorite(doc)} aria-label={isFav(doc) ? tr('uiText.unstar') : tr('uiText.star')} className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:bg-elevated">
                               <Star className={cn('h-4 w-4', isFav(doc) && 'fill-amber-400 text-amber-400')} />
                             </button>
                             <div className="relative">
-                              <button onClick={() => setMenuId(menuId === doc.id ? null : doc.id)} aria-label={tr('documents.moreActions')} className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-elevated">
+                              <button onClick={() => setMenuId(menuId === doc.id ? null : doc.id)} aria-label={tr('documents.moreActions')} className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:bg-elevated">
                                 <MoreHorizontal className="h-4 w-4" />
                               </button>
                               {menuId === doc.id && (
@@ -488,7 +494,7 @@ export function DocumentsModule() {
                 const meta = fileMeta(doc.title, doc.mime_type);
                 return (
                   <div key={doc.id} className="group relative rounded-2xl border border-border bg-surface/20 p-4">
-                    <button onClick={() => toggleFavorite(doc)} aria-label={isFav(doc) ? tr('uiText.unstar') : tr('uiText.star')} className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-elevated">
+                    <button onClick={() => toggleFavorite(doc)} aria-label={isFav(doc) ? tr('uiText.unstar') : tr('uiText.star')} className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-lg text-muted hover:bg-elevated">
                       <Star className={cn('h-4 w-4', isFav(doc) && 'fill-amber-400 text-amber-400')} />
                     </button>
                     <span className={cn('grid h-12 w-12 place-items-center rounded-xl', meta.tint)}><meta.Icon className={cn('h-6 w-6', meta.color)} /></span>
@@ -661,10 +667,10 @@ export function DocumentsModule() {
               <datalist id="folder-options">{folders.map((f) => <option key={f.name} value={f.name} />)}</datalist>
             </>
           )}</Field>
-          <Field label={tr('documents.visibility')}>{(id) => (
+          <Field label={tr('family.member')}>{(id) => (
             <Select id={id} value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))}>
-              <option value="">{tr('documents.sharedWithFamily')}</option>
-              {members.map((m) => <option key={m.id} value={m.id}>{tr('documents.private')} {m.display_name}</option>)}
+              <option value="">{tr('family.family')}</option>
+              {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </Select>
           )}</Field>
           <Field label={tr('documents.expiresOptional')} hint={tr('documentsModule.forPassportsInsuranceRegistrationsBubaly')}>{(id) => <Input id={id} type="date" value={form.expires_at} onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))} />}</Field>

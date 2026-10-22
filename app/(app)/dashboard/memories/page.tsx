@@ -273,7 +273,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
                 <input type="hidden" name="tab" value={tab} />
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
                 <input name="q" defaultValue={q} placeholder={tr('dashboardMemories.searchMemories')}
-                  className="h-10 w-full rounded-xl border border-border bg-surface/40 pl-9 pr-3 text-sm outline-none placeholder:text-muted focus:border-brand/50 lg:w-56" />
+                  className="h-10 w-full rounded-xl border border-border bg-surface/40 pl-9 pr-3 text-sm outline-none placeholder:text-muted focus:border-brand lg:w-56" />
               </form>
               <Link href={`/dashboard/memories?tab=${tab}`} className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border bg-surface/40 px-3 text-sm text-muted hover:bg-elevated">
                 <Filter className="h-4 w-4" /> {tr('dashboardMemories.filter')}

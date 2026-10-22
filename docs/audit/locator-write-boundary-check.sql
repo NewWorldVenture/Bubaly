@@ -136,7 +136,11 @@ begin
   if n <> 0 then
     raise exception 'a child deleted a parent''s safety check-in (%)', n;
   end if;
+  -- What is stored, read as the owner: under the held 0516 the child no
+  -- longer reads the parent's check-in, and a zero must mean a deleted row.
+  reset role;
   select count(*) into n from public.safety_check_ins where id = chk;
+  set local role authenticated;
   if n <> 1 then
     raise exception 'the check-in is gone despite the refusal';
   end if;

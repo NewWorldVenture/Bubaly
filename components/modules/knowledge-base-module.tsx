@@ -23,7 +23,7 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import {
-  filterFacts, groupByCategory, FACT_CATEGORY_LABELS, FACT_CATEGORY_ORDER,
+  factsVisibleTo, filterFacts, groupByCategory, FACT_CATEGORY_LABELS, FACT_CATEGORY_ORDER,
   type FactCategory,
 } from '@/lib/memory/facts';
 import type { Tables } from '@/lib/database.types';
@@ -40,7 +40,7 @@ const blank = {
 export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) {
   const t = useTranslations();
   const askConfirm = useConfirm();
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
 
   const [memberFilter, setMemberFilter] = useState<string>('all');
@@ -58,9 +58,16 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
 
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? 'The family';
 
+  // The reader's half of the sensitive-memory rule, before anything renders.
+  // RLS (0264) hides the medical and account CATEGORIES from a child, teen,
+  // caregiver or guest; the TERMS half (passwords, PINs, bank, allergies,
+  // diagnoses, salary…) is enforced only in code, and every other reader —
+  // recall, search, the AI context, insights — applies it. This page showed
+  // and offered to copy "Wi-Fi password" to anyone who opened it.
+  const readable = useMemo(() => factsVisibleTo(role, facts), [role, facts]);
   const visible = useMemo(
-    () => filterFacts(facts, { member: memberFilter, category: catFilter, q }),
-    [facts, memberFilter, catFilter, q],
+    () => filterFacts(readable, { member: memberFilter, category: catFilter, q }),
+    [readable, memberFilter, catFilter, q],
   );
   const grouped = useMemo(() => groupByCategory(visible), [visible]);
 
@@ -164,7 +171,7 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
         <div className="space-y-6">
           {grouped.map(([cat, items]) => (
             <section key={cat}>
-              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{FACT_CATEGORY_LABELS[cat]} <span className="opacity-60">· {items.length}</span></h2>
+              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{FACT_CATEGORY_LABELS[cat]} <span className="font-normal">· {items.length}</span></h2>
               <ul className="space-y-2">
                 {items.map((f) => (
                   <li key={f.id} className={cn('flex items-start gap-3 rounded-xl border bg-surface/50 p-3', f.is_pinned ? 'border-brand/30' : 'border-border')}>

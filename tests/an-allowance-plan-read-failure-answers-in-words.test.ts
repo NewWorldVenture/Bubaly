@@ -55,6 +55,9 @@ beforeEach(() => {
   harness.db = db;
   db.seed('families', [{ id: FAMILY, trial_ends_at: null, closed_at: null }]);
   db.seed('subscriptions', [{ family_id: FAMILY, plan: 'basic', status: 'active' }]);
+  // The wallet a NEW rule is saved for is read back in this family
+  // (tests/an-allowance-or-goal-is-for-a-child-in-this-family.test.ts).
+  db.seed('child_wallets', [{ id: 'wallet-b', family_id: FAMILY }]);
   db.seed('allowance_rules', [
     { id: 'rule-due', family_id: FAMILY, child_wallet_id: 'wallet-a', amount_cents: 1_000, cadence: 'weekly', split: null, is_active: true, next_run_on: '2026-09-27', last_run_on: '2026-09-20', created_by: 'user-self' },
   ]);

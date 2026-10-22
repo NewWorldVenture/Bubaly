@@ -8,7 +8,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { readDisplayCalendarOccurrences, CALENDAR_DISPLAY_CONTRACT, CALENDAR_SOURCE_ARCHIVE_ENABLED, type CalendarDisplayOccurrence } from '@/lib/calendar/display-occurrences';
 import { bucketCalendarDisplaySpans, calendarDisplayDay, type CalendarDisplaySpan } from '@/lib/calendar/display-spans';
-import { addDays as addDateDays, familyFetchRange } from '@/lib/calendar/day';
+import { addDays as addDateDays, allDayDate, familyFetchRange } from '@/lib/calendar/day';
 import { BusynessHeatmap } from '@/components/calendar/busyness-heatmap';
 import { describeDbError } from '@/lib/supabase/errors';
 import { createCalendarEventAction, updateCalendarEventAction } from '@/app/(app)/dashboard/calendar/actions';
@@ -730,11 +730,11 @@ export function CalendarModule() {
           <div className="flex-1 space-y-1 p-4">
             {/* All-day events */}
             {mobileDayAllDay.map(e => (
-              <div key={e.occurrenceKey} data-calendar-day={mobileDayStr} data-occurrence-key={e.occurrenceKey} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}>
-                <div className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{tr('calendar.allDay')}</div>
+              <div key={e.occurrenceKey} data-calendar-day={mobileDayStr} data-occurrence-key={e.occurrenceKey} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer rounded-lg border p-3 transition hover:shadow-md', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}>
+                <div className="text-[10px] font-semibold uppercase tracking-wide">{tr('calendar.allDay')}</div>
                 <div className="text-sm font-semibold">{e.title ?? '—'}</div>
                 {e.assignee_id && memberById.get(e.assignee_id) && (
-                  <div className="mt-1 flex items-center gap-1.5 text-xs opacity-70">
+                  <div className="mt-1 flex items-center gap-1.5 text-xs">
                     <Avatar name={memberById.get(e.assignee_id)!.display_name} color={memberById.get(e.assignee_id)!.color} size={14} />
                     {memberById.get(e.assignee_id)!.display_name}
                   </div>
@@ -750,7 +750,7 @@ export function CalendarModule() {
               const e = span.occurrence;
               const member = e.assignee_id ? memberById.get(e.assignee_id) : null;
               return (
-                <div key={e.occurrenceKey} data-calendar-day={span.day} data-occurrence-key={e.occurrenceKey} data-calendar-start={span.actualStartsAt} data-calendar-end={span.actualEndsAt} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}>
+                <div key={e.occurrenceKey} data-calendar-day={span.day} data-occurrence-key={e.occurrenceKey} data-calendar-start={span.actualStartsAt} data-calendar-end={span.actualEndsAt} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer rounded-lg border p-3 transition hover:shadow-md', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold">
                       {fmtTime(span.actualStartsAt)}
@@ -759,9 +759,9 @@ export function CalendarModule() {
                     {member && <Avatar name={member.display_name} color={member.color} size={18} />}
                   </div>
                   <div className="mt-1 text-sm font-semibold">{e.title ?? '—'}</div>
-                  {member && <div className="mt-0.5 text-xs opacity-70">{member.display_name}</div>}
+                  {member && <div className="mt-0.5 text-xs">{member.display_name}</div>}
                   {e.location && (
-                    <div className="mt-1 flex items-center gap-1 text-xs opacity-70"><MapPin className="h-3 w-3" />{e.location}</div>
+                    <div className="mt-1 flex items-center gap-1 text-xs"><MapPin className="h-3 w-3" />{e.location}</div>
                   )}
                 </div>
               );
@@ -842,16 +842,16 @@ export function CalendarModule() {
                         if (top < 0 || top > HOURS.length * HOUR_HEIGHT) return null;
                         return (
                           <div key={span.segmentKey} data-calendar-day={span.day} data-occurrence-key={e.occurrenceKey} data-calendar-start={span.actualStartsAt} data-calendar-end={span.actualEndsAt} style={{ top, height, left: 2, right: 2 }} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0}
-                            className={cn('focus-ring absolute z-10 overflow-hidden rounded-md border p-1.5 text-[10px] cursor-pointer hover:brightness-110 transition', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}
+                            className={cn('focus-ring absolute z-10 overflow-hidden rounded-md border p-1.5 text-[10px] cursor-pointer hover:shadow-md transition', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}
                             title={e.title ?? ''}>
                             <div className="flex items-start justify-between gap-1">
                               <span className="font-semibold leading-tight truncate">{fmtTime(span.actualStartsAt)}</span>
                               {height > 30 && member && <Avatar name={member.display_name} color={member.color} size={14} />}
                             </div>
                             {height > 24 && <div className="mt-0.5 truncate font-medium leading-tight">{e.title ?? '—'}</div>}
-                            {height > 42 && member && <div className="mt-0.5 truncate text-[9px] opacity-70">{member.display_name}</div>}
+                            {height > 42 && member && <div className="mt-0.5 truncate text-[9px]">{member.display_name}</div>}
                             {height > 54 && e.location && (
-                              <div className="mt-0.5 flex items-center gap-0.5 text-[9px] opacity-70"><MapPin className="h-2 w-2" />{e.location}</div>
+                              <div className="mt-0.5 flex items-center gap-0.5 text-[9px]"><MapPin className="h-2 w-2" />{e.location}</div>
                             )}
                           </div>
                         );
@@ -1019,7 +1019,15 @@ export function CalendarModule() {
         <CalendarOccurrenceDetailModal
           occurrence={selected} members={members} selfMemberId={selfMember?.id ?? null} familyId={familyId}
           onClose={closeSelection}
-          onEdit={() => { if(currentActionScope.current!==actionScope)return;const current = selection ? selectableRows.current[selection.origin].find(row=>row.occurrenceKey===selection.key) : null;if(current?.kind==='native' && !current.readOnly && closeSelection())setEditing(current.event); }}
+          onEdit={() => {
+            if(currentActionScope.current!==actionScope)return;
+            const current = selection ? selectableRows.current[selection.origin].find(row=>row.occurrenceKey===selection.key) : null;
+            // The STORED row, never the clicked occurrence: `current.event` carries
+            // this week's clock, and saving it moved the whole series' start here,
+            // so every earlier week vanished. A series edit is a series edit.
+            const stored = current?.kind==='native' ? current.seriesRow : undefined;
+            if(current?.kind==='native' && !current.readOnly && stored && closeSelection())setEditing(stored);
+          }}
           onDeleted={() => { if(closeSelection())void currentRefresh.current(); }}
         />
       )}
@@ -1049,15 +1057,24 @@ function NewEventModal({ existing, onClose, onSaved }: {
   // has said an earlier Save landed, so this composition is over.
   const submissionId = useRef('');
   if (!submissionId.current) submissionId.current = newSubmissionId();
+  // Editing an all-day row shows dates, not wall clocks (see onSubmit).
+  const allDay = existing?.all_day === true;
+  const series = !!existing?.recurrence && existing.recurrence !== 'none';
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
+    // An all-day row is a DATE, stored as that date's UTC midnight with an
+    // exclusive end (lib/calendar/day.ts). Its boxes are dates, the end box the
+    // LAST day, and they become those labels here, before anything reads them
+    // as a clock: a timed box showed Oct 24 as "Oct 23, 20:00" in New York,
+    // and a date typed into it landed a day late. `fromLocalInput` passes an
+    // absolute label through untouched.
     const input = {
       title: String(form.get('title') ?? ''),
       category: String(form.get('category') ?? 'general'),
-      starts_at: String(form.get('starts_at') ?? ''),
-      ends_at: String(form.get('ends_at') ?? '') || undefined,
+      starts_at: allDay ? allDayStartLabel(form.get('starts_at')) : String(form.get('starts_at') ?? ''),
+      ends_at: (allDay ? allDayEndLabel(form.get('ends_at')) : String(form.get('ends_at') ?? '')) || undefined,
       location: String(form.get('location') ?? '') || undefined,
       description: String(form.get('description') ?? '') || undefined,
     };
@@ -1086,6 +1103,7 @@ function NewEventModal({ existing, onClose, onSaved }: {
         title: parsed.data.title,
         startsAt,
         endsAt,
+        ...(allDay ? { allDay: true } : {}),
         category: parsed.data.category,
         location: parsed.data.location ?? null,
         description: parsed.data.description ?? null,
@@ -1093,8 +1111,13 @@ function NewEventModal({ existing, onClose, onSaved }: {
       };
       // No family_id and no created_by: the action reads both from the session,
       // so this component can no longer name the household it writes into.
+      // An edit carries the row as it was OPENED, so a Save from a modal that
+      // another member's change has overtaken is refused instead of writing
+      // this older copy of every field back over theirs.
       const result = existing
-        ? await updateCalendarEventAction(existing.id, fields)
+        ? await updateCalendarEventAction(existing.id, fields, {
+          startsAt: existing.starts_at, endsAt: existing.ends_at, allDay: existing.all_day, updatedAt: existing.updated_at,
+        })
         : await createCalendarEventAction({ ...fields, submissionId: submissionId.current });
       if (!result.ok) {
         // `already_saved`: an earlier Save of this modal landed as the event the
@@ -1115,6 +1138,7 @@ function NewEventModal({ existing, onClose, onSaved }: {
   return (
     <Modal open title={existing ? tr('dialogTitle.editEvent') : tr('dialogTitle.addEvent')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
+        {series && <p className="rounded-lg border border-border bg-surface/40 px-3 py-2 text-xs text-muted">{tr('calendarModule.editingWholeSeries')}</p>}
         <Field label={tr('calendar.title')} error={errors.title} required>
           {(id) => <Input id={id} name="title" autoFocus placeholder={tr('calendar.teamDinner')} defaultValue={existing?.title ?? ''} />}
         </Field>
@@ -1128,12 +1152,27 @@ function NewEventModal({ existing, onClose, onSaved }: {
           )}
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label={tr('calendar.starts')} error={errors.starts_at} required>
-            {(id) => <Input id={id} name="starts_at" type="datetime-local" defaultValue={toLocalInput(existing?.starts_at ?? null, timeZone)} />}
-          </Field>
-          <Field label={tr('calendar.ends')} error={errors.ends_at}>
-            {(id) => <Input id={id} name="ends_at" type="datetime-local" defaultValue={toLocalInput(existing?.ends_at ?? null, timeZone)} />}
-          </Field>
+          {allDay && existing ? (
+            // Dates for an all-day row. The stored end is exclusive; the end box
+            // shows the last day.
+            <>
+              <Field label={tr('calendar.starts')} error={errors.starts_at} required>
+                {(id) => <Input id={id} name="starts_at" type="date" defaultValue={allDayDate(existing.starts_at)} />}
+              </Field>
+              <Field label={tr('calendar.ends')} error={errors.ends_at}>
+                {(id) => <Input id={id} name="ends_at" type="date" defaultValue={existing.ends_at ? addDateDays(allDayDate(existing.ends_at), -1) : ''} />}
+              </Field>
+            </>
+          ) : (
+            <>
+              <Field label={tr('calendar.starts')} error={errors.starts_at} required>
+                {(id) => <Input id={id} name="starts_at" type="datetime-local" defaultValue={toLocalInput(existing?.starts_at ?? null, timeZone)} />}
+              </Field>
+              <Field label={tr('calendar.ends')} error={errors.ends_at}>
+                {(id) => <Input id={id} name="ends_at" type="datetime-local" defaultValue={toLocalInput(existing?.ends_at ?? null, timeZone)} />}
+              </Field>
+            </>
+          )}
         </div>
         <Field label={tr('calendar.location')}>
           {(id) => <Input id={id} name="location" placeholder={tr('calendar.homeSchool')} defaultValue={existing?.location ?? ''} />}
@@ -1161,4 +1200,17 @@ function NewEventModal({ existing, onClose, onSaved }: {
       </form>
     </Modal>
   );
+}
+
+/** A date box value as the UTC-midnight label an all-day row stores; '' when it is not a real date. */
+function allDayStartLabel(value: FormDataEntryValue | null): string {
+  const day = String(value ?? '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) && addDateDays(day, 0) === day ? `${day}T00:00:00Z` : '';
+}
+
+/** The last-day box as the row's EXCLUSIVE end label (the day after it); '' for none. */
+function allDayEndLabel(value: FormDataEntryValue | null): string {
+  const day = String(value ?? '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || addDateDays(day, 0) !== day) return '';
+  return `${addDateDays(day, 1)}T00:00:00Z`;
 }

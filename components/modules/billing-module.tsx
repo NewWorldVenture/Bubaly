@@ -52,6 +52,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { isInMonth, parseCalendarDate, startOfLocalDay } from '@/lib/utils/calendar-date';
 import { isAdmin, isManager } from '@/lib/constants/roles';
+import { readsHouseholdMoney } from '@/lib/finance/household-money';
 import { BASIC_MONTHLY_CENTS, BASIC_ANNUAL_CENTS, PLUS_MONTHLY_CENTS, PLUS_ANNUAL_CENTS, planLevel } from '@/lib/constants/plans';
 import { PLAN_CURRENCY } from '@/lib/marketing/value';
 import { formatCents } from '@/lib/wallet/ledger';
@@ -62,7 +63,9 @@ import {
 import { cn } from '@/lib/utils/cn';
 import type { Tables, SubscriptionStatus, AccountType, TransactionType, BudgetPeriod, BillStatus } from '@/lib/database.types';
 import { categoryLabel } from '@/lib/finance/category-label';
-import { billPaidPatch, billDateForAnchorDay, newBillDueDay } from '@/lib/finance/hub';
+import { billPaidPatch, billDateForAnchorDay, budgetSpent, newBillDueDay, pct as pctOf, periodWindow, type Period } from '@/lib/finance/hub';
+import { budgetByCategory, monthlyBudgetShare } from '@/lib/finance/budget-periods';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { BILL_READ_CONTRACT, readCompleteBills, isMissingBillDueDay, saveBillPayment, saveBillPaymentBefore0488 } from '@/lib/finance/bills';
 import { BillScheduleModal } from '@/components/finance/bill-schedule-modal';
 import { dueDayNotKeptQuestion, isDueDayNotKept, writeBillPatch, type DueDayNotKept } from '@/lib/finance/recurring';
@@ -75,6 +78,10 @@ import { ageOn } from '@/lib/utils/birthday';
 
 type FinancialAccount = Tables<'financial_accounts'>;
 type Transaction = Tables<'transactions'>;
+/** The columns every figure below is summed from. */
+type PeriodTxn = Pick<Transaction, 'id' | 'type' | 'category' | 'amount' | 'date' | 'created_by'>;
+/** A real ceiling: a year of spending past it is a failed read, never a smaller total. */
+const PERIOD_TXN_MAX = 50_000;
 type Budget = Tables<'budgets'>;
 type Bill = Tables<'bills'>;
 type SavingsGoal = Tables<'savings_goals'>;
@@ -694,21 +701,64 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const [showAddGoal, setShowAddGoal] = useState(false);
 
   // ── Data queries ────────────────────────────────────────────────────────
+  // The household's accounts and spending are a parent's or adult's (the held
+  // 0514). Anyone else reaches this module only from the plan gate, sees the
+  // plan, and does not ask for the household's money.
+  const seesHouseholdMoney = readsHouseholdMoney(role);
   const { data: accounts, loading: accLoading, error: accError, refresh: refreshAccounts } = useRealtimeQuery<FinancialAccount>({
     table: 'financial_accounts',
     familyId,
-    deps: [familyId],
-    fetcher: (supabase) =>
-      supabase.from('financial_accounts').select('*').eq('family_id', familyId).order('name'),
+    deps: [familyId, seesHouseholdMoney],
+    fetcher: (supabase) => seesHouseholdMoney
+      ? supabase.from('financial_accounts').select('*').eq('family_id', familyId).order('name')
+      : Promise.resolve({ data: [] as FinancialAccount[], error: null }),
   });
 
-  const { data: transactions, loading: txLoading, error: txError, refresh: refreshTransactions } = useRealtimeQuery<Transaction>({
+  // The LIST: the newest transactions, as the Recent and All transactions
+  // panels show them. Nothing is summed from it.
+  const { data: transactions, loading: txLoading, error: txError, refresh: refreshTransactionList } = useRealtimeQuery<Transaction>({
     table: 'transactions',
     familyId,
-    deps: [familyId],
-    fetcher: (supabase) =>
-      supabase.from('transactions').select('*').eq('family_id', familyId).order('date', { ascending: false }),
+    deps: [familyId, seesHouseholdMoney],
+    fetcher: (supabase) => seesHouseholdMoney
+      ? supabase.from('transactions').select('*').eq('family_id', familyId).order('date', { ascending: false })
+      : Promise.resolve({ data: [] as Transaction[], error: null }),
   });
+
+  // The FIGURES: every transaction of every period this screen sums, read
+  // whole. The list above is one capped request (PostgREST's db-max-rows, the
+  // newest 1,000 by date), so past 1,000 rows this month's income, expenses and
+  // each budget's spend were summed from part of the month. Here: last month
+  // (the month-on-month tip), this week (which can begin in last year's
+  // December) and this whole year, both ends bounded, paged on the id so a row
+  // written between pages is not counted twice (readAllById). Past the ceiling
+  // the read fails and the screen shows its error, not a smaller total.
+  const todayKey = clock.todayKey();
+  const thisWeek = periodWindow('weekly', todayKey), thisYear = periodWindow('yearly', todayKey);
+  const [todayYear, todayMonth] = todayKey.split('-').map(Number);
+  const lastMonthFrom = todayMonth === 1
+    ? `${String(todayYear - 1).padStart(4, '0')}-12-01`
+    : `${todayKey.slice(0, 4)}-${String(todayMonth - 1).padStart(2, '0')}-01`;
+  const periodFrom = [thisWeek.from, thisYear.from, lastMonthFrom].reduce((min, d) => (d < min ? d : min));
+  const periodTo = thisWeek.to > thisYear.to ? thisWeek.to : thisYear.to;
+  const { data: periodTxns, loading: periodLoading, error: periodError, refresh: refreshPeriodTxns } = useRealtimeQuery<PeriodTxn>({
+    table: 'transactions',
+    familyId,
+    deps: [familyId, seesHouseholdMoney, periodFrom, periodTo],
+    fetcher: (supabase) => seesHouseholdMoney
+      ? readAllByIdAsQuery<PeriodTxn>((after, limit) => {
+        let query = supabase.from('transactions').select('id, type, category, amount, date, created_by')
+          .eq('family_id', familyId).gte('date', periodFrom).lte('date', periodTo);
+        if (after) query = query.gt('id', after);
+        return query.order('id').limit(limit);
+      }, { max: PERIOD_TXN_MAX })
+      : Promise.resolve({ data: [] as PeriodTxn[], error: null }),
+  });
+  // A change to a transaction re-reads both: the list and the figures.
+  const refreshTransactions = useCallback(() => {
+    void refreshTransactionList();
+    void refreshPeriodTxns();
+  }, [refreshTransactionList, refreshPeriodTxns]);
 
   const { data: budgets, loading: budLoading, error: budError, refresh: refreshBudgets } = useRealtimeQuery<Budget>({
     table: 'budgets',
@@ -833,7 +883,13 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   }, [admin, reviewAccount, isCurrentReady, loadSub, success, toastError, tr]);
 
   // ── Computed values ─────────────────────────────────────────────────────
-  const totalBalance = useMemo(() => accounts.reduce((s, a) => s + (a.balance ?? 0), 0), [accounts]);
+  // A credit account's balance is money OWED: it lowers the total, as on the
+  // default Finances view, the wallet and Family CFO. Added as cash, a $1,500
+  // card balance beside $2,000 checking read $3,500 here and $500 there.
+  const totalBalance = useMemo(
+    () => accounts.reduce((s, a) => s + (a.type === 'credit' ? -(a.balance ?? 0) : (a.balance ?? 0)), 0),
+    [accounts],
+  );
 
   // The FAMILY's day (TIME-003) as a local calendar date, the convention every
   // bill due date below is parsed in (local midnight), so the month, the ringed
@@ -844,8 +900,8 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const currentYear = familyDay.getFullYear();
 
   const currentMonthTransactions = useMemo(() =>
-    transactions.filter((tx) => isInMonth(tx.date, currentYear, currentMonth)),
-    [transactions, currentMonth, currentYear],
+    periodTxns.filter((tx) => isInMonth(tx.date, currentYear, currentMonth)),
+    [periodTxns, currentMonth, currentYear],
   );
 
   const income = useMemo(() =>
@@ -876,20 +932,22 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       .map(([label, amt]) => ({ label, pct: Math.round((amt / total) * 100), color: categoryColor(label) }));
   }, [currentMonthTransactions]);
 
-  // Budget progress: compute spent per category from current month transactions
-  const budgetProgress = useMemo(() => {
-    const spentByCategory: Record<string, number> = {};
-    currentMonthTransactions
-      .filter((tx) => tx.type === 'expense')
-      .forEach((tx) => {
-        const cat = tx.category || 'Other';
-        spentByCategory[cat] = (spentByCategory[cat] ?? 0) + Math.abs(tx.amount);
-      });
-    return budgets.map((b) => ({
+  // Each budget against what was spent in ITS OWN period on the family's day
+  // (this week, this month or this year, both ends), as the Budget Planner
+  // does: a calendar month of spend set against every budget's raw amount read
+  // a $150 weekly Groceries budget as "$400 / $150" after an ordinary month,
+  // and a yearly one barely moved. One budget per category, the one the
+  // finance service edits and reports (budgetByCategory: the oldest row), with
+  // a transaction's category matched case-insensitively, so an AI-recorded
+  // "groceries" counts against "Groceries" and a legacy duplicate is not a
+  // second line summing the same spend.
+  const budgetProgress = useMemo(() =>
+    [...budgetByCategory(budgets.map((b) => ({ ...b, amount: Number(b.amount) }))).values()].map((b) => ({
       ...b,
-      spent: spentByCategory[b.category] ?? 0,
-    }));
-  }, [budgets, currentMonthTransactions]);
+      spent: budgetSpent(periodTxns, b.category, b.period as Period, familyDay),
+    })),
+    [budgets, periodTxns, familyDay],
+  );
 
   // Upcoming bills
   const upcomingBills = useMemo(() =>
@@ -932,10 +990,12 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     });
   }, [spendByCategory]);
 
-  // Budget Progress: total monthly budget vs total spent this month.
+  // Budget Progress: this month's budget (each budget's limit as its monthly
+  // share, one per category, as the budget list counts them) vs this month's
+  // spending.
   const totalMonthlyBudget = useMemo(
-    () => budgets.reduce((s, b) => s + (b.period === 'yearly' ? b.amount / 12 : b.period === 'weekly' ? b.amount * 4.33 : b.amount), 0),
-    [budgets],
+    () => budgetProgress.reduce((s, b) => s + monthlyBudgetShare(b.amount, b.period), 0),
+    [budgetProgress],
   );
   const budgetPct = totalMonthlyBudget > 0 ? Math.min(Math.round((expenses / totalMonthlyBudget) * 100), 999) : 0;
 
@@ -967,10 +1027,10 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   // Month-over-month expense delta → the "Money Tip" banner.
   const lastMonthExpenses = useMemo(() => {
     const d = new Date(currentYear, currentMonth - 1, 1);
-    return transactions
+    return periodTxns
       .filter((tx) => tx.type === 'expense' && isInMonth(tx.date, d.getFullYear(), d.getMonth()))
       .reduce((s, tx) => s + Math.abs(tx.amount), 0);
-  }, [transactions, currentMonth, currentYear]);
+  }, [periodTxns, currentMonth, currentYear]);
   const spendDeltaPct = lastMonthExpenses > 0 ? Math.round(((expenses - lastMonthExpenses) / lastMonthExpenses) * 100) : 0;
 
   // Mini calendar for Bills & Reminders: cells for the current month, each
@@ -1091,8 +1151,8 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   }
 
   // ── Loading / Error states ──────────────────────────────────────────────
-  const anyLoading = accLoading || txLoading || budLoading || billLoading || (billStale && !billError) || goalLoading;
-  const anyError = accError || txError || budError || billError || goalError;
+  const anyLoading = accLoading || txLoading || periodLoading || budLoading || billLoading || (billStale && !billError) || goalLoading;
+  const anyError = accError || txError || periodError || budError || billError || goalError;
 
   const status = subscription?.status ?? 'trialing';
   const subConfig = STATUS_CONFIG[status];
@@ -1399,7 +1459,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       ) : (
         <div className="space-y-4">
           {budgetProgress.map((b) => {
-            const pct = Math.min((b.spent / b.amount) * 100, 100);
+            const pct = pctOf(b.spent, b.amount);
             const over = b.spent > b.amount;
             const remaining = b.amount - b.spent;
             return (
@@ -1698,6 +1758,15 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       )}
     </div>
   );
+
+  if (!seesHouseholdMoney) {
+    return (
+      <div className="module-page">
+        <PageHeader title={tr('billing.finances')} description={tr('householdMoney.keptByParentsBody')} />
+        {planCard}
+      </div>
+    );
+  }
 
   return (
     <div className="module-with-sidebar">

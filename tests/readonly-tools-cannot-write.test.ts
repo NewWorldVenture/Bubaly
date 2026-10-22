@@ -14,7 +14,7 @@
 // select and the window spilled into `setRoutineEnabled` beneath it.
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import ts from 'typescript';
 
 const ROOT = process.cwd();
@@ -74,7 +74,7 @@ function toolDefinitions(): Tool[] {
         if (name && readOnly && execute && ts.isStringLiteral(name)) {
           out.push({
             name: name.text,
-            file: file.replace(`${ROOT}/`, ''),
+            file: relative(ROOT, file).replaceAll('\\', '/'),
             readOnly: readOnly.kind === ts.SyntaxKind.TrueKeyword,
             execute: execute.getText(sf),
           });
@@ -101,7 +101,7 @@ function reachesAMutation(tool: Tool): string | null {
     const bodies = functionBodies(source);
     for (const fn of called) {
       const body = bodies.get(fn);
-      if (body && MUTATION.test(body)) return `${fn}() in ${source.replace(`${ROOT}/`, '')}`;
+      if (body && MUTATION.test(body)) return `${fn}() in ${relative(ROOT, source).replaceAll('\\', '/')}`;
     }
   }
   return null;

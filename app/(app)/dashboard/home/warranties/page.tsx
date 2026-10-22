@@ -3,6 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requirePlanLevel } from '@/lib/supabase/auth';
 import { getWarranties, getAssets } from '@/lib/home/queries';
 import { WarrantiesClient } from '@/components/home/warranties-client';
+import { readsHouseholdMoney } from '@/lib/finance/household-money';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -13,8 +14,8 @@ export const dynamic = 'force-dynamic';
 export default async function WarrantiesPage() {
   const ctx = await requirePlanLevel(1);
   const [warranties, assets] = await Promise.all([
-    getWarranties(ctx.active.familyId),
+    getWarranties(ctx.active.familyId, { role: ctx.active.role, userId: ctx.user.id }),
     getAssets(ctx.active.familyId),
   ]);
-  return <WarrantiesClient warranties={warranties} assets={assets} />;
+  return <WarrantiesClient warranties={warranties} assets={assets} ownOnly={!readsHouseholdMoney(ctx.active.role)} />;
 }

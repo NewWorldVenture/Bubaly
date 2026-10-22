@@ -28,6 +28,8 @@ vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string)
 vi.mock('@/components/wallet/public-gift-form', () => ({ PublicGiftForm: () => 'GIFT-FORM' }));
 vi.mock('@/lib/server/rate-limit', () => ({ rateLimit: () => ({ ok: true }), clientIp: () => '203.0.113.9' }));
 vi.mock('@/lib/server/rate-limit-db', () => ({ rateLimitDb: async () => ({ ok: true }) }));
+// The gift page reads the caller's address for its per-address limit (audit N3).
+vi.mock('next/headers', () => ({ headers: async () => new Headers({ 'x-forwarded-for': '203.0.113.9' }) }));
 vi.mock('@/lib/ai/provider', () => ({
   isAIConfigured: async () => true,
   resolveProvider: async () => ({

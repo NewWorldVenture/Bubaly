@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function AccidentPage() {
   const ctx = await requirePlanLevel(1);
-  const [vehicles, policies] = await Promise.all([getVehicles(ctx.active.familyId), getPolicies(ctx.active.familyId)]);
+  const [vehicles, policies] = await Promise.all([getVehicles(ctx.active.familyId), getPolicies(ctx.active.familyId, { role: ctx.active.role, userId: ctx.user.id })]);
   const claimsPhone = policies.find((p) => p.is_active && p.claims_phone)?.claims_phone ?? null;
   return <AccidentClient vehicles={vehicles} claimsPhone={claimsPhone} />;
 }

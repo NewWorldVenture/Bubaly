@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { at } from './helpers/source-order';
+import { at, bodyOf } from './helpers/source-order';
 
 /**
  * Audit C1-S9-62 — the first tranche of the unconfirmed-write class OUTSIDE
@@ -66,9 +66,20 @@ describe('newsletter consent (C1-S9-62)', () => {
     expect(code(b)).not.toMatch(/return NextResponse\.json\(\{ ok: true/);
   });
 
-  it('unsubscribing stays ungated on rows — gone is unsubscribed', () => {
-    const w = unsubscribe.slice(at(unsubscribe, 'const { error: updateError }'));
-    expect(w.slice(0, 220)).not.toContain('.select(');
+  it('unsubscribing writes only over the row it read, and gone is still unsubscribed (AUD-1028-M1-ABA)', () => {
+    // C1-S9-62 left this write unconfirmed on purpose: on the service role,
+    // zero rows could only mean the row was deleted, and a person with no row
+    // is not on the list. AUD-1028-M1-ABA guards it on the status and opt-out
+    // time the click read, so zero rows now also means a newer write overtook
+    // it — told apart by a re-read by id, and proved end to end in
+    // tests/an-unsubscribe-click-outlasts-a-reactivation-in-flight.test.ts.
+    const w = bodyOf(unsubscribe, 'const advance = supabase', ".select('id');");
+    expect(w).toContain(".eq('status', observed.status)");
+    expect(w).toContain("advance.is('unsubscribed_at', null)");
+    expect(w).toContain("advance.eq('unsubscribed_at', seenStamp)");
+    const overtaken = bodyOf(unsubscribe, 'if (!wroteNoRows(advanced)) break;', 'observed = fresh;');
+    expect(overtaken).toContain(".eq('id', observed.id)\n      .maybeSingle();");
+    expect(overtaken).toContain('if (!fresh) break;');
     expect(unsubscribe).toContain('a person with no row is not on the list');
   });
 
@@ -178,7 +189,12 @@ describe('a failed trip build is rolled back and counted (C1-S9-63)', () => {
   it('the recommendation clear stays ungated on rows, with its reason', () => {
     const w = vacations.slice(at(vacations, "const { error: deleteError } = await supabase.from('vacation_ai_recommendations').delete()"));
     expect(w.split('\n')[0]).not.toContain('.select(');
-    expect(vacations).toContain('on a first run there is\n    // no prior set');
+    expect(vacations).toContain('Zero prior rows is the ordinary first run');
+    // The clear deletes exactly the rows it read, and only AFTER the new set
+    // landed — deleting first wiped the family's recommendations on a failed insert.
+    expect(w.split('\n')[0]).toContain(".in('id', priorIds)");
+    expect(at(vacations, "const { error: insertError } = await supabase.from('vacation_ai_recommendations').insert("))
+      .toBeLessThan(at(vacations, "const { error: deleteError } = await supabase.from('vacation_ai_recommendations').delete()"));
   });
 });
 
@@ -216,6 +232,21 @@ describe('ai-runs counts a run as returned only when it was (C1-S9-63)', () => {
   });
 });
 
+describe('the abandoned-checkout claim is guarded on pending and confirmed', () => {
+  // It used to be the fourth ungated cron below. Its rows now decide whether
+  // anyone is nudged: zero rows means the session completed (or another run
+  // claimed it) after the read.
+  it('claims before the nudge, only a pending row, and reads the claimed rows back', () => {
+    const src = read('app/api/cron/checkout-abandoned/route.ts');
+    const stmt = src.slice(at(src, ".update({ status: 'abandoned', abandoned_at: new Date().toISOString() })"));
+    const write = stmt.slice(0, stmt.indexOf(';'));
+    expect(write).toContain(".eq('status', 'pending')");
+    expect(write).toContain(".select('session_id')");
+    expect(src).toContain('if (wroteNoRows(claimed)) continue;');
+    expect(at(src, 'if (wroteNoRows(claimed)) continue;')).toBeLessThan(at(src, 'await fireAutomationEvent('));
+  });
+});
+
 describe('crons whose zero rows means the row is gone stay ungated (C1-S9-63)', () => {
   const cases = [
     ['app/api/cron/return-reminders/route.ts', "update({ overdue_notified_at: nowIso }).eq('id', o.id)", 'which no run will sweep'],
@@ -230,21 +261,6 @@ describe('crons whose zero rows means the row is gone stay ungated (C1-S9-63)', 
       expect(src, file).toContain(reason);
     });
   }
-});
-
-describe('the abandoned-checkout mark is a claim from pending, made before the nudge', () => {
-  // It was one of the crons above, ungated because a gone row is not swept
-  // again. It is now the claim that decides who is nudged: a session paid
-  // mid-sweep must not be emailed or overwritten (behaviour:
-  // a-checkout-paid-mid-sweep-is-not-called-abandoned).
-  it('app/api/cron/checkout-abandoned/route.ts', () => {
-    const src = read('app/api/cron/checkout-abandoned/route.ts');
-    const stmt = src.slice(at(src, ".update({ status: 'abandoned', abandoned_at: new Date().toISOString() })"));
-    const write = stmt.slice(0, stmt.indexOf(';'));
-    expect(write).toContain(".eq('status', 'pending')");
-    expect(write).toContain(".select('session_id')");
-    expect(at(src, 'if (wroteNoRows(claimed)) continue;')).toBeLessThan(at(src, 'await fireAutomationEvent('));
-  });
 });
 
 /**
@@ -262,7 +278,9 @@ describe('the connected-account mirror no longer discards its result (C1-S9-64)'
   it('throws on a refused write, so every caller — and Stripe — can react', () => {
     const fn = block(connect, 'export async function syncConnectedAccount(');
     expect(fn).toContain("if (error) throw new Error('Stripe connected-account mirror update failed');");
-    expect(fn).toContain(".eq('family_id', familyId)\n    .select('id');");
+    // Bound to the account as well as the family since audit N12: the webhook
+    // names the family from account metadata, so family alone was not enough.
+    expect(fn).toContain(".eq('family_id', familyId)\n    .eq('stripe_account_id', accountId)\n    .select('id');");
   });
 
   it('logs, and does NOT throw, when no mirror row matched', () => {
@@ -456,11 +474,22 @@ describe('marketing automation and platform writes (C1-S9-67)', () => {
     for (const [src, needle] of [
       [recurring, "if (error || wroteNoRows(noted)) console.error("],
       [onboardingContact, "if (error || wroteNoRows(updated)) console.error("],
-      [identity, "if (stitchError || wroteNoRows(stitched)) console.error("],
     ] as const) {
       const line = src.slice(at(src, needle)).split('\n')[0];
       expect(line).not.toMatch(/\bthrow\b|\breturn\b/);
     }
+  });
+
+  it('a visitor stitch that did not land is unknown, so no consent is carried on it (#1030)', () => {
+    // No longer log-only: the stitch now writes only over the row it read
+    // (its id and anonymous id, still unbound), and a write that matched
+    // nothing means another request bound it first. The sign-in stops as
+    // unknown before step 3 carries the browser's consent to this contact.
+    expect(identity).toContain(".eq('id', visitor.id).eq('anonymous_id', anonymousId).is('contact_id', null).select('id');");
+    const b = code(block(identity, 'if (stitchError || wroteNoRows(stitched)) {'));
+    expect(b).toContain("console.error('[identity] visitor stitch failed'");
+    expect(b).toContain("return { decision: 'unknown', contactId };");
+    expect(b).not.toMatch(/\bthrow\b/);
   });
 
   it('deliberate ones carry their reasons', () => {

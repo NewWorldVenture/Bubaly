@@ -36,6 +36,7 @@ import { dayKeyInTz, dayKeysBetween, scopeNow, zonedDayBoundsMs, zonedTimeMs } f
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { getTranslations } from '@/lib/i18n/server';
+import { followMovedEvent } from '@/lib/trips/follow-event';
 
 export type CalendarEvent = Tables<'calendar_events'>;
 
@@ -79,6 +80,56 @@ function validEventRange(start: string, end: string | null, allDay: boolean, ori
     return !allDay || from === parseExactInstant(originalStart.trim().slice(0, 10) + 'T00:00:00Z')
       && (to === null || to > from && to === parseExactInstant(originalEnd!.trim().slice(0, 10) + 'T00:00:00Z'));
   } catch { return false; }
+}
+
+/** Whether an all-day bound landed on the UTC midnight of the date it names (`validEventRange`'s rule). */
+function namesItsDate(normalized: string, original: string): boolean {
+  try {
+    return parseExactInstant(normalized) === parseExactInstant(original.trim().slice(0, 10) + 'T00:00:00Z');
+  } catch { return false; }
+}
+
+/**
+ * The `starts_at` / `ends_at` a create writes for these inputs, or the refusal
+ * it gives: a zone-less time is read on the family's clock, and an all-day
+ * event must be whole UTC-midnight DATE labels with its end after its start.
+ * An all-day bound that is not one is refused in words that say so
+ * (`calendar.allDayNeedsDate`), not as an event ending before it starts.
+ *
+ * As strict as `updateEvent` and `rescheduleEvent`: a zone-less midnight is a
+ * time on the family's clock here, not a date. The chat toolbox, whose model is
+ * told to speak that clock, reads one on an all-day event as the date it names
+ * BEFORE its gate files the arguments (lib/assistant/all-day-dates.ts), so the
+ * approval card holds the DATE label this accepts on replay.
+ *
+ * Exported for the one writer that inserts an event row itself — the chat
+ * toolbox's `create_calendar_event` — so its row is the row `createEvent`, and
+ * the same request approved and replayed through `calendar.createEvent`, would
+ * write. A raw insert stored a Los Angeles 3pm as 15:00Z, and an all-day row
+ * whose bounds were not whole days made every calendar read that covered it
+ * fail with "Could not load the calendar". `t` is the refusal's reader; the
+ * request's locale when omitted.
+ */
+export async function normalizeEventTimes(
+  input: { startsAt: string; endsAt?: string | null; allDay?: boolean },
+  timezone: string,
+  t?: (key: string) => string,
+): Promise<ServiceResult<{ startsAt: string; endsAt: string | null }>> {
+  const allDay = input.allDay === true;
+  const rawStart = input.startsAt;
+  const rawEnd = input.endsAt ?? null;
+  const startsAt = normalizeCalendarWriteInstant(rawStart, timezone);
+  if (!startsAt) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
+
+  const endsAt = normalizeCalendarWriteInstant(rawEnd, timezone);
+  if (invalidOptionalClock(rawEnd, endsAt)) return fail('An event cannot end before it starts.', { code: SERVICE_CODES.invalidInput });
+  if (allDay && (!namesItsDate(startsAt, rawStart) || (endsAt !== null && rawEnd !== null && !namesItsDate(endsAt, rawEnd)))) {
+    return fail((t ?? await getTranslations())('calendar.allDayNeedsDate'), { code: SERVICE_CODES.invalidInput });
+  }
+  if (!validEventRange(startsAt, endsAt, input.allDay ?? false, rawStart, rawEnd)) {
+    return fail('An event cannot end before it starts.', { code: SERVICE_CODES.invalidInput });
+  }
+  return ok({ startsAt, endsAt });
 }
 
 export type CreateEventInput = {
@@ -135,13 +186,9 @@ export async function createEvent(
   const title = input.title?.trim() ?? '';
   if (!title) return fail('An event needs a title.', { code: SERVICE_CODES.invalidInput });
 
-  const startsAt = normalizeCalendarWriteInstant(input.startsAt, scope.tz);
-  if (!startsAt) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
-
-  const endsAt = normalizeCalendarWriteInstant(input.endsAt, scope.tz);
-  if (invalidOptionalClock(input.endsAt, endsAt) || !validEventRange(startsAt, endsAt, input.allDay ?? false, input.startsAt, input.endsAt ?? null)) {
-    return fail('An event cannot end before it starts.', { code: SERVICE_CODES.invalidInput });
-  }
+  const times = await normalizeEventTimes(input, scope.tz);
+  if (!times.ok) return times;
+  const { startsAt, endsAt } = times.data;
 
   const recurrenceUntil = normalizeCalendarWriteInstant(input.recurrenceUntil, scope.tz);
   if (invalidOptionalClock(input.recurrenceUntil, recurrenceUntil)) return fail('That recurrence end could not be understood.', { code: SERVICE_CODES.invalidInput });
@@ -399,9 +446,16 @@ export async function deleteEvents(scope: ServiceScope, eventIds: string[]): Pro
 
 export type UpdateEventPatch = Partial<Omit<CreateEventInput, 'title'>> & { title?: string };
 
-type EventClockState = Pick<CalendarEvent, 'id' | 'title' | 'starts_at' | 'ends_at' | 'all_day'>;
-export async function updateEvent(scope: ServiceScope, eventId: string, patch: UpdateEventPatch): Promise<ServiceResult<CalendarEvent>> {
-  return applyEventUpdate(scope, eventId, patch);
+type EventClockState = Pick<CalendarEvent, 'id' | 'title' | 'starts_at' | 'ends_at' | 'all_day'> & { updated_at?: string };
+/**
+ * `expected` is the clock the caller already holds for the row (the conflicts
+ * page's quick fix, computed from a render): the time change is written only
+ * if the row still has it, rather than against whatever it reads now. With an
+ * `updated_at` the row's version must match too, so a change to its text
+ * fields (the calendar editor sends them all) is not written over either.
+ */
+export async function updateEvent(scope: ServiceScope, eventId: string, patch: UpdateEventPatch, expected?: EventClockState): Promise<ServiceResult<CalendarEvent>> {
+  return applyEventUpdate(scope, eventId, patch, expected);
 }
 async function applyEventUpdate(scope: ServiceScope, eventId: string, patch: UpdateEventPatch, captured?: EventClockState): Promise<ServiceResult<CalendarEvent>> {
   const update: Updatable<'calendar_events'> = {};
@@ -478,6 +532,7 @@ async function applyEventUpdate(scope: ServiceScope, eventId: string, patch: Upd
   if (clockState) {
     mutation = mutation.eq('starts_at', clockState.starts_at).eq('all_day', clockState.all_day);
     mutation = clockState.ends_at === null ? mutation.is('ends_at', null) : mutation.eq('ends_at', clockState.ends_at);
+    if (clockState.updated_at) mutation = mutation.eq('updated_at', clockState.updated_at);
   }
   const { data, error } = await mutation.select('*').maybeSingle();
 
@@ -488,6 +543,24 @@ async function applyEventUpdate(scope: ServiceScope, eventId: string, patch: Upd
   // No row means the id belongs to another family (or is gone). Reporting
   // "not found" rather than "denied" avoids confirming that the id exists.
   if (!data) return fail('That event could not be found.', { code: SERVICE_CODES.notFound });
+
+  // A Smart Departure planned for this event follows it (lib/trips/follow-event.ts).
+  // Done HERE because this is where every move is written: the calendar
+  // editor, a conflict quick fix, the assistant's calendar tools and the week
+  // planner that runs them. Each move is followed once, whoever made it.
+  // `clockState` is what the write compared-and-set against, so its start is
+  // the one the event had. The move is saved either way; a plan that could not
+  // follow is logged, and Refresh re-plans it from the event's current start.
+  if (update.starts_at !== undefined && clockState) {
+    try {
+      await followMovedEvent(scope.db, {
+        familyId: scope.familyId, eventId, previousStartsAt: clockState.starts_at, startsAt: data.starts_at,
+        tz: zoneOf(scope), now: scope.now,
+      });
+    } catch (cause) {
+      console.error('[service:calendar] departure plans could not follow a moved event', { eventId, cause });
+    }
+  }
 
   await recordActivitySafely(scope, {
     agent: 'calendar',
