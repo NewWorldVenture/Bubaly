@@ -13950,6 +13950,7 @@
   "studio.whatToGenerate": "Qué generar",
   "studio.writeYourPostUseHashtagsAnd": "Escribe tu publicación… usa #hashtags y @menciones donde se admitan.",
   "submit.formidIsRequired": "Se requiere formId",
+  "submit.thatFormIdIsNotValid": "Ese identificador de formulario no es válido.",
   "submit.thisFormHasNoFields": "Este formulario no tiene campos.",
   "submit.thisFormIsNoLonger": "Este formulario ya no está disponible.",
   "submit.thisFormIsTemporarilyUnavailable": "Este formulario no está disponible temporalmente. Inténtalo de nuevo en un momento.",
