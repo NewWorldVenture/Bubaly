@@ -78,11 +78,30 @@ export async function rateLimitDb(
   key: string,
   { limit = 10, windowMs = 60_000, failOpen = false }: RateLimitDbOptions = {},
 ): Promise<{ ok: boolean; retryAfter: number }> {
-  const unavailable = (): { ok: boolean; retryAfter: number } => ({
-    ok: failOpen,
-    retryAfter: failOpen ? 0 : 5,
-  });
+  const hit = await rateLimitDbVerdict(supabase, key, { limit, windowMs });
+  if (hit.verdict === 'unavailable') return { ok: failOpen, retryAfter: failOpen ? 0 : 5 };
+  return hit.verdict === 'allowed' ? { ok: true, retryAfter: 0 } : { ok: false, retryAfter: hit.retryAfter };
+}
 
+/** One durable hit, with "could not be evaluated" kept apart from "refused". */
+export type RateLimitDbVerdict =
+  | { verdict: 'allowed' }
+  | { verdict: 'refused'; retryAfter: number }
+  | { verdict: 'unavailable' };
+
+/**
+ * The hit `rateLimitDb` makes, answered without folding an unavailable limiter
+ * into a refusal (or, with failOpen, an allowance) — which is right for a
+ * budget, and wrong for a caller that uses a limit of one as an ARBITER: the
+ * first hit on a key wins and every later one is a repeat. Such a caller has to
+ * answer a repeat and an outage differently (app/reviews/new/actions.ts), so it
+ * needs to know which one it got.
+ */
+export async function rateLimitDbVerdict(
+  supabase: SupabaseClient<Database>,
+  key: string,
+  { limit = 10, windowMs = 60_000 }: Pick<RateLimitDbOptions, 'limit' | 'windowMs'> = {},
+): Promise<RateLimitDbVerdict> {
   try {
     const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : 10;
     const safeWindowSeconds = Number.isFinite(windowMs)
@@ -93,16 +112,17 @@ export async function rateLimitDb(
       p_limit: safeLimit,
       p_window_seconds: safeWindowSeconds,
     });
-    if (error || !data || (Array.isArray(data) && data.length !== 1)) return unavailable();
+    if (error || !data || (Array.isArray(data) && data.length !== 1)) return { verdict: 'unavailable' };
     const row = Array.isArray(data) ? data[0] : data;
-    if (!row || typeof row.allowed !== 'boolean') return unavailable();
+    if (!row || typeof row.allowed !== 'boolean') return { verdict: 'unavailable' };
+    if (row.allowed) return { verdict: 'allowed' };
     const parsedRetryAfter = Number(row.retry_after);
     const retryAfter = Number.isFinite(parsedRetryAfter)
       ? Math.max(0, Math.ceil(parsedRetryAfter))
       : 0;
-    return { ok: row.allowed, retryAfter: row.allowed ? 0 : Math.max(1, retryAfter) };
+    return { verdict: 'refused', retryAfter: Math.max(1, retryAfter) };
   } catch {
-    return unavailable();
+    return { verdict: 'unavailable' };
   }
 }
 
