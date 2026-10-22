@@ -491,6 +491,10 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
+      - name: Verify toast commit lifetimes in Chromium
+        if: matrix.shard == 1
+        run: node node_modules/vitest/vitest.mjs run --config vitest.toast-browser.config.ts --maxWorkers 1
+
       # Diagnostic only (never fails): key shapes + PostgREST status/body for
       # every header combination, so a red schema audit explains itself here.
       - name: Probe isolated REST auth
