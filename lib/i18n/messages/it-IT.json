@@ -675,6 +675,7 @@
   "actions.adminConsoleNeedsYourCode": "Inserisci il codice dell'accesso in due passaggi prima di usare la console di amministrazione.",
   "actions.teamActionNeedsYourCode": "Inserisci il codice dell’accesso in due passaggi prima di cambiare lo stato di un’idea.",
   "actions.revokeSuperAdminBeforeBanning": "Questo account ha l'accesso di super-amministratore. Rimuovi quell'accesso prima di bloccarlo.",
+  "actions.removeSuperAdminBeforeChangingRole": "Questa persona ha l'accesso di super-amministratore. Disattivala o revoca il suo accesso prima di assegnarle un altro ruolo.",
   "actions.youCanTReportYour": "Non puoi segnalare l’annuncio della tua famiglia.",
   "actions.youDoNotHavePermission": "Non hai il permesso di pubblicare post.",
   "actions.youReNotAbleTo": "Non puoi intervenire su questa proposta.",

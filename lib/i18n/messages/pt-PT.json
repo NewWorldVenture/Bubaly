@@ -676,6 +676,7 @@
   "actions.adminConsoleNeedsYourCode": "Introduz o teu código de início de sessão em dois passos antes de usares a consola de administração.",
   "actions.teamActionNeedsYourCode": "Introduz o teu código de início de sessão em dois passos antes de alterares o estado de uma ideia.",
   "actions.revokeSuperAdminBeforeBanning": "Esta conta tem acesso de superadministrador. Remova esse acesso antes de a banir.",
+  "actions.removeSuperAdminBeforeChangingRole": "Esta pessoa tem acesso de superadministrador. Desative-a ou revogue o acesso antes de lhe atribuir outra função.",
   "actions.youCanTReportYour": "Não pode denunciar o anúncio da sua própria família.",
   "actions.youDoNotHavePermission": "Não tem permissão para publicar.",
   "actions.youReNotAbleTo": "Não pode agir sobre esta proposta.",

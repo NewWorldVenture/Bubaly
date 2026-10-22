@@ -668,6 +668,7 @@
   "actions.adminConsoleNeedsYourCode": "Enter your two-step code before using the admin console.",
   "actions.teamActionNeedsYourCode": "Enter your two-step code before changing an idea’s status.",
   "actions.revokeSuperAdminBeforeBanning": "This account has super-admin access. Remove that access before banning it.",
+  "actions.removeSuperAdminBeforeChangingRole": "This person has super-admin access. Deactivate or revoke them before giving them another role.",
   "actions.youCanTReportYour": "You can’t report your own family’s listing.",
   "actions.youDoNotHavePermission": "You do not have permission to publish posts.",
   "actions.youReNotAbleTo": "You’re not able to act on this offer.",
