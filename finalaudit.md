@@ -1,5 +1,11 @@
 # Final Production Audit
 
+## First native recovery expiry proof accepted; latest main adoption allocated — 2026-10-22T17:35:33.811Z
+
+- Last Updated: 2026-10-22T17:35:33.811Z
+
+Root 2026-10-22T17:35:33.811Z: Original PR1072 head1c4dc865 first three workflows/all13normal jobs completed SUCCESS370e70a7; actual native recovery-expiry case qualifiedfacc199b: Chromium retry0, seven phases exactly once, one real password save, fresh independent realUI newpassword login, unchanged captured updated receipt delivered after browser grant expiry and owned cleanup. Containing shard1 691PASS0skip/flake/fail; no softassertion failure accepted. Whole normal includes THREE configured-retry flakes in shard2 (onboarding missing profile heading, kitchen afternoon locator timeout, kitchen sunset screenshot/font timeout); preserve their first failures, cause unknown, no blanket clean-first-attempt claim. Current latestmain1745c94ade59eb08aae8430b653ceff1dec931e7 includes separately merged calendar/hub1073 and public-entry1074 releases plus port1071. BEFORE source adoption allocate private normalmerge of that exactmain; readonlymap1ca4b04b compares commonbase343 and proves3recovery paths versus135incoming paths disjoint, no shared independentlychanged auditrows, union15222parentIDs. Preserve all exact qualifiedsource bodies/modes, independentlychanged rows and fullparenthistories; no recovery code edit duringmerge. Incoming authactions/provider boundaries changed onmain, so original actualHTTP success remains datedspecificsource and does not qualify newcomposition. Require fullcurrenttypes/allchangedrelatedwholefixtures/controlled57, independent source/ledger/holdunion, then firstcurrenthead nativeHTTP/fullhosted acceptance. Keep all productionprivacy/schema/configuration/migrationholds; no realprovider/customerpassword/SQL/config/moneyaction. Original53PASS4FAIL to57PASS causalproof and all prior failures remain. No newclosurecredit. PRODUCTION READY: NO.
+
 ## Recovery candidate passes final combined local gates; actual HTTP and hosted qualification required — 2026-10-20T14:49:11.914Z
 
 - Last Updated: 2026-10-20T14:49:11.914Z
