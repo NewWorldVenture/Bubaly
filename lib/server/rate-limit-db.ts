@@ -17,8 +17,11 @@ import type { Database } from '@/lib/database.types';
 // (0179) requires to appear in their key.
 //
 // The forms replaced are the ones `clientIp` produces — an IPv4 address or an
-// IPv6 /64 — and anything shaped like an email address. The digest is keyed on
-// a server secret, so it cannot be reversed by hashing the IPv4 space.
+// IPv6 /64 — anything shaped like an email address, and an E.164 phone number
+// (the Contact Center's per-sender budgets are keyed on the signed `From` of a
+// text or a call, lib/contact-center/inbound-budget.ts). The digest is keyed
+// on a server secret, so it cannot be reversed by hashing the IPv4 space, or
+// the ten billion numbers of one country.
 //
 // ONLY while that secret is one. With neither INTERNAL_SECRET nor
 // SUPABASE_SERVICE_ROLE_KEY set, the key used to fall back to the constant
@@ -33,6 +36,7 @@ import type { Database } from '@/lib/database.types';
 const IPV4 = /(?<![\d.])\d{1,3}(?:\.\d{1,3}){3}(?![\d.])/g;
 const IPV6_64 = /(?<![0-9a-f])[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){3}::\/64/gi;
 const EMAIL = /[^\s:@]+@[^\s:@]+/g;
+const E164 = /(?<![\w+])\+[1-9]\d{6,14}(?!\d)/g;
 const DEV_SUBJECT_KEY = 'bubaly-dev-rate-limit-subject';
 
 function subjectKey(): string {
@@ -58,7 +62,8 @@ export function storedBucketKey(key: string): string {
   return key
     .replace(EMAIL, (match) => digest(match.toLowerCase()))
     .replace(IPV6_64, (match) => digest(match.toLowerCase()))
-    .replace(IPV4, (match) => digest(match));
+    .replace(IPV4, (match) => digest(match))
+    .replace(E164, (match) => digest(match));
 }
 
 export type RateLimitDbOptions = {

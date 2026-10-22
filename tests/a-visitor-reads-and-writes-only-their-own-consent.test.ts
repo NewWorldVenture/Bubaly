@@ -112,6 +112,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe('a request reads only the consent of the browser that sent it', () => {
@@ -136,6 +137,28 @@ describe('a request reads only the consent of the browser that sent it', () => {
     const res = await GET(get('', VICTIM));
     expect(res.status).toBe(200);
     expect((await res.json()).state).toEqual(VICTIM_STATE);
+  });
+
+  // U1: a visitor's own consent state is a per-visitor answer, like
+  // /api/blog/like's and /api/blog/save's, and Next sends a dynamic route
+  // handler's response with no Cache-Control of its own, so without the header
+  // the answer was left to whatever a platform or shared cache defaults to.
+  it('the answer is marked no-store, so no cache between here and the browser keeps it', async () => {
+    const { GET, POST } = await import('@/app/api/mkt/consent/route');
+    expect((await GET(get('', VICTIM))).headers.get('cache-control')).toBe('no-store');
+    expect((await POST(post({ consents: { analytics: false } }, OTHER))).headers.get('cache-control')).toBe('no-store');
+  });
+
+  it('an unavailable ledger answers 503, also no-store', async () => {
+    createServiceClient.mockImplementation(() => ({ from() { throw new Error('synthetic outage'); } }));
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { GET, POST } = await import('@/app/api/mkt/consent/route');
+    const read = await GET(get('', VICTIM));
+    expect(read.status).toBe(503);
+    expect(read.headers.get('cache-control')).toBe('no-store');
+    const write = await POST(post({ consents: { analytics: false } }, OTHER));
+    expect(write.status).toBe(503);
+    expect(write.headers.get('cache-control')).toBe('no-store');
   });
 });
 
