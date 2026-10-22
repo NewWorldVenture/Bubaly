@@ -47,7 +47,8 @@ let auth: Auth;
 vi.doMock('../mobile/src/lib/auth', () => ({ useAuth: () => auth }));
 
 const { mobileTranslate } = await import('../mobile/src/lib/mobile-i18n');
-const { normalizeGroceryName } = await import('../mobile/src/lib/queries');
+const queriesModule = '../mobile/src/lib/queries';
+const { normalizeGroceryName } = await import(queriesModule);
 // Web CI has no native dependencies. Keep native UI imports dynamic so the web
 // typecheck does not absorb the separate mobile TS project; mobile CI checks it.
 const screenModule = '../mobile/app/(tabs)/grocery';
