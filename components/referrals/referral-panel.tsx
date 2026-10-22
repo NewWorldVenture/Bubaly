@@ -24,8 +24,10 @@ const STATUS_LABEL: Record<string, { label: string; labelKey: string }> = {
   void: { label: 'Void', labelKey: 'referralPanel.statusVoid' },
 };
 
-export function ReferralPanel({ code, link, rewardLabel, enabled, alreadyReferred, rows }: {
+export function ReferralPanel({ code, link, rewardLabel, enabled, alreadyReferred, rows, canManage = true }: {
   code: string; link: string; rewardLabel: string; enabled: boolean; alreadyReferred: boolean; rows: Row[];
+  /** A parent or an adult: applies a code, sends invites, sees whom the family invited. */
+  canManage?: boolean;
 }) {
   const t = useTranslations();
   const { fmtDate, fmtMoney } = useFormat();
@@ -97,7 +99,7 @@ export function ReferralPanel({ code, link, rewardLabel, enabled, alreadyReferre
             <Share2 className="h-4 w-4" /> {t('referral.share')}
           </button>
         </div>
-        {enabled && (
+        {enabled && canManage && (
           <form onSubmit={emailInvite} className="mt-5 border-t border-border pt-5" data-testid="referral-email-form">
             <div className="flex items-center gap-2">
               <Mail className="h-4 w-4 text-brand-text" />
@@ -123,7 +125,7 @@ export function ReferralPanel({ code, link, rewardLabel, enabled, alreadyReferre
         )}
       </section>
 
-      {!alreadyReferred && (
+      {!alreadyReferred && canManage && (
         <section className="rounded-3xl border border-border bg-surface/40 p-6">
           <div className="flex items-center gap-2">
             <Ticket className="h-4 w-4 text-brand-text" />
@@ -144,7 +146,7 @@ export function ReferralPanel({ code, link, rewardLabel, enabled, alreadyReferre
         </section>
       )}
 
-      <section className="rounded-3xl border border-border bg-surface/40 p-6">
+      {canManage && <section className="rounded-3xl border border-border bg-surface/40 p-6">
         <h2 className="mb-4 text-base font-semibold">{t('referral.familiesYouAposVeInvited')}</h2>
         {rows.length ? (
           <ul className="divide-y divide-border">
@@ -164,7 +166,7 @@ export function ReferralPanel({ code, link, rewardLabel, enabled, alreadyReferre
         ) : (
           <p className="py-6 text-center text-sm text-muted">{t('referral.noReferralsYetShareYourLink')}</p>
         )}
-      </section>
+      </section>}
     </div>
   );
 }

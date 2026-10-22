@@ -46,7 +46,7 @@ function emptyDisplay(familyName: string, now: Date, timezone: unknown): Display
     timezone: calendar.timezone, dayKey: calendar.dayKey, timezoneFallback: calendar.timezoneFallback,
     loadStatus: {
       events: 'error', upcoming: 'error', monthEvents: 'error', reminders: 'error',
-      meals: 'error', grocery: 'error', chores: 'error',
+      meals: 'error', grocery: 'error', chores: 'error', members: 'error', notes: 'error',
     },
     members: [], events: [], upcoming: [], chores: [], meals: [],
     grocery: { items: [], count: 0 }, reminders: [], birthdays: [],
@@ -270,6 +270,10 @@ async function loadDisplay(
       events: eventsFailed ? 'error' : 'ok', upcoming: upcomingFailed ? 'error' : 'ok',
       monthEvents: monthFailed ? 'error' : 'ok', reminders: results[7].error ? 'error' : 'ok',
       meals: mealsFailed ? 'error' : 'ok', grocery: groceryFailed ? 'error' : 'ok', chores: choresFailed ? 'error' : 'ok',
+      // The members read feeds the members tile AND the birthdays tile; the
+      // notes read the notes tile. Unreported, a failed read rendered "No
+      // birthdays this week" and "No pinned notes" all day, under no banner.
+      members: results[0].error ? 'error' : 'ok', notes: results[8].error ? 'error' : 'ok',
     },
     members: (members ?? []).map((m) => ({ id: m.id, display_name: m.display_name ?? 'Member', color: m.color, role: m.role })),
     events: eventsFailed?[]:visibleEvents.map(event=>event.kind==='native'?{...event,id:event.reference.eventId}:event),

@@ -17,17 +17,20 @@ type ReferralMetadata = Database['public']['Tables']['referrals']['Update']['met
 
 const SETTINGS_KEY = 'referral_program';
 
-/** Read the program config from marketing_settings (falls back to defaults). */
+/**
+ * Read the program config from marketing_settings. A missing row is the
+ * defaults, on purpose; a FAILED read is `error`, and its `config` is only the
+ * defaults as a placeholder. Every caller that acts on the program (applies a
+ * code, records an invite's reward, says the program is on) refuses on
+ * `error`: taking the defaults there re-enabled a paused program at $10/$10
+ * for the length of one failed read.
+ */
 export async function getReferralConfigResult(supabase: DB): Promise<{ config: ReferralConfig; error: Error | null }> {
   const { data, error } = await supabase.from('marketing_settings').select('value').eq('key', SETTINGS_KEY).maybeSingle();
   return {
     config: data ? resolveReferralConfig(data.value) : DEFAULT_REFERRAL_CONFIG,
     error: error ? new Error('Referral program settings read failed') : null,
   };
-}
-
-export async function getReferralConfig(supabase: DB): Promise<ReferralConfig> {
-  return (await getReferralConfigResult(supabase)).config;
 }
 
 /** Persist program config (admin only — caller must be gated). */
@@ -91,7 +94,7 @@ export async function listReferralsForFamily(supabase: DB, familyId: string): Pr
   return data ?? [];
 }
 
-export type ApplyFailureCode = 'empty' | 'paused' | 'not_found' | 'own_code' | 'already_referred' | 'lookup_failed' | 'write_failed';
+export type ApplyFailureCode = 'empty' | 'paused' | 'not_found' | 'own_code' | 'already_referred' | 'lookup_failed' | 'write_failed' | 'denied';
 export type ApplyResult = { ok: true } | { ok: false; reason: string; code: ApplyFailureCode };
 
 /**
@@ -113,10 +116,13 @@ export async function applyReferralCode(input: {
   if (!code) return { ok: false, reason: 'Enter a referral code.', code: 'empty' };
 
   const service = createServiceClient();
-  const config = await getReferralConfig(service);
-  if (!config.enabled) return { ok: false, reason: 'The referral program is currently paused.', code: 'paused' };
-
   const lookupFailed: ApplyResult = { ok: false, reason: 'We could not apply that referral code right now. Please try again.', code: 'lookup_failed' };
+  const { config, error: configError } = await getReferralConfigResult(service);
+  if (configError) {
+    console.error('[referrals/server] referral settings read failed', { familyId: input.referredFamilyId });
+    return lookupFailed;
+  }
+  if (!config.enabled) return { ok: false, reason: 'The referral program is currently paused.', code: 'paused' };
 
   const { data: codeRow, error: codeError } = await service.from('referral_codes').select('family_id, code').eq('code', code).maybeSingle();
   if (codeError) {

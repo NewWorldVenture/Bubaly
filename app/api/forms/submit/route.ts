@@ -8,6 +8,7 @@ import { firePublicFormSubmitted } from '@/lib/marketing/public-form-automation'
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { describeReadError } from '@/lib/supabase/settle';
+import { isUuid } from '@/lib/utils/validation';
 
 export const runtime = 'nodejs';
 const MAX_FORM_REQUEST_BYTES = 65_536;
@@ -45,6 +46,15 @@ export async function POST(req: NextRequest) {
   const formId = typeof body.formId === 'string' ? body.formId.trim() : '';
   const values = (body.values && typeof body.values === 'object') ? body.values as Record<string, unknown> : {};
   if (!formId) return NextResponse.json({ error: t('submit.formidIsRequired') }, { status: 422 });
+  // A form id is a uuid; anything else names no form. Handed to the uuid column
+  // it made Postgres refuse (22P02), which read below as a failed read: an
+  // error log line and a 503 "temporarily unavailable" for a bad request, from
+  // any anonymous caller, ten times a minute per address. Refused as the
+  // caller's own malformed input, before any read — the page for the same forms
+  // already guards this way (app/(marketing)/f/[id]/page.tsx) — keeping the 404
+  // for a well-formed id that names nothing and the 503 for a read that
+  // genuinely failed. Audit N11.
+  if (!isUuid(formId)) return NextResponse.json({ error: t('submit.thatFormIdIsNotValid') }, { status: 422 });
 
   // A refused read left the binding null and took the same branch as a row
   // that genuinely is not there, so the caller was told their own form

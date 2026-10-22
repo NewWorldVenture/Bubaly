@@ -7,6 +7,8 @@ import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 const MAX_LANDING_TRACK_REQUEST_BYTES = 4_096;
+/** A landing-page slug is a path segment; nothing longer names one. */
+const MAX_LANDING_SLUG_LENGTH = 200;
 
 /**
  * Public landing-page metric ingestion. Increments views/conversions for a
@@ -34,12 +36,17 @@ export async function POST(req: NextRequest) {
     );
   }
   const body = (parsedBody.value && typeof parsedBody.value === 'object' ? parsedBody.value : {}) as {
-    slug?: string; kind?: string;
+    slug?: unknown; kind?: unknown;
   };
 
-  const slug = (body.slug ?? '').trim().toLowerCase();
+  // A non-string `slug` reached `.trim()` and threw — an unhandled 500 for a
+  // hand-crafted body, where a refusal belongs; the sibling /api/ab/track
+  // route already guards its fields this way. Bounded too, as it bounds its
+  // identifiers. Audit N10.
+  const slug = typeof body.slug === 'string' ? body.slug.trim().toLowerCase() : '';
   const metric = body.kind === 'conversion' ? 'conversion' : 'view';
   if (!slug) return NextResponse.json({ error: t('track.slugIsRequired') }, { status: 422 });
+  if (slug.length > MAX_LANDING_SLUG_LENGTH) return NextResponse.json({ error: t('track.identifierIsTooLong') }, { status: 422 });
 
   const { error } = await supabase.rpc('bump_landing_metric', { p_slug: slug, p_metric: metric });
   if (error) {

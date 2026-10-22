@@ -211,11 +211,15 @@ describe('a row that licenses the next write is confirmed before it (C1-S9-82)',
     expect(at(fn, 'if (wroteNoRows(removedRow))')).toBeLessThan(at(fn, 'removeFamilyMedia(supabase, photo.storage_path)'));
   });
 
-  it('routines: a template edit is confirmed before its steps are cleared and replaced', () => {
+  it('routines: a template edit is confirmed before its steps are replaced, new steps first', () => {
+    // The replacement used to clear every step and then insert, so a refused
+    // insert left the routine with none (N19). The new steps now land, and are
+    // confirmed, before the old ones are removed by id.
     const src = readFileSync('components/modules/routines-panel.tsx', 'utf8');
     const fn = bodyOf(src, 'async function save() {', '\n  }\n');
-    expect(at(fn, 'if (wroteNoRows(renamed))')).toBeLessThan(at(fn, ".from('routine_template_items').delete()"));
-    expect(at(fn, ".from('routine_template_items').delete()")).toBeLessThan(at(fn, ".from('routine_template_items').insert("));
+    expect(at(fn, 'if (wroteNoRows(renamed))')).toBeLessThan(at(fn, ".from('routine_template_items').insert("));
+    expect(at(fn, ".from('routine_template_items').insert(")).toBeLessThan(at(fn, ".from('routine_template_items').delete()"));
+    expect(at(fn, '(inserted?.length ?? 0) !== steps.length')).toBeLessThan(at(fn, ".from('routine_template_items').delete()"));
   });
 
   it('expenses: a split rollback that matched nothing is logged, not silent', () => {
@@ -224,20 +228,24 @@ describe('a row that licenses the next write is confirmed before it (C1-S9-82)',
     expect(at(src, 'if (rollbackError)')).toBeLessThan(at(src, 'else if (wroteNoRows(rolledBack)) console.error('));
   });
 
-  it('two writes stay unconfirmed on purpose, and say why', () => {
-    // Zero rows is a legitimate answer for both: nothing was unread, and a
-    // template with no steps written. Confirming them would refuse a success.
+  it('one write stays unconfirmed on purpose, and says why; the routine step delete is now confirmed', () => {
+    // Zero rows is a legitimate answer for mark-all-read: nothing was unread.
+    // Confirming it would refuse a success.
     const notifications = readFileSync('components/modules/notifications-module.tsx', 'utf8');
     const all = bodyOf(notifications, 'async function markAllRead() {', '\n  }\n');
     expect(all).toContain(".update({ is_read: true })");
     expect(all).not.toContain(".select(");
     expect(all).toContain('Audit C1-S9-82');
+    // The routine steps used to be cleared wholesale and unconfirmed. They are
+    // now removed by the ids read before the new steps were written, and the
+    // delete is held to exactly that many rows (N19): fewer means another save
+    // replaced them in between.
     const routines = readFileSync('components/modules/routines-panel.tsx', 'utf8');
     const clear = at(routines, ".from('routine_template_items').delete()");
-    const clearLine = routines.slice(clear, routines.indexOf('\n', clear));
-    expect(clearLine).not.toContain('.select(');
-    const lead = routines.slice(0, clear).split('\n').slice(-12).join('\n');
-    expect(lead).toContain('Audit C1-S9-82');
+    const statement = routines.slice(clear, routines.indexOf(';', clear));
+    expect(statement).toContain(".in('id', previous)");
+    expect(statement).toContain(".select('id')");
+    expect(routines.slice(clear)).toContain('(removed?.length ?? 0) !== previous.length');
   });
 });
 

@@ -1,8 +1,15 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase/server';
 import { occasionLabelKey, DEFAULT_SUGGESTED_CENTS } from '@/lib/wallet/gift';
 import { PublicGiftForm } from '@/components/wallet/public-gift-form';
 import { getTranslations } from '@/lib/i18n/server';
+import { clientIp } from '@/lib/server/rate-limit';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+
+// Gift pages one address may open a minute before it is told to try later.
+// Not exported: a page module may only export what Next.js knows. Audit N3.
+const GIFT_VIEW_PER_MINUTE = 30;
 
 // The tab title is copy like any other: it was English in every locale.
 // Audit C1-S9-100.
@@ -17,6 +24,14 @@ export default async function PublicGiftPage({ params }: { params: Promise<{ tok
   const { token } = await params;
   const supabase = createServiceClient();
 
+  // Per address, before any read: this page names a child and a family to
+  // whoever holds a token, and /pay/<handle> forwards a guessed handle here, so
+  // without a limiter a dictionary walk read them at request speed (the pledge
+  // action was limited; the read was not). The refusal is the same retryable
+  // shell a failed read draws. Audit N3.
+  const limited = await enforceRequestRateLimit(supabase, `gift-view:${clientIp(await headers())}`, { limit: GIFT_VIEW_PER_MINUTE });
+  if (!limited.ok) return <Unavailable t={t} />;
+
   const { data: link, error: linkError } = await supabase
     .from('gift_links')
     .select('id, is_active, occasion, message, suggested_cents, child_wallet_id, family_id')
@@ -30,14 +45,7 @@ export default async function PublicGiftPage({ params }: { params: Promise<{ tok
   // instead.
   if (linkError) {
     console.error('[gift/token] gift link read failed', linkError);
-    return (
-      <div className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-6 px-4 py-10 text-center">
-        <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-2xl">🎁</div>
-        <p className="rounded-2xl border border-border bg-surface/40 p-6 text-sm text-muted">
-          {t('gift.weCouldnAposTLoadThis')}
-        </p>
-      </div>
-    );
+    return <Unavailable t={t} />;
   }
 
   const active = !!link && link.is_active;
@@ -94,6 +102,18 @@ export default async function PublicGiftPage({ params }: { params: Promise<{ tok
       />
 
       <p className="max-w-xs text-center text-[11px] text-muted">{t('gift.bubalyIsNotABank')}</p>
+    </div>
+  );
+}
+
+/** The page could not be served right now. Deliberately says nothing about the token. */
+function Unavailable({ t }: { t: (key: string) => string }) {
+  return (
+    <div className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-6 px-4 py-10 text-center">
+      <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-2xl">🎁</div>
+      <p className="rounded-2xl border border-border bg-surface/40 p-6 text-sm text-muted">
+        {t('gift.weCouldnAposTLoadThis')}
+      </p>
     </div>
   );
 }

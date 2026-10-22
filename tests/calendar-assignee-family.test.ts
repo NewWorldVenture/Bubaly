@@ -71,7 +71,7 @@ if (id === '@/lib/calendar/source-capability') return { CALENDAR_SOURCE_ARCHIVE_
    if(id==='../types'||id==='./types')return load('types');if(id==='../idempotency')return load('idempotency');if(id==='@/lib/supabase/errors')return load('errors');
    if(id==='../activity')return{recordActivitySafely:async(_scope:any,descriptor:any)=>trace.activity.push(descriptor)};
    if(id==='@/lib/i18n/server')return{getTranslations:async()=>()=> 'An earlier try already saved this event.'};
-   if(['@/lib/home/conflicts','@/lib/calendar/scheduling','@/lib/supabase/settle','../scope','@/lib/supabase/escape-like'].includes(id))return unused(id);
+   if(['@/lib/home/conflicts','@/lib/calendar/scheduling','@/lib/supabase/settle','../scope','@/lib/supabase/escape-like','@/lib/trips/follow-event'].includes(id))return unused(id);
    return deny('Forbidden import '+id);
  };new Function('require','module','exports',sourceFor(name))(require,entry,entry.exports);loaded[name]=entry.exports;return entry.exports;}
  return{run:()=>load('calendar').createEvent(scope,input,{rejectChangedRetry:options.rejectChanged??false}),saved};

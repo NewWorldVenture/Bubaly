@@ -127,7 +127,14 @@ export async function POST(req: NextRequest) {
       case 'account.updated': {
         const acct = event.data.object as Stripe.Account;
         const familyId = acct.metadata?.family_id;
-        if (familyId) await syncConnectedAccount(supabase, familyId, acct.id);
+        // Mirrored only where the family AND the account agree
+        // (lib/stripe/connect.ts): metadata naming a family that does not own
+        // this account is a logged skip, not a success. The event is still
+        // marked processed — Stripe retrying it for days would change nothing.
+        // Audit N12.
+        if (familyId && !await syncConnectedAccount(supabase, familyId, acct.id)) {
+          console.warn('[money webhook] account.updated skipped: no mirror row pairs this family with this account', { familyId, accountId: acct.id });
+        }
         break;
       }
       default:

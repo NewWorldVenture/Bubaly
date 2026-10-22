@@ -47,7 +47,10 @@ vi.mock('@/lib/i18n/server', async () => {
 vi.mock('@/lib/calendar/source-capability', () => ({ get CALENDAR_SOURCE_ARCHIVE_ENABLED() { return false; } }));
 vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: async () => 1 }));
 vi.mock('@/lib/services/approvals', () => ({ listPending: async () => ({ ok: true, data: [] }) }));
-vi.mock('@/lib/services/memory', () => ({ listMemories: async () => ({ ok: true, data: { pending: [] } }) }));
+vi.mock('@/lib/services/memory', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/services/memory')>()),
+  listMemories: async () => ({ ok: true, data: { pending: [] } }),
+}));
 vi.mock('@/lib/home/completed', () => ({ loadCompletedByBubaly: async () => ({ ok: true, data: [] }) }));
 vi.mock('@/lib/schedule/intelligence-server', () => ({ loadScheduleIntelligence: async () => ({ ok: true, data: { byEvent: {} } }) }));
 vi.mock('@/lib/metric/time-saved-server', () => ({ loadTimeSaved: async () => ({ show: false }) }));

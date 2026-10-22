@@ -19,6 +19,39 @@ export type AttemptReservation =
   | { ok: false; reason: 'unavailable'; error: unknown };
 
 /**
+ * Delete throttle rows that no longer decide anything. True when the database
+ * confirmed the delete.
+ *
+ * Sign-in reserves an attempt for every syntactically valid username typed,
+ * BEFORE the account lookup — deliberately, so the throttle is not a lookup
+ * oracle — so an anonymous caller adds a row per guessed name, 30 a minute per
+ * address, for usernames that exist nowhere, and nothing ever removed them
+ * (01371_child_login_throttle.sql defines no prune; rate_limit_prune covers
+ * another table). A row still matters for `lockMemoryMs` after its lock lifts
+ * (child-throttle.ts), so only rows whose window AND any lock ended more than
+ * that long ago go, and a live lock is always kept. Run from the daily
+ * automations cron beside the limiter prune. Audit N7.
+ */
+export async function pruneChildLoginThrottle(
+  admin: SupabaseClient<Database>,
+  now: Date = new Date(),
+  policy: ThrottlePolicy = DEFAULT_POLICY,
+): Promise<boolean> {
+  const cutoff = new Date(now.getTime() - policy.lockMemoryMs).toISOString();
+  try {
+    const { error, count } = await admin.from('child_login_throttle').delete({ count: 'exact' })
+      .lt('window_start', cutoff)
+      .or(`locked_until.is.null,locked_until.lt.${cutoff}`);
+    if (error) throw error;
+    if (count) console.info(`[child-login] pruned ${count} stale throttle rows`);
+    return true;
+  } catch (error) {
+    console.error('[child-login] throttle prune failed', error);
+    return false;
+  }
+}
+
+/**
  * Take one of this username's attempts BEFORE its PIN is checked, counting it
  * as a failure until a sign-in succeeds and clears the row.
  *

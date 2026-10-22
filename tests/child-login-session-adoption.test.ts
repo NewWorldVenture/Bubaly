@@ -132,9 +132,15 @@ describe('child password action returns a candidate without adopting browser sto
   });
 
   it('keeps unknown usernames and rejected PINs indistinguishable and counts both attempts', async () => {
+    // Indistinguishable in WORK as well as wording (audit N8): the unknown
+    // username makes the same provider round trip, with a password no account
+    // holds, and the provider's answer — this fixture's default is a valid
+    // receipt — is not adopted.
     state.unknown = true;
     const unknown = await childSignInAction({ username: 'emma', pin: '1234' });
-    expect(state.request).not.toHaveBeenCalled();
+    expect(state.request).toHaveBeenCalledOnce();
+    expect(JSON.parse(String(state.request.mock.calls[0][1]?.body)).password)
+      .not.toBe(deriveChildPassword('synthetic-child-derivation-fixture', 'emma', '1234'));
     state.unknown = false; respond({ error_code: 'invalid_credentials', msg: 'Invalid login credentials' }, 400);
     const rejected = await childSignInAction({ username: 'emma', pin: '1234' });
     expect(unknown).toEqual({ ok: false, error: 'actions.thatUsernameOrPinIsn' });
@@ -172,13 +178,17 @@ describe('child password action returns a candidate without adopting browser sto
     expect(state.upserts).toEqual([]);
   });
 
-  it('refuses a child whose member row was removed, before the PIN is checked, in the wrong-PIN wording', async () => {
+  it('refuses a child whose member row was removed, without ever presenting their PIN, in the wrong-PIN wording', async () => {
     // Removal is a soft is_active=false that leaves child_logins and the auth
     // user in place; signing in would then auto-provision them a family of
-    // their own as its parent.
+    // their own as its parent. The provider round trip is still made — a miss
+    // costs what a wrong PIN costs (audit N8) — but with a password no account
+    // holds, and this fixture's valid receipt is not adopted.
     state.memberActive = false;
     expect(await childSignInAction({ username: 'emma', pin: '1234' })).toEqual({ ok: false, error: 'actions.thatUsernameOrPinIsn' });
-    expect(state.request).not.toHaveBeenCalled();
+    expect(state.request).toHaveBeenCalledOnce();
+    expect(JSON.parse(String(state.request.mock.calls[0][1]?.body)).password)
+      .not.toBe(deriveChildPassword('synthetic-child-derivation-fixture', 'emma', '1234'));
     expect(state.upserts).toEqual([]);
   });
 
