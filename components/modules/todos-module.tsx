@@ -9,6 +9,8 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { literalContainsPattern } from '@/lib/supabase/escape-like';
 import { completeTodoAction, createTodoAction, deleteTodoAction, updateTodoAction } from '@/app/(app)/dashboard/todos/actions';
 import { newSubmissionId, submissionSettled } from '@/lib/utils/submission-id';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -47,6 +49,17 @@ const LIST_COLORS: Record<string, string> = {
 
 const LIST_ICONS = ['📋', '🏠', '💼', '🛒', '🎯', '📚', '🏋️', '✈️', '💡', '🎉'];
 
+/**
+ * How many finished tasks the Completed tab lists, newest first. Finished tasks
+ * are never purged, so this list is bounded on purpose and its COUNT is read
+ * separately: the tab and the summary say how many there really are.
+ */
+const COMPLETED_SHOWN = 200;
+/** How long typing rests before a search of every finished task is asked. */
+const SEARCH_SETTLE_MS = 250;
+/** Open tasks are read whole; past this many the read fails rather than cuts. */
+const OPEN_MAX = 20_000;
+
 // Donut segment palette (explicit hex — conic-gradient needs real colors).
 const DONUT = {
   overdue:   { labelKey: 'todosModule.donut.overdue', hex: '#f43f5e' },
@@ -66,7 +79,7 @@ export function TodosModule() {
   const dueLabel = dueLabelWith(useFormat().fmtDate);
   const clock = useFamilyClock();
   const tr = useTranslations();
-  const { familyId, members, selfMember } = useApp();
+  const { familyId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
   const selfId = selfMember?.id ?? null;
@@ -91,17 +104,76 @@ export function TodosModule() {
         .order('sort_order').order('created_at'),
   });
 
-  const { data: items, loading: itemsLoading, error: itemsError, refresh: refreshItems } = useRealtimeQuery<TodoItem>({
-    table: 'todo_items', familyId, deps: [familyId],
-    fetcher: (sb) =>
-      sb.from('todo_items').select('*').eq('family_id', familyId)
+  // Three reads where there was one. A single select of every task stopped at
+  // db-max-rows (1,000) without a word, and finished tasks are never purged —
+  // so a family a year in lost its newest-dated and every undated OPEN task off
+  // the end of a due-date order, while the tabs, the summary and "All clear!"
+  // were computed from what was left. Open tasks are now read whole (past the
+  // ceiling the read fails and the screen says so); finished ones are listed
+  // newest first up to a bound, and counted exactly.
+  const openQ = useRealtimeQuery<TodoItem>({
+    table: 'todo_items', familyId, deps: [familyId, 'open'],
+    fetcher: (sb) => readAllAsQuery<TodoItem>((from, to) =>
+      sb.from('todo_items').select('*').eq('family_id', familyId).eq('is_done', false)
         .order('due_date', { ascending: true, nullsFirst: false })
-        .order('priority', { ascending: false }),
+        .order('priority', { ascending: false })
+        .order('id').range(from, to), { max: OPEN_MAX }),
+  });
+  const doneQ = useRealtimeQuery<TodoItem>({
+    table: 'todo_items', familyId, deps: [familyId, 'done'],
+    // Listed, not summed: a prefix of the newest is the useful end of the set.
+    fetcher: (sb) => readAllAsQuery<TodoItem>((from, to) =>
+      sb.from('todo_items').select('*').eq('family_id', familyId).eq('is_done', true)
+        .order('completed_at', { ascending: false, nullsFirst: false })
+        .order('id').range(from, to), { max: COMPLETED_SHOWN, failOnMax: false }),
+  });
+  const doneCountQ = useRealtimeQuery<{ total: number }>({
+    table: 'todo_items', familyId, deps: [familyId, 'done-count'],
+    fetcher: async (sb) => {
+      const { count, error: countError } = await sb.from('todo_items').select('id', { count: 'exact', head: true })
+        .eq('family_id', familyId).eq('is_done', true);
+      return { data: countError ? null : [{ total: count ?? 0 }], error: countError };
+    },
   });
 
-  const loading = listsLoading || itemsLoading;
-  const error = listsError || itemsError;
+  // The finished list above is the newest 200, so a search of it alone told a
+  // family with 201 finished tasks "No completed tasks" for the oldest one's
+  // exact title, with nothing to reopen it from. When more are finished than
+  // are listed, a search on the Completed tab asks the database over all of
+  // them — newest first, up to the same bound, and said so when there are more.
+  const completedTotalRead = doneCountQ.data[0]?.total ?? doneQ.data.length;
+  const doneTruncated = completedTotalRead > doneQ.data.length;
+  const [completedQuery, setCompletedQuery] = useState('');
+  useEffect(() => {
+    const q = search.trim();
+    const timer = setTimeout(() => setCompletedQuery(q), q ? SEARCH_SETTLE_MS : 0);
+    return () => clearTimeout(timer);
+  }, [search]);
+  const searchAllDone = tab === 'completed' && doneTruncated ? completedQuery : '';
+  const doneSearchQ = useRealtimeQuery<TodoItem>({
+    table: 'todo_items', familyId, deps: [familyId, 'done-search', searchAllDone],
+    fetcher: (sb) => (searchAllDone
+      ? sb.from('todo_items').select('*').eq('family_id', familyId).eq('is_done', true)
+        // The text exactly as typed, a `*` included: imatch on the escaped
+        // value. ilike cannot say it — PostgREST turns every `*` there into
+        // `%` — and filtering a broad match afterwards lost the older literal
+        // matches behind the row limit (lib/supabase/escape-like.ts).
+        .filter('title', 'imatch', literalContainsPattern(searchAllDone))
+        .order('completed_at', { ascending: false, nullsFirst: false })
+        .order('id').range(0, COMPLETED_SHOWN)
+      : Promise.resolve({ data: [] as TodoItem[], error: null })),
+  });
+  // Typed but not yet asked, or asked and not yet answered: neither is "no match".
+  const searchingAllDone = tab === 'completed' && doneTruncated && search.trim() !== '';
+  const doneSearchPending = searchingAllDone && (completedQuery !== search.trim() || doneSearchQ.loading);
+  const refreshItems = () => Promise.all([openQ.refresh(), doneQ.refresh(), doneCountQ.refresh(), doneSearchQ.refresh()]);
+
+  const loading = listsLoading || openQ.loading || doneQ.loading || doneCountQ.loading;
+  const error = listsError || openQ.error || doneQ.error || doneCountQ.error || doneSearchQ.error;
   const refresh = () => { void refreshLists(); void refreshItems(); };
+  // A guest views the household's tasks; it does not add, edit or tick them off
+  // (the actions refuse it too — see app/(app)/dashboard/todos/actions.ts).
+  const readOnly = role === 'guest';
 
   const listById = useMemo(() => new Map(lists.map((l) => [l.id, l])), [lists]);
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -113,19 +185,24 @@ export function TodosModule() {
   const tomorrowStr = clock.wallKey(clock.addDays(wall, 1));
   const weekEndStr = clock.wallKey(clock.addDays(wall, 7));
 
-  const active = useMemo(() => items.filter((i) => !i.is_done), [items]);
-  const completed = useMemo(() => items.filter((i) => i.is_done), [items]);
+  const active = openQ.data;
+  const completed = doneQ.data;
+  // The exact number finished, not the length of the bounded list above.
+  const completedTotal = doneCountQ.data[0]?.total ?? completed.length;
 
   const counts = {
     all: active.length,
     mine: active.filter((i) => i.created_by === selfId).length,
     assigned: active.filter((i) => i.assigned_to_id === selfId).length,
-    completed: completed.length,
+    completed: completedTotal,
   };
 
   // Tab → base set, then search.
   const tabItems = useMemo(() => {
     let res: TodoItem[];
+    // Searched in the database already: every finished task, not the listed
+    // 200, matched literally as the list's own search matches them.
+    if (searchingAllDone) return doneSearchQ.data.slice(0, COMPLETED_SHOWN);
     if (tab === 'completed') res = completed;
     else if (tab === 'mine') res = active.filter((i) => i.created_by === selfId);
     else if (tab === 'assigned') res = active.filter((i) => i.assigned_to_id === selfId);
@@ -135,7 +212,7 @@ export function TodosModule() {
       res = res.filter((i) => i.title.toLowerCase().includes(q));
     }
     return res;
-  }, [tab, active, completed, selfId, search]);
+  }, [tab, active, completed, selfId, search, searchingAllDone, doneSearchQ.data]);
 
   // Group the active tabs by due date.
   const groups = useMemo(() => {
@@ -156,7 +233,7 @@ export function TodosModule() {
     overdue: active.filter((i) => i.due_date && i.due_date < todayStr).length,
     today: active.filter((i) => i.due_date === todayStr).length,
     week: active.filter((i) => i.due_date && i.due_date > todayStr && i.due_date <= weekEndStr).length,
-    completed: completed.length,
+    completed: completedTotal,
   };
 
   const priorities = useMemo(() => {
@@ -202,7 +279,7 @@ export function TodosModule() {
   async function ensureListId(): Promise<string | null> {
     if (lists.length > 0) return lists[0].id;
     const { data, error } = await createClient().from('todo_lists')
-      .insert({ family_id: familyId, name: tr('todosModule.defaultListName'), icon: '📋', color: 'violet', is_shared: true })
+      .insert({ family_id: familyId, name: tr('todosModule.defaultListName'), icon: '📋', color: 'violet', is_shared: true, created_by: selfId })
       .select('id').single();
     if (error || !data) { toastError(describeDbError(error)); return null; }
     void refreshLists();
@@ -252,6 +329,7 @@ export function TodosModule() {
   }
 
   async function openAdd() {
+    if (readOnly) return;
     if (lists.length === 0) { await ensureListId(); }
     setAddOpen(true);
   }
@@ -272,12 +350,19 @@ export function TodosModule() {
     const busyToggle = isPending(`toggle:${item.id}`);
     return (
       <div className="group flex items-center gap-3 rounded-xl border border-border/70 bg-surface/30 px-3 py-2.5 transition hover:bg-elevated/40">
-        <button onClick={() => toggleItem(item)} disabled={busyToggle}
-          aria-label={item.is_done ? tr('uiText.markNotDone') : tr('uiText.markDone')}
-          className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition disabled:opacity-60',
-            item.is_done ? 'border-success bg-success' : 'border-border hover:border-success/60')}>
-          {busyToggle ? <Loader2 className="h-3 w-3 animate-spin text-muted" /> : item.is_done && <Check className="h-3 w-3 text-white" />}
-        </button>
+        {readOnly ? (
+          <span aria-hidden className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2',
+            item.is_done ? 'border-success bg-success' : 'border-border')}>
+            {item.is_done && <Check className="h-3 w-3 text-white" />}
+          </span>
+        ) : (
+          <button onClick={() => toggleItem(item)} disabled={busyToggle}
+            aria-label={item.is_done ? tr('uiText.markNotDone') : tr('uiText.markDone')}
+            className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition disabled:opacity-60',
+              item.is_done ? 'border-success bg-success' : 'border-border hover:border-success/60')}>
+            {busyToggle ? <Loader2 className="h-3 w-3 animate-spin text-muted" /> : item.is_done && <Check className="h-3 w-3 text-white" />}
+          </button>
+        )}
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -294,15 +379,17 @@ export function TodosModule() {
           </div>
         </div>
 
-        <div className="flex items-center gap-1 opacity-100 sm:opacity-0 transition sm:group-hover:opacity-100 focus-within:opacity-100 coarse:opacity-100">
-          <button onClick={() => setEditingItem(item)} aria-label={tr('todos.editTask')} className="rounded p-1.5 text-muted hover:text-fg">
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-          <button onClick={() => deleteItem(item.id)} disabled={isPending(`delete:${item.id}`)} aria-label={tr('todos.deleteTask')}
-            className="rounded p-1.5 text-muted hover:text-danger disabled:opacity-50">
-            {isPending(`delete:${item.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-          </button>
-        </div>
+        {!readOnly && (
+          <div className="flex items-center gap-1 opacity-100 sm:opacity-0 transition sm:group-hover:opacity-100 focus-within:opacity-100 coarse:opacity-100">
+            <button onClick={() => setEditingItem(item)} aria-label={tr('todos.editTask')} className="rounded p-1.5 text-muted hover:text-fg">
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            <button onClick={() => deleteItem(item.id)} disabled={isPending(`delete:${item.id}`)} aria-label={tr('todos.deleteTask')}
+              className="rounded p-1.5 text-muted hover:text-danger disabled:opacity-50">
+              {isPending(`delete:${item.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+        )}
 
         <div className="flex shrink-0 items-center gap-2">
           {item.due_date && (
@@ -349,7 +436,7 @@ export function TodosModule() {
               <Button variant="outline" size="sm" onClick={() => setTab('assigned')}>
                 <UserIcon className="h-4 w-4" /> {tr('todos.myTasks')}
               </Button>
-              <Button size="sm" onClick={openAdd}><Plus className="h-4 w-4" /> {tr('todos.addTask')}</Button>
+              {!readOnly && <Button size="sm" onClick={openAdd}><Plus className="h-4 w-4" /> {tr('todos.addTask')}</Button>}
             </div>
           }
         />
@@ -377,13 +464,23 @@ export function TodosModule() {
 
         {/* Body */}
         <div className="mt-4">
-          {nothing ? (
+          {doneSearchPending ? (
+            <p role="status" className="py-6 text-center text-sm text-muted">{tr('todosModule.searchingCompleted')}</p>
+          ) : nothing ? (
             <EmptyState icon={CheckSquare}
               title={tab === 'completed' ? 'No completed tasks' : 'All clear!'}
               description={tab === 'completed' ? 'Finished tasks will show up here.' : 'No tasks here yet — add one to get started.'}
-              action={tab !== 'completed' ? <Button onClick={openAdd}><Plus className="h-4 w-4" /> {tr('todos.addTask')}</Button> : undefined} />
+              action={tab !== 'completed' && !readOnly ? <Button onClick={openAdd}><Plus className="h-4 w-4" /> {tr('todos.addTask')}</Button> : undefined} />
           ) : tab === 'completed' ? (
-            <div className="space-y-1.5">{tabItems.map((i) => <TaskRow key={i.id} item={i} />)}</div>
+            <>
+              <div className="space-y-1.5">{tabItems.map((i) => <TaskRow key={i.id} item={i} />)}</div>
+              {completedTotal > completed.length && !search.trim() && (
+                <p className="mt-2 text-xs text-muted">{tr('todosModule.showingRecentCompleted', { shown: completed.length, total: completedTotal })}</p>
+              )}
+              {searchingAllDone && doneSearchQ.data.length > COMPLETED_SHOWN && (
+                <p className="mt-2 text-xs text-muted">{tr('todosModule.showingNewestMatches', { shown: COMPLETED_SHOWN })}</p>
+              )}
+            </>
           ) : (
             <>
               <Section label={tr('todos.overdue')} tone="text-danger" list={groups.overdue} />
@@ -393,10 +490,12 @@ export function TodosModule() {
             </>
           )}
 
-          <button onClick={openAdd}
-            className="mt-2 flex w-full items-center gap-2 rounded-xl border-2 border-dashed border-border px-3 py-2.5 text-sm font-medium text-muted transition hover:border-brand/40 hover:text-brand-text">
-            <Plus className="h-4 w-4" /> {tr('todos.addTask')}
-          </button>
+          {!readOnly && (
+            <button onClick={openAdd}
+              className="mt-2 flex w-full items-center gap-2 rounded-xl border-2 border-dashed border-border px-3 py-2.5 text-sm font-medium text-muted transition hover:border-brand/40 hover:text-brand-text">
+              <Plus className="h-4 w-4" /> {tr('todos.addTask')}
+            </button>
+          )}
         </div>
       </div>
 
@@ -428,7 +527,7 @@ export function TodosModule() {
               {priorities.map((i) => {
                 const overdue = i.due_date && i.due_date < todayStr;
                 return (
-                  <button key={i.id} onClick={() => setEditingItem(i)} className="flex w-full items-center gap-2 text-left">
+                  <button key={i.id} onClick={() => setEditingItem(i)} disabled={readOnly} className="flex w-full items-center gap-2 text-left">
                     <span className="h-3.5 w-3.5 shrink-0 rounded-full border-2 border-border" />
                     <span className="flex-1 truncate text-xs font-medium">{i.title}</span>
                     {i.due_date && (
@@ -458,7 +557,7 @@ export function TodosModule() {
               {assignedToOthers.map((i) => {
                 const m = i.assigned_to_id ? memberById.get(i.assigned_to_id) : undefined;
                 return (
-                  <button key={i.id} onClick={() => setEditingItem(i)} className="flex w-full items-center gap-2.5 text-left">
+                  <button key={i.id} onClick={() => setEditingItem(i)} disabled={readOnly} className="flex w-full items-center gap-2.5 text-left">
                     {m && <Avatar name={m.display_name} color={m.color} size={28} />}
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-semibold">{m?.display_name ?? 'Member'}</p>
@@ -473,7 +572,7 @@ export function TodosModule() {
         </div>
 
         {/* Quick Add */}
-        <div className="sidebar-card">
+        {!readOnly && <div className="sidebar-card">
           <h3 className="mb-3 flex items-center gap-2 text-sm font-bold"><Sparkles className="h-4 w-4 text-brand-text" /> {tr('todos.quickAdd')}</h3>
           <Input value={quickTitle} onChange={(e) => setQuickTitle(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void quickAdd('today'); } }}
@@ -490,16 +589,16 @@ export function TodosModule() {
               <CalendarIcon className="h-3.5 w-3.5" /> {tr('todos.pickDate')}
             </button>
           </div>
-        </div>
+        </div>}
       </div>
 
       {/* Modals */}
-      {newListOpen && (
-        <NewListModal familyId={familyId}
+      {newListOpen && !readOnly && (
+        <NewListModal familyId={familyId} selfId={selfId}
           onClose={() => setNewListOpen(false)}
           onCreated={() => { setNewListOpen(false); void refreshLists(); }} />
       )}
-      {(addOpen || editingItem) && (
+      {(addOpen || editingItem) && !readOnly && (
         <ItemModal familyId={familyId} selfId={selfId} members={members} lists={lists}
           item={editingItem ?? undefined}
           onNewList={() => setNewListOpen(true)}
@@ -539,8 +638,8 @@ function SummaryDonut({ summary }: { summary: { total: number; overdue: number; 
   );
 }
 
-function NewListModal({ familyId, onClose, onCreated }: {
-  familyId: string; onClose: () => void; onCreated: (id: string) => void;
+function NewListModal({ familyId, selfId, onClose, onCreated }: {
+  familyId: string; selfId: string | null; onClose: () => void; onCreated: (id: string) => void;
 }) {
   const tr = useTranslations();
   const { error: toastError } = useToast();
@@ -548,7 +647,6 @@ function NewListModal({ familyId, onClose, onCreated }: {
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('📋');
   const [color, setColor] = useState('violet');
-  const [isShared, setIsShared] = useState(true);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -559,8 +657,13 @@ function NewListModal({ familyId, onClose, onCreated }: {
     setLoading(true);
     try {
       const supabase = createClient();
+      // Every list is the family's: nothing reads `is_shared` — not this page,
+      // the focus queue, the assistant or RLS — so a "Shared with family" box
+      // that could be unticked promised a privacy nothing kept. The creator is
+      // recorded (a family_members id, per 0015) so an owner exists to filter
+      // on if private lists are ever made real.
       const { data, error } = await supabase.from('todo_lists').insert({
-        family_id: familyId, name: trimmed, icon, color, is_shared: isShared,
+        family_id: familyId, name: trimmed, icon, color, is_shared: true, created_by: selfId,
       }).select('id').single();
       if (error || !data) { toastError(describeDbError(error)); return; }
       onCreated(data.id);
@@ -599,10 +702,7 @@ function NewListModal({ familyId, onClose, onCreated }: {
             </div>
           )}
         </Field>
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <input type="checkbox" checked={isShared} onChange={(e) => setIsShared(e.target.checked)} className="accent-brand" />
-          {tr('todos.sharedWithFamily')}
-        </label>
+        <p className="text-xs text-muted">{tr('todosModule.listsAreFamilyWide')}</p>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>{tr('todos.cancel')}</Button>
           <Button type="submit" loading={loading}>{tr('todos.create')}</Button>

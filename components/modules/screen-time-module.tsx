@@ -161,12 +161,16 @@ export function ScreenTimeModule() {
         {memberIds.map((mid) => {
           const mEntries = all.filter((e) => e.member_id === mid) as ScreenEntryLike[];
           const m = memberById.get(mid);
-          const usedToday = minutesOnDate(mEntries, clock.todayKey());
-          const week = minutesInWindow(mEntries, 7);
+          // Every figure on the card counts the family's days, the ones
+          // `entry_date` is written in — 'today' already did, the week, the
+          // streak and the balance counted Greenwich's.
+          const todayKey = clock.todayKey();
+          const usedToday = minutesOnDate(mEntries, todayKey);
+          const week = minutesInWindow(mEntries, 7, todayKey);
           const limit = limitByMember.get(mid) ?? 0;
           const prog = limitProgress(usedToday, limit);
-          const streak = underLimitStreak(mEntries, limit);
-          const balance = balanceScore(mEntries.filter((e) => minutesInWindow([e], 7) > 0));
+          const streak = underLimitStreak(mEntries, limit, todayKey);
+          const balance = balanceScore(mEntries.filter((e) => minutesInWindow([e], 7, todayKey) > 0));
           const breakdown = categoryBreakdown(mEntries).slice(0, 3);
           return (
             <div key={mid} className="rounded-2xl border border-border bg-surface/40 p-4">

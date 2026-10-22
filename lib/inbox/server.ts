@@ -18,6 +18,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/database.types';
 import { settleAll } from '@/lib/supabase/settle';
 import { paperworkSummary, paperworkSummaryFacts, type PaperworkReader } from '@/lib/paperwork/triage';
+import { narrowedToAdder, type MoneyReader } from '@/lib/finance/household-money';
+import { isManager } from '@/lib/constants/roles';
 import {
   countNeedsYou, unifyInbox,
   type CommunicationRow, type InboxMessageRow, type PaperworkRow, type UnifiedInboxItem,
@@ -46,13 +48,27 @@ export type InboxQueueRead = {
  * snippet is re-rendered from the row's own columns in the reader's language,
  * with the amount in the reader's format (I18N-003). Required: a default here is
  * how every reader ends up with the writer's English.
+ *
+ * `viewer` is who is reading, for the paperwork half. Paperwork is a parent's
+ * or adult's, and whoever added an item keeps reading it (the held 0514,
+ * lib/finance/household-money.ts) — the rule the Paperwork Inbox and Needs-you
+ * pages already apply. This queue read the whole family's, so a teen, a child
+ * or a caregiver was shown every medical form, bill and permission slip with
+ * its amount, and handed the row ids. Narrowed in the query, before the limit,
+ * exactly as needs-you does. Required, for the same reason `reader` is.
  */
 export async function loadInboxQueue(
   db: SupabaseClient<Database>,
   familyId: string,
   reader: PaperworkReader,
+  viewer: MoneyReader,
   opts: { now?: Date } = {},
 ): Promise<InboxQueueRead> {
+  const adder = narrowedToAdder(viewer);
+  const paperworkQuery = db
+    .from('paperwork_items')
+    .select('id, kind, title, summary, sender, due_on, urgency, status, created_at, actions, amount, meta')
+    .eq('family_id', familyId);
   const [messagesResult, paperworkResult, commsResult] = await settleAll([
     db
       .from('family_inbox_messages')
@@ -61,10 +77,7 @@ export async function loadInboxQueue(
       .neq('status', 'archived')
       .order('occurred_at', { ascending: false })
       .limit(PER_SOURCE_LIMIT),
-    db
-      .from('paperwork_items')
-      .select('id, kind, title, summary, sender, due_on, urgency, status, created_at, actions, amount, meta')
-      .eq('family_id', familyId)
+    (adder === null ? paperworkQuery : paperworkQuery.eq('created_by', adder))
       .in('status', ['needs_action', 'in_progress'])
       .order('created_at', { ascending: false })
       .limit(PER_SOURCE_LIMIT),
@@ -103,6 +116,8 @@ export async function loadInboxQueue(
     ),
     communications: commsResult.error ? [] : ((commsResult.data ?? []) as CommunicationRow[]),
     now: opts.now,
+    // "Handle it" is a parent's or adult's (handleInboxMessageAction refuses anyone else).
+    canFile: isManager(viewer.role),
   });
 
   return { items, needsYou: countNeedsYou(items), unavailable, allFailed };

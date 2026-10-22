@@ -35,7 +35,7 @@ describe('every AI route that calls a model counts against the monthly allowance
 
   it.each(all.filter((path) => !NO_MODEL[path]))('%s meters before it spends', (path) => {
     const src = readFileSync(path, 'utf8');
-    const meter = Math.min(...['refuseOverAIAllowance(', 'withinAIAllowance(', 'assertFamilyAIAllowance(', 'assertAIAccess(']
+    const meter = Math.min(...['refuseOverAIAllowance(', 'withinAIAllowance(', 'assertFamilyAIAllowance(', 'assertAIAllowance(', 'assertAIAccess(']
       .map((call) => src.indexOf(call)).filter((i) => i >= 0));
     expect(Number.isFinite(meter), 'no allowance check').toBe(true);
     // A model call, not the choice of provider: resolveProvider() spends nothing.

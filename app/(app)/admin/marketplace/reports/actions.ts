@@ -1,20 +1,19 @@
 'use server';
 
 // Super-admin moderation actions for marketplace safety reports. Gated by
-// isSuperAdmin and executed with the service role (marketplace_reports has no
+// superAdminGate and executed with the service role (marketplace_reports has no
 // public UPDATE policy). Resolving can optionally withdraw the offending
 // listing in the same step.
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
-import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
-import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
+import { superAdminGate, type SuperAdminGate } from '@/lib/auth/super-admin-gate';
 import { createServiceClient } from '@/lib/supabase/server';
 import { describeActionError } from '@/lib/supabase/errors';
 import { logAudit } from '@/lib/server/audit';
 
 type Result = { ok: true } | { ok: false; error: string };
 type AdminClient = ReturnType<typeof createServiceClient>;
-type AuthUser = NonNullable<Awaited<ReturnType<typeof getUser>>>;
+type AuthUser = Extract<SuperAdminGate, { status: 'allowed' }>['user'];
 type GuardResult = { admin: AdminClient; user: AuthUser } | { ok: false; error: string };
 
 // The fallback is a PARAMETER now, not a default. A default is evaluated in
@@ -29,10 +28,13 @@ function actionFailure(error: unknown, fallback: string): Result {
 
 async function guard(): Promise<GuardResult> {
   const t = await getTranslations();
-  const user = await getUser();
-  if (!user || !(await isSuperAdmin())) return { ok: false, error: t('actions.notAuthorized') };
-  if (!(await superAdminAssurance()).ok) return { ok: false, error: t('actions.adminConsoleNeedsYourCode') };
-  return { admin: createServiceClient(), user };
+  const gate = await superAdminGate();
+  if (gate.status !== 'allowed') {
+    const error = gate.status === 'unavailable' ? t('ai.accountContextIsTemporarilyUnavailable')
+      : gate.status === 'step_up' ? t('actions.adminConsoleNeedsYourCode') : t('actions.notAuthorized');
+    return { ok: false, error };
+  }
+  return { admin: createServiceClient(), user: gate.user };
 }
 
 /** Resolve a report: 'actioned' or 'dismissed', with an optional note and an

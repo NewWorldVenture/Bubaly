@@ -8,11 +8,11 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
 import { respawnChoreAssignment } from '@/lib/services/tasks';
 import { isManager } from '@/lib/constants/roles';
-import { validateChoreSubmission, generateChorePlan, type ChorePlanItem } from '@/lib/chores/ai';
+import { validateChoreSubmission, generateChorePlan, fallbackValidation, type ChorePlanItem } from '@/lib/chores/ai';
 import { computeReward, canAutoApprove, type ChoreReward, type Difficulty } from '@/lib/chores/logic';
 import { applyCompletionRewards, logChoreEvent } from '@/lib/chores/server';
 import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
-import { assertAIAccess } from '@/lib/server/ai-access';
+import { assertAIAccess, assertAIAllowance } from '@/lib/server/ai-access';
 import { familyDetailsBaseSchema } from '@/lib/validation';
 import type { Tables } from '@/lib/database.types';
 import { claimProof, releaseUnreferencedProof, type ProofClaims } from '@/lib/chores/proof-cleanup';
@@ -266,17 +266,28 @@ async function submitClaimedProof({ t, ctx, supabase, familyId, tz, assignment, 
   await logChoreEvent({ familyId, assignmentId, submissionId: submission.id, actorId: assignment.member_id, action: 'submit', note });
 
   // Run AI validation (degrades safely to parent review).
+  //
+  // The reviewer files an `ai_requests` row (lib/chores/ai.ts), so the Free
+  // plan's monthly AI allowance applies to it as to every other helper: each
+  // chore a child sent in, a 'none'-proof one included, used one of the
+  // family's ten, and the review itself was never refused. The child is not
+  // refused either. Past the allowance, or when it cannot be checked, the
+  // proof goes to a parent, as any review the model cannot give does, and no
+  // model is asked.
   let verdict: Awaited<ReturnType<typeof validateChoreSubmission>>;
   try {
-    verdict = await validateChoreSubmission(scopeFromUserContext(ctx, supabase), {
-      choreTitle: chore.title,
-      instructions: chore.instructions ?? chore.description,
-      proofKind: proofKind as 'none' | 'photo' | 'video' | 'before_after',
-      difficulty: chore.difficulty,
-      safetyLevel: chore.safety_level,
-      kidNote: note,
-      images,
-    });
+    const allowance = await assertAIAllowance(ctx, { db: supabase });
+    verdict = !allowance.ok
+      ? fallbackValidation(allowance.code === 'allowance_exceeded' ? 'this month\'s AI requests are used up' : 'the AI allowance could not be confirmed')
+      : await validateChoreSubmission(scopeFromUserContext(ctx, supabase), {
+        choreTitle: chore.title,
+        instructions: chore.instructions ?? chore.description,
+        proofKind: proofKind as 'none' | 'photo' | 'video' | 'before_after',
+        difficulty: chore.difficulty,
+        safetyLevel: chore.safety_level,
+        kidNote: note,
+        images,
+      });
   } catch {
     await cleanupSubmission(supabase, familyId, submission.id, mediaPaths, claims);
     return { ok: false, error: t('actions.couldNotReviewYourProof') };
@@ -319,8 +330,12 @@ async function submitClaimedProof({ t, ctx, supabase, familyId, tz, assignment, 
   }
   await logChoreEvent({ familyId, assignmentId, submissionId: submission.id, action: 'ai_validate', note: verdict.status });
 
-  // Auto-approve only when the parent set a threshold and nothing needs a human.
-  const autoOk = canAutoApprove({
+  // Auto-approve only when the parent set a threshold and nothing needs a human
+  // — and only on something the reviewer SAW. With no photo (a 'none' chore,
+  // or one whose images were not shown) the child's own note was the whole of
+  // the evidence, and a note can say anything, including the verdict it wants:
+  // that approval, its points and its owed cash, were the child's to write.
+  const autoOk = proofKind !== 'none' && images.length > 0 && canAutoApprove({
     autoApproveScore: chore.auto_approve_score, score: verdict.quality_score,
     needsParentReview: verdict.needs_parent_review, safetyFlags: verdict.safety_flags,
   });
@@ -632,6 +647,12 @@ export async function createChoreAction(formData: FormData): Promise<MissionActi
   const pricing = ['points', 'points_min', 'points_max', 'cash_cents', 'cash_min_cents', 'cash_max_cents'];
   const priced = pricing.some((field) => intVal(formData, field) != null);
   if (priced && !isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentCanSetAChoreReward') };
+  // Whether a reviewer's score alone may approve a chore — and so release its
+  // reward with no parent — is a parent's setting too. A child turning it on
+  // for their own chore chose their own approval.
+  if (intVal(formData, 'auto_approve_score') != null && !isManager(ctx.active.role)) {
+    return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
+  }
 
   const memberIds = formData.getAll('member_ids').map((v) => String(v)).filter(Boolean);
 

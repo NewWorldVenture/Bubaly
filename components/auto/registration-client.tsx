@@ -8,7 +8,7 @@ import {
   saveRegistrationAction, deleteRegistrationAction, saveInspectionAction, deleteInspectionAction,
 } from '@/app/(app)/dashboard/auto/actions';
 import { renewalStatus, vehicleLabel, INSPECTION_TYPES } from '@/lib/auto/renewals';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import type { Tables } from '@/lib/database.types';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -24,11 +24,15 @@ type Inspection = Tables<'vehicle_inspections'>;
 type Vehicle = Tables<'vehicles'>;
 
 export function RegistrationClient({
-  registrations, inspections, vehicles,
+  registrations, inspections, vehicles, ownOnly = false,
 }: {
   registrations: Registration[]; inspections: Inspection[]; vehicles: Vehicle[];
+  /** The viewer reads only the registrations they added (the held 0514). */
+  ownOnly?: boolean;
 }) {
   const { fmtDate } = useFormat();
+  // The family's day: `expires_on` is a DATE (lib/auto/renewals.ts).
+  const todayKey = useFamilyClock().todayKey();
   const tr = useTranslations();
   const [regOpen, setRegOpen] = useState(false);
   const [regEdit, setRegEdit] = useState<Registration | null>(null);
@@ -47,12 +51,13 @@ export function RegistrationClient({
           <h2 className="flex items-center gap-2 text-sm font-semibold"><FileText className="h-4 w-4 text-brand-text" /> {tr('registrationClient.registrations')}</h2>
           <Button onClick={() => { setRegEdit(null); setRegOpen(true); }}><Plus className="h-4 w-4" /> Add</Button>
         </div>
+        {ownOnly && <p className="text-xs text-muted">{tr('householdMoney.onlyWhatYouAdded')}</p>}
         {registrations.length === 0 ? (
           <EmptyState icon={FileText} title={tr('registrationClient.noRegistrations')} description={tr('registrationClient.trackEachVehicleSRegistration')} />
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {registrations.map((r) => {
-              const s = renewalStatus(r.expires_on);
+              const s = renewalStatus(r.expires_on, todayKey);
               return (
                 <Card key={r.id}>
                   <div className="flex items-start justify-between gap-2">
@@ -81,7 +86,7 @@ export function RegistrationClient({
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {inspections.map((i) => {
-              const s = renewalStatus(i.expires_on);
+              const s = renewalStatus(i.expires_on, todayKey);
               return (
                 <Card key={i.id}>
                   <div className="flex items-start justify-between gap-2">

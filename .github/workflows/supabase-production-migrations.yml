@@ -54,6 +54,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # A held db push can succeed without applying SQL. Refuse the generic
+      # apply path before credentials/linking or any later marketing backfill.
+      - name: Refuse generic production apply while migrations are held
+        if: github.event_name == 'workflow_dispatch' && inputs.apply == true
+        shell: bash
+        run: |
+          echo "::error::Automatic migrations are held by supabase/config.toml. Generic production apply is disabled; use only a separately reviewed forward release."
+          exit 1
+
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc

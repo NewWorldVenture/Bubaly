@@ -15,6 +15,9 @@
 import { runPagePath } from '@/lib/ai/chat-request';
 import { EMPTY_EVIDENCE, progressSummary, runReason, runSources, type CompletedEvidence, type CompletedSource } from '@/lib/home/today';
 import { displayRunState, LEGACY_RUN_STATUS_TO_STATE, type RunState } from './states';
+import { compareExactInstants } from '@/lib/calendar/exact-instant';
+import { normalizeRunHistoryCursor } from './history-cursor';
+export { runHistoryCursorFor } from './history-cursor';
 
 export const RUN_HISTORY_FILTERS = ['all', 'active', 'waiting', 'done', 'problems'] as const;
 export type RunHistoryFilter = (typeof RUN_HISTORY_FILTERS)[number];
@@ -104,11 +107,9 @@ export function parseRunHistoryFilter(raw: unknown): RunHistoryFilter {
   return typeof raw === 'string' && (RUN_HISTORY_FILTERS as readonly string[]).includes(raw) ? (raw as RunHistoryFilter) : 'all';
 }
 
-/** A `before` cursor is an ISO instant or nothing; anything else is dropped rather than handed to the query. */
+/** Validate a full tuple or legacy ISO bookmark before handing it to the query. */
 export function parseRunHistoryCursor(raw: unknown): string | null {
-  if (typeof raw !== 'string' || !raw.trim()) return null;
-  const ms = Date.parse(raw);
-  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+  return normalizeRunHistoryCursor(raw);
 }
 
 /** The columns the history reads off a run row. Mapped by name below, so the lease, result and metadata never cross to a component. */
@@ -156,9 +157,11 @@ export type RunHistoryItem = {
  */
 export function orderRunHistoryRows<T extends { id: string; created_at: string }>(runs: readonly T[]): T[] {
   return [...runs].sort((a, b) => {
-    const t = Date.parse(b.created_at) - Date.parse(a.created_at);
-    if (t !== 0 && Number.isFinite(t)) return t;
-    return a.id.localeCompare(b.id);
+    const t = compareExactInstants(b.created_at, a.created_at);
+    if (t !== 0) return t;
+    // Canonical UUID text has the same byte ordering as PostgreSQL's UUID
+    // type. Avoid a host-locale-dependent tie-break at a page boundary.
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });
 }
 

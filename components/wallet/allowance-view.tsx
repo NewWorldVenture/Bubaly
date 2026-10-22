@@ -24,6 +24,8 @@ import { useFamilyClock } from '@/components/i18n/use-format';
 export type AllowanceRow = {
   childWalletId: string; name: string; ruleId: string | null;
   amountCents: number; cadence: 'weekly' | 'biweekly' | 'monthly'; isActive: boolean; nextRunOn: string | null;
+  /** This child has more than one allowance rule, and each one pays. */
+  duplicate?: boolean;
 };
 
 export function AllowanceView({ rows, enabled, canManage }: { rows: AllowanceRow[]; enabled: boolean; canManage: boolean }) {
@@ -92,7 +94,7 @@ export function AllowanceView({ rows, enabled, canManage }: { rows: AllowanceRow
       ) : (
         <div className="space-y-2">
           {rows.map((r) => (
-            <div key={r.childWalletId} className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4">
+            <div key={r.ruleId ?? r.childWalletId} className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4">
               <Avatar name={r.name} size={36} className="rounded-full" />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold">{r.name}</p>
@@ -104,6 +106,7 @@ export function AllowanceView({ rows, enabled, canManage }: { rows: AllowanceRow
                 ) : (
                   <p className="text-xs text-muted">{t('allowanceView.noAllowanceSet')}</p>
                 )}
+                {r.duplicate && <p className="text-xs text-amber-700 dark:text-amber-300">{t('allowanceView.oneOfSeveralAllowances')}</p>}
               </div>
               {canManage && enabled && (
                 <div className="flex items-center gap-1">

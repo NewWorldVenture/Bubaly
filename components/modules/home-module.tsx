@@ -22,6 +22,7 @@ import { isManager } from '@/lib/constants/roles';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
 import { MANUAL_CATEGORY, WARRANTY_CATEGORY } from '@/lib/home/asset-detail';
 import { writeMaintenanceCompletion } from '@/lib/home/maintenance-rollover';
+import { assetDocumentFolder, removeHomeAsset } from '@/lib/home/remove-asset';
 import type { Tables } from '@/lib/database.types';
 import { preOpenWindow } from '@/lib/utils/open-url';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -185,14 +186,22 @@ export function HomeModule() {
 
   async function removeAsset(id: string) {
     if (!(await askConfirm({ title: tr('home.deleteAssetQ'), body: tr('confirm.cannotBeUndone') }))) return;
-    const supabase = createClient();
     // Family-scoped, and read back: 0336 makes this table manager-written, and
     // RLS FILTERS a delete rather than refusing it, so a refused one answered
     // `error: null` and the toast said the asset was gone while it stayed.
-    const { data: removed, error } = await supabase.from('home_assets').delete()
-      .eq('id', id).eq('family_id', familyId).select('id');
-    if (error) return toastError(describeDbError(error));
-    if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // The asset's manuals and warranty files go first: see lib/home/remove-asset.
+    const removed = await removeHomeAsset(createClient(), familyId, id);
+    if (!removed.ok) {
+      // A file sweep that failed ran after the asset was deleted, so the list
+      // on screen may be stale: show what is there now. A file it could not
+      // remove is kept in the Secure Vault, where a parent deletes it in Files.
+      refreshWarranty();
+      if ('keptInVault' in removed && removed.keptInVault) return toastError(tr('homeModule.assetRemovedFileKept'));
+      // The database kept the asset because a file is still attached (often
+      // one added meanwhile); deleting again removes it with its files.
+      if ('stillAttached' in removed && removed.stillAttached) return toastError(tr('homeModule.assetKeptFileAttached'));
+      return toastError('error' in removed ? removed.error : tr('errors.thatChangeWasNotSaved'));
+    }
     success(tr('homeModule.assetRemoved'));
     void refreshAssets();
   }
@@ -430,7 +439,9 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
     const supabase = createClient();
     const manual = docKind === MANUAL_CATEGORY;
     const { path, error: uploadError } = await uploadFamilyDocument(supabase, {
-      familyId, folder: `${manual ? 'manuals' : 'warranties'}/${asset.id}`, file,
+      // The folder removeHomeAsset sweeps after the asset is gone: a file
+      // attached while it is being deleted is still found there.
+      familyId, folder: assetDocumentFolder(manual ? 'manuals' : 'warranties', asset.id), file,
     });
     if (uploadError || !path) {
       setUploading(false);

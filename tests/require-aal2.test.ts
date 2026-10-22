@@ -21,7 +21,7 @@ vi.mock('next/navigation', () => ({
   },
 }));
 vi.mock('@/lib/supabase/server', () => ({
-  createServer: async () => ({ auth: { mfa: { getAuthenticatorAssuranceLevel: mocks.getAal } } }),
+  createServer: async () => ({ auth: { getSession: async () => ({ data: { session: { access_token: 'synthetic-assurance-token' } }, error: null }), mfa: { getAuthenticatorAssuranceLevel: mocks.getAal } } }),
 }));
 
 import { aal2Verdict, decideAal2, readAssurance, requireAal2 } from '@/lib/auth/require-aal2';
@@ -54,14 +54,66 @@ describe('decideAal2', () => {
 
 describe('readAssurance', () => {
   it('wraps the Supabase answer, a Supabase error, and a thrown error the same way', async () => {
-    const good = await readAssurance({ auth: { mfa: { getAuthenticatorAssuranceLevel: async () => ({ data: { currentLevel: 'aal1', nextLevel: 'aal2' }, error: null }) } } });
+    const good = await readAssurance({ auth: { getSession: async () => ({ data: { session: { access_token: 'synthetic-assurance-token' } }, error: null }), mfa: { getAuthenticatorAssuranceLevel: async () => ({ data: { currentLevel: 'aal1', nextLevel: 'aal2' }, error: null }) } } });
     expect(good).toEqual({ ok: true, assurance: { currentLevel: 'aal1', nextLevel: 'aal2' } });
 
-    const bad = await readAssurance({ auth: { mfa: { getAuthenticatorAssuranceLevel: async () => ({ data: null, error: { message: 'no session' } }) } } });
+    const bad = await readAssurance({ auth: { getSession: async () => ({ data: { session: { access_token: 'synthetic-assurance-token' } }, error: null }), mfa: { getAuthenticatorAssuranceLevel: async () => ({ data: null, error: { message: 'no session' } }) } } });
     expect(bad).toMatchObject({ ok: false, error: { message: 'no session' } });
 
-    const thrown = await readAssurance({ auth: { mfa: { getAuthenticatorAssuranceLevel: async () => { throw new Error('network'); } } } });
+    const thrown = await readAssurance({ auth: { getSession: async () => ({ data: { session: { access_token: 'synthetic-assurance-token' } }, error: null }), mfa: { getAuthenticatorAssuranceLevel: async () => { throw new Error('network'); } } } });
     expect(thrown).toMatchObject({ ok: false, error: new Error('network') });
+  });
+
+  it.each(['returned', 'thrown'] as const)('does not read factors after a %s session error, even with a usable token', async (kind) => {
+    const failure = new Error('session lookup unavailable');
+    const getAuthenticatorAssuranceLevel = vi.fn(async () => ({ data: { currentLevel: 'aal1', nextLevel: 'aal1' }, error: null }));
+    const read = await readAssurance({ auth: {
+      getSession: async () => {
+        if (kind === 'thrown') throw failure;
+        return { data: { session: { access_token: 'synthetic-assurance-token' } }, error: failure };
+      },
+      mfa: { getAuthenticatorAssuranceLevel },
+    } });
+    expect(read).toEqual({ ok: false, error: failure });
+    expect(getAuthenticatorAssuranceLevel).not.toHaveBeenCalled();
+  });
+
+  it('does not turn a blank session token into the SDK no-token fallback', async () => {
+    const getAuthenticatorAssuranceLevel = vi.fn(async () => ({ data: { currentLevel: 'aal1', nextLevel: 'aal1' }, error: null }));
+    const read = await readAssurance({ auth: {
+      getSession: async () => ({ data: { session: { access_token: '   ' } }, error: null }),
+      mfa: { getAuthenticatorAssuranceLevel },
+    } });
+    expect(read).toMatchObject({ ok: false, error: expect.any(Error) });
+    expect(getAuthenticatorAssuranceLevel).not.toHaveBeenCalled();
+  });
+
+  it('binds the assurance read to exactly the recovered token', async () => {
+    const getAuthenticatorAssuranceLevel = vi.fn(async () => ({ data: { currentLevel: 'aal1', nextLevel: 'aal2' }, error: null }));
+    const read = await readAssurance({ auth: {
+      getSession: async () => ({ data: { session: { access_token: 'exact-synthetic-token' } }, error: null }),
+      mfa: { getAuthenticatorAssuranceLevel },
+    } });
+    expect(read).toEqual({ ok: true, assurance: { currentLevel: 'aal1', nextLevel: 'aal2' } });
+    expect(getAuthenticatorAssuranceLevel).toHaveBeenCalledExactlyOnceWith('exact-synthetic-token');
+  });
+
+  it.each([null, 'unrecognized-level'])('rejects unusable next level %j instead of treating it as no enrolled factor', async (nextLevel) => {
+    const read = await readAssurance({ auth: {
+      getSession: async () => ({ data: { session: { access_token: 'synthetic-assurance-token' } }, error: null }),
+      mfa: { getAuthenticatorAssuranceLevel: async () => ({ data: { currentLevel: 'aal1', nextLevel }, error: null }) },
+    } });
+    expect(read).toMatchObject({ ok: false, error: expect.any(Error) });
+    expect(decideAal2({ role: 'parent', read, returnTo: '/dashboard/documents' })).toMatchObject({ action: 'step_up', reason: 'assurance_unreadable' });
+  });
+
+  it('prioritizes an assurance error over accompanying allow-shaped data', async () => {
+    const failure = new Error('Auth unavailable');
+    const read = await readAssurance({ auth: {
+      getSession: async () => ({ data: { session: { access_token: 'synthetic-assurance-token' } }, error: null }),
+      mfa: { getAuthenticatorAssuranceLevel: async () => ({ data: { currentLevel: 'aal1', nextLevel: 'aal1' }, error: failure }) },
+    } });
+    expect(read).toEqual({ ok: false, error: failure });
   });
 });
 
@@ -115,6 +167,7 @@ describe('the pages that hold money, documents and trust call the guard', () => 
     ['app/(app)/dashboard/bills/page.tsx', 'money', '/dashboard/bills'],
     ['app/(app)/dashboard/payments/page.tsx', 'money', '/dashboard/payments'],
     ['app/(app)/dashboard/autopay/page.tsx', 'money', '/dashboard/autopay'],
+    ['app/(app)/dashboard/due/page.tsx', 'money', '/dashboard/due'],
     ['app/(app)/dashboard/savings/page.tsx', 'money', '/dashboard/savings'],
     ['app/(app)/dashboard/subscriptions/page.tsx', 'money', '/dashboard/subscriptions'],
     ['app/(app)/dashboard/money-timeline/page.tsx', 'money', '/dashboard/money-timeline'],

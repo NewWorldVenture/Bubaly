@@ -279,6 +279,11 @@ function PantryItemModal({ item, familyId, userId, onClose, onSaved }: {
       notes: String(form.get('notes') ?? '').trim() || null,
     };
     setLoading(true);
+    // The count (with its unit — "2 kg" is one figure) goes only when this form
+    // changed it. The editor opened on a snapshot; sending that quantity back
+    // with a new best-by date undid a partner's +1 or a put-away that landed
+    // while the form was open.
+    const countChanged = !item || payload.quantity !== Number(item.quantity) || payload.unit !== (item.unit?.trim() || null);
     // `savePantryItem`, not `pantryAdjust`: the latter carries only quantity,
     // unit, location and expiry, so it would drop the category, threshold,
     // staple flag and notes this form sets.
@@ -287,8 +292,7 @@ function PantryItemModal({ item, familyId, userId, onClose, onSaved }: {
         name: payload.name,
         category: payload.category,
         location: payload.location,
-        quantity: payload.quantity,
-        unit: payload.unit,
+        ...(countChanged ? { quantity: payload.quantity, unit: payload.unit } : {}),
         lowThreshold: payload.low_threshold,
         expiresAt: payload.expires_at,
         isStaple: payload.is_staple,

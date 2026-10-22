@@ -13,6 +13,7 @@ import { getAIConfig } from '@/lib/ai/settings';
 import { MAX_FLYER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
+import { readReplyArray } from '@/lib/ai/reply-array';
 
 export const runtime = 'nodejs';
 
@@ -41,16 +42,18 @@ const textOrNull = (v: unknown): string | null => (typeof v === 'string' && v.tr
  * an object where `ProposedEvent` says string. A reply with no JSON array is no
  * events, as before.
  */
-function buildEvents(text: string, tz: string): ProposedEvent[] {
-  let raw: unknown = [];
-  try {
-    const match = text.match(/\[[\s\S]*\]/);
-    raw = JSON.parse(match?.[0] ?? '[]');
-  } catch {
-    raw = [];
-  }
-  if (!Array.isArray(raw)) return [];
-  return raw
+// Only a JSON array from the model is an answer. No content, prose, a
+// refusal, or a dense flyer's array cut off at the token limit used to become
+// `[]`, and the scan screen said "No events found on that flyer" about a flyer
+// nobody had managed to read. And only the reply's OWN array (readReplyArray,
+// the rule Fridge Chef reads by): the `[]` inside `{"error":[]}` is not "no
+// events", nor is an object wrapping a list the prompt never asked for. A list
+// in which no item is an event (`[{}]`) is unreadable too; a list with some
+// good events keeps those. `null` is that unreadable answer.
+function buildEvents(text: string, tz: string): ProposedEvent[] | null {
+  const raw = readReplyArray(text);
+  if (!raw) return null;
+  const events = raw
     .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object' && typeof (r as Record<string, unknown>).title === 'string' && typeof (r as Record<string, unknown>).date === 'string')
     .map((r) => {
       const date = r.date as string;
@@ -70,6 +73,7 @@ function buildEvents(text: string, tz: string): ProposedEvent[] {
         summary: fmtSummary(r.title as string, iso, allDay, location, tz),
       };
     });
+  return raw.length > 0 && events.length === 0 ? null : events;
 }
 
 /** The most events one confirm may create — the cap `/api/ai/import` uses. */
@@ -247,11 +251,14 @@ Rules:
         // value that throws when formatted) is a malformed answer, and building
         // the response after the row closed recorded it as completed and then
         // failed the caller with a 500.
+        let built: ProposedEvent[] | null;
         try {
-          return buildEvents(content ?? '[]', tz);
+          built = buildEvents(content ?? '', tz);
         } catch (buildErr) {
           throw new ProviderMalformedResponse(res.status, `unusable events: ${String(buildErr)}`);
         }
+        if (!built) throw new ProviderMalformedResponse(res.status, 'the reply held no event list');
+        return built;
       },
       );
     } catch (err) {

@@ -40,6 +40,15 @@ describe('in-memory PostgREST logical filters', () => {
       .or('and(done.eq.false,value.gte.3),and(done.eq.true,value.lt.3)').order('value', { ascending: false }).limit(1);
     expect(result.data).toEqual([{ id: 'c' }]);
   });
+  it('filters out a higher row before applying the shared ordered limit', async () => {
+    const db = seeded();
+    db.seed('items', [{ id: 'above-but-excluded', family_id: 'own', done: true, value: 4, label: 'four', optional: null }]);
+    const unfiltered = await db.from('items').select('id').eq('family_id', 'own').order('value', { ascending: false }).limit(1);
+    expect(unfiltered.data).toEqual([{ id: 'above-but-excluded' }]);
+    const filtered = await db.from('items').select('id').eq('family_id', 'own')
+      .or('and(done.eq.false,value.gte.3),and(done.eq.true,value.lt.3)').order('value', { ascending: false }).limit(1);
+    expect(filtered.data).toEqual([{ id: 'c' }]);
+  });
   it('supports nested conjunctions without admitting a partially matched branch', async () => {
     const result = await seeded().from('items').select('id').eq('family_id', 'own')
       .or('and(value.gte.1,and(done.eq.false,value.lt.3)),label.eq.two').order('value');

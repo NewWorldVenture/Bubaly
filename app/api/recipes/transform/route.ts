@@ -110,6 +110,10 @@ export async function POST(req: NextRequest) {
       category: recipe.category,
       cuisine: recipe.cuisine,
       photo_url: recipe.photo_url,
+      // The model was told "Servings: N" and wrote its amounts for N. Left
+      // out, the column's default of 4 applied, and every later scale of the
+      // variant — and every grocery add after one — was off by N/4.
+      servings: recipe.servings,
       ingredients: result.ingredients as unknown as Json,
       instructions: result.instructions as unknown as Json,
       notes: result.notes,

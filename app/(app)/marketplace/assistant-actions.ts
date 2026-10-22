@@ -85,9 +85,12 @@ export async function askMarketAssistantAction(
   // AI request, so it counts against the family's monthly allowance. Only the
   // model is metered: a family past its month still gets the grounded answer,
   // which reaches no provider, exactly as a family with no key configured does.
-  const allowance = await assertAIAllowance(ctx, { db: sb });
   try {
-    if (allowance.ok && await isAIConfigured()) {
+    // The model tier files an `ai_requests` row, so the Free plan's monthly AI
+    // allowance applies to it as to every other helper. Past the allowance (or
+    // when it cannot be checked) the shopper still gets the grounded answer
+    // below, which calls no model and counts toward nothing.
+    if (await isAIConfigured() && (await assertAIAllowance(ctx, { db: sb })).ok) {
       // Two ways this ends at `source: 'engine'` — the provider threw, or it
       // answered with nothing usable — and the shopper sees the same
       // deterministic reply either way, which is also what "no API key" looks

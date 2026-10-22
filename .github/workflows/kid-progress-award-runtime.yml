@@ -27,6 +27,7 @@ on:
       - 'supabase/reserved/0496_a_childs_xp_is_awarded_by_a_parent.sql'
       - 'docs/audit/reserved/a-childs-xp-is-awarded-by-a-parent-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
       - 'supabase/migrations/**'
   push:
     branches: [main]
@@ -35,6 +36,7 @@ on:
       - 'supabase/reserved/0496_a_childs_xp_is_awarded_by_a_parent.sql'
       - 'docs/audit/reserved/a-childs-xp-is-awarded-by-a-parent-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
       - 'supabase/migrations/**'
 
 permissions:
@@ -50,7 +52,7 @@ jobs:
       github.repository == 'NewWorldVenture/Bubaly' &&
       ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
        (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     # No service container, for the reason invite-rejoin-role-runtime.yml gives:
     # Docker Hub's unauthenticated pull limit refuses pgvector/pgvector:pg16

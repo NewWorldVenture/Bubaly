@@ -19,10 +19,23 @@ vi.mock('@/lib/server/plan', async (importOriginal) => ({
   // The same, unlocked family as the whole entitlement the AI gates read.
   resolveFamilyEntitlement: async () => ({ effectiveLevel: 1, locked: false, closed: false, inTrial: false, trialEndsAt: null }),
 }));
+// The account-standing gate (a closed or trial-ended family is refused) has its
+// own test, tests/the-free-ai-helpers-refuse-a-closed-or-trial-ended-family.test.ts.
+// The family here is open, so the gate is answered rather than seeded.
+vi.mock('@/lib/server/account-standing', () => ({ refuseClosedOrTrialEnded: async () => null }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.context }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.server }));
 vi.mock('@/lib/ai/provider', () => ({ resolveProvider: mocks.provider, isAIConfigured: async () => true }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.rate }));
+// Both routes are plan-gated now (F33); that gate has its own cases, so it admits here.
+vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: async () => null }));
+// The Free allowance (N18) has its own cases in
+// tests/the-free-plans-ai-allowance-holds-on-every-helper.test.ts; it admits here.
+vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
+  assertAIAccess: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+  assertAIAllowance: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+}));
 vi.mock('@/lib/services/scope', () => ({
   scopeFromUserContext: (ctx: { active: { familyId: string }; user: { id: string } }, db: unknown) => ({
     db, familyId: ctx.active.familyId, userId: ctx.user.id,

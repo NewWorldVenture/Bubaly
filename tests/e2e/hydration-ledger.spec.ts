@@ -13,7 +13,7 @@ const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/su
 const sources = Object.fromEntries([
   'components/modules/habits-module.tsx', 'lib/hooks/use-realtime-query.ts', 'lib/realtime/own-channel.ts', 'lib/ui/a11y.ts',
   'lib/offline/cache.ts', 'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',
-  'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/constants/roles.ts', 'lib/habits/streaks.ts', 'lib/habits/presets.ts', 'lib/members/age.ts',
+  'lib/supabase/errors.ts', 'lib/supabase/read-all.ts', 'lib/realtime/published-tables.ts', 'lib/constants/roles.ts', 'lib/habits/streaks.ts', 'lib/habits/presets.ts', 'lib/members/age.ts',
   'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
   // The family clock (TIME-003): the shared formatter and the zone helpers it reads.
   'components/i18n/use-format.ts', 'lib/time/local-day.ts', 'lib/time/wall-clock.ts', 'lib/utils/format.ts',
@@ -81,9 +81,19 @@ async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US'): Promise
   };
   const headers = { 'access-control-allow-origin': origin, 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET,POST,PATCH,DELETE,OPTIONS' };
   const matches = (row: Row, url: URL) => [...url.searchParams].every(([key, value]) =>
-    ['select', 'columns', 'order'].includes(key) || (value.startsWith('eq.') ? String(row[key]) === value.slice(3) : value === 'is.null' ? row[key] === null : value.startsWith('gte.') && String(row[key]) >= value.slice(4)));
-  const read = (route: Route, table: Table) => route.fulfill({ status: state.mode[table] === 'fail' ? 403 : 200, headers, contentType: 'application/json',
-    body: JSON.stringify(state.mode[table] === 'fail' ? { code: '42501', message: `Fixture ${table} read unavailable`, details: null, hint: null } : state.rows[table].filter(row => matches(row, new URL(route.request().url())))) });
+    ['select', 'columns', 'order', 'offset', 'limit'].includes(key) || (value.startsWith('eq.') ? String(row[key]) === value.slice(3) : value === 'is.null' ? row[key] === null : value.startsWith('gte.') && String(row[key]) >= value.slice(4)));
+  // `.range(from, to)` arrives as offset/limit, as PostgREST reads it: a paged
+  // read (readAll) stops only on a short page, so the window is applied here.
+  const rangeOf = (rows: Row[], url: URL) => {
+    const offset = Number(url.searchParams.get('offset') ?? 0);
+    const limit = url.searchParams.get('limit');
+    return limit === null ? rows.slice(offset) : rows.slice(offset, offset + Number(limit));
+  };
+  const read = (route: Route, table: Table) => {
+    const url = new URL(route.request().url());
+    return route.fulfill({ status: state.mode[table] === 'fail' ? 403 : 200, headers, contentType: 'application/json',
+      body: JSON.stringify(state.mode[table] === 'fail' ? { code: '42501', message: `Fixture ${table} read unavailable`, details: null, hint: null } : rangeOf(state.rows[table].filter(row => matches(row, url)), url)) });
+  };
   await page.route('**/*', async route => {
     const request = route.request(), url = new URL(request.url());
     if (url.origin === origin) { await route.fulfill({ contentType: 'text/html', body: '<!doctype html><main id="root"></main>' }); return; }
@@ -92,6 +102,13 @@ async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US'): Promise
     const table = url.pathname.split('/').at(-1) as Table;
     if (!(table in state.rows)) throw new Error(`Unexpected fixture table: ${table}`);
     if (request.method() === 'GET') {
+      // A later page of a paged read (offset > 0) belongs to the read already
+      // counted and released: it is answered at once from the same rows, so a
+      // read stays one counted, holdable event however many pages it takes.
+      if (Number(url.searchParams.get('offset') ?? 0) > 0) {
+        await route.fulfill({ status: 200, headers, contentType: 'application/json', body: JSON.stringify(rangeOf(state.rows[table].filter(row => matches(row, url)), url)) });
+        return;
+      }
       state.reads.push(table);
       if (state.mode[table] === 'hold') { const queue = held.get(table) ?? []; queue.push(() => read(route, table)); held.set(table, queue); }
       else await read(route, table);

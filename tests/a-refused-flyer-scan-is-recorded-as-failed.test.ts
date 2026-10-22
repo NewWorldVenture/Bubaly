@@ -115,13 +115,14 @@ describe('a flyer scan the provider refused is recorded as failed', () => {
     expect(finalStatus()).toBe('completed');
   });
 
-  it('a reply whose array holds no usable event returns none, completed', async () => {
+  // Main's reading rule (a-photo-the-model-could-not-read-is-not-an-empty-one):
+  // a list in which no item is an event is an unreadable answer, not "no events".
+  it('a reply whose array holds no usable event is unreadable: 502, and the row says failed', async () => {
     fetchWithDeadline.mockResolvedValue(reply([7, null, { title: 5, date: '2026-10-10' }]));
     const { POST } = await import('@/app/api/ai/flyer/route');
     const res = await POST(scan());
-    expect(res.status).toBe(200);
-    expect((await res.json() as { events: unknown[] }).events).toEqual([]);
-    expect(finalStatus()).toBe('completed');
+    expect(res.status).toBe(502);
+    expect(finalStatus()).toBe('failed');
   });
 
   it('control: a valid answer is recorded as completed', async () => {

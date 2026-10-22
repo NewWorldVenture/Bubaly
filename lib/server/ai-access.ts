@@ -121,30 +121,6 @@ export function resetMonthlyCountFallbackWarning(): void {
 }
 
 /**
- * What a locked entitlement gets: no AI at all. A trial that ended unpaid is
- * level 0 like Free, but it is not Free, and a closed account is closed. Every
- * gate in this file answers it the same way: the concierge's `assertAIAccess`
- * and the allowance the other AI routes check (`assertAIAllowance`,
- * `assertFamilyAIAllowance`), which used to read the plan level alone and so
- * gave a locked family the Free allowance on every route but the concierge.
- */
-function lockedRefusal(locked: 'trial_expired' | 'account_closed'): AIAccess {
-  return {
-    ok: false, status: 403, code: locked, needLevel: 1,
-    error: locked === 'account_closed'
-      ? 'This Bubaly account is closed. Reopen it to continue.'
-      : 'Your free trial has ended. Choose Family Basic or Family+ to keep using Bubaly.',
-  };
-}
-
-/** The family's level for an AI request, or its locked refusal. THROWS when the entitlement cannot be read. */
-async function entitledLevel(db: DB, familyId: string): Promise<{ level: number } | { refusal: AIAccess }> {
-  const entitlement = await resolveFamilyEntitlement(db, familyId);
-  const locked = lockedEntitlementCode(entitlement);
-  return locked ? { refusal: lockedRefusal(locked) } : { level: entitlement.effectiveLevel };
-}
-
-/**
  * May this caller file a concierge request right now?
  *
  * `db` is the caller's RLS-bound client. A protected count-only RPC includes
@@ -195,21 +171,9 @@ export async function assertAIAccess(
     return { ok: false, status: 404, code: 'feature_off', error: 'Not found.' };
   }
 
-  let planLevel: number;
-  try {
-    if (superAdmin) planLevel = 2;
-    else {
-      // A trial that ended unpaid is level 0 like Free, but it is not Free: it
-      // gets no allowance at all. The (app) layout's paywall is not in front of
-      // this route, nor of the mobile app's bearer requests.
-      const entitled = await entitledLevel(opts.db, familyId);
-      if ('refusal' in entitled) return entitled.refusal;
-      planLevel = entitled.level;
-    }
-  } catch (error) {
-    console.error('[ai-access] plan level read failed', error);
-    return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not confirm your plan right now. Try again in a moment.' };
-  }
+  const plan = await familyPlanLevel(opts.db, familyId, superAdmin);
+  if (!plan.ok) return plan;
+  const { planLevel } = plan;
   const need = tier === 'off' ? 0 : tierToLevel(tier);
   if (planLevel < need) {
     return {
@@ -218,22 +182,79 @@ export async function assertAIAccess(
     };
   }
 
-  return monthlyAllowance(ctx.active.familyId, opts, planLevel, superAdmin);
+  return meterMonthlyAllowance({ db: opts.db, familyId, planLevel, superAdmin, now: opts.now ?? new Date() });
 }
 
-async function monthlyAllowance(
-  familyId: string,
+/**
+ * The monthly allowance alone: has this family used the AI requests its plan
+ * includes this month?
+ *
+ * For the helpers that call a model from a page the family already has — the
+ * Habits coach, the Journal prompt, Notes AI, voice input, the meal planner,
+ * nutrition, every module's AI Assist, the recipe helpers, the reconnect and
+ * paperwork drafts, the marketplace assistant. Each answers to its OWN page's
+ * feature gate for whether it is available at all. `assertAIAccess` with the
+ * assistant's key also answered to the assistant's tier and its Off switch, so
+ * an admin who switched "AI Assistant" Off (or raised it to Family+) switched
+ * all of these off with it, behind pages that still offered them.
+ *
+ * What it checks is what the allowance is: a trial that ended unpaid or a
+ * closed account gets none (as in `assertAIAccess`), the plan's
+ * AI_MONTHLY_ALLOWANCE, and this month's count of `ai_requests` rows — the rows
+ * each of these helpers files through `withAiRequest`. A count that cannot be
+ * read is not an allowance, so it refuses. Whether these helpers should count
+ * toward Free's ten at all is the owner's call; today they are metered.
+ */
+export async function assertAIAllowance(
+  ctx: UserContext,
   opts: { db: DB; now?: Date },
-  planLevel: number,
-  superAdmin: boolean,
 ): Promise<AIAccess> {
+  const familyId = ctx.active.familyId;
+  const superAdmin = isSuperAdminEmail(ctx.user.email);
+  const plan = await familyPlanLevel(opts.db, familyId, superAdmin);
+  if (!plan.ok) return plan;
+  return meterMonthlyAllowance({ db: opts.db, familyId, planLevel: plan.planLevel, superAdmin, now: opts.now ?? new Date() });
+}
+
+/** The family's plan level, or the refusal for a lapsed trial, a closed account or a plan that cannot be read. */
+async function familyPlanLevel(
+  db: DB,
+  familyId: string,
+  superAdmin: boolean,
+): Promise<{ ok: true; planLevel: number } | AIAccessDenial> {
+  try {
+    if (superAdmin) return { ok: true, planLevel: 2 };
+    const entitlement = await resolveFamilyEntitlement(db, familyId);
+    // A trial that ended unpaid is level 0 like Free, but it is not Free: it
+    // gets no allowance at all. The (app) layout's paywall is not in front of
+    // this route, nor of the mobile app's bearer requests.
+    const locked = lockedEntitlementCode(entitlement);
+    if (locked) {
+      return {
+        ok: false, status: 403, code: locked, needLevel: 1,
+        error: locked === 'account_closed'
+          ? 'This Bubaly account is closed. Reopen it to continue.'
+          : 'Your free trial has ended. Choose Family Basic or Family+ to keep using Bubaly.',
+      };
+    }
+    return { ok: true, planLevel: entitlement.effectiveLevel };
+  } catch (error) {
+    console.error('[ai-access] plan level read failed', error);
+    return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not confirm your plan right now. Try again in a moment.' };
+  }
+}
+
+/** The plan level's monthly allowance against this month's count; a count that cannot be read refuses. */
+async function meterMonthlyAllowance(
+  opts: { db: DB; familyId: string; planLevel: number; superAdmin: boolean; now: Date },
+): Promise<AIAccess> {
+  const { familyId, planLevel, superAdmin, now } = opts;
   const level = (planLevel >= 2 ? 2 : planLevel >= 1 ? 1 : 0) as 0 | 1 | 2;
   const allowance = superAdmin ? null : AI_MONTHLY_ALLOWANCE[level];
   if (allowance === null) return { ok: true, planLevel, monthlyUsed: null, monthlyAllowance: null };
 
   let count: unknown;
   let countError: unknown;
-  const now = opts.now ?? new Date();
   try {
     const result = await opts.db.rpc('count_family_ai_requests_month', {
       p_family_id: familyId,
@@ -280,37 +301,6 @@ async function monthlyAllowance(
 }
 
 /**
- * The monthly AI allowance alone, for a route whose FEATURE is already decided
- * by `refuseUnlessEntitled` or is Free (F19).
- *
- * The allowance is the whole-product budget the plans sell — Free lists
- * "10 AI requests/month", Basic and Plus "Unlimited" — and the count is every
- * `ai_requests` row the family filed this month, which `withAiRequest` writes
- * for every one of these routes. But only the routes that called
- * `assertAIAccess` refused past it, so a Free family could call the meal
- * planner, the chef, the journal and twenty more without end, each a paid
- * model request. This is the same check without the concierge's tier gate
- * (`assertAIAccess` would refuse a Free family a Free feature), so it changes
- * nothing for a Basic or Plus family, whose allowance is unlimited.
- */
-export async function assertAIAllowance(ctx: UserContext, opts: { db: DB; now?: Date }): Promise<AIAccess> {
-  const superAdmin = isSuperAdminEmail(ctx.user.email);
-  let planLevel: number;
-  try {
-    if (superAdmin) planLevel = 2;
-    else {
-      const entitled = await entitledLevel(opts.db, ctx.active.familyId);
-      if ('refusal' in entitled) return entitled.refusal;
-      planLevel = entitled.level;
-    }
-  } catch (error) {
-    console.error('[ai-access] plan level read failed', error);
-    return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not confirm your plan right now. Try again in a moment.' };
-  }
-  return monthlyAllowance(ctx.active.familyId, opts, planLevel, superAdmin);
-}
-
-/**
  * For a route that has an answer without AI (a deterministic fallback): past
  * the allowance it should give that answer, not a refusal. Throw this inside
  * the try that already falls back when the model fails; the model is never
@@ -330,17 +320,10 @@ export async function withinAIAllowance(ctx: UserContext, db: DB): Promise<boole
  * public gift page, where a relative writes a message for a family's link.
  * `db` must be able to count that family's rows (the service client there).
  */
-export async function assertFamilyAIAllowance(db: DB, familyId: string): Promise<AIAccess> {
-  let planLevel: number;
-  try {
-    const entitled = await entitledLevel(db, familyId);
-    if ('refusal' in entitled) return entitled.refusal;
-    planLevel = entitled.level;
-  } catch (error) {
-    console.error('[ai-access] plan level read failed', error);
-    return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not confirm the plan right now. Try again in a moment.' };
-  }
-  return monthlyAllowance(familyId, { db }, planLevel, false);
+export async function assertFamilyAIAllowance(db: DB, familyId: string, now: Date = new Date()): Promise<AIAccess> {
+  const plan = await familyPlanLevel(db, familyId, false);
+  if (!plan.ok) return plan;
+  return meterMonthlyAllowance({ db, familyId, planLevel: plan.planLevel, superAdmin: false, now });
 }
 
 /**

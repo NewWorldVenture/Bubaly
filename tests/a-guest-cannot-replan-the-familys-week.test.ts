@@ -21,9 +21,17 @@ vi.mock('@/lib/ai/provider', () => ({
   describeAIError: () => ({ message: 'Generation unavailable' }),
 }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.limit }));
+// The Free plan's AI allowance (N18) has its own cases in
+// tests/the-free-plans-ai-allowance-holds-on-every-helper.test.ts, and F19's in
+// every-ai-route-counts-against-the-allowance; it admits here.
+vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
+  assertAIAccess: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+  assertAIAllowance: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+  refuseOverAIAllowance: async () => null,
+  withinAIAllowance: async () => true,
+}));
 vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: mocks.gate }));
-// The monthly allowance (F19) is its own suite (every-ai-route-counts-against-the-allowance); this one is the planner's role boundary.
-vi.mock('@/lib/server/ai-access', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/server/ai-access')>()), refuseOverAIAllowance: async () => null, withinAIAllowance: async () => true }));
 vi.mock('@/lib/ai/observability', () => ({
   withAiRequest: (_scope: unknown, _feature: unknown, run: (observer: { used: () => void }) => Promise<string>) => run({ used: vi.fn() }),
 }));

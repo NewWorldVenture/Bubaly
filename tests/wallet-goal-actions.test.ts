@@ -68,6 +68,9 @@ beforeEach(() => {
   harness.decision = { effect: 'allow', reason: 'Allowed.' };
   harness.revalidatePath.mockClear();
   harness.evaluateTrust.mockClear();
+  // A child's goal is read back against its wallet in the active family
+  // (tests/an-allowance-or-goal-is-for-a-child-in-this-family.test.ts).
+  db.seed('child_wallets', [{ id: 'wallet-1', family_id: FAMILY }, { id: 'wallet-9', family_id: 'family-2' }]);
   db.seed('wallet_goals', [
     { id: 'goal-1', family_id: FAMILY, child_wallet_id: 'wallet-1', title: 'New bike', kind: 'custom', target_cents: 20_000, saved_cents: 0 },
     { id: 'goal-elsewhere', family_id: 'family-2', child_wallet_id: 'wallet-9', title: 'Their goal', kind: 'custom', target_cents: 5_000, saved_cents: 0 },

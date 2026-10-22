@@ -20,6 +20,7 @@ import { drivingScore, scoreBand, SCORE_TINT, averageScore, fmtDateTime as fmtDa
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { fromLocalInput, toLocalInput } from '@/lib/time/local-input';
 import { useFamilyClock } from '@/components/i18n/use-format';
+import { historyInScope, readsEveryonesHistory } from '@/lib/location/history-scope';
 
 type Trip = Tables<'driving_trips'>;
 
@@ -28,19 +29,29 @@ export function DrivingSafetyView() {
   // The date and clock follow the reader.
   const locale = useLocale();
   const fmtDateTime = (iso: string) => fmtDateTimeIn(iso, locale.code);
-  const { familyId, userId, members, role } = useApp();
+  const { familyId, userId, members, role, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   // The trip log is what a parent reviews; a driver must not be able to erase
   // their own speeding or phone-use record (0365: managers edit and delete).
   const canDelete = isManager(role);
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
+  // The held 0516: a parent, an adult or a caregiver reads everyone's trips;
+  // anyone else their own, and the summary is of what they read. Narrowed
+  // before the limit, as the check-in page does, so a teen's own trips are not
+  // crowded out of the 200 newest and nobody else's reach their browser.
+  const seesEveryones = readsEveryonesHistory(role);
+  const selfId = selfMember?.id ?? null;
   const { data: rows, loading, error, refresh } = useRealtimeQuery<Trip>({
-    table: 'driving_trips', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('driving_trips').select('*').eq('family_id', familyId).order('started_at', { ascending: false }).limit(200),
+    table: 'driving_trips', familyId, deps: [familyId, role, selfId],
+    fetcher: (sb) => {
+      if (!seesEveryones && !selfId) return Promise.resolve({ data: [] as Trip[], error: null });
+      const query = sb.from('driving_trips').select('*').eq('family_id', familyId);
+      return (seesEveryones ? query : query.eq('member_id', selfId!)).order('started_at', { ascending: false }).limit(200);
+    },
   });
 
-  const trips = useMemo(() => rows ?? [], [rows]);
+  const trips = useMemo(() => historyInScope(rows ?? [], role, selfMember?.id), [rows, role, selfMember]);
   const avg = useMemo(() => averageScore(trips.map((t) => t.score)), [trips]);
   const totalMiles = useMemo(() => trips.reduce((s, t) => s + Number(t.distance_miles), 0), [trips]);
   const [form, setForm] = useState(false);
@@ -63,6 +74,7 @@ export function DrivingSafetyView() {
       <PageHeader title={tr('drivingSafety.drivingSafety')} description={tr('drivingSafetyView.trackTripsAndDrivingScores')}
         action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {tr('drivingSafety.logTrip')}</Button>} />
 
+      {!seesEveryones && <p className="text-xs text-muted">{tr('drivingSafetyView.onlyYourOwnTrips')}</p>}
       {/* Summary */}
       <div className="grid grid-cols-3 gap-3">
         <Stat label={tr('drivingSafety.avgScore')} value={avg != null ? String(avg) : '—'} tint={avg != null ? SCORE_TINT[scoreBand(avg)] : 'text-muted'} icon={Gauge} />

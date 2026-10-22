@@ -93,7 +93,7 @@ describe('a school or sports window reads its edges the same way', () => {
 
   it('the Santiago midnight-gap day runs from 01:00 (when it begins) to its end, not from 23:00 the day before', () => {
     expect(resolveWindow(scopeIn('America/Santiago'), { from: '2026-09-06', to: '2026-09-06' }))
-      .toEqual({ ok: true, data: { from: '2026-09-06T04:00:00.000Z', to: '2026-09-07T02:59:59.999Z' } });
+      .toEqual({ ok: true, data: { from: '2026-09-06T04:00:00.000Z', to: '2026-09-07T02:59:59.999Z', toExclusive: '2026-09-07T03:00:00.000Z' } });
   });
 
   it('the Los Angeles gap is the same instant a reminder and the calendar give it', () => {

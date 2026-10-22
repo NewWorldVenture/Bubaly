@@ -17,11 +17,12 @@ import 'server-only';
 import type { Priority, Tables } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
 import { DEFAULT_CADENCES, TRADES, TRADE_FOR_CATEGORY } from '@/lib/home/maintenance';
+import { alreadyOnOrAfter, onlyForward } from '@/lib/home/service-dates';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
 import { withIdempotency } from '../idempotency';
-import { dayKeyInTz, scopeNow } from '../scope';
+import { dayKeyInTz, familyInstantIso, scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
 
@@ -216,6 +217,8 @@ export async function saveContractor(scope: ServiceScope, input: SaveContractorI
       .update(patch)
       .eq('id', targetId)
       .eq('family_id', scope.familyId)
+      // A deleted contractor is not edited back into a hidden row: it is not found.
+      .is('deleted_at', null)
       .select('*')
       .maybeSingle();
     if (error) {
@@ -303,6 +306,24 @@ export type CreateServiceRecordInput = {
   nextDueOn?: string | null;
 };
 
+// The asset FK identifies a row globally; the caller must also be able to
+// select that saved asset in this family before a new linked write is attempted.
+async function checkLinkedAsset(scope: ServiceScope, assetId: string): Promise<ServiceResult<null>> {
+  try {
+    const { data, error } = await scope.db.from('home_assets').select('id')
+      .eq('id', assetId).eq('family_id', scope.familyId).maybeSingle();
+    if (error) {
+      console.error('[service:home] asset check failed', error);
+      return fail(describeDbError(error, 'Could not check that asset.'), { code: SERVICE_CODES.db });
+    }
+    if (!data) return fail('That asset could not be found.', { code: SERVICE_CODES.notFound });
+    return ok(null);
+  } catch (error) {
+    console.error('[service:home] asset check failed', error);
+    return fail('Could not check that asset.', { code: SERVICE_CODES.db });
+  }
+}
+
 /**
  * Log a service visit. Mirrors the module's own action, including the
  * best-effort refresh of the asset's `last_serviced_on` that the life/forecast
@@ -340,6 +361,26 @@ export async function createServiceRecord(scope: ServiceScope, input: CreateServ
       },
     },
     async () => {
+      // Only new writes need admission; an already saved idempotent result is
+      // still returned if its asset has subsequently disappeared.
+      if (input.assetId) {
+        const asset = await checkLinkedAsset(scope, input.assetId);
+        if (!asset.ok) return asset;
+      }
+      // The contractor must be one the family still has. The foreign key only
+      // proves the id exists somewhere: a deleted contractor would get a new
+      // visit on its hidden row, and another family's id would be stored here.
+      // Checked inside the create, so a retry of a visit already saved still
+      // answers with it.
+      if (input.contractorId) {
+        const { data: live, error: contractorReadError } = await scope.db.from('home_contractors').select('id')
+          .eq('id', input.contractorId).eq('family_id', scope.familyId).is('deleted_at', null).maybeSingle();
+        if (contractorReadError) {
+          console.error('[service:home] contractor check failed', contractorReadError);
+          return fail(describeDbError(contractorReadError, 'Could not check that contractor.'), { code: SERVICE_CODES.db });
+        }
+        if (!live) return fail('That contractor could not be found.', { code: SERVICE_CODES.notFound });
+      }
       const { data, error } = await scope.db
         .from('home_service_records')
         .insert({
@@ -363,21 +404,32 @@ export async function createServiceRecord(scope: ServiceScope, input: CreateServ
 
       // Both follow-up writes are best-effort: the record itself is saved, and
       // a stale "last used" date is a smaller wrong than losing the visit.
+      // Both move FORWARD only (lib/home/service-dates): a visit logged after
+      // the fact is history, and writing its date over a later one made every
+      // recommended task overdue and reordered the contractor list. Zero rows
+      // is then ordinary — the later date stays — and only a missing row or a
+      // date still older is logged.
       if (input.assetId) {
         // Confirmed for the LOG, as the dashboard's own copy of this write was
         // under C1-S9-60: an asset id matching nothing is the commonest way it
         // quietly does nothing. Never raised. Audit C1-S9-65.
         const { data: assetTouched, error: assetError } = await scope.db.from('home_assets')
-          .update({ last_serviced_on: serviceDate }).eq('id', input.assetId).eq('family_id', scope.familyId).select('id');
+          .update({ last_serviced_on: serviceDate }).eq('id', input.assetId).eq('family_id', scope.familyId)
+          .or(onlyForward('last_serviced_on', serviceDate)).select('id');
         if (assetError || wroteNoRows(assetTouched)) {
-          console.error('[service:home] home_assets last_serviced_on update failed', assetError ?? { assetId: input.assetId, error: 'no rows updated' });
+          if (assetError || !(await alreadyOnOrAfter(scope.db, 'home_assets', 'last_serviced_on', scope.familyId, input.assetId, serviceDate))) {
+            console.error('[service:home] home_assets last_serviced_on update failed', assetError ?? { assetId: input.assetId, error: 'no rows updated' });
+          }
         }
       }
       if (input.contractorId) {
         const { data: contractorTouched, error: contractorError } = await scope.db.from('home_contractors')
-          .update({ last_used_on: serviceDate, updated_by: scope.userId }).eq('id', input.contractorId).eq('family_id', scope.familyId).select('id');
+          .update({ last_used_on: serviceDate, updated_by: scope.userId }).eq('id', input.contractorId).eq('family_id', scope.familyId)
+          .is('deleted_at', null).or(onlyForward('last_used_on', serviceDate)).select('id');
         if (contractorError || wroteNoRows(contractorTouched)) {
-          console.error('[service:home] home_contractors last_used_on update failed', contractorError ?? { contractorId: input.contractorId, error: 'no rows updated' });
+          if (contractorError || !(await alreadyOnOrAfter(scope.db, 'home_contractors', 'last_used_on', scope.familyId, input.contractorId, serviceDate))) {
+            console.error('[service:home] home_contractors last_used_on update failed', contractorError ?? { contractorId: input.contractorId, error: 'no rows updated' });
+          }
         }
       }
 
@@ -404,9 +456,10 @@ export async function createMaintenanceTask(scope: ServiceScope, input: CreateMa
   if (!title) return fail('A maintenance task needs a title.', { code: SERVICE_CODES.invalidInput });
   let dueAt: string | null = null;
   if (input.dueAt) {
-    const ms = Date.parse(input.dueAt);
-    if (!Number.isFinite(ms)) return fail('That due date could not be understood.', { code: SERVICE_CODES.invalidInput });
-    dueAt = new Date(ms).toISOString();
+    // On the FAMILY's clock: `Date.parse` read "Friday 17:00" as 17:00Z (10am in
+    // Los Angeles) and a bare date as UTC midnight, the evening before.
+    dueAt = familyInstantIso(input.dueAt, scope.tz);
+    if (!dueAt) return fail('That due date could not be understood.', { code: SERVICE_CODES.invalidInput });
   }
   if (input.priority && !PRIORITIES.includes(input.priority)) return fail('Priority is low, medium or high.', { code: SERVICE_CODES.invalidInput });
   if (input.intervalDays != null && (!Number.isInteger(input.intervalDays) || input.intervalDays <= 0)) {
@@ -438,6 +491,10 @@ export async function createMaintenanceTask(scope: ServiceScope, input: CreateMa
       },
     },
     async () => {
+      if (input.assetId) {
+        const asset = await checkLinkedAsset(scope, input.assetId);
+        if (!asset.ok) return asset;
+      }
       const { data, error } = await scope.db
         .from('maintenance_tasks')
         .insert({
@@ -482,9 +539,10 @@ export async function listOpenMaintenance(
     .order('due_at', { ascending: true, nullsFirst: false })
     .limit(Math.min(Math.max(input.limit ?? 100, 1), 500));
   if (input.dueBefore) {
-    const ms = Date.parse(input.dueBefore);
-    if (!Number.isFinite(ms)) return fail('That date could not be understood.', { code: SERVICE_CODES.invalidInput });
-    query = query.lte('due_at', new Date(ms).toISOString());
+    // The family's day boundary, not UTC midnight (see createMaintenanceTask).
+    const dueBefore = familyInstantIso(input.dueBefore, scope.tz);
+    if (!dueBefore) return fail('That date could not be understood.', { code: SERVICE_CODES.invalidInput });
+    query = query.lte('due_at', dueBefore);
   }
   if (input.assetId) query = query.eq('asset_id', input.assetId);
   const { data, error } = await query;

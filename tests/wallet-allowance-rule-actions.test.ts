@@ -78,6 +78,12 @@ beforeEach(() => {
     { id: 'family-2', trial_ends_at: null, closed_at: null },
   ]);
   db.seed('subscriptions', [{ family_id: FAMILY, plan: 'basic', status: 'active' }]);
+  // A new rule is read back against its wallet in the active family
+  // (tests/an-allowance-or-goal-is-for-a-child-in-this-family.test.ts).
+  db.seed('child_wallets', [
+    { id: 'wallet-a', family_id: FAMILY }, { id: 'wallet-b', family_id: FAMILY },
+    { id: 'wallet-c', family_id: FAMILY }, { id: 'wallet-x', family_id: 'family-2' },
+  ]);
   db.seed('allowance_rules', [
     { id: 'rule-1', family_id: FAMILY, child_wallet_id: 'wallet-a', amount_cents: 1_000, cadence: 'weekly', split: SPLIT, is_active: true, next_run_on: '2026-09-30', last_run_on: '2026-09-23', created_by: 'user-other' },
     { id: 'rule-paused', family_id: FAMILY, child_wallet_id: 'wallet-b', amount_cents: 500, cadence: 'monthly', split: null, is_active: false, next_run_on: '2026-08-15', last_run_on: '2026-07-15', created_by: 'user-other' },

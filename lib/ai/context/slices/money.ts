@@ -76,7 +76,9 @@ export const moneySlice: SliceDefinition = {
     const cur = data.currency;
     const lines: string[] = [];
     if (data.budgets.length) {
-      lines.push(`- Budgets this month: ${money(data.totals.spent, cur)} of ${money(data.totals.limit, cur)} spent${data.totals.overCount ? `, ${data.totals.overCount} over` : ''}`);
+      // The totals are the month's: weekly and yearly limits counted as their
+      // monthly share (budgetVsActual). Each line below carries its own period.
+      lines.push(`- Budgets this month (weekly and yearly limits as their monthly share): ${money(data.totals.spent, cur)} of ${money(data.totals.limit, cur)} spent${data.totals.overCount ? `, ${data.totals.overCount} over` : ''}`);
       for (const b of data.budgets) {
         lines.push(`- ${sanitizeUntrusted(b.category, 30)} (${b.period}): ${money(b.spent, cur)} of ${money(b.limit, cur)}, ${b.pct}%${b.over ? ' OVER' : ''}`);
       }

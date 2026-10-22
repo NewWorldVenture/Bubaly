@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { refuseGuest } from '@/lib/auth/guest-scope';
 import { createServer } from '@/lib/supabase/server';
 import { describeReadError, settleAll } from '@/lib/supabase/settle';
 import { PartialReadBanner } from '@/components/ui/partial-read-banner';
@@ -17,7 +18,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function GuardianPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  const ctx = await requireUserContext(); refuseGuest(ctx, '/guardian');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 

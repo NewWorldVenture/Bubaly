@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
@@ -7,7 +6,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { AiRequestDuplicate, AiRequestNotFiled, withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, describeAIError, isAIConfigured, type AIMessage } from '@/lib/ai/provider';
-import { finalizeAssistantContent, summarizeToolResult } from '@/lib/ai/assistant-engine';
+import { ASSISTANT_STOPPED, finalizeAssistantContent, stoppedAssistantContent, summarizeToolResult } from '@/lib/ai/assistant-engine';
 import { chronologicalMessages } from '@/lib/ai/conversation-session';
 import { toStructuredContent } from '@/lib/ai/result-cards';
 import { buildAssistantTools } from '@/lib/assistant/tools';
@@ -15,6 +14,8 @@ import { wrapToolsWithTrust } from '@/lib/assistant/trust-wrapper';
 import type { Database } from '@/lib/database.types';
 import { rateLimitDb } from '@/lib/server/rate-limit-db';
 import { rateLimit } from '@/lib/server/rate-limit';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
+import { AI_ASSISTANT_FEATURE_KEY, accessDeniedResponse, assertAIAccess } from '@/lib/server/ai-access';
 import { parseAIChatRequest, parseAssistantTurnKey } from '@/lib/ai/chat-request';
 import { assistantTurnRequestKey, findPriorTurn } from '@/lib/ai/assistant-turn-replay';
 import { answerPriorTurn } from '@/lib/ai/assistant-turn-answer';
@@ -33,6 +34,15 @@ export async function POST(req: NextRequest) {
     const familyId = ctx.active.familyId;
     const tz = ctx.active.family.timezone || 'America/New_York';
     const supabase = await createServer();
+
+    // The same assistant as /api/ai, so the same two gates: the feature for the
+    // family's plan before the rate limiter, and the plan's monthly allowance
+    // (with a closed or trial-ended family refused) after a retried send has
+    // been answered from its saved turn (F19), before the model runs.
+    // This route asked neither, so it answered every signed-in member of every
+    // family, past the Free plan's ten turns and past a closed account.
+    const refused = await refuseUnlessEntitled(supabase, familyId, ['/dashboard/assistant']);
+    if (refused) return refused;
 
     // Agentic chat can execute family tools, so bound both request volume and
     // input size before reading family context or invoking the model.
@@ -74,6 +84,13 @@ export async function POST(req: NextRequest) {
       const prior = await findPriorTurn(supabase, { familyId, userId: ctx.user.id, conversationId, message }, turnKey.key);
       if (prior.kind !== 'none') return answerPriorTurn(prior, { conversationId, json: false, tr: t });
     }
+
+    // The assistant's tier and switch and the monthly AI allowance the plans
+    // sell (F19), checked before the model and before the stream opens: a
+    // `return` inside the stream's start() would not reach the caller. A
+    // retried send was answered above and is never refused here.
+    const access = await assertAIAccess(ctx, { db: supabase, featureKey: AI_ASSISTANT_FEATURE_KEY });
+    if (!access.ok) return accessDeniedResponse(access, t);
 
     if (!(await isAIConfigured())) {
       return NextResponse.json({ error: t('chat.theAiEngineIsnT') }, { status: 503 });
@@ -172,10 +189,6 @@ export async function POST(req: NextRequest) {
 
     // Stream the run as Server-Sent Events: `action` chips as tools fire,
     // `delta` chunks as the reply streams, then a final `done` (after persisting).
-    // F19: the monthly AI allowance the plans sell, checked before the stream
-    // opens — a `return` inside the stream's start() would not reach the caller.
-    const overAllowance = await refuseOverAIAllowance(ctx, supabase);
-    if (overAllowance) return overAllowance;
 
     const encoder = new TextEncoder();
     let connected = true;
@@ -185,13 +198,18 @@ export async function POST(req: NextRequest) {
     // written anyway (audit hold on #834, 2026-10-04). What ran before the stop
     // stands and is persisted below, so the conversation records it.
     const stopped = new AbortController();
+    // Request cancellation can precede response-reader cancellation, including
+    // while the route is preparing its context. Check after subscribing too.
+    const stopRequest = () => stopped.abort();
+    req.signal.addEventListener('abort', stopRequest, { once: true });
+    if (req.signal.aborted) stopRequest();
     const stream = new ReadableStream({
       cancel() { connected = false; stopped.abort(); },
       async start(controller) {
         const send = (e: unknown) => {
           if (!connected) return;
           try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(e)}\n\n`)); }
-          catch { connected = false; }
+          catch { connected = false; stopped.abort(); }
         };
         // §33: the chat assistant is the other surface the row names by name.
         // It catches its own stream errors and falls back, so nothing ever
@@ -220,10 +238,9 @@ export async function POST(req: NextRequest) {
           }
         } catch (streamErr) {
           console.error('AI stream error:', streamErr);
-          // Recorded now, before the fallback: what broke FIRST is the diagnosis,
-          // and `partial` distinguishes "the stream died having said nothing"
-          // from "the family got half an answer".
-          obs.failed(streamErr, { partial: Boolean(content) || actions.length > 0 });
+          // Preserve the first stream error for ordinary failures, but defer
+          // observation until a fallback settles: it may commit a tool before
+          // cancellation, which must be recorded as a stopped partial turn.
           // Resilience: if streaming failed before producing any text (e.g. a proxy
           // buffered/blocked the SSE response), fall back to a single non-streaming
           // run so the assistant still works. Only surface an error if that fails too.
@@ -232,17 +249,22 @@ export async function POST(req: NextRequest) {
           if (!content && actions.length === 0 && !stopped.signal.aborted) {
             try {
               const result = await provider.runTools({ system, messages, tools, maxTokens: 1500, signal: stopped.signal });
-              for (const a of result.actions) if (!actions.some((x) => x.name === a.name && JSON.stringify(x.args) === JSON.stringify(a.args))) pushAction(a.name, a.args, a.result);
+              // No actions existed before this fallback. Each returned entry
+              // is one execution, even when two calls had identical arguments.
+              for (const a of result.actions) pushAction(a.name, a.args, a.result);
               if (result.text) { content = result.text; send({ type: 'delta', text: result.text }); }
+              if (!stopped.signal.aborted) obs.failed(streamErr, { partial: false });
             } catch (fallbackErr) {
               console.error('AI fallback error:', fallbackErr);
+              obs.failed(streamErr, { partial: false });
               obs.failed(fallbackErr);
               send({ type: 'error', error: describeAIError(fallbackErr).message });
               if (connected) controller.close();
               return;
             }
-          } else {
+          } else if (!stopped.signal.aborted) {
             // We already streamed a partial answer; report the interruption but keep what we have.
+            obs.failed(streamErr, { partial: Boolean(content) });
             responseError = describeAIError(streamErr).message;
             send({ type: 'error', error: responseError });
           }
@@ -250,7 +272,11 @@ export async function POST(req: NextRequest) {
 
         // The same rule as the live surface, from the same function: a turn
         // whose actions were all refused must not sign off with "Done".
-        const assistantContent = finalizeAssistantContent(content, actions);
+        if (stopped.signal.aborted) {
+          responseError = ASSISTANT_STOPPED;
+          obs.failed(new Error(ASSISTANT_STOPPED), { partial: actions.length > 0 || Boolean(content) });
+        }
+        const assistantContent = stopped.signal.aborted ? stoppedAssistantContent(content) : finalizeAssistantContent(content, actions);
 
         // Persist both turns + the structured actions, then finish the conversation.
         let persistenceError: unknown = null;
@@ -308,7 +334,7 @@ export async function POST(req: NextRequest) {
         send({ type: 'done', content: assistantContent, persisted: !persistenceError, requestId: obs.requestId });
         if (connected) controller.close();
           },
-        );
+        ).finally(() => req.signal.removeEventListener('abort', stopRequest));
         } catch (err) {
           // Another attempt with this send's key filed the turn first; this
           // one ran nothing and counts nothing.

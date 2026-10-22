@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { summarizeHealth, buildHealthReport, checkRequiredEnv } from '../lib/health/status';
-import { probeServiceRole, probeDatabase } from '../lib/health/probe';
+import { probeServiceRole, probeDatabase, probeAuth } from '../lib/health/probe';
 
 const OK = { ok: true, latencyMs: 5 };
 const ENV_OK = { ok: true, missing: [] };
@@ -87,4 +87,51 @@ describe('the gap this closes', () => {
     // Only the probe can tell the difference.
     expect(summarizeHealth(ENV_OK, OK, OK, { ok: false, latencyMs: 8 })).toBe('degraded');
   });
+});
+
+describe('health probe API-key header compatibility', () => {
+  const probes = [
+    ['database', probeDatabase, '/rest/v1/'],
+    ['auth', probeAuth, '/auth/v1/health'],
+    ['service-role', probeServiceRole, '/rest/v1/'],
+  ] as const;
+
+  for (const [label, runProbe, endpoint] of probes) {
+    it.each(['sb_secret_synthetic_health_key', 'sb_publishable_synthetic_health_key'])(
+      `${label} sends opaque key %s only in apikey`, async apiKey => {
+        const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(new Response('{}', { status: 200 }));
+        vi.stubGlobal('fetch', fetchSpy);
+        const result = await runProbe('https://x.supabase.co/', apiKey);
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        const [resource, options] = fetchSpy.mock.calls[0];
+        expect(resource).toBe(`https://x.supabase.co${endpoint}`);
+        expect(options?.method).toBe('GET');
+        expect(options?.cache).toBe('no-store');
+        expect(options?.signal).toBeInstanceOf(AbortSignal);
+        expect(options?.headers).toEqual({ apikey: apiKey });
+        expect(result.ok).toBe(true);
+        expect(JSON.stringify(result)).not.toContain(apiKey);
+      },
+    );
+
+    it.each([
+      'eyJhbGciOiJIUzI1NiJ9.synthetic-claims.synthetic-signature',
+      'generic-synthetic-health-key',
+      'SB_SECRET_uppercase_is_not_the_opaque_prefix',
+      'prefix-sb_publishable_is_not_the_opaque_prefix',
+    ])(`${label} retains dual headers for legacy or unrecognized key %s`, async apiKey => {
+      const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(new Response('{}', { status: 200 }));
+      vi.stubGlobal('fetch', fetchSpy);
+      const result = await runProbe('https://x.supabase.co/', apiKey);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [resource, options] = fetchSpy.mock.calls[0];
+      expect(resource).toBe(`https://x.supabase.co${endpoint}`);
+      expect(options?.method).toBe('GET');
+      expect(options?.cache).toBe('no-store');
+      expect(options?.signal).toBeInstanceOf(AbortSignal);
+      expect(options?.headers).toEqual({ apikey: apiKey, Authorization: `Bearer ${apiKey}` });
+      expect(result.ok).toBe(true);
+      expect(JSON.stringify(result)).not.toContain(apiKey);
+    });
+  }
 });

@@ -12,6 +12,7 @@ import { summarizeMember, type BehaviorLogLike } from '@/lib/behavior/insights';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { describeReadError } from '@/lib/supabase/settle';
+import { readsEveryNote } from '@/lib/care/note-scope';
 
 export const runtime = 'nodejs';
 
@@ -27,6 +28,15 @@ const CANNED_INSIGHT = 'Keep logging — patterns will sharpen over time.';
 export async function POST(req: NextRequest) {
   const t = await getTranslations();
   const ctx = await requireUserContext();
+  // Who reads the household's behaviour notes is the Behavior page's rule (the
+  // held 0510, lib/care/note-scope.ts): a parent, an adult or a caregiver. The
+  // page never offers anyone else this coaching, and a guest is sent away from
+  // it altogether, but the endpoint checked nothing — so a guest, a teen or a
+  // child could POST a sibling's member id and be coached from every note
+  // written about them, or, with no AI key, read their counts and categories.
+  if (!readsEveryNote(ctx.active.role)) {
+    return NextResponse.json({ error: t('behaviorModule.keptForParentsAndCaregivers') }, { status: 403 });
+  }
   const supabase = await createServer();
   // The page in front of this is feature-gated; this endpoint was not.
   // Same resolver, so the two cannot disagree.

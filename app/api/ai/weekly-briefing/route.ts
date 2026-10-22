@@ -7,13 +7,33 @@ import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
-import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
-import { resolveFamilyPlanLevel } from '@/lib/server/plan';
+import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
+import { requireUserContext } from '@/lib/supabase/auth';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { weekWindow, weekRangeLabel, choreCompletionRate, bucketByDay, dayLoad } from '@/lib/ai/weekly';
 import { dayKeyInZone } from '@/lib/schedule/zoned';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
+import { openGroceryListIds } from '@/lib/services/groceries';
+
+/**
+ * The model's reply as a briefing, or null when it is not one: no text, no
+ * JSON object in it (a fenced object is fine), JSON that does not parse, or an
+ * object with neither a headline nor any day of the week.
+ */
+function usableWeeklyBriefing(text: unknown): Record<string, unknown> | null {
+  if (typeof text !== 'string' || !text.trim()) return null;
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return null;
+  let parsed: unknown;
+  try { parsed = JSON.parse(jsonMatch[0]); } catch { return null; }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const reply = parsed as Record<string, unknown>;
+  const headline = typeof reply.headline === 'string' && reply.headline.trim().length > 0;
+  const days = Array.isArray(reply.dayByDay) && reply.dayByDay.length > 0;
+  return headline || days ? reply : null;
+}
 
 /**
  * Plus-tier Weekly AI Briefing. Distinct from the daily briefing: it reads a
@@ -27,10 +47,17 @@ export async function POST(req: NextRequest) {
     const { familyId } = ctx.active;
     const supabase = await createServer();
 
-    // Plus-only — guard here too (the page already gates, but the endpoint is
-    // independently reachable). Return 402 so the client can prompt an upgrade.
-    if ((await effectivePlanLevel(await resolveFamilyPlanLevel(supabase, familyId))) < 2) {
-      return NextResponse.json({ error: t('weeklyBriefing.weeklyAiBriefingIsA') }, { status: 402 });
+    // The page's own gate, here too (the endpoint is independently reachable):
+    // the admin-overridable tier the page resolves, its Off switch and a
+    // lapsed trial included. A bare "plan level below 2" check let a Family+
+    // POST past a feature switched Off, and refused every call a lowered
+    // tier's page offered. A plan below the tier stays a 402, so the client
+    // can prompt an upgrade.
+    const refused = await refuseUnlessEntitled(supabase, familyId, ['/dashboard/weekly-briefing']);
+    if (refused) {
+      const body = await refused.clone().json().catch(() => null) as { code?: string } | null;
+      if (body?.code === 'plan_required') return NextResponse.json({ error: t('weeklyBriefing.weeklyAiBriefingIsA') }, { status: 402 });
+      return refused;
     }
     // With no key the provider threw "not configured" and the catch below
     // answered a generic 500; the other AI routes say so with a 503 first.
@@ -52,17 +79,17 @@ export async function POST(req: NextRequest) {
     const w = weekWindow(now, tz);
 
     const [
-      { data: members },
-      { data: aheadEvents },
-      { data: schoolEvents },
-      { data: sportsEvents },
-      { data: appointments },
-      { data: choresDueAhead },
-      { data: mealPlans },
-      { data: groceryItems },
-      { data: reminders },
-      { data: recapChores },
-      { data: recapEvents },
+      { data: members, error: membersError },
+      { data: aheadEvents, error: aheadEventsError },
+      { data: schoolEvents, error: schoolError },
+      { data: sportsEvents, error: sportsError },
+      { data: appointments, error: appointmentsError },
+      { data: choresDueAhead, error: choresAheadError },
+      { data: mealPlans, error: mealPlansError },
+      groceryResult,
+      { data: reminders, error: remindersError },
+      { data: recapChores, error: recapChoresError },
+      { data: recapEvents, error: recapEventsError },
     ] = await settleAll([
       supabase.from('family_members').select('id, display_name, role').eq('family_id', familyId).eq('is_active', true),
       // Series included, so the week grid shows every week of a weekly event (lib/calendar/occurrences.ts).
@@ -72,11 +99,51 @@ export async function POST(req: NextRequest) {
       supabase.from('appointments').select('title, starts_at, provider, location, member_id').eq('family_id', familyId).gte('starts_at', w.aheadStart).lte('starts_at', w.aheadEnd).order('starts_at').limit(15),
       supabase.from('chore_assignments').select('status, due_at, member_id').eq('family_id', familyId).gte('due_at', w.aheadStart).lte('due_at', w.aheadEnd),
       supabase.from('meal_plans').select('plan_date, meal_type, meals(name)').eq('family_id', familyId).gte('plan_date', w.days[0]).lte('plan_date', w.days[w.days.length - 1]).order('plan_date').limit(21),
-      supabase.from('grocery_items').select('name, category').eq('family_id', familyId).eq('is_checked', false).limit(20),
-      supabase.from('reminders').select('title, notes, remind_at').eq('family_id', familyId).eq('is_done', false).lte('remind_at', w.aheadEnd).order('remind_at').limit(12),
+      // Only items on a list the family has not archived (openGroceryListIds).
+      (async () => {
+        const lists = await openGroceryListIds(supabase, familyId);
+        if (!lists.ok) return { data: null, error: lists.error };
+        return supabase.from('grocery_items').select('name, category').eq('family_id', familyId).in('list_id', lists.ids).eq('is_checked', false).limit(20);
+      })(),
+      // Only the reminders this reader may be told (lib/autopilot/reminder-cards.ts):
+      // one an Autopilot card made follows the card — "Renew Passport" is not a
+      // guest's, a policy's renewal is the managers' and its member's.
+      readVisibleReminders((from, to) => supabase.from('reminders').select('id, title, notes, remind_at, related_type, related_id')
+        .eq('family_id', familyId).eq('is_done', false).lte('remind_at', w.aheadEnd).order('remind_at').order('id').range(from, to),
+      { limit: 12, viewer: { role: ctx.active.role, memberId: ctx.active.member?.id ?? null }, cards: reminderCardsReader(supabase, familyId, {
+        onError: (error) => console.error('[weekly-briefing] autopilot reminder cards read failed', error),
+      }) }),
       supabase.from('chore_assignments').select('status, due_at, member_id').eq('family_id', familyId).gte('due_at', w.recapStart).lte('due_at', w.recapEnd),
       readCalendarOccurrences(supabase, familyId, instantCalendarBounds(w.recapStart, w.recapEnd, tz), tz, { columns: ['title', 'starts_at', 'category'], limit: 40 }),
     ]);
+
+    // A grocery list that could not be read is unavailable, not "- none" still
+    // needed. A returned error and a rejected read (settled above) both arrive
+    // here, before any model is asked.
+    if (groceryResult.error) {
+      console.error('[api/ai/weekly-briefing] grocery read failed', groceryResult.error);
+      return NextResponse.json({ error: t('weeklyBriefing.failedToGenerateWeeklyBriefing') }, { status: 503 });
+    }
+    // The same for the chores: a failed read was "0% completion of 0
+    // assignments", which the prompt then ordered the recap to repeat.
+    if (choresAheadError || recapChoresError) {
+      console.error('[api/ai/weekly-briefing] chore read failed', choresAheadError ?? recapChoresError);
+      return NextResponse.json({ error: t('weeklyBriefing.failedToGenerateWeeklyBriefing') }, { status: 503 });
+    }
+    // And every other read the brief is built from. A calendar, school,
+    // sports, appointments, meals, reminders or members read that failed
+    // reached the prompt as "nothing scheduled" and "- none", and the model
+    // wrote a light, low-stress week at 200 that the page then kept for the
+    // day. A week Bubaly could not read is unavailable, never an empty one.
+    const failedRead = [
+      ['members', membersError], ['calendar ahead', aheadEventsError], ['school', schoolError], ['sports', sportsError],
+      ['appointments', appointmentsError], ['meals', mealPlansError], ['reminders', remindersError], ['calendar recap', recapEventsError],
+    ].find(([, error]) => error);
+    if (failedRead) {
+      console.error(`[api/ai/weekly-briefing] ${failedRead[0]} read failed`, failedRead[1]);
+      return NextResponse.json({ error: t('weeklyBriefing.failedToGenerateWeeklyBriefing') }, { status: 503 });
+    }
+    const groceryItems = groceryResult.data;
 
     const memberMap = new Map((members ?? []).map((m) => [m.id, m]));
     const firstName = ctx.active.member?.display_name?.split(' ')[0] ?? 'there';
@@ -204,7 +271,7 @@ Rules:
     // F19: the monthly AI allowance the plans sell, checked before the model runs.
     const overAllowance = await refuseOverAIAllowance(ctx, supabase);
     if (overAllowance) return overAllowance;
-    let briefing = await withAiRequest(
+    const briefing = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
       { feature: 'briefing.weekly', text: 'Generate the weekly briefing' },
       async (obs) => {
@@ -216,37 +283,21 @@ Rules:
           maxTokens: 2600,
         });
         obs.used(completion.model ?? 'unknown', completion.usage);
-        const text = completion.text || '{}';
-        try {
-          const jsonMatch = text.match(/\{[\s\S]*\}/);
-          return JSON.parse(jsonMatch?.[0] ?? '{}') as Record<string, unknown>;
-        } catch {
-          obs.failed(new Error('The weekly briefing did not parse as JSON; used the deterministic fallback.'));
+        const parsed = usableWeeklyBriefing(completion.text);
+        if (!parsed) {
+          // An empty or refused reply, prose with no JSON, or JSON that does
+          // not parse is not a briefing. It used to become one — a blank
+          // `{}` recorded as a success, or an invented "being processed" week
+          // scored 75 and low-stress — at 200, kept for the rest of the day.
+          obs.failed(new Error('The weekly briefing reply was empty, unparseable or had neither a headline nor a day-by-day.'));
           return null;
         }
+        return parsed;
       },
     );
 
     if (briefing === null) {
-      // Deterministic fallback built from the same data, so the page is never empty.
-      briefing = {
-        weekRange: weekRangeLabel(w),
-        headline: `Here’s your week, ${firstName}.`,
-        summary: ['Your weekly briefing is being processed — refresh in a moment.'],
-        recap: { choreCompletion: recapRate, wins: [], misses: [], note: 'Keep it up!' },
-        dayByDay: w.days.map((key) => ({
-          day: dayName(key),
-          date: new Date(`${key}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
-          emoji: '📅',
-          load: dayLoad((eventsByDay[key] ?? []).length),
-          events: (eventsByDay[key] ?? []).map((e) => ({ time: fmtTime(e.starts_at), title: e.title, member: memberName(e.assignee_id) ?? '' })),
-        })),
-        highlights: [],
-        conflicts: [],
-        prepChecklist: [],
-        weeklyScore: { overall: 75, categories: [], stressLevel: 'low', stressReason: null, focus: 'Have a great week!' },
-        focusOfTheWeek: 'Have a great week!',
-      };
+      return NextResponse.json({ error: t('weeklyBriefing.failedToGenerateWeeklyBriefing') }, { status: 502 });
     }
 
     return NextResponse.json({ briefing, generatedAt: new Date().toISOString(), weekKey: w.days[0] });

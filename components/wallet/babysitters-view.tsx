@@ -30,8 +30,10 @@ export type PaymentRow = {
   tipCents: number; amountCents: number; status: string; createdAt: string;
 };
 
-export function BabysittersView({ sitters, payments, canManage }: {
+export function BabysittersView({ sitters, payments, canManage, seesPayouts = true }: {
   sitters: BabysitterRow[]; payments: PaymentRow[]; canManage: boolean;
+  /** Whether this reader sees the payouts (a parent or adult; the held 0514). */
+  seesPayouts?: boolean;
 }) {
   const locale = useLocale();
   const format = useFormat();
@@ -65,12 +67,16 @@ export function BabysittersView({ sitters, payments, canManage }: {
       />
       <WalletSubnav />
 
+      {!seesPayouts && <p className="mb-4 text-xs text-muted">{t('babysittersView.payoutsAreKeptByParents')}</p>}
+
       {/* Stats */}
-      <div className="mb-5 grid grid-cols-3 gap-3">
+      <div className={cn('mb-5 grid gap-3', seesPayouts ? 'grid-cols-3' : 'grid-cols-1')}>
         {[
           { label: 'Sitters', value: String(sitters.length), icon: '👶' },
-          { label: 'Payments', value: String(payments.length), icon: '🧾' },
-          { label: 'Total Paid', value: formatCents(totalPaid), icon: '💵' },
+          ...(seesPayouts ? [
+            { label: 'Payments', value: String(payments.length), icon: '🧾' },
+            { label: 'Total Paid', value: formatCents(totalPaid), icon: '💵' },
+          ] : []),
         ].map((s) => (
           <div key={s.label} className="rounded-2xl border border-border bg-surface/40 p-4">
             <div className="text-xl">{s.icon}</div>
@@ -108,7 +114,7 @@ export function BabysittersView({ sitters, payments, canManage }: {
                     {s.rateCents != null && <span>{formatCents(s.rateCents)}/hr</span>}
                     {s.phone && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{s.phone}</span>}
                     {s.email && <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{s.email}</span>}
-                    {paid > 0 && <span className="text-green-400">{formatCents(paid)} paid</span>}
+                    {seesPayouts && paid > 0 && <span className="text-green-400">{formatCents(paid)} paid</span>}
                   </div>
                 </div>
                 {canManage && (
@@ -131,7 +137,7 @@ export function BabysittersView({ sitters, payments, canManage }: {
       )}
 
       {/* Recent payments */}
-      {payments.length > 0 && (
+      {seesPayouts && payments.length > 0 && (
         <div className="mt-6">
           <h2 className="mb-2 text-sm font-semibold">{tr('babysitters.recentPayments')}</h2>
           <div className="overflow-hidden rounded-2xl border border-border bg-surface/40 divide-y divide-border/50">

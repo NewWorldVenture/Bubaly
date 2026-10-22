@@ -338,7 +338,11 @@ describe('createAssistantStream (SSE transport)', () => {
     await vi.waitFor(() => expect(inserts.some(row => row.table === 'ai_messages')).toBe(true));
     expect(provider.runTools).not.toHaveBeenCalled();
     const rows = inserts.find(row => row.table === 'ai_messages')?.rows as Row[];
-    expect(rows[1].content).toBe('Before disconnect. Completed afterwards.');
+    // The text this already-running provider delivered remains saved. A
+    // stopped turn also says it stopped, instead of silently claiming the
+    // whole request completed. This provider double ignores cancellation.
+    expect(rows[1].content).toBe('Before disconnect. Completed afterwards.\n\nResponse stopped. Actions already started may have completed. Review this conversation before sending the request again.');
+    expect(JSON.stringify(rows[1].structured_content)).toContain('Response stopped.');
     expect(inserts.filter(row => row.table === 'ai_messages')).toHaveLength(1);
   });
 });

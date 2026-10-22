@@ -79,6 +79,8 @@ export interface DimensionScore {
   label: string;
   score: number;      // 0–100
   summary: string;    // one honest human sentence
+  /** Set when the summary is the household's money, left out for this reader (lib/operating-index/audience.ts). */
+  withheld?: boolean;
 }
 
 export interface OperatingSuggestion {

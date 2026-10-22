@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { readAll } from '@/lib/supabase/read-all';
-import { generateFamilyNotifications } from '@/lib/server/notifications';
+import { generateFamilyNotifications, type NotificationGenerationReport } from '@/lib/server/notifications';
 import { dispatchPendingPushes } from '@/lib/server/push';
 import { deliverNotificationEmails } from '@/lib/server/notification-emails';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
@@ -40,7 +40,15 @@ export async function GET(req: NextRequest) {
   let generationFailures = 0;
   for (const f of families ?? []) {
     try {
-      total += await generateFamilyNotifications(supabase, f.id);
+      // A family whose source reads did not all answer is a failure of this
+      // tick, not a quiet family: it used to answer 200 ok however many reads
+      // had failed, because only a throw was counted.
+      const report: NotificationGenerationReport = { failedSources: [] };
+      total += await generateFamilyNotifications(supabase, f.id, report);
+      if (report.failedSources.length) {
+        generationFailures += 1;
+        console.error(`Notification generation incomplete for family ${f.id}:`, report.failedSources);
+      }
     } catch (e) {
       generationFailures += 1;
       console.error(`Notification generation failed for family ${f.id}:`, e);

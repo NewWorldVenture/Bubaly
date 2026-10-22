@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { at } from './helpers/source-order';
+import { at, bodyOf } from './helpers/source-order';
 
 /**
  * Audit C1-S9-62 — the first tranche of the unconfirmed-write class OUTSIDE
@@ -66,9 +66,20 @@ describe('newsletter consent (C1-S9-62)', () => {
     expect(code(b)).not.toMatch(/return NextResponse\.json\(\{ ok: true/);
   });
 
-  it('unsubscribing stays ungated on rows — gone is unsubscribed', () => {
-    const w = unsubscribe.slice(at(unsubscribe, 'const { error: updateError }'));
-    expect(w.slice(0, 220)).not.toContain('.select(');
+  it('unsubscribing writes only over the row it read, and gone is still unsubscribed (AUD-1028-M1-ABA)', () => {
+    // C1-S9-62 left this write unconfirmed on purpose: on the service role,
+    // zero rows could only mean the row was deleted, and a person with no row
+    // is not on the list. AUD-1028-M1-ABA guards it on the status and opt-out
+    // time the click read, so zero rows now also means a newer write overtook
+    // it — told apart by a re-read by id, and proved end to end in
+    // tests/an-unsubscribe-click-outlasts-a-reactivation-in-flight.test.ts.
+    const w = bodyOf(unsubscribe, 'const advance = supabase', ".select('id');");
+    expect(w).toContain(".eq('status', observed.status)");
+    expect(w).toContain("advance.is('unsubscribed_at', null)");
+    expect(w).toContain("advance.eq('unsubscribed_at', seenStamp)");
+    const overtaken = bodyOf(unsubscribe, 'if (!wroteNoRows(advanced)) break;', 'observed = fresh;');
+    expect(overtaken).toContain(".eq('id', observed.id)\n      .maybeSingle();");
+    expect(overtaken).toContain('if (!fresh) break;');
     expect(unsubscribe).toContain('a person with no row is not on the list');
   });
 
@@ -221,11 +232,25 @@ describe('ai-runs counts a run as returned only when it was (C1-S9-63)', () => {
   });
 });
 
+describe('the abandoned-checkout claim is guarded on pending and confirmed', () => {
+  // It used to be the fourth ungated cron below. Its rows now decide whether
+  // anyone is nudged: zero rows means the session completed (or another run
+  // claimed it) after the read.
+  it('claims before the nudge, only a pending row, and reads the claimed rows back', () => {
+    const src = read('app/api/cron/checkout-abandoned/route.ts');
+    const stmt = src.slice(at(src, ".update({ status: 'abandoned', abandoned_at: new Date().toISOString() })"));
+    const write = stmt.slice(0, stmt.indexOf(';'));
+    expect(write).toContain(".eq('status', 'pending')");
+    expect(write).toContain(".select('session_id')");
+    expect(src).toContain('if (wroteNoRows(claimed)) continue;');
+    expect(at(src, 'if (wroteNoRows(claimed)) continue;')).toBeLessThan(at(src, 'await fireAutomationEvent('));
+  });
+});
+
 describe('crons whose zero rows means the row is gone stay ungated (C1-S9-63)', () => {
   const cases = [
     ['app/api/cron/return-reminders/route.ts', "update({ overdue_notified_at: nowIso }).eq('id', o.id)", 'which no run will sweep'],
     ['app/api/cron/wallet-allowance/route.ts', ".from('allowance_rules')\n          .update({ next_run_on: rule.next_run_on", 'no schedule to restore'],
-    ['app/api/cron/checkout-abandoned/route.ts', ".update({ status: 'abandoned', abandoned_at: new Date().toISOString() })", 'a gone row is not swept again'],
     ['app/api/cron/guardian-learning/route.ts', ".update({ status: 'auto_dismissed' })", 'ordinary "nothing expired" tick'],
   ] as const;
   for (const [file, write, reason] of cases) {
@@ -447,11 +472,22 @@ describe('marketing automation and platform writes (C1-S9-67)', () => {
     for (const [src, needle] of [
       [recurring, "if (error || wroteNoRows(noted)) console.error("],
       [onboardingContact, "if (error || wroteNoRows(updated)) console.error("],
-      [identity, "if (stitchError || wroteNoRows(stitched)) console.error("],
     ] as const) {
       const line = src.slice(at(src, needle)).split('\n')[0];
       expect(line).not.toMatch(/\bthrow\b|\breturn\b/);
     }
+  });
+
+  it('a visitor stitch that did not land is unknown, so no consent is carried on it (#1030)', () => {
+    // No longer log-only: the stitch now writes only over the row it read
+    // (its id and anonymous id, still unbound), and a write that matched
+    // nothing means another request bound it first. The sign-in stops as
+    // unknown before step 3 carries the browser's consent to this contact.
+    expect(identity).toContain(".eq('id', visitor.id).eq('anonymous_id', anonymousId).is('contact_id', null).select('id');");
+    const b = code(block(identity, 'if (stitchError || wroteNoRows(stitched)) {'));
+    expect(b).toContain("console.error('[identity] visitor stitch failed'");
+    expect(b).toContain("return { decision: 'unknown', contactId };");
+    expect(b).not.toMatch(/\bthrow\b/);
   });
 
   it('deliberate ones carry their reasons', () => {

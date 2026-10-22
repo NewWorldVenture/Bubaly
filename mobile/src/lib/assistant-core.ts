@@ -162,13 +162,22 @@ export function cardSections(card: AssistantCard, t: MobileTranslator = englishM
       const total = num(card.total_spent);
       const limit = num(card.total_limit);
       const head = total !== null ? limit !== null ? t('mobileAssistant.amountOf', { amount: money(total, currency, locale), limit: money(limit, currency, locale) }) : money(total, currency, locale) : null;
+      // Each budget line is judged in its OWN period (a week, the month, the
+      // year) and says which; the headline of a budgetVsActual card is the
+      // MONTH's budgeted spending (totals: 'month'), and the subtitle says so.
+      // Without either, a yearly "$15,000 / $14,000 · over" sat under "$200 of
+      // $1,166.67" and the bare month, and read as one month. The web card
+      // says both (components/ai/cards/budget-analysis.tsx, M12-CARD).
       const rows = list(card.rows).map((r) => {
         const spent = num(r.spent);
         const rowLimit = num(r.limit);
-        return `${str(r.label) ?? ''}: ${spent !== null ? money(spent, currency, locale) : ''}${rowLimit !== null ? ` / ${money(rowLimit, currency, locale)}` : ''}${r.over === true ? ` · ${t('mobileAssistant.over')}` : ''}`;
+        const period = r.period === 'weekly' ? t('mobileAssistant.periodWeekly') : r.period === 'monthly' ? t('mobileAssistant.periodMonthly') : r.period === 'yearly' ? t('mobileAssistant.periodYearly') : null;
+        return `${str(r.label) ?? ''}: ${spent !== null ? money(spent, currency, locale) : ''}${rowLimit !== null ? ` / ${money(rowLimit, currency, locale)}${period ? ` · ${period}` : ''}` : ''}${r.over === true ? ` · ${t('mobileAssistant.over')}` : ''}`;
       });
       const lines = [...(head ? [head] : []), ...rows, ...(str(card.insight) ? [str(card.insight) as string] : [])];
-      return { ...base, subtitle: base.subtitle ?? str(card.period), ...cap(lines), tone: limit !== null && total !== null && total > limit ? 'danger' : 'brand' };
+      const month = str(card.period);
+      const subtitle = base.subtitle ?? (card.totals === 'month' && month ? t('mobileAssistant.monthsBudgetedSpending', { month }) : month);
+      return { ...base, subtitle, ...cap(lines), tone: limit !== null && total !== null && total > limit ? 'danger' : 'brand' };
     }
     case 'vacation_prep': {
       const items = list(card.items).map((i) => `${i.done === true ? '✓' : '○'} ${str(i.label) ?? ''}${str(i.detail) ? ` — ${str(i.detail)}` : ''}`);

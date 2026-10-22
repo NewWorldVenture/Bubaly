@@ -9,6 +9,7 @@ import { placeForPoint, classifyTransition, type PlaceLike } from '@/lib/locatio
 import { notify } from '@/lib/services/notifications';
 import { systemScopeForFamily } from '@/lib/services/scope';
 import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
+import { readsEveryonesHistory } from '@/lib/location/history-scope';
 
 export type LocationResult = { ok: boolean; error?: string; place?: string | null };
 
@@ -65,10 +66,25 @@ export async function updateMyLocation(input: {
   const current = placeForPoint(placeLikes, point);
 
   const { data: prev, error: prevError } = await supabase
-    .from('member_locations').select('place_id').eq('member_id', member.id).maybeSingle();
+    .from('member_locations').select('place_id, is_sharing, latitude, longitude')
+    .eq('member_id', member.id).eq('family_id', familyId).maybeSingle();
   if (prevError) return { ok: false, error: describeActionError(prevError) };
+  // A transition is a move between two REAL positions. A live row that was not
+  // sharing, or carries no position, says nothing about where the member was:
+  // Stop Sharing clears place_id (CLEARED_POSITION), so turning sharing back on
+  // at Home was classified null -> Home and logged an "arrived" — with an
+  // urgent push to the managers — for someone who never moved. The first fix
+  // after sharing resumes is a baseline: its place is written, nothing is
+  // announced. (A member with no live row at all is still announced on their
+  // first share, as before.)
+  const baseline = prev != null && (prev.is_sharing !== true || prev.latitude == null || prev.longitude == null);
   // A previous place that is no longer armed is not one the member can "leave".
-  const prevPlaceId = armed.some((p) => p.id === prev?.place_id) ? prev!.place_id : null;
+  // And a place cleared off the row while its geofence was off (or created
+  // around the member since) is found again from the previous position: when
+  // a parent re-arms Home with the member inside it, they did not "arrive".
+  const prevPlaceId = !prev || baseline ? null
+    : armed.some((p) => p.id === prev.place_id) ? prev.place_id
+      : placeForPoint(placeLikes, { latitude: prev.latitude!, longitude: prev.longitude! })?.id ?? null;
 
   const nowIso = new Date().toISOString();
   const { error: upErr } = await supabase.from('member_locations').upsert({
@@ -79,7 +95,7 @@ export async function updateMyLocation(input: {
   }, { onConflict: 'member_id' });
   if (upErr) return { ok: false, error: describeActionError(upErr) };
 
-  const transition = classifyTransition(prevPlaceId, current?.id ?? null);
+  const transition = baseline ? 'none' : classifyTransition(prevPlaceId, current?.id ?? null);
   if (transition !== 'none') {
     const oldName = armed.find((p) => p.id === prevPlaceId)?.name ?? null;
     const events: { event_type: 'arrived' | 'left'; place_id: string | null; place_name: string | null }[] = [];
@@ -100,10 +116,15 @@ export async function updateMyLocation(input: {
       if (evErr) console.error('[locator] location_events insert failed', { familyId, memberId: member.id, error: evErr });
     }
 
-    // Place alerts → notify the rest of the family.
-    const { data: members } = await supabase
-      .from('family_members').select('id, user_id').eq('family_id', familyId).eq('is_active', true);
-    const recipients = (members ?? []).filter((m) => m.id !== member.id && m.user_id);
+    // Place alerts → the members who read everyone's location history: the
+    // managers and caregivers (lib/location/history-scope.ts, the owner's
+    // rule the locator page applies). It went to every member with a login,
+    // so a guest — whom 0481 refuses other members' positions and the family's
+    // places — or a child was pushed "Mom left Home" with the place's name.
+    const { data: members, error: membersError } = await supabase
+      .from('family_members').select('id, user_id, role').eq('family_id', familyId).eq('is_active', true);
+    if (membersError) console.error('[locator] place-alert recipient read failed', { familyId, error: membersError });
+    const recipients = (members ?? []).filter((m) => m.id !== member.id && m.user_id && readsEveryonesHistory(m.role));
     if (recipients.length) {
       const verb = transition === 'left' ? 'left' : 'arrived at';
       const placeName = transition === 'left' ? (oldName ?? 'a place') : current!.name;

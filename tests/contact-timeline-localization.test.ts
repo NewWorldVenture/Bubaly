@@ -66,6 +66,12 @@ vi.mock('@/lib/supabase/server', () => ({ createServer: async () => ({ from: (ta
 // preempt the behaviour under test. Stubbed the way every other AI-path test
 // here does it; no assertion below is relaxed.
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
+// The Free plan's AI allowance has its own cases in
+// tests/the-free-plans-ai-allowance-holds-on-every-helper.test.ts; it admits here.
+vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
+  assertAIAllowance: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+}));
 vi.mock('@/lib/ai/provider', () => ({
   isAIConfigured: async () => true, resolveProvider: async () => ({ model: 'test', complete: h.complete }),
   describeAIError: () => ({ message: 'Provider failure' }),

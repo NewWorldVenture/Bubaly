@@ -23,12 +23,14 @@ import { PhoneInput } from '@/components/ui/phone-input';
 import { guessDialCodeFromPhone, extractLocalNumber, COUNTRY_DIAL_CODES } from '@/lib/utils/phone';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
-import { ROLE_LABEL_KEYS, ROLE_ORDER, isAdmin, roleLabel } from '@/lib/constants/roles';
+import { ROLE_LABEL_KEYS, assignableMemberRoles, isAdmin, isManager, roleLabel, rolesForAKidLogin } from '@/lib/constants/roles';
+import { settle } from '@/lib/supabase/settle';
 import {
   DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, DASHBOARD_DESCRIPTION_KEYS, type DashboardView,
 } from '@/lib/constants/dashboards';
 import { setDefaultDashboardAction, updateMyProfileAction } from '@/app/(app)/actions';
-import { removeFamilyMemberAction } from '@/app/(app)/family/member-actions';
+import { removeFamilyMemberAction, updateFamilyMemberAction } from '@/app/(app)/family/member-actions';
+import { PendingInvites } from '@/components/family/pending-invites';
 import { splitFullName } from '@/lib/onboarding/profile';
 import { cn } from '@/lib/utils/cn';
 import { CalendarSyncPanel } from '@/components/dashboard/calendar-sync-panel';
@@ -79,6 +81,8 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
   const [inviteOpen, setInviteOpen] = useState(false);
+  // Bumped after an invite is sent, so the pending list shows it.
+  const [pendingInvitesKey, setPendingInvitesKey] = useState(0);
   // M39 — after a member invite goes out, offer the next natural ask: another
   // family. Amounts come from the referral config the page resolved (defaults
   // otherwise), never typed here.
@@ -200,6 +204,9 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
     // the family map, and nothing scheduled clears it (the retention sweep
     // that would is held, pending the owner's decision).
     if (!res.locationForgotten) { toastError(t('familyModule.removedButLocationStillVisible')); return; }
+    // And a pending invite to them that could not be revoked would let them
+    // straight back in; the Pending invites list below can revoke it by hand.
+    if (!res.invitesRevoked) { toastError(t('familyModule.removedButInviteStillOpen')); return; }
     success(t('settingsModule.memberRemoved'));
     window.location.reload();
   }
@@ -403,6 +410,9 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
           </div>
         )}
       </Card>
+      {/* A mistaken or stale invite can be cancelled here, by the household,
+          rather than only by the site's super admin. */}
+      {isManager(role) && <PendingInvites familyId={family.id} reloadKey={pendingInvitesKey} />}
       </>)}
 
       {/* Bubaly AI tab */}
@@ -439,6 +449,7 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
           onSent={(emailed) => {
             setInviteOpen(false);
             setShowReferralCta(true);
+            setPendingInvitesKey((k) => k + 1);
             // The invite exists either way — it is the row, not the email, that
             // grants access. Saying "sent" when it was not is the defect.
             if (emailed) success(t('settingsModule.inviteSent'));
@@ -462,8 +473,23 @@ function EditMemberModal({ member, isSelf, onClose }: {
   member: Tables<'family_members'>; isSelf: boolean; onClose: () => void;
 }) {
   const t = useTranslations();
+  const { role: actorRole } = useApp();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
+  // The same roles the family page's editor offers: never `parent` from an
+  // adult, and never parent or adult for a member who signs in with a kid PIN
+  // (the held 0512). This editor offered every role, so a 4-digit PIN could
+  // end up guarding a manager's account. updateFamilyMemberAction decides it
+  // again on the server; this only stops offering what it would refuse.
+  const [hasKidLogin, setHasKidLogin] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void settle(createClient().from('child_logins').select('id').eq('member_id', member.id).eq('family_id', member.family_id).limit(1))
+      .then(({ data }) => { if (live) setHasKidLogin((data ?? []).length > 0); });
+    return () => { live = false; };
+  }, [member.id, member.family_id]);
+  const assignable = assignableMemberRoles(actorRole, member.role);
+  const roleOptions = hasKidLogin ? rolesForAKidLogin(assignable, member.role) : assignable;
 
   async function save(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -472,19 +498,19 @@ function EditMemberModal({ member, isSelf, onClose }: {
     const role = String(form.get('role') ?? member.role) as MemberRole;
     const birthday = String(form.get('birthday') ?? '').trim();
     if (!display_name) { toastError(t('settingsModule.nameIsRequired')); return; }
+    if (!roleOptions.includes(role)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     setSaving(true);
-    // This form changes a member's ROLE, so it is the sharpest case of the lot:
-    // fm_update (0211) is manager-gated, RLS FILTERS the update rather than
-    // refusing it, and the `window.location.reload()` below then showed the OLD
-    // role right after "Member updated". Scoped by the row's own `family_id`
-    // rather than a threaded prop — the question is whether this row is still in
-    // the family the screen believes it is in.
-    const { data: edited, error } = await createClient().from('family_members')
-      .update({ display_name, role, birthday: birthday || null })
-      .eq('id', member.id).eq('family_id', member.family_id).select('id');
+    // Through the server action the family page uses: it refuses a member who
+    // was removed since this list loaded (a stale tab used to write the old
+    // role back over the removal), writes only what changed while the row is
+    // the one opened here, and checks the kid login itself.
+    const res = await updateFamilyMemberAction({
+      memberId: member.id, expectedUpdatedAt: member.updated_at ?? null,
+      changes: { display_name, role, birthday: birthday || null },
+    }).catch(() => null);
     setSaving(false);
-    if (error) return toastError(describeDbError(error));
-    if (wroteNoRows(edited)) return toastError(t('errors.thatChangeWasNotSaved'));
+    if (!res) return toastError(t('errors.thatChangeWasNotSaved'));
+    if (!res.ok) return toastError(res.error);
     success(t('settingsModule.memberUpdated'));
     onClose();
     window.location.reload();
@@ -496,10 +522,10 @@ function EditMemberModal({ member, isSelf, onClose }: {
         <Field label={t('settings.name')} required>
           {(id) => <Input id={id} name="display_name" defaultValue={member.display_name} autoFocus />}
         </Field>
-        <Field label={t('settings.role')}>
+        <Field label={t('settings.role')} hint={hasKidLogin ? t('familyModule.aKidLoginCannotBeAManager', { name: member.display_name }) : undefined}>
           {(id) => (
             <Select id={id} name="role" defaultValue={member.role}>
-              {ROLE_ORDER.map((r) => (
+              {roleOptions.map((r) => (
                 <option key={r} value={r}>{t(ROLE_LABEL_KEYS[r])}</option>
               ))}
             </Select>

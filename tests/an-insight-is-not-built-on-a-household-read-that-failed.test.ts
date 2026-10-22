@@ -30,10 +30,18 @@ vi.mock('@/lib/supabase/auth', () => ({
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db }));
 vi.mock('@/lib/ai/provider', () => ({ isAIConfigured: async () => true, resolveProvider: async () => ({ complete: h.complete }), describeAIError: () => ({ message: 'unavailable' }) }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
+// The Free plan's AI allowance (N18) has its own cases in
+// tests/the-free-plans-ai-allowance-holds-on-every-helper.test.ts, and F19's in
+// every-ai-route-counts-against-the-allowance; it admits here.
+vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
+  assertAIAccess: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+  assertAIAllowance: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+  refuseOverAIAllowance: async () => null,
+  withinAIAllowance: async () => true,
+}));
 // The per-kind plan gate is covered by tests/insight-kinds-are-gated-like-their-pages.test.ts.
 vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: async () => null }));
-// The monthly allowance (F19) is its own suite (every-ai-route-counts-against-the-allowance); this one is the failed-read boundary.
-vi.mock('@/lib/server/ai-access', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/server/ai-access')>()), refuseOverAIAllowance: async () => null, withinAIAllowance: async () => true }));
 vi.mock('@/lib/ai/observability', () => ({ withAiRequest: (_s: unknown, _f: unknown, run: (o: { used: () => void; failed: () => void }) => unknown) => run({ used: () => {}, failed: () => {} }) }));
 
 import { POST } from '@/app/api/ai/insights/route';

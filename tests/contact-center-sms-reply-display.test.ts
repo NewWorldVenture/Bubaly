@@ -16,16 +16,22 @@ vi.mock('@/lib/contact-center/sms-reply-status', () => ({ readSmsReplyStatuses: 
 vi.mock('@/lib/contact-center/server', () => ({ getOrCreateChannelResult: async () => ({ data: null, error: null }) }));
 vi.mock('@/lib/guardian/twilio', () => ({ isTwilioConfigured: () => false }));
 vi.mock('@/app/(app)/dashboard/contact-center/actions', () => ({ assignEmailAction: vi.fn(), provisionNumberAction: vi.fn(), updateConciergeAction: vi.fn(), setMessageStatusAction: vi.fn() }));
-vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => {
-  state.calls.push('service');
-  const query = {
-    select: (columns: string) => { state.columns = columns; return query; },
-    eq: (column: string, value: string) => { expect([column, value]).toEqual(['family_id', '11111111-1111-4111-8111-111111111111']); return query; },
-    order: () => query, limit: () => query,
-    then: (resolve: (result: unknown) => unknown) => Promise.resolve({ data: state.rows, error: state.readError ? { message: 'Synthetic inbox outage' } : null }).then(resolve),
+// The inbox is read through the CALLER's client since the guest fix (the
+// service role is left to the channel row), so both factories hand back the
+// same recording query.
+vi.mock('@/lib/supabase/server', () => {
+  const client = (kind: string) => {
+    state.calls.push(kind);
+    const query = {
+      select: (columns: string) => { state.columns = columns; return query; },
+      eq: (column: string, value: string) => { expect([column, value]).toEqual(['family_id', '11111111-1111-4111-8111-111111111111']); return query; },
+      order: () => query, limit: () => query,
+      then: (resolve: (result: unknown) => unknown) => Promise.resolve({ data: state.rows, error: state.readError ? { message: 'Synthetic inbox outage' } : null }).then(resolve),
+    };
+    return { from: () => query };
   };
-  return { from: () => query };
-} }));
+  return { createServiceClient: () => client('service'), createServer: async () => client('caller') };
+});
 
 const locales = ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT'];
 const statuses: SmsReplyStatus[] = ['prepared', 'confirmation_unknown', 'suppressed', 'legacy_unknown', 'unavailable',

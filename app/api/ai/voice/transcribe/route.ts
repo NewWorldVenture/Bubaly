@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { refuseClosedOrTrialEnded } from '@/lib/server/account-standing';
 import { assertAIRequestFamily, getAIRequestTranslations } from '@/lib/server/ai-request-context';
 import { authenticateAI, refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { getOpenAIKey } from '@/lib/ai/settings';
-import { cleanTranscript, isValidAudioUpload } from '@/lib/ai/voice';
+import { cleanTranscript, isValidAudioUpload, VOICE_COMMAND_MAX_BYTES } from '@/lib/ai/voice';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
@@ -12,7 +13,8 @@ export const runtime = 'nodejs';
 
 const COULD_NOT_TRANSCRIBE = 'Could not transcribe that recording. Please try again.';
 export const maxDuration = 60;
-const MAX_AUDIO_REQUEST_BYTES = 26 * 1024 * 1024;
+/** The recording plus the multipart framing around it. */
+const MAX_AUDIO_REQUEST_BYTES = VOICE_COMMAND_MAX_BYTES + 64 * 1024;
 
 // Speech-to-text for "talk to AI". Accepts a recorded audio blob (multipart),
 // forwards it to OpenAI's transcription endpoint, and returns the text. The key
@@ -31,11 +33,27 @@ export async function POST(req: NextRequest) {
     const { supabase, ctx } = authed;
     const familyError = assertAIRequestFamily(req, ctx.active.familyId, t);
     if (familyError) return familyError;
+    // A closed or trial-ended family is refused before any work: see lib/server/account-standing.ts.
+    const refused = await refuseClosedOrTrialEnded(supabase, ctx.active.familyId);
+    if (refused) return refused;
     const limited = await enforceAIRateLimit(supabase, `ai-voice-transcribe:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
       { error: t('transcribe.tooManyVoiceRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
+    // A paid model call: the Free plan's monthly allowance applies, so a family
+    // past its month cannot keep a voice exchange going. The allowance alone,
+    // not the assistant's tier or its Off switch: voice is how a member types
+    // into the concierge's Ask bar and the command bar too, and switching the
+    // assistant Off must not take the microphone off those.
+    //
+    // F19, the owner's decision of 2026-10-02: one spoken exchange counts as
+    // ONE request, the assistant turn it carries, which files its own row.
+    // Transcription therefore files nothing. Recording it as well (main's N17)
+    // would count each exchange twice, and an exchange admitted at 9 of 10
+    // would spend the tenth here and then be refused its own turn.
+    const overAllowance = await refuseOverAIAllowance(ctx, supabase, t);
+    if (overAllowance) return overAllowance;
     const apiKey = await getOpenAIKey(supabase);
     if (!apiKey) {
       return NextResponse.json(
@@ -47,7 +65,7 @@ export async function POST(req: NextRequest) {
     const boundedForm = await readBoundedRequestFormData(req, MAX_AUDIO_REQUEST_BYTES);
     if (!boundedForm.ok) {
       return NextResponse.json(
-        { error: boundedForm.reason === 'too_large' ? 'Recording too large (max 25 MB)' : 'Invalid audio upload' },
+        { error: boundedForm.reason === 'too_large' ? t('transcribe.recordingTooLong') : 'Invalid audio upload' },
         { status: boundedForm.reason === 'too_large' ? 413 : 400 },
       );
     }
@@ -55,7 +73,8 @@ export async function POST(req: NextRequest) {
     if (!(file instanceof Blob)) {
       return NextResponse.json({ error: t('transcribe.noAudioProvided') }, { status: 400 });
     }
-    const check = isValidAudioUpload(file.size, file.type);
+    if (file.size > VOICE_COMMAND_MAX_BYTES) return NextResponse.json({ error: t('transcribe.recordingTooLong') }, { status: 413 });
+    const check = isValidAudioUpload(file.size, file.type, VOICE_COMMAND_MAX_BYTES);
     if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 });
 
     const model = process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1';
@@ -66,14 +85,6 @@ export async function POST(req: NextRequest) {
     upstream.append('model', model);
     upstream.append('response_format', 'json');
 
-    // F19, the owner's decision of 2026-10-02: one spoken exchange counts as
-    // ONE request — the assistant turn it carries, which files its own row.
-    // Speech and transcription therefore file nothing; they are refused only
-    // once the month is spent, so a family past its allowance cannot keep a
-    // voice exchange going. How a standalone voice call (one with no turn) is
-    // counted is documented as open, not given an invented rule here.
-    const overAllowance = await refuseOverAIAllowance(authed.ctx, authed.supabase, t);
-    if (overAllowance) return overAllowance;
     const res = await fetchWithDeadline('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: { authorization: `Bearer ${apiKey}` },

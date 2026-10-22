@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   kickRun: vi.fn(),
   getAISettings: vi.fn(),
   nextRelativeFire: vi.fn(),
+  planRoutineRequest: vi.fn(),
 }));
 
 type Row = Record<string, unknown>;
@@ -99,11 +100,32 @@ vi.mock('@/lib/server/cron-auth', () => ({ hasCronAuthorization: (req: Request) 
 vi.mock('@/lib/services/ai-settings', () => ({
   loadAISettings: async (scope: unknown) => ({ ok: true, data: await mocks.getAISettings(scope) }),
 }));
-vi.mock('@/lib/ai/runs/store', () => ({ createRequest: mocks.createRequest, createRun: mocks.createRun }));
+vi.mock('@/lib/ai/runs/store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/ai/runs/store')>()),
+  createRequest: mocks.createRequest,
+  createRun: mocks.createRun,
+}));
+// The cron plans each occurrence before it hands the run on (N2); planning
+// has its own cases in tests/a-routine-is-planned-before-it-is-filed.test.ts,
+// so here the plan is answered.
+vi.mock('@/lib/ai/runs/intake', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/ai/runs/intake')>()),
+  planRoutineRequest: mocks.planRoutineRequest,
+}));
 vi.mock('@/lib/ai/runs/continue', () => ({ kickRun: mocks.kickRun }));
+// Whether a family still has Ask Bubaly (N8) has its own cases in
+// tests/a-routine-is-planned-before-it-is-filed.test.ts; every family here has it.
+vi.mock('@/lib/ai/runs/entitlement', () => ({ agentRunEntitlementChecker: () => async () => 'entitled' }));
 vi.mock('@/lib/services/routines', async () => {
   const actual = await vi.importActual<typeof import('@/lib/services/routines')>('@/lib/services/routines');
-  return { ...actual, nextRelativeFire: mocks.nextRelativeFire };
+  // The due re-check reads the anchor through readRelativeFire, which tells a
+  // failed read from no anchor (tests/a-relative-routine-fires-once-for-the-anchor-it-names.test.ts);
+  // here both answer what the anchor says.
+  return {
+    ...actual,
+    nextRelativeFire: mocks.nextRelativeFire,
+    readRelativeFire: async (...args: unknown[]) => ({ ok: true, at: await mocks.nextRelativeFire(...args) }),
+  };
 });
 
 const { GET } = await import('@/app/api/cron/family-routines/route');
@@ -145,6 +167,7 @@ beforeEach(() => {
   mocks.getAISettings.mockResolvedValue({ familyId: 'fam-1', enabled: true, behavior: 'execute', categoryBehavior: {}, riskOverrides: {}, childChannels: {}, memoryEnabled: true, quietHours: null });
   mocks.createRequest.mockResolvedValue({ ok: true, data: { id: 'req-1' } });
   mocks.createRun.mockResolvedValue({ ok: true, data: { id: 'run-1' } });
+  mocks.planRoutineRequest.mockResolvedValue({ ok: true, data: { runId: 'run-1', outcome: 'plan' } });
 });
 
 afterEach(() => { vi.useRealTimers(); });
@@ -166,6 +189,12 @@ describe('the routine worker', () => {
     expect(mocks.createRequest).toHaveBeenCalledWith(
       expect.objectContaining({ familyId: 'fam-1', role: 'system', actorKind: 'system' }),
       expect.objectContaining({ requestText: 'Plan our meals for next week', kind: 'routine' }),
+      expect.anything(),
+    );
+    // Planned through the same intake steps before anything is handed on.
+    expect(mocks.planRoutineRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ familyId: 'fam-1' }),
+      { requestId: 'req-1', runId: 'run-1', text: 'Plan our meals for next week' },
       expect.anything(),
     );
     expect(mocks.kickRun).toHaveBeenCalledWith('run-1', expect.objectContaining({ budgetMs: expect.any(Number) }));

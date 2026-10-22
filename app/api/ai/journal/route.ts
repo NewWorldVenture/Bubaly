@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { withinAIAllowance, AIAllowanceSpent } from '@/lib/server/ai-access';
+import { refuseClosedOrTrialEnded } from '@/lib/server/account-standing';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -8,6 +8,8 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider } from '@/lib/ai/provider';
 import { buildJournalPrompt, parseJournalPrompt, promptOfTheDay } from '@/lib/journal/prompts';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { accessDeniedResponse, assertAIAllowance } from '@/lib/server/ai-access';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { describeReadError } from '@/lib/supabase/settle';
 
 // POST /api/ai/journal — returns one personalized reflection prompt for the
@@ -19,11 +21,26 @@ export async function POST() {
     const ctx = await requireUserContext();
     const memberId = ctx.active.member?.id ?? null;
     const supabase = await createServer();
+    // A closed or trial-ended family is refused before any work: see lib/server/account-standing.ts.
+    const closed = await refuseClosedOrTrialEnded(supabase, ctx.active.familyId);
+    if (closed) return closed;
+    // The page in front of this is feature-gated; this endpoint was not, and it
+    // calls a model. Same resolver, so the two cannot disagree.
+    const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, ['/dashboard/journal']);
+    if (refused) return refused;
     const limited = await enforceAIRateLimit(supabase, `ai-journal:${ctx.user.id}`, { limit: 20 });
     if (!limited.ok) return NextResponse.json(
       { error: t('journal.tooManyJournalRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
+    // A model call, so the Free plan's monthly AI allowance applies here as it
+    // does at /api/ai: only the routes that asked `assertAIAccess` enforced it,
+    // so a Free family past its ten requests kept getting these — while their
+    // rows still counted toward the limit the assistant then refused them on.
+    // The allowance alone: whether the prompt is available is the Journal
+    // page's gate above, not the assistant's tier or its Off switch.
+    const access = await assertAIAllowance(ctx, { db: supabase });
+    if (!access.ok) return accessDeniedResponse(access, t);
 
     // These five entries are the only thing that makes the prompt personal. A
     // refused read produced an empty list, which is also what a brand-new
@@ -53,8 +70,6 @@ export async function POST() {
       // Inside the try that falls through to the evergreen prompt, so a failure
       // is recorded before it is swallowed — the same reason the daily brief
       // wraps inside its own silent catch.
-      // F19: past the monthly AI allowance, give the answer this route gives without AI.
-      if (!(await withinAIAllowance(ctx, supabase))) throw new AIAllowanceSpent();
       const prompt = await withAiRequest(
         scopeFromUserContext(ctx, supabase),
         { feature: 'journal.prompt', text: 'Journal prompt' },

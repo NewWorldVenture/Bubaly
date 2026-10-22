@@ -171,3 +171,39 @@ describe('getPreferences', () => {
     expect(res.ok).toBe(false);
   });
 });
+
+// Preserve the original roster order above: these adversarial local orders
+// distinguish exact/prefix/substring priority instead of agreeing accidentally.
+describe('family name resolution with earlier competing matches', () => {
+  it('chooses an exact match after an earlier prefix', () => {
+    const members = [ROWS[2], ROWS[1]].map((row) => ({ id: row.id, displayName: row.display_name }));
+    expect(matchMemberByName(members, 'sam')?.id).toBe('member-2');
+    expect(matchMemberByName(members, '  sAM  ')?.id).toBe('member-2');
+  });
+
+  it('chooses a prefix after an earlier interior substring', () => {
+    const members = [
+      { id: 'interior', displayName: 'Old Samantha' },
+      { id: 'prefix', displayName: 'Samantha' },
+    ];
+    expect(matchMemberByName(members, 'saman')?.id).toBe('prefix');
+    expect(matchMemberByName(members, 'manth')?.id).toBe('interior');
+  });
+
+  it.each([
+    ['sam', 'member-2'],
+    ['saman', 'member-3'],
+  ])('forwards the real roster and %s through matching precedence', async (name, expectedId) => {
+    const rows = [{ ...ROWS[2], id: 'interior', display_name: 'Old Samantha' }, ROWS[2], ROWS[1]];
+    const { db, calls } = makeDb((call) => ({
+      data: rows.filter((row) => Object.entries(call.filters).every(([column, value]) => row[column as keyof typeof row] === value)),
+      error: null,
+    }));
+    const res = await resolveMemberByName(scopeWith(db), name);
+    expect(res.ok).toBe(true);
+    expect(res.ok && res.data?.id).toBe(expectedId);
+    expect(calls).toEqual([{
+      table: 'family_members', kind: 'select', filters: { family_id: 'fam-1', is_active: true },
+    }]);
+  });
+});

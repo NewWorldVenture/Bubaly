@@ -351,39 +351,51 @@ export class OpenAIProvider implements AIProvider {
         : usage;
     };
 
-    for (let round = 0; round < maxRounds; round++) {
-      const last = round === maxRounds - 1;
-      const res = await this.post(this.chatBody({
-        messages: convo,
-        // Drop tools on the final round so the model must answer in prose.
-        ...(toolDefs && !last ? { tools: toolDefs, tool_choice: 'auto' } : {}),
-      }, maxTokens), signal);
-      if (!res.ok) throw await openAIError(res);
-      const data = await readBoundedResponseJson<OpenAIChatResponse>(res, OPENAI_MAX_RESPONSE_BYTES);
-      account(usageFromOpenAI(data.usage));
-      const msg = data.choices?.[0]?.message ?? {};
-      const calls: { id: string; function: { name: string; arguments: string } }[] = msg.tool_calls ?? [];
+    // Cancellation cannot erase the receipts of tools already dispatched.
+    // Callers label the partial turn from their aborted signal; there is no
+    // new model summary, compensation, or retry after the stop.
+    const stopped = (): ToolRunResult => ({ text: '', actions, usage: total });
+    try {
+      for (let round = 0; round < maxRounds; round++) {
+        if (signal?.aborted) return stopped();
+        const last = round === maxRounds - 1;
+        const res = await this.post(this.chatBody({
+          messages: convo,
+          // Drop tools on the final round so the model must answer in prose.
+          ...(toolDefs && !last ? { tools: toolDefs, tool_choice: 'auto' } : {}),
+        }, maxTokens), signal);
+        if (!res.ok) throw await openAIError(res);
+        const data = await readBoundedResponseJson<OpenAIChatResponse>(res, OPENAI_MAX_RESPONSE_BYTES);
+        account(usageFromOpenAI(data.usage));
+        const msg = data.choices?.[0]?.message ?? {};
+        const calls: { id: string; function: { name: string; arguments: string } }[] = msg.tool_calls ?? [];
 
-      if (!calls.length) return { text: msg.content ?? '', actions, usage: total };
+        if (!calls.length) return { text: msg.content ?? '', actions, usage: total };
 
-      // Record the assistant turn (with its tool_calls) then execute each call.
-      convo.push({ role: 'assistant', content: msg.content ?? null, tool_calls: calls });
-      for (const call of calls) {
-        let args: Record<string, unknown> = {};
-        try { args = JSON.parse(call.function.arguments || '{}'); } catch { /* ignore */ }
-        const tool = byName.get(call.function.name);
-        let result: unknown;
-        try { result = tool ? await tool.execute(args) : { ok: false, error: `Unknown tool ${call.function.name}` }; }
-        catch (e) { result = toolExecutionFailure(call.function.name, e); }
-        actions.push({ name: call.function.name, args, result });
-        convo.push({ role: 'tool', tool_call_id: call.id, content: fenceToolResult(call.function.name, result) });
+        // Record the assistant turn (with its tool_calls) then execute each call.
+        convo.push({ role: 'assistant', content: msg.content ?? null, tool_calls: calls });
+        for (const call of calls) {
+          if (signal?.aborted) return stopped();
+          let args: Record<string, unknown> = {};
+          try { args = JSON.parse(call.function.arguments || '{}'); } catch { /* ignore */ }
+          const tool = byName.get(call.function.name);
+          let result: unknown;
+          try { result = tool ? await tool.execute(args) : { ok: false, error: `Unknown tool ${call.function.name}` }; }
+          catch (e) { result = toolExecutionFailure(call.function.name, e); }
+          actions.push({ name: call.function.name, args, result });
+          convo.push({ role: 'tool', tool_call_id: call.id, content: fenceToolResult(call.function.name, result) });
+        }
       }
+      // Exhausted rounds — ask once more for a plain summary.
+      if (signal?.aborted) return stopped();
+      const res = await this.post(this.chatBody({ messages: convo }, maxTokens), signal);
+      const data = res.ok ? await readBoundedResponseJson<OpenAIChatResponse>(res, OPENAI_MAX_RESPONSE_BYTES) : null;
+      account(usageFromOpenAI(data?.usage));
+      return { text: data?.choices?.[0]?.message?.content ?? 'Done.', actions, usage: total };
+    } catch (error) {
+      if (signal?.aborted) return stopped();
+      throw error;
     }
-    // Exhausted rounds — ask once more for a plain summary.
-    const res = await this.post(this.chatBody({ messages: convo }, maxTokens), signal);
-    const data = res.ok ? await readBoundedResponseJson<OpenAIChatResponse>(res, OPENAI_MAX_RESPONSE_BYTES) : null;
-    account(usageFromOpenAI(data?.usage));
-    return { text: data?.choices?.[0]?.message?.content ?? 'Done.', actions, usage: total };
   }
 
   /**

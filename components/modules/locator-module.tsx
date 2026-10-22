@@ -26,6 +26,7 @@ import { updateMyLocation, setLocationSharing, savePlace, deletePlace, setGeofen
 import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFormat } from '@/components/i18n/use-format';
+import { historyInScope, readsEveryonesHistory } from '@/lib/location/history-scope';
 
 type MemberLocation = Tables<'member_locations'>;
 type Place = Tables<'family_places'>;
@@ -113,9 +114,20 @@ export function LocatorModule() {
     table: 'family_places', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_places').select('*').eq('family_id', familyId).order('name'),
   });
+  // The held 0516: a parent, an adult or a caregiver reads everyone's history;
+  // anyone else their own. Narrowed before the limit, as the check-in page
+  // does, so a child's own arrivals are not crowded out of the 120 newest by
+  // everyone else's, and nobody else's reach their browser; with no member
+  // record of their own there is nothing of theirs to read.
+  const seesEveryonesHistory = readsEveryonesHistory(role);
+  const selfId = selfMember?.id ?? null;
   const { data: events, loading: eventsLoading, error: eventsError, refresh: refreshEvents } = useRealtimeQuery<LocationEvent>({
-    table: 'location_events', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('location_events').select('*').eq('family_id', familyId).order('occurred_at', { ascending: false }).limit(120),
+    table: 'location_events', familyId, deps: [familyId, role, selfId],
+    fetcher: (sb) => {
+      if (!seesEveryonesHistory && !selfId) return Promise.resolve({ data: [] as LocationEvent[], error: null });
+      const query = sb.from('location_events').select('*').eq('family_id', familyId);
+      return (seesEveryonesHistory ? query : query.eq('member_id', selfId!)).order('occurred_at', { ascending: false }).limit(120);
+    },
   });
 
   const locByMember = useMemo(() => new Map((locations ?? []).map((l) => [l.member_id, l])), [locations]);
@@ -144,13 +156,15 @@ export function LocatorModule() {
     return new Map(projectPoints(pts).map((p) => [p.id, p]));
   }, [places, liveMembers, locByMember]);
 
-  const alerts = useMemo(() => arrivalAlerts(events ?? [], 6), [events]);
+  // The held 0516 (above): live location keeps its own sharing rule.
+  const visibleEvents = useMemo(() => historyInScope(events ?? [], role, selfMember?.id), [events, role, selfMember]);
+  const alerts = useMemo(() => arrivalAlerts(visibleEvents, 6), [visibleEvents]);
   // The day headings follow the reader: two words from the catalogue, the date
   // from the locale.
   const history = useMemo(() => groupHistoryByDay(
-    (events ?? []).map((e) => ({ id: e.id, member_id: e.member_id, place_name: e.place_name, event_type: e.event_type, occurred_at: e.occurred_at })),
+    visibleEvents.map((e) => ({ id: e.id, member_id: e.member_id, place_name: e.place_name, event_type: e.event_type, occurred_at: e.occurred_at })),
     now, locale.code, tr,
-  ), [events, now, locale.code, tr]);
+  ), [visibleEvents, now, locale.code, tr]);
 
   useEffect(() => {
     if (selfMember) setSharing(locByMember.get(selfMember.id)?.is_sharing ?? false);
@@ -483,6 +497,7 @@ export function LocatorModule() {
           <div className="mb-3 flex items-center justify-between">
             <p className="flex items-center gap-1.5 text-sm font-semibold"><Bell className="h-4 w-4 text-brand-text" /> {tr('locator.locationHistory')}</p>
           </div>
+          {!seesEveryonesHistory && <p className="mb-2 text-xs text-muted">{tr('locator.onlyYourOwnHistory')}</p>}
           {history.length === 0 ? (
             <p className="text-xs text-muted">{tr('locator.noHistoryYet')}</p>
           ) : (

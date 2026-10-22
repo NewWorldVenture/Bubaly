@@ -26,12 +26,24 @@ vi.mock('@/lib/server/plan', async (importOriginal) => ({
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserContext }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.createServer }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.enforceAIRateLimit }));
+// The Free plan's AI allowance (N18) has its own cases in
+// tests/the-free-plans-ai-allowance-holds-on-every-helper.test.ts; it admits here.
+vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
+  assertAIAccess: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+  assertAIAllowance: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+}));
 vi.mock('@/lib/ai/provider', () => ({
   isAIConfigured: mocks.isAIConfigured,
   resolveProvider: mocks.resolveProvider,
   describeAIError: mocks.describeAIError,
 }));
 vi.mock('@/lib/services/scope', () => ({ scopeFromUserContext: () => ({}) }));
+// Every kind now answers to the family's plan lock (refuseIfLocked for a kind
+// no gated page renders); the lock is covered by
+// tests/an-insight-answers-to-the-familys-plan-whatever-its-name.test.ts, and
+// this file is about the response, so the fixture family is not locked.
+vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: async () => null, refuseIfLocked: async () => null }));
 vi.mock('@/lib/ai/insights', () => ({
   INSIGHTS: { chores: { system: 'Fixture system', buildUser: () => 'Fixture rows', maxTokens: 100 } },
   isInsightKind: (kind: unknown) => kind === 'chores',

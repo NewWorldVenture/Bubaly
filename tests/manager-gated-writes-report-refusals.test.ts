@@ -25,8 +25,11 @@ const GATED_WRITES: Record<string, string[]> = {
   'components/modules/rewards-module.tsx': ['rewards'],
   'components/modules/billing-module.tsx': ['bills', 'financial_accounts'],
   'components/finance/bills-view.tsx': ['bills'],
-  'components/modules/family-module.tsx': ['family_members'],
-  'components/modules/settings-module.tsx': ['families', 'family_members'],
+  // Both roster editors' member edits and removals moved into these server
+  // actions (removeFamilyMemberAction, updateFamilyMemberAction), which still
+  // write through the caller's session and so still have to read back rows.
+  'app/(app)/family/member-actions.ts': ['family_members'],
+  'components/modules/settings-module.tsx': ['families'],
 };
 
 /** A write statement that asks for nothing back cannot tell refused from done. */
@@ -77,13 +80,18 @@ describe('a manager-gated write never claims success on a refusal', () => {
 // member is shown a bin on a family-wide notice that only a manager can empty.
 // Mark-read stays uncounted on purpose (zero rows there means nothing was
 // unread); the delete is the write that can be refused.
-describe('deleting a notification the member cannot delete', () => {
+describe('dismissing a notification the member cannot dismiss', () => {
+  // The bin is a dismissal now (a DELETE let the generator re-create the
+  // notice on its next scan), made by a server action under the same rule
+  // notif_delete held: the recipient, or a manager for a family-wide row.
   const source = readFileSync('components/modules/notifications-module.tsx', 'utf8');
+  const action = readFileSync('app/(app)/dashboard/notifications/actions.ts', 'utf8');
 
-  it('asks how many rows the delete removed, and says so when none', () => {
-    const deletes = source.match(/from\('notifications'\)\.delete\(\)[^;]*;/g) ?? [];
-    expect(deletes.length, 'no notification delete found — did the module change?').toBeGreaterThan(0);
-    expect(deletes.filter((s) => !s.includes(".select('id')")), 'a delete with no row count').toEqual([]);
-    expect(source).toMatch(/if \(wroteNoRows\(rows\)\) toastError\(t\('errors\.thatChangeWasNotSaved'\)\)/);
+  it('asks how many rows the dismissal changed, and the screen says so when none', () => {
+    expect(source).not.toMatch(/from\('notifications'\)\.delete\(\)/);
+    expect(source).toContain('await dismissNotificationAction({ id })');
+    expect(source).toMatch(/else if \(!res\.ok\) toastError\(res\.error\)/);
+    expect(action).toMatch(/\.update\(dismissal as never\)\s*\.eq\('id', row\.id\)\.eq\('family_id', familyId\)\s*\.select\('id'\)/);
+    expect(action).toContain('if (wroteNoRows(rows)) return notSaved;');
   });
 });

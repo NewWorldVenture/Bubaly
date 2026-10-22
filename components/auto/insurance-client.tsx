@@ -17,6 +17,7 @@ import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/home/field';
 import { EmptyState } from '@/components/ui/states';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock } from '@/components/i18n/use-format';
 import { formatCents } from '@/lib/wallet/ledger';
 
 type Policy = Tables<'auto_insurance_policies'>;
@@ -75,8 +76,11 @@ export function PolicyDetails({ policy: p }: { policy: Policy }) {
   );
 }
 
-export function InsuranceClient({ policies, vehicles }: { policies: Policy[]; vehicles: Vehicle[] }) {
+/** `ownOnly`: the viewer reads only the policies they added (the held 0514). */
+export function InsuranceClient({ policies, vehicles, ownOnly = false }: { policies: Policy[]; vehicles: Vehicle[]; ownOnly?: boolean }) {
   const t = useTranslations();
+  // The family's day: `expires_on` is a DATE (lib/auto/renewals.ts).
+  const todayKey = useFamilyClock().todayKey();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Policy | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -91,6 +95,7 @@ export function InsuranceClient({ policies, vehicles }: { policies: Policy[]; ve
         <div>
           <h2 className="text-sm font-semibold">{t('insuranceClient.autoInsurance')}</h2>
           <p className="text-xs text-muted">{t('insuranceClient.fullPolicyDetailsPlusAOne')}</p>
+          {ownOnly && <p className="text-xs text-muted">{t('householdMoney.onlyWhatYouAdded')}</p>}
         </div>
         <Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> {t('insuranceClient.addPolicy')}</Button>
       </div>
@@ -100,7 +105,7 @@ export function InsuranceClient({ policies, vehicles }: { policies: Policy[]; ve
       ) : (
         <div className="space-y-3">
           {policies.map((p) => {
-            const s = renewalStatus(p.expires_on);
+            const s = renewalStatus(p.expires_on, todayKey);
             const isOpen = expanded === p.id;
             return (
               <Card key={p.id}>

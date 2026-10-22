@@ -104,6 +104,18 @@ describe('planning a meal into a slot', () => {
     ] } });
   });
 
+  it('a custom dish typed with a saved dish\'s name and no ingredients plans the saved dish, not an empty copy', async () => {
+    // What the planner's custom form sends when no ingredient row is filled in.
+    db.seed('meals', [{ id: 'soup', family_id: FAMILY, name: 'Lentil soup', meal_type: 'lunch',
+      ingredients: [{ name: 'lentils', qty: '1', unit: 'cup' }] }]);
+
+    const result = await planMealAction({ mealName: 'Lentil soup', date: '2026-09-08', mealType: 'dinner', ingredients: [] });
+
+    expect(result).toMatchObject({ ok: true, slot: { mealId: 'soup', name: 'Lentil soup', ingredients: [{ name: 'lentils', quantity: '1', unit: 'cup' }] } });
+    expect(db.table('meals').filter((meal) => meal.name === 'Lentil soup')).toHaveLength(1);
+    expect(plans()).toEqual([expect.objectContaining({ meal_id: 'soup', meal_type: 'dinner' })]);
+  });
+
   it('creates a library-only custom meal without planning it', async () => {
     const result = await createMealAction({ name: 'Breakfast oats', mealType: 'breakfast',
       ingredients: [{ name: 'oats', quantity: '1/2', unit: 'cup' }], imageUrl: 'https://example.com/oats.jpg',

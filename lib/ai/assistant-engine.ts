@@ -44,6 +44,12 @@ type ConversationUpdate = Database['public']['Tables']['ai_conversations']['Upda
 
 export const ASSISTANT_MAX_TOKENS = 1500;
 
+export const ASSISTANT_STOPPED = 'Response stopped. Actions already started may have completed. Review this conversation before sending the request again.';
+
+export function stoppedAssistantContent(text: string): string {
+  return [text.trim(), ASSISTANT_STOPPED].filter(Boolean).join('\n\n');
+}
+
 export const SSE_HEADERS = {
   'Content-Type': 'text/event-stream; charset=utf-8',
   'Cache-Control': 'no-cache, no-transform',
@@ -72,6 +78,8 @@ export type AssistantTurnInput = {
   tz: string;
   conversationId: string;
   message: string;
+  /** Stop future dispatch while retaining the outcome of any tool already running. */
+  signal?: AbortSignal;
   /** Skip classification when the caller already knows what this is (a routine, a card action). */
   intent?: IntentKey;
   /** Where the person is in the app — narrows classification and lets slices focus. */
@@ -478,14 +486,16 @@ export async function runAssistantTurn(input: AssistantTurnInput, prepared: Prep
     // surface entirely. The `feature` string is what names this one.
     { feature: 'assistant.turn', text: 'Assistant turn', conversationId: input.conversationId, clientRequestId: turnKey(input) },
     async (obs) => {
-      const result = await provider.runTools({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS });
+      const result = await provider.runTools({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS, signal: input.signal });
       obs.used(provider.model, result.usage);
       const actions: ExecutedAssistantAction[] = result.actions.map((a) => ({ name: a.name, args: a.args, result: a.result }));
-      const content = finalizeAssistantContent(result.text, actions);
+      const stopped = input.signal?.aborted;
+      const content = stopped ? stoppedAssistantContent(result.text) : finalizeAssistantContent(result.text, actions);
+      if (stopped) obs.failed(new Error(ASSISTANT_STOPPED), { partial: actions.length > 0 || Boolean(result.text) });
       const { cards, runIds } = await collectOutcomes(input, prepared, actions);
       const persisted = await persistAssistantTurn(input.supabase, {
         familyId: input.familyId, conversationId: input.conversationId, message: input.message,
-        assistantContent: content, actions, model: provider.model, structured: toStructuredContent(cards, runIds), requestId: obs.requestId,
+        assistantContent: content, actions, model: provider.model, structured: toStructuredContent(cards, runIds, stopped ? ASSISTANT_STOPPED : undefined), requestId: obs.requestId,
       });
       // Partial, not failed: the family got their answer, the conversation did
       // not keep it.
@@ -515,12 +525,14 @@ export async function runAssistantTurn(input: AssistantTurnInput, prepared: Prep
 export function createAssistantStream(input: AssistantTurnInput, prepared: PreparedAssistantTurn): ReadableStream<Uint8Array> {
   const { system, messages, tools, provider } = prepared;
   const encoder = new TextEncoder();
-  // Disconnecting the reader must not throw from enqueue and trigger a second
-  // provider/tool run. Finish the started turn and retain its history so the
-  // person can reopen it to see what actually happened.
+  // A closed response must not trigger a fallback or start another tool. The
+  // tool already running still settles and its outcome is saved, so stopping
+  // a response never pretends to undo a write that may have committed.
   let connected = true;
+  const stopped = new AbortController();
+  const signal = input.signal ? AbortSignal.any([input.signal, stopped.signal]) : stopped.signal;
   return new ReadableStream<Uint8Array>({
-    cancel() { connected = false; },
+    cancel() { connected = false; stopped.abort(); },
     async start(controller) {
       // The wrapper lives INSIDE `start`, not around the call that builds this
       // stream. `withAiRequest` settles when its body resolves, and the function
@@ -535,7 +547,7 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
             const send = (e: unknown) => {
               if (!connected) return;
               try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(e)}\n\n`)); }
-              catch { connected = false; } // cancel can precede the async start settling
+              catch { connected = false; stopped.abort(); } // cancel can precede the async start settling
             };
             let content = '';
             let responseError: string | undefined;
@@ -561,7 +573,7 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
               }
             };
             try {
-              for await (const ev of provider.runToolsStream({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS })) {
+              for await (const ev of provider.runToolsStream({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS, signal })) {
                 if (ev.type === 'delta') { content += ev.text; send({ type: 'delta', text: ev.text }); }
                 else await pushAction(ev.name, ev.args, ev.result);
               }
@@ -572,16 +584,18 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
               obs.used(provider.model, undefined);
             } catch (streamErr) {
               console.error('[assistant-engine] stream error:', streamErr);
-              if (!content && actions.length === 0) {
+              if (!content && actions.length === 0 && !signal.aborted) {
                 try {
-                  const result = await provider.runTools({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS });
+                  const result = await provider.runTools({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS, signal });
                   // The turn recovered and the family gets a whole answer, so this
                   // settles `completed`. The stream break is in the log, not the row:
                   // a status of `failed` would describe a turn nobody experienced as
                   // one. The fallback DOES carry usage.
                   obs.used(provider.model, result.usage);
+                  // This fallback starts with no recorded actions. Its ordered
+                  // entries are executions; equal arguments can be two writes.
                   for (const a of result.actions) {
-                    if (!actions.some((x) => x.name === a.name && JSON.stringify(x.args) === JSON.stringify(a.args))) await pushAction(a.name, a.args, a.result);
+                    await pushAction(a.name, a.args, a.result);
                   }
                   if (result.text) { content = result.text; send({ type: 'delta', text: result.text }); }
                 } catch (fallbackErr) {
@@ -596,7 +610,7 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
                   if (connected) controller.close();
                   return;
                 }
-              } else {
+              } else if (!signal.aborted) {
                 // Text reached the family before the stream broke. The tokens were
                 // spent and the answer is half an answer: `partially_completed`.
                 obs.used(provider.model, undefined);
@@ -605,10 +619,16 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
                 // before the row settles still knows it was cut off.
                 responseError = describeAIError(streamErr).message;
                 send({ type: 'error', error: responseError });
+              } else {
+                obs.used(provider.model, undefined);
               }
             }
 
-            const assistantContent = finalizeAssistantContent(content, actions);
+            if (signal.aborted) {
+              responseError = ASSISTANT_STOPPED;
+              obs.failed(new Error(ASSISTANT_STOPPED), { partial: actions.length > 0 || Boolean(content) });
+            }
+            const assistantContent = signal.aborted ? stoppedAssistantContent(content) : finalizeAssistantContent(content, actions);
             const persisted = await persistAssistantTurn(input.supabase, {
               familyId: input.familyId, conversationId: input.conversationId, message: input.message,
               assistantContent, actions, model: provider.model, structured: toStructuredContent(cards, runIds, responseError), requestId: obs.requestId,

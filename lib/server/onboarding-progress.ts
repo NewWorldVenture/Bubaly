@@ -72,32 +72,52 @@ export async function recordOnboardingProgress(admin: DB, p: RecordProgressInput
 
 export type OnboardingProgressRow = Database['public']['Tables']['onboarding_progress']['Row'];
 
-/** Read the account's onboarding_progress row (null when absent / pre-migration). */
-export async function getOnboardingProgress(supabase: DB, userId: string): Promise<OnboardingProgressRow | null> {
+/**
+ * Read the account's onboarding_progress row, saying whether the read answered.
+ *
+ * `row: null, error: null` is a confirmed absence. `error` set means the read
+ * did NOT answer and the row is unknown: finalize used to take that null for
+ * "no progress", treat the account as an idempotent re-submit and return
+ * success without writing the family details, members, invites or
+ * preferences, while the wizard showed Done and deleted the draft.
+ */
+export async function readOnboardingProgress(
+  supabase: DB, userId: string,
+): Promise<{ row: OnboardingProgressRow | null; error: unknown }> {
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('onboarding_progress')
       .select('*')
       .eq('user_id', userId)
       .maybeSingle();
-    return (data as OnboardingProgressRow | null) ?? null;
-  } catch {
-    return null;
+    if (error) return { row: null, error };
+    return { row: (data as OnboardingProgressRow | null) ?? null, error: null };
+  } catch (error) {
+    return { row: null, error: error ?? new Error('onboarding progress read failed') };
   }
+}
+
+/** Read the account's onboarding_progress row (null when absent, pre-migration or unreadable). */
+export async function getOnboardingProgress(supabase: DB, userId: string): Promise<OnboardingProgressRow | null> {
+  return (await readOnboardingProgress(supabase, userId)).row;
 }
 
 /**
  * Resolve an account's live completeness by joining the progress row with the
  * ground-truth facts (does a family_onboarding row exist, how many members,
- * does the profile have a real name). Degrades safely — any query failure yields
- * a conservative "in_progress" verdict rather than throwing.
+ * does the profile have a real name). It never throws, but a read that did not
+ * answer is named in `readFailures`, so the setup page can say it could not
+ * check rather than show a score built on reads that never happened.
  */
 export async function resolveCompleteness(
   admin: DB,
   userId: string,
   familyId: string | null,
-): Promise<{ result: CompletenessResult; progress: OnboardingProgressRow | null }> {
-  const progress = await getOnboardingProgress(admin, userId);
+): Promise<{ result: CompletenessResult; progress: OnboardingProgressRow | null; readFailures: string[] }> {
+  const readFailures: string[] = [];
+  const progressRead = await readOnboardingProgress(admin, userId);
+  if (progressRead.error) readFailures.push('onboarding_progress');
+  const progress = progressRead.row;
 
   let hasName = false;
   let hasQuestionnaire = false;
@@ -105,27 +125,31 @@ export async function resolveCompleteness(
   let memberCount = 0;
 
   try {
-    const { data: profile } = await admin
+    const { data: profile, error } = await admin
       .from('profiles').select('display_name, full_name').eq('id', userId).maybeSingle();
+    if (error) readFailures.push('profiles');
     hasName = !!(profile?.display_name || profile?.full_name);
-  } catch { /* keep default */ }
+  } catch { readFailures.push('profiles'); }
 
   if (familyId) {
     try {
-      const { data: fo } = await admin
+      const { data: fo, error } = await admin
         .from('family_onboarding').select('goals, completed_at').eq('family_id', familyId).maybeSingle();
+      if (error) readFailures.push('family_onboarding');
       hasQuestionnaire = !!fo?.completed_at;
       hasGoals = Array.isArray(fo?.goals) && fo!.goals.length > 0;
-    } catch { /* keep default */ }
+    } catch { readFailures.push('family_onboarding'); }
     try {
-      const { count } = await admin
+      const { count, error } = await admin
         .from('family_members')
         .select('id', { count: 'exact', head: true })
         .eq('family_id', familyId);
+      if (error) readFailures.push('family_members');
       // Discount the account holder themselves.
       memberCount = Math.max(0, (count ?? 1) - 1);
-    } catch { /* keep default */ }
+    } catch { readFailures.push('family_members'); }
   }
+  if (readFailures.length) console.error('[onboarding] completeness reads failed', { userId, familyId, readFailures });
 
   const signals: CompletenessSignals = {
     hasName,
@@ -140,7 +164,7 @@ export async function resolveCompleteness(
   };
 
   const result = computeCompleteness(signals);
-  return { result, progress };
+  return { result, progress, readFailures };
 }
 
 export { statusFromCompleteness };

@@ -8,6 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { describeDbError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { useToast } from '@/components/ui/toast';
@@ -41,6 +42,16 @@ const STATUS_STYLES: Record<RedemptionStatus, string> = {
 
 const blankReward = { id: '', title: '', description: '', cost_points: 100 };
 
+/**
+ * The ledger is read whole, to a ceiling that is an error rather than a cut.
+ * Balances are sums, and a sum over a prefix is a wrong number presented as a
+ * right one: one unpaged select stopped at db-max-rows (1,000) in no particular
+ * order, so a family past a thousand approved chores saw balances short of what
+ * 0439's guard sums — "Not enough points" on a reward the database would
+ * allow, and Approve disabled for the parent.
+ */
+const LEDGER_MAX = 50_000;
+
 export function RewardsModule() {
   const t = useTranslations();
   const askConfirm = useConfirm();
@@ -69,11 +80,25 @@ export function RewardsModule() {
   });
   const { data: assignments, loading: assignmentsLoading, error: assignmentsError, stale: assignmentsStale, refreshAndConfirm: confirmAssignments } = useRealtimeQuery<Assignment>({
     table: 'chore_assignments', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('chore_assignments').select('*').eq('family_id', familyId).eq('status', 'approved'),
+    // Paged on the id, not on offsets: the balances below are SUMS, and an
+    // offset read repeats a row when one is written between its pages (see
+    // readAllById). A chore approved mid-read counted an old one twice.
+    fetcher: (sb) => readAllByIdAsQuery<Assignment>((after, limit) => {
+      let q = sb.from('chore_assignments').select('*').eq('family_id', familyId).eq('status', 'approved');
+      if (after) q = q.gt('id', after);
+      return q.order('id').limit(limit);
+    }, { max: LEDGER_MAX }),
   });
   const { data: redemptions, loading: redemptionsLoading, error: redemptionsError, stale: redemptionsStale, refreshAndConfirm: confirmRedemptions } = useRealtimeQuery<Redemption>({
     table: 'reward_redemptions', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('reward_redemptions').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
+    // The same: a new request, which spends nothing, landing between two pages
+    // made an old approved redemption subtract a second time. Read in id order,
+    // shown newest first below.
+    fetcher: (sb) => readAllByIdAsQuery<Redemption>((after, limit) => {
+      let q = sb.from('reward_redemptions').select('*').eq('family_id', familyId);
+      if (after) q = q.gt('id', after);
+      return q.order('id').limit(limit);
+    }, { max: LEDGER_MAX }),
   });
 
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
@@ -86,8 +111,10 @@ export function RewardsModule() {
   const balanceByMember = useMemo(() => new Map(balances.map((b) => [b.memberId, b])), [balances]);
   const selfBalance = selfMember ? balanceByMember.get(selfMember.id) : undefined;
 
-  const pending = useMemo(() => (redemptions ?? []).filter((r) => r.status === 'requested'), [redemptions]);
-  const history = useMemo(() => (redemptions ?? []).filter((r) => r.status !== 'requested').slice(0, 12), [redemptions]);
+  const newestFirst = useMemo(() => [...(redemptions ?? [])]
+    .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? '') || b.id.localeCompare(a.id)), [redemptions]);
+  const pending = useMemo(() => newestFirst.filter((r) => r.status === 'requested'), [newestFirst]);
+  const history = useMemo(() => newestFirst.filter((r) => r.status !== 'requested').slice(0, 12), [newestFirst]);
 
   const sortedBalances = useMemo(() => [...balances].sort((a, b) => b.available - a.available), [balances]);
   const readError = error || assignmentsError || redemptionsError;

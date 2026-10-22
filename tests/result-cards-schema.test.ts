@@ -137,9 +137,10 @@ describe('cardFromToolResult', () => {
         ],
       },
     });
-    expect(vsActual).toMatchObject({ kind: 'budget_analysis', period: '2026-09', total_limit: 900, total_spent: 950, insight: '1 budget is over.' });
+    expect(vsActual).toMatchObject({ kind: 'budget_analysis', period: '2026-09', totals: 'month', total_limit: 900, total_spent: 950, insight: '1 budget is over.' });
     if (vsActual?.kind !== 'budget_analysis') return;
-    expect(vsActual.rows[0]).toEqual({ label: 'Groceries', spent: 620, limit: 500, share: 124, delta: null, over: true });
+    // Each line carries the period it is judged in (M12-CARD).
+    expect(vsActual.rows[0]).toEqual({ label: 'Groceries', period: 'monthly', spent: 620, limit: 500, share: 124, delta: null, over: true });
 
     const compared = cardFromToolResult('compare_spending_periods', {}, {
       ok: true, summary: 'Spending up $50',
