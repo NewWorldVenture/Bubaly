@@ -43,7 +43,7 @@ vi.mock('@/lib/email', () => ({
   APP_URL: 'https://bubaly.test',
 }));
 
-const FORM_ID = 'form-newsletter';
+const FORM_ID = '7e3c2d1a-5b4f-4c8e-9a1d-2f3e4b5c6d7e';
 
 /** rate_limit_hit (0156/0179) over a table, fixed windows, every hit counted. */
 function limiter(args: Record<string, unknown>, db: InMemorySupabase) {

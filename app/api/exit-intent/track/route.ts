@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
+import { isUuid } from '@/lib/utils/validation';
 
 export const runtime = 'nodejs';
 
@@ -28,12 +29,17 @@ export async function POST(req: NextRequest) {
     );
   }
   const body = (parsedBody.value && typeof parsedBody.value === 'object' ? parsedBody.value : {}) as {
-    id?: string; kind?: string;
+    id?: unknown; kind?: unknown;
   };
 
-  const id = (body.id ?? '').trim();
+  // The offer id is a uuid, or it names no offer. A non-string reached
+  // `.trim()` and threw (an unhandled 500), and a non-uuid string reached the
+  // uuid-typed RPC, which refused it (22P02) — logged as an error and answered
+  // 500. Both are the caller's input, so both are 422; the 500 below is for a
+  // failed RPC on valid input. Audit N9.
+  const id = typeof body.id === 'string' ? body.id.trim() : '';
   const metric = body.kind === 'conversion' ? 'conversion' : 'impression';
-  if (!id) return NextResponse.json({ error: t('track.idIsRequired') }, { status: 422 });
+  if (!id || !isUuid(id)) return NextResponse.json({ error: t('track.idIsRequired') }, { status: 422 });
 
   const { error } = await supabase.rpc('bump_exit_intent', { p_id: id, p_metric: metric });
   if (error) {

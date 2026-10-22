@@ -278,7 +278,9 @@ describe('the connected-account mirror no longer discards its result (C1-S9-64)'
   it('throws on a refused write, so every caller — and Stripe — can react', () => {
     const fn = block(connect, 'export async function syncConnectedAccount(');
     expect(fn).toContain("if (error) throw new Error('Stripe connected-account mirror update failed');");
-    expect(fn).toContain(".eq('family_id', familyId)\n    .select('id');");
+    // Bound to the account as well as the family since audit N12: the webhook
+    // names the family from account metadata, so family alone was not enough.
+    expect(fn).toContain(".eq('family_id', familyId)\n    .eq('stripe_account_id', accountId)\n    .select('id');");
   });
 
   it('logs, and does NOT throw, when no mirror row matched', () => {

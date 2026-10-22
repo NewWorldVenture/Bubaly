@@ -26,6 +26,9 @@ export function ReviewForm(p: Props) {
   const [body, setBody] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  // Honeypot: never shown and never focusable, so a person leaves it empty; a
+  // bot that fills every field fills it, and the action then writes nothing.
+  const [website, setWebsite] = useState('');
   const [pending, start] = useTransition();
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
@@ -34,7 +37,7 @@ export function ReviewForm(p: Props) {
     if (rating < 1) { setError(t('reviewForm.pleaseChooseAStarRating')); return; }
     setError('');
     start(async () => {
-      const r = await submitReviewAction({ rating, title, body, name, email });
+      const r = await submitReviewAction({ rating, title, body, name, email, website });
       if (r.ok) setDone(true); else setError(r.error ?? t('reviewForm.somethingWentWrong'));
     });
   }
@@ -68,6 +71,10 @@ export function ReviewForm(p: Props) {
         {p.message && <p className="mt-1 text-sm text-muted">{p.message}</p>}
       </div>
 
+      {/* `onMouseLeave` only clears the hover preview; the stars themselves are
+          buttons, so the keyboard path is theirs. Same reasoning as the social
+          feed's menu (components/modules/social-feed-module.tsx). */}
+      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
       <div className="flex justify-center gap-1.5" onMouseLeave={() => setHover(0)}>
         {[1, 2, 3, 4, 5].map((v) => (
           <button key={v} type="button" onClick={() => setRating(v)} onMouseEnter={() => setHover(v)} aria-label={v === 1 ? t('reviewsNewReviewForm.oneStar') : t('reviewsNewReviewForm.nStars', { count: v })}>
@@ -86,6 +93,7 @@ export function ReviewForm(p: Props) {
         <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder={t('reviewsNewReviewForm.emailOptional')}
           className="h-11 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring" />
       </div>
+      <input value={website} onChange={(e) => setWebsite(e.target.value)} name="website" type="text" tabIndex={-1} autoComplete="off" aria-hidden="true" className="hidden" />
 
       {error && <p className="text-sm text-danger">{error}</p>}
       <button onClick={submit} disabled={pending}
