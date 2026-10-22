@@ -99,6 +99,9 @@ function scope(): ServiceScope {
 
 beforeAll(() => {
   db.seed('families', [{ id: FAMILY, name: 'The Hughens', timezone: 'America/New_York', created_by: USER }]);
+  // Family Basic: a run is Ask Bubaly's work, and `continueRun` executes only
+  // a family that has it (N8; tests/no-kick-runs-a-lapsed-familys-run.test.ts).
+  db.seed('subscriptions', [{ id: 'sub-hughens', family_id: FAMILY, plan: 'basic', status: 'active', current_period_end: '2099-01-01T00:00:00Z' }]);
   db.seed('family_members', [
     { id: PARENT, family_id: FAMILY, user_id: USER, display_name: 'Dan', role: 'parent', is_active: true, birthdate: null },
     { id: CHILD, family_id: FAMILY, user_id: null, display_name: 'Maya', role: 'child', is_active: true, birthdate: '2016-03-02' },

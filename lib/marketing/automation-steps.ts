@@ -6,6 +6,7 @@ import type { Copy } from '@/lib/marketing/automation-triggers';
 import { unsubUrl } from '@/lib/marketing/unsubscribe';
 import { canonicalMailbox } from '@/lib/server/canonical-mailbox';
 import { escapeLike } from '@/lib/supabase/escape-like';
+import { isChildLoginEmail } from '@/lib/onboarding/child-login';
 
 type DB = SupabaseClient<Database>;
 
@@ -99,6 +100,102 @@ function unsubscribeFooter(url: string): string {
 }
 
 /**
+ * The per-step results an earlier attempt of a run recorded in its metadata
+ * (`{ actions: [...] }`), or none. A failed run is retried by running its steps
+ * again, and this is how the retry knows which of them already went out.
+ */
+export function recordedActions(metadata: unknown): string[] {
+  const actions = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? (metadata as { actions?: unknown }).actions
+    : undefined;
+  return Array.isArray(actions) ? actions.map((action) => (typeof action === 'string' ? action : '')) : [];
+}
+
+/**
+ * A run's recorded results exactly as stored (`metadata.actions`), as JSON
+ * text, or null when it holds none: what a retry's claim is fenced on.
+ *
+ * The receipts are read before the run is claimed. Another pass can claim the
+ * run in between, deliver an email, fail a later step and record that
+ * delivery; a retry that then claimed the run worked from receipts without
+ * it, and sent the email again. Claimed only while `metadata.actions` is still
+ * what was read, the claim matches nothing in that case, and the run waits,
+ * failed, for a pass that reads its receipts afresh. The fence is on the
+ * results alone, not the whole metadata: they are short, and every attempt
+ * that records them records its steps (`retryOf`) in the same write.
+ */
+export function recordedActionsJson(metadata: unknown): string | null {
+  const actions = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? (metadata as { actions?: unknown }).actions
+    : undefined;
+  return actions === undefined || actions === null ? null : JSON.stringify(actions);
+}
+
+/**
+ * Whether a run's metadata carries the steps an attempt ran (`retryOf`). A
+ * retry that read a run without them is claimed only while it still has none:
+ * another pass may have retried it in between, recording the same results
+ * (a carried send, the same step failing again) beside the steps IT ran, and
+ * a claim fenced on the results alone then matched, and retried from the stale
+ * read against the current steps — an edited workflow's — sending again what
+ * the other pass had already delivered. Once recorded, the steps are the
+ * snapshot every later retry runs and records again, so their presence is the
+ * whole fence.
+ */
+export function stepsRecorded(metadata: unknown): boolean {
+  const steps = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? (metadata as { steps?: unknown }).steps
+    : undefined;
+  return steps !== undefined && steps !== null;
+}
+
+/**
+ * What a retry of a failed run works from: the steps its earlier attempt ran,
+ * and what each of them did (`recordedActions`), matched by position.
+ *
+ * Positions only line up against the steps that attempt RAN. The workflow
+ * can be edited between attempts, and a retry used to load its CURRENT
+ * steps: "email A, email B" recorded as [sent, failed] and then reordered to
+ * "email B, email A" skipped B as sent and mailed A a second time. So every
+ * attempt records the steps it ran beside their results (`metadata.steps`),
+ * and a retry runs that snapshot. An edit to the workflow reaches runs that
+ * start after it. A run recorded before attempts kept their steps has no
+ * snapshot, and is matched against the current steps as before.
+ */
+export function retryOf(metadata: unknown, current: Step[]): { steps: Step[]; previous: string[] } {
+  const recorded = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? (metadata as { steps?: unknown }).steps
+    : undefined;
+  // A recorded snapshot is run as it was recorded, entries runSteps could not
+  // read included: it records each of those as a failed step, so the next
+  // attempt meets it at the same index. Falling back to the current steps for
+  // such a snapshot paired them with receipts made against other steps — a
+  // first run of [email A, null] recorded [send_email, step:failed], and with
+  // the workflow edited to [null, email A] the retry sent A again at the
+  // failed index.
+  const snapshot = Array.isArray(recorded) ? (recorded as Step[]) : null;
+  return { steps: snapshot ?? current, previous: recordedActions(metadata) };
+}
+
+/** Emails this attempt actually sent: a send carried over from `previous` was not sent again. */
+export function emailsSent(actions: readonly string[], previous: readonly string[] = []): number {
+  return actions.filter((action, i) => action === 'send_email' && previous[i] !== 'send_email').length;
+}
+
+/**
+ * The log to record when an attempt failed without producing one of its own
+ * (the caller caught a throw from `runSteps`). Writing a bare
+ * `['automation:failed']` there erased the only record of which emails had
+ * already gone, so the next retry sent them again. This keeps every send the
+ * earlier attempt recorded, by position, and marks the rest failed, so the run
+ * stays failed and the retry repeats nothing that was delivered.
+ */
+export function failedAttempt(steps: readonly unknown[], previous: readonly string[] = []): string[] {
+  if (steps.length === 0) return ['automation:failed'];
+  return steps.map((_, i) => (previous[i] === 'send_email' ? 'send_email' : 'automation:failed'));
+}
+
+/**
  * Executes a workflow's steps for one recipient. Only `send_email` actually
  * sends today (via Resend); other actions (notify_admin / apply_tag /
  * add_to_segment / update_lead_score …) are recorded but not yet executed.
@@ -115,6 +212,18 @@ function unsubscribeFooter(url: string): string {
  * bound held). It is how a caller's per-recipient allowance is enforced on the
  * mail actually sent rather than on the event that started it: one event fans
  * out to every matching workflow and every send_email step in each.
+ *
+ * `previous` is the log of the earlier attempt when a failed run is retried.
+ * A `send_email` step it records as sent is carried over and NOT sent again:
+ * every step but `send_email` is recorded `:unsupported`, which fails the run,
+ * so a workflow such as "send_email, then apply_tag" is retried on every pass
+ * and used to mail the same person the same email each time. A failed, skipped,
+ * suppressed, throttled or never-attempted send is still attempted, opt-out
+ * read and admission included. Steps are matched by position.
+ *
+ * A step that throws (a malformed workflow, such as a body that is not text)
+ * is recorded `<action>:failed` and the rest still run. It used to escape, and
+ * the caller then replaced the whole log, sends included, with one failure.
  */
 export async function runSteps(
   steps: Step[],
@@ -122,66 +231,86 @@ export async function runSteps(
   fallback: Copy,
   supabase: DB,
   admit?: SendAdmission,
+  previous: readonly string[] = [],
 ): Promise<string[]> {
   const done: string[] = [];
-  for (const step of steps) {
-    if (step.action === 'send_email' && !recipient.email) {
-      done.push('send_email:skipped(no-recipient)');
-      continue;
-    }
-    if (step.action === 'send_email' && recipient.email) {
-      // Read the opt-out for EVERY send, never once per run: an unsubscribe that
-      // lands while an earlier step's mail is in flight must stop the next one.
-      const consent = await suppressionFor(supabase, recipient.email);
-      if (consent === 'unknown') {
-        done.push('send_email:failed');
+  for (const [i, step] of steps.entries()) {
+    try {
+      if (step.action === 'send_email' && previous[i] === 'send_email') {
+        done.push('send_email');
         continue;
       }
-      if (consent === 'suppressed') {
-        done.push('send_email:suppressed');
+      if (step.action === 'send_email' && !recipient.email) {
+        done.push('send_email:skipped(no-recipient)');
         continue;
       }
-      const subject = step.subject || fallback.subject;
-      const html = `<p>Hi ${escapeHtml(recipient.name || 'there')},</p><p>${escapeHtml(step.body || fallback.body)}</p><p>— The Bubaly Team</p>`;
-      if (emailEnabled()) {
-        // A refusal, and an admission that could not be decided, both send nothing.
-        let admitted = true;
-        if (admit) {
-          try { admitted = await admit(); } catch { admitted = false; }
-        }
-        if (!admitted) {
-          done.push('send_email:throttled');
+      // Never a kid login's synthetic address (lib/onboarding/child-login.ts),
+      // the rule sendReactEmail and sendEmail keep: nothing is delivered on
+      // that domain and it is not Bubaly's, so a send is a bounce or a child's
+      // name in a stranger's inbox. This step calls the provider directly, so
+      // it keeps the rule here: a profile or a CRM contact can still carry
+      // one, such as a kid login's own profiles.email.
+      if (step.action === 'send_email' && isChildLoginEmail(recipient.email)) {
+        done.push('send_email:skipped(kid-login)');
+        continue;
+      }
+      if (step.action === 'send_email' && recipient.email) {
+        // Read the opt-out for EVERY send, never once per run: an unsubscribe that
+        // lands while an earlier step's mail is in flight must stop the next one.
+        const consent = await suppressionFor(supabase, recipient.email);
+        if (consent === 'unknown') {
+          done.push('send_email:failed');
           continue;
         }
-        // The admission is awaited, and an opt-out can land while it is. Read
-        // the opt-out again right before the provider is called. (The first
-        // read stays, so an inbox already opted out never spends its allowance.)
-        if (admit) {
-          const now = await suppressionFor(supabase, recipient.email);
-          if (now !== 'mailable') {
-            done.push(now === 'suppressed' ? 'send_email:suppressed' : 'send_email:failed');
+        if (consent === 'suppressed') {
+          done.push('send_email:suppressed');
+          continue;
+        }
+        const subject = step.subject || fallback.subject;
+        const html = `<p>Hi ${escapeHtml(recipient.name || 'there')},</p><p>${escapeHtml(step.body || fallback.body)}</p><p>— The Bubaly Team</p>`;
+        if (emailEnabled()) {
+          // A refusal, and an admission that could not be decided, both send nothing.
+          let admitted = true;
+          if (admit) {
+            try { admitted = await admit(); } catch { admitted = false; }
+          }
+          if (!admitted) {
+            done.push('send_email:throttled');
             continue;
           }
-        }
-        try {
-          const unsubscribe = unsubUrl(APP_URL, recipient.email);
-          const { error } = await getResend().emails.send({
-            from: FROM_EMAIL,
-            to: recipient.email,
-            subject,
-            html: `${html}${unsubscribeFooter(unsubscribe)}`,
-            headers: { 'List-Unsubscribe': `<${unsubscribe}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
-          });
-          done.push(error ? 'send_email:failed' : 'send_email');
-        } catch (error) {
-          console.error('[marketing automation] email provider call failed', error);
-          done.push('send_email:failed');
+          // The admission is awaited, and an opt-out can land while it is. Read
+          // the opt-out again right before the provider is called. (The first
+          // read stays, so an inbox already opted out never spends its allowance.)
+          if (admit) {
+            const now = await suppressionFor(supabase, recipient.email);
+            if (now !== 'mailable') {
+              done.push(now === 'suppressed' ? 'send_email:suppressed' : 'send_email:failed');
+              continue;
+            }
+          }
+          try {
+            const unsubscribe = unsubUrl(APP_URL, recipient.email);
+            const { error } = await getResend().emails.send({
+              from: FROM_EMAIL,
+              to: recipient.email,
+              subject,
+              html: `${html}${unsubscribeFooter(unsubscribe)}`,
+              headers: { 'List-Unsubscribe': `<${unsubscribe}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
+            });
+            done.push(error ? 'send_email:failed' : 'send_email');
+          } catch (error) {
+            console.error('[marketing automation] email provider call failed', error);
+            done.push('send_email:failed');
+          }
+        } else {
+          done.push('send_email:skipped(no-key)');
         }
       } else {
-        done.push('send_email:skipped(no-key)');
+        done.push(`${step.action}:unsupported`);
       }
-    } else {
-      done.push(`${step.action}:unsupported`);
+    } catch (error) {
+      console.error('[marketing automation] step threw', error);
+      done.push(`${typeof step?.action === 'string' ? step.action : 'step'}:failed`);
     }
   }
   return done;

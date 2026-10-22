@@ -17,16 +17,18 @@ import { briefingCalendarBounds, instantCalendarBounds } from '@/lib/briefing/ca
 import type { ParentApprovalRow, RenewalRow, DocumentRow, NeedsReader } from '@/lib/home/needs-sources';
 import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { reminderAttention } from '@/lib/dashboard/reminder-attention';
-import { dayKeyInTz, familyInstantIso, zonedDayBoundsMs } from '@/lib/services/scope';
+import { addDaysToDayKey, dayKeyInTz, familyInstantIso, zonedDayBoundsMs } from '@/lib/services/scope';
 import { nextRemindAt } from '@/lib/reminders/details';
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { wroteNoRows } from '@/lib/supabase/errors';
-import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
-import { ensureTodoListId } from '@/lib/services/tasks';
+import { addItems, ensureDefaultGroceryListId, readOnOpenGroceryLists } from '@/lib/services/groceries';
+import { CHORES_ARE_SET_BY_A_MANAGER, ensureTodoListId, mayManageChores } from '@/lib/services/tasks';
 import { createGoal } from '@/lib/services/goals';
 import { normalizeEventTimes } from '@/lib/services/calendar';
 import { allDayBoundsAsDates } from '@/lib/assistant/all-day-dates';
 import { reminderInstant } from '@/lib/services/reminders';
+import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
+import { mintSuggestionReminderKey, mintSuggestionSourceTag } from '@/lib/autopilot/reminder-key';
 import { SERVICE_CODES } from '@/lib/services/types';
 import { isManager, ROLE_ORDER, type MemberRole } from '@/lib/constants/roles';
 import { isSensitiveDocument } from '@/lib/documents/sensitivity';
@@ -128,6 +130,21 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
   // zone — and a raw write of that into a `timestamptz` was read in the
   // database's zone (UTC), storing a Los Angeles 9am reminder as 09:00Z.
   const familyTz = ctx.tz || 'UTC';
+  // A reminder found by part of its title is the soonest match this reader may
+  // be SHOWN: one an Autopilot card made is its card's readers'
+  // (lib/autopilot/reminder-cards.ts), as `reminders.listDue` lists it. Matched
+  // on the title alone, Kit's "renew" completed the managers' "Renew dental
+  // insurance (Smile Co)" in place of his own "Renew library books" and read
+  // its title back to him. A hidden reminder is no match.
+  const visibleReminderLookup = () => ({
+    limit: 1,
+    viewer: { role: ctx.role, memberId: ctx.memberId },
+    cards: reminderCardsReader(supabase, ctx.familyId, {
+      keyOf: (cardId) => mintSuggestionReminderKey(ctx.familyId, cardId),
+      sourceTagOf: mintSuggestionSourceTag,
+      onError: (cause) => console.error('[assistant] autopilot reminder cards read failed', cause),
+    }),
+  });
 
   return [
     {
@@ -187,6 +204,10 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         required: ['title'],
       },
       execute: async (a) => {
+        // The chores board's rule (`createChoreAction` is manager-only), which
+        // the trust wrapper does not stand in for: it lets a teen's low-risk
+        // writes through. An unknown role is refused, not waved through.
+        if (!mayManageChores(ctx.role)) return { ok: false, error: CHORES_ARE_SET_BY_A_MANAGER };
         const title = str(a.title);
         if (!title) return { ok: false, error: 'title is required' };
         const points = Number.isFinite(a.points) ? Math.max(0, Math.round(a.points as number)) : 10;
@@ -227,10 +248,22 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const list = await ensureGroceryList(supabase, ctx.familyId, ctx.userId);
         if (list.error) return toolFailure('open a grocery list', list.error);
         if (!list.id) return { ok: false, error: 'Could not open a grocery list' };
-        const { error } = await supabase.from('grocery_items').insert({
-          family_id: ctx.familyId, list_id: list.id, name, quantity: optStr(a.quantity), created_by: ctx.userId,
-        });
-        if (error) return toolFailure('add the grocery item', error);
+        // Through the grocery service, like every other writer: an item already
+        // open on the list is skipped rather than added twice ("add milk" with
+        // Milk unbought made a second line), the aisle is filled in, and the
+        // write is read back. This tool shadows the registry's
+        // groceries.addItems, so the raw insert it replaces was the chat path.
+        const role = knownRole(ctx.role);
+        if (!role) return { ok: false, error: 'Only a member of the household can change its shopping list.' };
+        const res = await addItems(
+          { db: supabase, familyId: ctx.familyId, userId: ctx.userId, memberId: ctx.memberId, role, actorKind: 'ai', tz: ctx.tz || 'UTC' },
+          { items: [{ name, quantity: optStr(a.quantity) }], listId: list.id },
+        );
+        if (!res.ok) {
+          if (res.code === SERVICE_CODES.db) return toolFailure('add the grocery item', res.error);
+          return { ok: false, error: res.error };
+        }
+        if (res.data.added.length === 0) return { ok: true, summary: `${name} is already on the grocery list.` };
         return { ok: true, summary: `Added ${name} to the grocery list.` };
       },
     },
@@ -313,10 +346,11 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
       execute: async (a) => {
         const q = str(a.title);
         if (!q) return { ok: false, error: 'title is required' };
-        const { data: rows, error: lookupError } = await supabase.from('family_reminders')
-          .select('id, title, notes, kind, priority, recurrence, remind_at, member_id, location_name')
+        // The soonest match this reader may be shown (visibleReminderLookup).
+        const { data: rows, error: lookupError } = await readVisibleReminders((from, to) => supabase.from('family_reminders')
+          .select('id, title, notes, kind, priority, recurrence, remind_at, member_id, location_name, idempotency_key, tags')
           .eq('family_id', ctx.familyId).eq('status', 'active').ilike('title', `%${escapeLike(q)}%`)
-          .order('remind_at', { ascending: true, nullsFirst: false }).limit(1);
+          .order('remind_at', { ascending: true, nullsFirst: false }).order('id').range(from, to), visibleReminderLookup());
         if (lookupError) return toolFailure('find the reminder', lookupError);
         const r = rows?.[0];
         if (!r) return { ok: false, error: `No active reminder matching “${q}”.` };
@@ -331,13 +365,18 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         if (error) return toolFailure('complete the reminder', error);
         if (wroteNoRows(completed)) return toolFailure('complete the reminder', 'no rows updated');
         // Recurring → schedule the next occurrence (core columns only, so it's
-        // safe regardless of the 0100 detail-columns migration state).
+        // safe regardless of the 0100 detail-columns migration state). The tags
+        // are core (0014), and carry an accepted Autopilot card's stamp: the
+        // next occurrence has no key, so its tag is what keeps it its card's
+        // readers' (lib/autopilot/reminder-cards.ts). Dropped, a repeating
+        // "Renew dental insurance (Smile Co)" came back linked to no card, and
+        // was Kit's to list and to move though the policy does not name him.
         const next = r.remind_at && r.recurrence !== 'none' ? nextRemindAt(r.remind_at, r.recurrence, familyTz) : null;
         if (next) {
           const { error: nextError } = await supabase.from('family_reminders').insert({
             family_id: ctx.familyId, created_by: ctx.userId, title: r.title, notes: r.notes,
             kind: r.kind, priority: r.priority, recurrence: r.recurrence, location_name: r.location_name,
-            member_id: r.member_id, remind_at: next, status: 'active',
+            member_id: r.member_id, remind_at: next, status: 'active', tags: r.tags ?? [],
           });
           if (nextError) {
             // Restoring the reminder this call just completed; zero rows is a
@@ -369,9 +408,10 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         // when this move is approved and replayed.
         const remind_at = reminderInstant(requested, familyTz);
         if (!remind_at) return { ok: false, error: MODEL_READER.t('reminders.timeUnreadable') };
-        const { data: rows, error: lookupError } = await supabase.from('family_reminders')
-          .select('id, title').eq('family_id', ctx.familyId).eq('status', 'active').ilike('title', `%${escapeLike(q)}%`)
-          .order('remind_at', { ascending: true, nullsFirst: false }).limit(1);
+        // The soonest match this reader may be shown (visibleReminderLookup).
+        const { data: rows, error: lookupError } = await readVisibleReminders((from, to) => supabase.from('family_reminders')
+          .select('id, title, idempotency_key, tags').eq('family_id', ctx.familyId).eq('status', 'active').ilike('title', `%${escapeLike(q)}%`)
+          .order('remind_at', { ascending: true, nullsFirst: false }).order('id').range(from, to), visibleReminderLookup());
         if (lookupError) return toolFailure('find the reminder', lookupError);
         const r = rows?.[0];
         if (!r) return { ok: false, error: `No active reminder matching “${q}”.` };
@@ -511,10 +551,12 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         // not the other is how a day key ends up meaning two things in one
         // function, which is the defect this replaces.
         const tz = ctx.tz || 'UTC';
-        const dayEndExclusiveMs = zonedDayBoundsMs(dayKeyInTz(now, tz), tz).end;
+        const todayKey = dayKeyInTz(now, tz);
+        const dayEndExclusiveMs = zonedDayBoundsMs(todayKey, tz).end;
         const todayEnd = new Date(dayEndExclusiveMs - 1);
         const in14 = new Date(now.getTime() + 14 * 86400000).toISOString();
-        const in30 = new Date(now.getTime() + 30 * 86400000).toISOString();
+        // `documents.expires_at` is a DATE: bounded by the family's day key.
+        const in30 = addDaysToDayKey(todayKey, 30);
         const in45 = new Date(now.getTime() + 45 * 86400000).toISOString();
         // Money decisions and chore sign-offs wait on a parent, and only a
         // parent or adult is shown them — Home, Needs-you and the dashboard all
@@ -539,7 +581,8 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           manager
             ? supabase.from('chore_assignments').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('status', 'submitted')
             : Promise.resolve({ count: 0, error: null }),
-          supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('is_checked', false),
+          // Only lists the family has not archived (readOnOpenGroceryLists).
+          readOnOpenGroceryLists(supabase, ctx.familyId, (lists) => supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).in('list_id', lists).eq('is_checked', false)),
           supabase.from('todo_items').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('is_done', false),
         ]);
         const pendingError = [appr, ren, docs, dueRem, convEvents, signoff, grocery, todos].find((result) => result.error)?.error;
@@ -563,6 +606,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           lowGrocery: (grocery.count ?? 0) > 0,
           openTodos: todos.count ?? 0,
           now,
+          todayKey,
           reader: MODEL_READER,
         }));
         return { ok: true, count: needs.length, items: needs.map((n) => ({ title: n.title, urgency: n.urgency })) };

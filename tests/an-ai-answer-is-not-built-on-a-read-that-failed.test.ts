@@ -52,9 +52,14 @@ describe('the savings route does not answer "On track" from a failed read (C1-S9
     // `.limit(N)` is not a bound — PostgREST caps at db-max-rows regardless —
     // so an understated over-budget figure would still be stated as fact.
     const read = bodyOf(savings, 'const [txnsResult', ']);');
-    expect(read).toContain('readAllAsQuery');
+    // Paged on the id with a real ceiling (M11-RATCHET: a year of spending is
+    // many pages, and offsets shift when a row is written between two). The one
+    // `.limit()` left is the page size the id-paged reader asks for.
+    expect(read).toContain('readAllByIdAsQuery');
     expect(read).toContain('{ max: 20_000 }');
-    expect(read).not.toMatch(/from\('transactions'\)[\s\S]{0,200}?\.limit\(/);
+    expect(read).toContain("if (after) query = query.gt('id', after);");
+    expect(read).toContain("return query.order('id').limit(limit);");
+    expect(read.replace("return query.order('id').limit(limit);", '')).not.toMatch(/\.limit\(/);
   });
 });
 

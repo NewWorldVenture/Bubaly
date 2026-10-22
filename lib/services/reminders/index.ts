@@ -21,8 +21,11 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
 import { keyedProbe, sameId, sameInstant, withIdempotency, type KeyedCreateOptions } from '../idempotency';
 import { familyInstant } from '@/lib/time/civil';
+import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
+import { mintSuggestionReminderKey, mintSuggestionSourceTag } from '@/lib/autopilot/reminder-key';
 import { scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
+import { REMINDER_NOT_FOUND, requireShownReminder, shownReminders } from './shown';
 
 export type FamilyReminder = Tables<'family_reminders'>;
 
@@ -209,18 +212,30 @@ export async function createReminder(
  * it outright would silently cancel a daily medication reminder the first time
  * someone ticked it off.
  */
-export async function completeReminder(scope: ServiceScope, reminderId: string): Promise<ServiceResult<FamilyReminder>> {
-  const { data: existing, error: readError } = await scope.db
-    .from('family_reminders')
-    .select('id, recurrence, remind_at')
-    .eq('id', reminderId)
-    .eq('family_id', scope.familyId)
-    .maybeSingle();
-  if (readError) {
-    console.error('[service:reminders] complete read failed', readError);
-    return fail(describeDbError(readError, 'Could not load that reminder.'), { code: SERVICE_CODES.db });
+/**
+ * A fresh family-scoped reminder this service caller may act on: one the
+ * reader's rule shows them (./shown.ts shownReminders, the asker of an
+ * approved request included). Any other id answers what an unknown id
+ * answers, word for word; a failed read of the row or of its cards refuses.
+ */
+async function loadVisibleReminderForMutation(scope: ServiceScope, reminderId: string): Promise<ServiceResult<FamilyReminder>> {
+  const { data, error } = await scope.db.from('family_reminders').select('*')
+    .eq('id', reminderId).eq('family_id', scope.familyId).maybeSingle();
+  if (error) {
+    console.error('[service:reminders] mutation admission read failed', error);
+    return fail(describeDbError(error, 'Could not load that reminder.'), { code: SERVICE_CODES.db, retryable: true });
   }
-  if (!existing) return fail('That reminder could not be found.', { code: SERVICE_CODES.notFound });
+  if (!data) return fail(REMINDER_NOT_FOUND, { code: SERVICE_CODES.notFound });
+  const shown = await shownReminders(scope, [data]);
+  if (!shown.ok) return shown;
+  if (shown.data.length !== 1) return fail(REMINDER_NOT_FOUND, { code: SERVICE_CODES.notFound });
+  return ok(data);
+}
+
+export async function completeReminder(scope: ServiceScope, reminderId: string): Promise<ServiceResult<FamilyReminder>> {
+  const admitted = await loadVisibleReminderForMutation(scope, reminderId);
+  if (!admitted.ok) return admitted;
+  const existing = admitted.data;
 
   const now = scopeNow(scope).toISOString();
   const rollForward = existing.remind_at && existing.recurrence !== 'none'
@@ -256,6 +271,10 @@ export async function completeReminder(scope: ServiceScope, reminderId: string):
  * the service does not already have.
  */
 export async function deleteReminder(scope: ServiceScope, reminderId: string): Promise<ServiceResult<{ id: string; title: string }>> {
+  // Only one its actor may be shown; any other id is unknown (./shown.ts).
+  const shown = await requireShownReminder(scope, reminderId);
+  if (!shown.ok) return shown;
+
   const { data, error } = await scope.db
     .from('family_reminders')
     .delete()
@@ -277,6 +296,9 @@ export async function deleteReminder(scope: ServiceScope, reminderId: string): P
 export async function snoozeReminder(scope: ServiceScope, reminderId: string, minutes: number): Promise<ServiceResult<FamilyReminder>> {
   const mins = Math.round(minutes);
   if (!Number.isFinite(mins) || mins <= 0) return fail('Snooze needs a length in minutes.', { code: SERVICE_CODES.invalidInput });
+
+  const admitted = await loadVisibleReminderForMutation(scope, reminderId);
+  if (!admitted.ok) return admitted;
 
   const until = new Date(scopeNow(scope).getTime() + mins * 60_000).toISOString();
   const { data, error } = await scope.db
@@ -328,23 +350,48 @@ export async function listDue(
   if (!Number.isFinite(beforeMs)) return fail('That horizon could not be understood.', { code: SERVICE_CODES.invalidInput });
   const beforeIso = new Date(beforeMs).toISOString();
 
-  let query = scope.db
-    .from('family_reminders')
-    .select('*')
-    .eq('family_id', scope.familyId)
-    .in('status', ['active', 'snoozed'])
-    .not('remind_at', 'is', null)
-    .lte('remind_at', beforeIso)
-    .order('remind_at', { ascending: true })
-    .limit(Math.min(Math.max(input.limit ?? 100, 1), 500));
-  if (input.memberId) query = query.eq('member_id', input.memberId);
-
-  const { data, error } = await query;
+  // A reminder an Autopilot card made is listed only to the card's readers
+  // (lib/autopilot/reminder-cards.ts): asked "what's due?", a child the policy
+  // does not name is not told an accepted insurance card's "Renew dental
+  // insurance (Smile Co)", nor a guest a renewal's. The reader is the scope's
+  // role and member; a system scope is no manager, so it is not told a
+  // policy's. The key and the tag are minted with Web Crypto
+  // (lib/autopilot/reminder-key.ts): the server's own mints live in
+  // lib/services/autopilot, which imports this module.
+  let malformed = false;
+  const { data, error } = await readVisibleReminders(async (from, to) => {
+    let query = scope.db
+      .from('family_reminders')
+      .select('*')
+      .eq('family_id', scope.familyId)
+      .in('status', ['active', 'snoozed'])
+      .not('remind_at', 'is', null)
+      .lte('remind_at', beforeIso)
+      .order('remind_at', { ascending: true })
+      .order('id')
+      .range(from, to);
+    if (input.memberId) query = query.eq('member_id', input.memberId);
+    const page = await query;
+    // A reply that is not a list is not a page of reminders, empty or otherwise.
+    if (!page.error && page.data != null && !Array.isArray(page.data)) {
+      malformed = true;
+      return { data: null, error: null };
+    }
+    return page;
+  }, {
+    limit: Math.min(Math.max(input.limit ?? 100, 1), 500),
+    viewer: { role: scope.role, memberId: scope.memberId },
+    cards: reminderCardsReader(scope.db, scope.familyId, {
+      keyOf: (cardId) => mintSuggestionReminderKey(scope.familyId, cardId),
+      sourceTagOf: mintSuggestionSourceTag,
+      onError: (cause) => console.error('[service:reminders] autopilot reminder cards read failed', cause),
+    }),
+  });
   if (error) {
     console.error('[service:reminders] due read failed', error);
     return fail(describeDbError(error, 'Could not load your reminders.'), { code: SERVICE_CODES.db });
   }
-  if (data != null && !Array.isArray(data)) {
+  if (malformed) {
     return fail('Could not load your reminders.', { code: SERVICE_CODES.db });
   }
 

@@ -517,11 +517,16 @@ describe('Supabase migration filename safety', () => {
     // may make, unmake and invite a parent; 0483 counts live card holds
     // against the spend bucket and records both families on an order; 0484
     // links a document to a trip once and keeps a guest out of paperwork;
-    // 0485 indexes push_devices by device_key. 0486 and 0487 are free.
+    // 0485 indexes push_devices by device_key. 0486 (2026-10-12, PR #1031's
+    // follow-up, the next free number) reads an Autopilot card by its
+    // audience: lib/autopilot/audience.ts's rule as RESTRICTIVE SELECT and
+    // UPDATE policies on autopilot_suggestions, a pin on the columns that
+    // decide who reads a card (kind, source_kind, family_id), and a backfill
+    // of legacy insurance cards' member. 0487 is free.
     // Preserve main's owner allocation map above that: bill anchor 0488 and
     // feed claim 0490 remain held in supabase/reserved. Approval, AI privacy
     // and atomic sync candidates are held at 0492-0494.
-    expect(audit.nextVersion).toBe('0486');
+    expect(audit.nextVersion).toBe('0487');
   });
 
   // A hole below the high-water mark is not a free number: `supabase db push`

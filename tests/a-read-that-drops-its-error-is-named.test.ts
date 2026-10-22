@@ -25,7 +25,6 @@ import { describe, expect, it } from 'vitest';
  */
 
 const HARMLESS: Record<string, string> = {
-  'components/vacations/trip-overview.tsx vacation_travel_scores': 'the latest score badge; absent renders no badge',
   'app/gift/[token]/page.tsx child_wallets': "the recipient's name on a public gift page; falls back to a generic greeting",
   'app/gift/[token]/page.tsx family_members': 'same — the display name only',
   'app/gift/[token]/page.tsx families': 'same — the family name only',

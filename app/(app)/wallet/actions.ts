@@ -17,6 +17,7 @@ import { normalizeHandle, handleError } from '@/lib/wallet/pay-handle';
 import { evaluateTrust, roleOf } from '@/lib/trust/server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { logWalletAudit } from '@/lib/server/audit';
+import { isWithheldFromGuest } from '@/lib/auth/guest-scope';
 
 const WALLET_TERMS_VERSION = '2026-06-25';
 
@@ -30,6 +31,18 @@ type Result = { ok: boolean; error?: string };
 function actionFailure(error: unknown, fallback: string): Result {
   console.error('[wallet-action] failed:', error);
   return { ok: false, error: describeActionError(error, fallback) };
+}
+
+/** The members a wallet is provisioned for: the household's children. */
+const WALLET_CHILD_ROLES = new Set(['child', 'teen']);
+
+/**
+ * The /wallet pages send a guest away (refuseGuest, the held 0509); the
+ * actions behind them answer to the same rule, so a guest who holds a wallet
+ * from before activation was limited to children cannot file requests from it.
+ */
+function guestRefused(role: string | null | undefined): boolean {
+  return role === 'guest' && isWithheldFromGuest('/wallet');
 }
 
 /** Default bucket set every child wallet is provisioned with. */
@@ -71,14 +84,19 @@ export async function activateFamilyWalletAction(): Promise<Result> {
   });
   if (disclosureError) return actionFailure(disclosureError, t('actions.couldNotRecordTheWallet'));
 
-  // 3) a child wallet + buckets + default rule for each child member
+  // 3) a child wallet + buckets + default rule for each child member.
+  // Children are 'child' and 'teen' (CHILD_ROLES), as everywhere else in the
+  // app. "Not a manager" also took in caregivers and guests: each got a wallet,
+  // was listed as a child to fund, give an allowance and issue a card to, and a
+  // guest then passed the own-wallet checks of actions the /wallet pages refuse
+  // them. (Wallets already provisioned that way are data, and the owner's.)
   const { data: children, error: childrenError } = await supabase
     .from('family_members')
     .select('id, role')
     .eq('family_id', familyId).eq('is_active', true);
   if (childrenError) return actionFailure(childrenError, t('actions.couldNotLoadFamilyMembers'));
 
-  for (const child of (children ?? []).filter((m) => !isManager(m.role))) {
+  for (const child of (children ?? []).filter((m) => WALLET_CHILD_ROLES.has(m.role))) {
     const { data: cw, error: childWalletError } = await supabase
       .from('child_wallets')
       .upsert({ family_id: familyId, member_id: child.id, is_active: true, created_by: userId }, { onConflict: 'family_id,member_id' })
@@ -318,6 +336,18 @@ export async function saveAllowanceRuleAction(input: {
       .select('id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle();
     if (walletError) return actionFailure(walletError, t('actions.couldNotLoadThatChild'));
     if (!cw) return { ok: false, error: t('actions.childWalletNotFound') };
+    // A NEW rule only where the child has none. A row rendered before another
+    // parent (or another tab) set this child's allowance sends no rule id, and
+    // inserting here gave the child a SECOND rule: the cron and Run due now pay
+    // every active due rule, so the child was paid twice each period, and the
+    // page showed and paused only one of them. allowance_rules has no unique
+    // key per wallet to refuse it (owner action: an index on (family_id,
+    // child_wallet_id) once duplicates are merged), so the save says so and
+    // the parent edits the rule that is there.
+    const { data: existing, error: existingError } = await supabase.from('allowance_rules')
+      .select('id').eq('family_id', familyId).eq('child_wallet_id', input.childWalletId).limit(1);
+    if (existingError) return actionFailure(existingError, t('actions.couldNotSaveThatAllowance'));
+    if ((existing ?? []).length > 0) return { ok: false, error: t('actions.thisChildAlreadyHasAnAllowance') };
   }
 
   // Schedule from the family's calendar day: a parent setting up an allowance
@@ -897,6 +927,7 @@ export async function requestSpendAction(input: {
 }): Promise<Result & { pendingApproval?: boolean }> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
+  if (guestRefused(ctx.active.role)) return { ok: false, error: t('actions.notAuthorized') };
   const familyId = ctx.active.familyId;
   const amount = Math.trunc(input.amountCents);
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: t('actions.enterAnAmountGreaterThan') };
@@ -1077,6 +1108,7 @@ export async function requestAllowanceAction(input: {
 }): Promise<Result> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
+  if (guestRefused(ctx.active.role)) return { ok: false, error: t('actions.notAuthorized') };
   const familyId = ctx.active.familyId;
   const amount = Math.trunc(input.amountCents);
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: t('actions.enterAnAmountGreaterThan') };

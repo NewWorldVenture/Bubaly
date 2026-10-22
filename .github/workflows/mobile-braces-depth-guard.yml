@@ -8,6 +8,15 @@ on:
       - mobile/vendor/braces/**
       - mobile/vendor/braces-3.0.3-depth-guard.tgz
       - mobile/scripts/braces-depth-guard.test.mjs
+      - mobile/scripts/patch-auth-storage-errors.mjs
+      - mobile/scripts/auth-storage-errors.test.mjs
+      - mobile/scripts/auth-storage-errors.patch.json
+      - mobile/scripts/device-signout-ownership.test.mjs
+      - mobile/src/lib/sign-out.ts
+      - mobile/src/lib/chunked-storage.ts
+      - mobile/src/lib/supabase.ts
+      - mobile/src/lib/auth-core.ts
+      - shared/auth/refresh-fetch.ts
       - .github/workflows/mobile-braces-depth-guard.yml
   push:
     branches: [main]
@@ -17,6 +26,15 @@ on:
       - mobile/vendor/braces/**
       - mobile/vendor/braces-3.0.3-depth-guard.tgz
       - mobile/scripts/braces-depth-guard.test.mjs
+      - mobile/scripts/patch-auth-storage-errors.mjs
+      - mobile/scripts/auth-storage-errors.test.mjs
+      - mobile/scripts/auth-storage-errors.patch.json
+      - mobile/scripts/device-signout-ownership.test.mjs
+      - mobile/src/lib/sign-out.ts
+      - mobile/src/lib/chunked-storage.ts
+      - mobile/src/lib/supabase.ts
+      - mobile/src/lib/auth-core.ts
+      - shared/auth/refresh-fetch.ts
       - .github/workflows/mobile-braces-depth-guard.yml
 
 permissions:

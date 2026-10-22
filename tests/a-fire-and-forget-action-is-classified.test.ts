@@ -103,7 +103,7 @@ describe('the library player takes back a position it did not save (C1-S9-74)', 
     const body = helper.slice(0, at(helper, '\n}\n'));
     // Each branch on its own: a single regex across both let the catch
     // branch's call stand in for a missing refusal branch (a mutation survived).
-    expect(between(body, 'if (res.ok) return;', '.catch(')).toContain('onFail?.();');
+    expect(between(body, 'if (res.ok) { onSaved?.(); return; }', '.catch(')).toContain('onFail?.();');
     expect(body.slice(at(body, '.catch((err: unknown) => {'))).toContain('onFail?.();');
   });
 

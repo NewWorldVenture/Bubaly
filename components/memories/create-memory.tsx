@@ -43,7 +43,12 @@ export function CreateMemory() {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const [created, setCreated] = useState<{ id: string; path: string }[]>([]);
+  // `pick` is the index into `picks` the row came from, so the confirmation
+  // shows a photo that was actually saved.
+  const [created, setCreated] = useState<{ id: string; path: string; pick: number }[]>([]);
+  // Picks that did not save (upload or row refused), by index: the done screen
+  // says how many and offers to try exactly those again.
+  const [failed, setFailed] = useState<number[]>([]);
   const [undoing, setUndoing] = useState(false);
   const [done, setDone] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -77,19 +82,31 @@ export function CreateMemory() {
 
   const canSave = title.trim().length > 0 && picks.length > 0 && !saving;
 
-  async function save() {
-    if (!canSave) return;
+  /**
+   * Save every pick, or — `only` — the ones a first attempt could not.
+   *
+   * A file whose upload or row failed used to get a toast and be skipped, and
+   * the confirmation then said "saved (5 photos)" from the number PICKED, with
+   * the first pick's thumbnail whether or not it was saved, and the journey was
+   * recorded as a success. The count and the picture now come from what was
+   * saved, and a partial save says so and offers a retry for the rest.
+   */
+  async function save(only?: number[]) {
+    if (only ? saving : !canSave) return;
+    const indexes = only ?? picks.map((_, i) => i);
     setSaving(true);
-    setProgress({ done: 0, total: picks.length });
+    setProgress({ done: 0, total: indexes.length });
     const supabase = createClient();
     const trimmedNote = note.trim();
     // Fold the note into the caption: the Memories timeline surfaces any captioned
     // (or favorited) photo, and uses the caption as the memory's title/blurb.
     const caption = trimmedNote ? `${title.trim()} — ${trimmedNote}` : title.trim();
     const takenAt = new Date().toISOString();
-    const createdRows: { id: string; path: string }[] = [];
+    const createdRows: { id: string; path: string; pick: number }[] = [];
+    const failedPicks: number[] = [];
     let saved = 0;
-    for (let i = 0; i < picks.length; i++) {
+    for (let n = 0; n < indexes.length; n++) {
+      const i = indexes[n];
       const { file } = picks[i];
       const path = familyMediaPath(familyId, 'photos', file.name);
       const { data: stored, error: upErr } = await supabase.storage
@@ -97,6 +114,7 @@ export function CreateMemory() {
         .upload(path, file, { upsert: false, cacheControl: '31536000' });
       if (upErr) {
         toastError(t('memories.couldNotUploadFile', { name: file.name }));
+        failedPicks.push(i);
       } else {
         const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);
         const { data: row, error: insErr } = await supabase.from('family_photos').insert({
@@ -113,26 +131,32 @@ export function CreateMemory() {
           toastError(describeDbError(insErr ?? { message: t('createMemory.couldNotSaveMemory') }));
           const { error: cleanupError } = await supabase.storage.from('family-media').remove([stored.path]);
           if (cleanupError) toastError(t('createMemory.theUploadedPhotoCouldNot'));
+          failedPicks.push(i);
         } else {
           // Mark it a favorite so it also shows in the Photos "Favorites" tab.
           // A refused update is no error and zero rows, the same outcome as a
           // failed one, and it said nothing. Audit C1-S9-83.
           const { data: favorited, error: favoriteError } = await supabase.from('family_photos').update({ is_favorite: true }).eq('id', row.id).select('id');
           if (favoriteError || wroteNoRows(favorited)) toastError(t('createMemory.theMemoryWasSavedBut'));
-          createdRows.push({ id: row.id, path: stored.path });
+          createdRows.push({ id: row.id, path: stored.path, pick: i });
           saved++;
         }
       }
       // Advance the visible progress after each file (success or skip).
-      setProgress({ done: i + 1, total: picks.length });
+      setProgress({ done: n + 1, total: indexes.length });
     }
     setSaving(false);
     setProgress(null);
-    if (saved === 0) return; // errors already surfaced
-    setCreated(createdRows);
-    journey.complete();
+    if (saved === 0) return; // errors already surfaced; nothing new was saved
+    setCreated((prev) => (only ? [...prev, ...createdRows] : createdRows));
+    setFailed(failedPicks);
+    // A success only when every photo is in: a partial save is not one.
+    if (failedPicks.length === 0) journey.complete();
     setDone(true);
   }
+
+  const saveAll = () => save();
+  const retryMissing = () => save(failed);
 
   // Reverse the just-created memory: delete its photo rows + storage objects,
   // then return to the form (picks/title/note are still in state) so nothing is lost.
@@ -182,6 +206,7 @@ export function CreateMemory() {
       if (rmErr) toastError(t('createMemory.theMemoryWasUndoneBut'));
     }
     setCreated([]);
+    setFailed([]);
     setUndoing(false);
     setDone(false);
     success(t('createMemory.memoryUndoneNothingWasSaved'));
@@ -189,12 +214,13 @@ export function CreateMemory() {
 
   // ── Memory Created (screen 10) ───────────────────────────────
   if (done) {
+    const shown = created[0] ? picks[created[0].pick] : undefined;
     return (
       <div className="mx-auto w-full max-w-md px-4 py-10 text-center">
         <div className="relative mx-auto h-24 w-24">
-          {picks[0] ? (
+          {shown ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={picks[0].preview} alt="" className="h-24 w-24 rounded-2xl object-cover" />
+            <img src={shown.preview} alt="" className="h-24 w-24 rounded-2xl object-cover" />
           ) : (
             <div className="grid h-24 w-24 place-items-center rounded-2xl bg-brand/15 text-brand-text"><ImageIcon className="h-10 w-10" /></div>
           )}
@@ -204,8 +230,16 @@ export function CreateMemory() {
         </div>
         <h1 className="mt-5 text-2xl font-bold">{t('createMemory.memoryCreated')}</h1>
         <p className="mx-auto mt-2 max-w-xs text-sm text-muted">
-          “{title.trim()}{t('createMemory.isSavedToYourFamilyMemories')}{picks.length > 1 ? ` (${picks.length} photos)` : ''}.
+          “{title.trim()}{t('createMemory.isSavedToYourFamilyMemories')}{created.length > 1 ? ` (${created.length} photos)` : ''}.
         </p>
+        {failed.length > 0 && (
+          <div role="alert" className="mx-auto mt-4 max-w-xs rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+            <p>{t('createMemory.someOfThePhotosWereNotSaved', { saved: created.length, total: created.length + failed.length, failed: failed.length })}</p>
+            <Button variant="outline" className="mt-2 w-full" disabled={saving} onClick={retryMissing}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null} {t('createMemory.tryTheMissingPhotosAgain')}
+            </Button>
+          </div>
+        )}
         <div className="mt-8 space-y-3">
           <Button className="w-full" onClick={() => { router.push('/dashboard/memories'); router.refresh(); }}>
             {t('createMemory.viewMemories')}
@@ -213,7 +247,7 @@ export function CreateMemory() {
           <Button
             variant="outline"
             className="w-full"
-            onClick={() => { setPicks([]); setTitle(''); setNote(''); setCreated([]); setDone(false); }}
+            onClick={() => { setPicks([]); setTitle(''); setNote(''); setCreated([]); setFailed([]); setDone(false); }}
           >
             <Plus className="h-4 w-4" /> {t('createMemory.createAnother')}
           </Button>
@@ -295,7 +329,7 @@ export function CreateMemory() {
         </Field>
       </div>
 
-      <Button className="mt-7 w-full" disabled={!canSave} onClick={save}>
+      <Button className="mt-7 w-full" disabled={!canSave} onClick={saveAll}>
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
         {saving
           ? progress && progress.total > 1

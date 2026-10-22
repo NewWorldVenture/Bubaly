@@ -54,12 +54,24 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
   const [memberFilter, setMemberFilter] = useState('all');
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
 
+  // The rows this viewer reads (the held 0506, lib/health/record-scope.ts): a
+  // parent or adult the household's; anyone else the visits about themselves
+  // and the ones they recorded. Released, 0481 still hands a teen or child
+  // every member's reasons and outcomes, and a caregiver only their own; the
+  // screen shows the same rows either way, before the follow-ups are counted.
+  const readable = useMemo(() => {
+    const all = visits ?? [];
+    if (canEdit) return all;
+    const own = new Set(filterMembers.map((m) => m.id));
+    return all.filter((v) => (v.member_id != null && own.has(v.member_id)) || (v.created_by != null && v.created_by === userId));
+  }, [visits, canEdit, filterMembers, userId]);
+
   const scoped = useMemo(() => {
-    let list = visits ?? [];
+    let list = readable;
     if (defaultKind) list = list.filter((v) => v.kind === defaultKind);
     if (memberFilter !== 'all') list = list.filter((v) => v.member_id === memberFilter);
     return sortByVisitDate(list);
-  }, [visits, defaultKind, memberFilter]);
+  }, [readable, defaultKind, memberFilter]);
 
   const followUps = useMemo(() => upcomingFollowUps(scoped, 90), [scoped]);
 
@@ -158,8 +170,13 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
       ) : error ? (
         <ErrorState message={t('healthVisitsModule.couldNotLoadHealthVisits')} onRetry={refresh} />
       ) : scoped.length === 0 ? (
-        <EmptyState icon={Stethoscope} title={t('healthVisits.noVisitsLogged')} description={t('healthVisitsModule.addADoctorDentistOr')} />
+        // "No visits logged" is true only for a reader who sees the household's.
+        canEdit
+          ? <EmptyState icon={Stethoscope} title={t('healthVisits.noVisitsLogged')} description={t('healthVisitsModule.addADoctorDentistOr')} />
+          : <EmptyState icon={Stethoscope} title={t('healthVisitsModule.noneOfYours')} description={t('healthVisitsModule.onlyYourOwn')} />
       ) : (
+        <>
+        {!canEdit && <p className="text-xs text-muted">{t('healthVisitsModule.onlyYourOwn')}</p>}
         <ul className="space-y-2">
           {scoped.map((v) => {
             const meta = visitKindMeta(v.kind);
@@ -194,6 +211,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
             );
           })}
         </ul>
+        </>
       )}
 
       {form && (

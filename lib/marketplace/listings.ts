@@ -74,9 +74,13 @@ export function formatCents(cents: number | null | undefined, locale: LocaleCode
  * that names none. Accepting records the order at the offer's amount when it
  * has one (marketplace_accept_offer: `coalesce(offer.amount_cents, price)`), so
  * every place an owner accepts an offer shows it.
+ *
+ * Only a missing amount (null) names none. Zero is an amount: `coalesce`
+ * keeps it, so accepting a zero offer records the order at zero, and the
+ * owner reads that before accepting rather than a blank.
  */
 export function offerAmountLabel(amountCents: number | null | undefined, locale: LocaleCode): string {
-  return amountCents ? formatCents(amountCents, locale) : '';
+  return amountCents == null ? '' : formatCents(amountCents, locale);
 }
 
 /**

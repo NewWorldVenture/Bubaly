@@ -11,8 +11,11 @@ import { safeFeedUrl } from '@/lib/library/feed-parse';
 // export async functions and every export it has is callable from the browser,
 // so anything the nightly cron also needs cannot live in this file.
 import { ingestFeed } from '@/lib/library/ingest';
+import { addedByAnAdult, readCurators } from '@/lib/library/curator';
 import { rateLimit } from '@/lib/server/rate-limit';
 import { wroteNoRows } from '@/lib/supabase/errors';
+import { isManager } from '@/lib/constants/roles';
+import { getTranslations } from '@/lib/i18n/server';
 
 const PAGE = '/dashboard/library';
 
@@ -30,8 +33,24 @@ const bookSchema = z.object({
   mediaUrl: z.string().trim().url('Enter a valid audio link').or(z.literal('')).optional(),
 });
 
+/**
+ * Who may put content in the family library. A subscription's episodes, and a
+ * book's audio address, land in EVERY member's library — a young child's
+ * included — and stream through Bubaly's own media route, from Bubaly's own
+ * origin, past whatever filter a parent set on the device for the publisher's
+ * host. So adding them is a parent's or another adult's call, the same line the
+ * rest of the household's shared catalogues draw; anyone may still keep a
+ * title or a page link, and anyone may refresh what is already subscribed.
+ */
+async function refuseUnlessCurator(role: string): Promise<LibraryResult | null> {
+  if (isManager(role)) return null;
+  return { ok: false, error: (await getTranslations())('actionRefusal.notAllowed') };
+}
+
 export async function subscribeFeedAction(formData: FormData): Promise<LibraryResult> {
   const ctx = await requireUserContext();
+  const refused = await refuseUnlessCurator(ctx.active.role);
+  if (refused) return refused;
   const parsed = feedSchema.safeParse({
     url: String(formData.get('url') ?? ''),
     kind: String(formData.get('kind') ?? 'podcast'),
@@ -97,9 +116,20 @@ export async function refreshFeedAction(feedId: string): Promise<LibraryResult> 
   }
   const supabase = await createServer();
   const { data: feed, error } = await supabase
-    .from('library_feeds').select('id, feed_url')
+    .from('library_feeds').select('id, feed_url, created_by')
     .eq('id', feedId).eq('family_id', ctx.active.familyId).maybeSingle();
   if (error || !feed) return { ok: false, error: 'That subscription could not be found.' };
+  // Anyone may refresh what the family's adults subscribed to; a feed row that
+  // no current parent or adult added (one written over PostgREST) is not
+  // fetched on anyone's behalf (lib/library/curator.ts).
+  const curated = await readCurators(supabase, [ctx.active.familyId], [feed.created_by]);
+  if (!curated.ok) {
+    console.error('[library] curator read failed', curated.error);
+    return { ok: false, error: (await getTranslations())('library.feedCouldNotBeChecked') };
+  }
+  if (!addedByAnAdult(curated, ctx.active.familyId, feed.created_by)) {
+    return { ok: false, error: (await getTranslations())('library.feedNotAddedByAnAdult') };
+  }
 
   const result = await ingestFeed(supabase, ctx.active.familyId, ctx.user.id, feed.id, feed.feed_url);
   revalidatePath(PAGE);
@@ -117,6 +147,8 @@ export async function refreshFeedAction(feedId: string): Promise<LibraryResult> 
 
 export async function unsubscribeFeedAction(feedId: string): Promise<LibraryResult> {
   const ctx = await requireUserContext();
+  const refused = await refuseUnlessCurator(ctx.active.role);
+  if (refused) return refused;
   const supabase = await createServer();
   const { data: unsubscribed, error } = await supabase
     .from('library_feeds').delete().eq('id', feedId).eq('family_id', ctx.active.familyId).select('id');
@@ -139,6 +171,12 @@ export async function addBookAction(formData: FormData): Promise<LibraryResult> 
     mediaUrl: String(formData.get('mediaUrl') ?? ''),
   });
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check the form.' };
+  // A title and a page link are anyone's to keep; an audio or video address is
+  // streamed to the whole family from Bubaly's origin, so it is the adults'.
+  if (parsed.data.mediaUrl) {
+    const refused = await refuseUnlessCurator(ctx.active.role);
+    if (refused) return refused;
+  }
 
   const supabase = await createServer();
   const { error } = await supabase.from('library_items').insert({
@@ -169,6 +207,17 @@ const progressSchema = z.object({
   completed: z.boolean().optional(),
 });
 
+const PROGRESS_SAVE_FAILED = 'Could not save your place.';
+
+function sameLibraryReference(received: unknown, requested: string): boolean {
+  if (typeof received !== 'string' || !received.trim()) return false;
+  if (received === requested) return true;
+  // The existing input schema accepts uppercase UUIDs; PostgreSQL returns
+  // canonical lowercase text. Compare identity without changing request bytes.
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuid.test(received) && uuid.test(requested) && received.toLowerCase() === requested.toLowerCase();
+}
+
 /**
  * Where this PERSON has got to.
  *
@@ -182,6 +231,20 @@ export async function saveProgressAction(input: z.input<typeof progressSchema>):
   if (!parsed.success) return { ok: false, error: 'Invalid progress update.' };
 
   const supabase = await createServer();
+  // The item's FK is global, while progress is keyed by item and user. A
+  // submitted id must belong to the active family before that personal row
+  // can be created or moved by an upsert, even for a member of both families.
+  let admitted = false;
+  try {
+    const { data, error } = await supabase.from('library_items')
+      .select('id, family_id').eq('id', parsed.data.itemId).eq('family_id', ctx.active.familyId).maybeSingle();
+    admitted = !error && data !== null && typeof data === 'object' && !Array.isArray(data)
+      && sameLibraryReference(data.id, parsed.data.itemId)
+      && sameLibraryReference(data.family_id, ctx.active.familyId);
+  } catch {
+    admitted = false;
+  }
+  if (!admitted) return { ok: false, error: PROGRESS_SAVE_FAILED };
   const patch: Record<string, unknown> = {
     family_id: ctx.active.familyId, item_id: parsed.data.itemId, user_id: ctx.user.id,
     updated_at: new Date().toISOString(),
@@ -194,7 +257,7 @@ export async function saveProgressAction(input: z.input<typeof progressSchema>):
   const { error } = await supabase.from('library_progress').upsert(patch as never, { onConflict: 'item_id,user_id' });
   if (error) {
     console.error('[library] progress save failed', error);
-    return { ok: false, error: 'Could not save your place.' };
+    return { ok: false, error: PROGRESS_SAVE_FAILED };
   }
   revalidatePath(PAGE);
   return { ok: true, message: 'Saved.' };

@@ -165,29 +165,9 @@ export async function assertAIAccess(
     return { ok: false, status: 404, code: 'feature_off', error: 'Not found.' };
   }
 
-  let planLevel: number;
-  try {
-    if (superAdmin) planLevel = 2;
-    else {
-      const entitlement = await resolveFamilyEntitlement(opts.db, familyId);
-      // A trial that ended unpaid is level 0 like Free, but it is not Free: it
-      // gets no allowance at all. The (app) layout's paywall is not in front of
-      // this route, nor of the mobile app's bearer requests.
-      const locked = lockedEntitlementCode(entitlement);
-      if (locked) {
-        return {
-          ok: false, status: 403, code: locked, needLevel: 1,
-          error: locked === 'account_closed'
-            ? 'This Bubaly account is closed. Reopen it to continue.'
-            : 'Your free trial has ended. Choose Family Basic or Family+ to keep using Bubaly.',
-        };
-      }
-      planLevel = entitlement.effectiveLevel;
-    }
-  } catch (error) {
-    console.error('[ai-access] plan level read failed', error);
-    return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not confirm your plan right now. Try again in a moment.' };
-  }
+  const plan = await familyPlanLevel(opts.db, familyId, superAdmin);
+  if (!plan.ok) return plan;
+  const { planLevel } = plan;
   const need = tier === 'off' ? 0 : tierToLevel(tier);
   if (planLevel < need) {
     return {
@@ -196,13 +176,79 @@ export async function assertAIAccess(
     };
   }
 
+  return meterMonthlyAllowance({ db: opts.db, familyId, planLevel, superAdmin, now: opts.now ?? new Date() });
+}
+
+/**
+ * The monthly allowance alone: has this family used the AI requests its plan
+ * includes this month?
+ *
+ * For the helpers that call a model from a page the family already has — the
+ * Habits coach, the Journal prompt, Notes AI, voice input, the meal planner,
+ * nutrition, every module's AI Assist, the recipe helpers, the reconnect and
+ * paperwork drafts, the marketplace assistant. Each answers to its OWN page's
+ * feature gate for whether it is available at all. `assertAIAccess` with the
+ * assistant's key also answered to the assistant's tier and its Off switch, so
+ * an admin who switched "AI Assistant" Off (or raised it to Family+) switched
+ * all of these off with it, behind pages that still offered them.
+ *
+ * What it checks is what the allowance is: a trial that ended unpaid or a
+ * closed account gets none (as in `assertAIAccess`), the plan's
+ * AI_MONTHLY_ALLOWANCE, and this month's count of `ai_requests` rows — the rows
+ * each of these helpers files through `withAiRequest`. A count that cannot be
+ * read is not an allowance, so it refuses. Whether these helpers should count
+ * toward Free's ten at all is the owner's call; today they are metered.
+ */
+export async function assertAIAllowance(
+  ctx: UserContext,
+  opts: { db: DB; now?: Date },
+): Promise<AIAccess> {
+  const familyId = ctx.active.familyId;
+  const superAdmin = isSuperAdminEmail(ctx.user.email);
+  const plan = await familyPlanLevel(opts.db, familyId, superAdmin);
+  if (!plan.ok) return plan;
+  return meterMonthlyAllowance({ db: opts.db, familyId, planLevel: plan.planLevel, superAdmin, now: opts.now ?? new Date() });
+}
+
+/** The family's plan level, or the refusal for a lapsed trial, a closed account or a plan that cannot be read. */
+async function familyPlanLevel(
+  db: DB,
+  familyId: string,
+  superAdmin: boolean,
+): Promise<{ ok: true; planLevel: number } | AIAccessDenial> {
+  try {
+    if (superAdmin) return { ok: true, planLevel: 2 };
+    const entitlement = await resolveFamilyEntitlement(db, familyId);
+    // A trial that ended unpaid is level 0 like Free, but it is not Free: it
+    // gets no allowance at all. The (app) layout's paywall is not in front of
+    // this route, nor of the mobile app's bearer requests.
+    const locked = lockedEntitlementCode(entitlement);
+    if (locked) {
+      return {
+        ok: false, status: 403, code: locked, needLevel: 1,
+        error: locked === 'account_closed'
+          ? 'This Bubaly account is closed. Reopen it to continue.'
+          : 'Your free trial has ended. Choose Family Basic or Family+ to keep using Bubaly.',
+      };
+    }
+    return { ok: true, planLevel: entitlement.effectiveLevel };
+  } catch (error) {
+    console.error('[ai-access] plan level read failed', error);
+    return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not confirm your plan right now. Try again in a moment.' };
+  }
+}
+
+/** The plan level's monthly allowance against this month's count; a count that cannot be read refuses. */
+async function meterMonthlyAllowance(
+  opts: { db: DB; familyId: string; planLevel: number; superAdmin: boolean; now: Date },
+): Promise<AIAccess> {
+  const { familyId, planLevel, superAdmin, now } = opts;
   const level = (planLevel >= 2 ? 2 : planLevel >= 1 ? 1 : 0) as 0 | 1 | 2;
   const allowance = superAdmin ? null : AI_MONTHLY_ALLOWANCE[level];
   if (allowance === null) return { ok: true, planLevel, monthlyUsed: null, monthlyAllowance: null };
 
   let count: unknown;
   let countError: unknown;
-  const now = opts.now ?? new Date();
   try {
     const result = await opts.db.rpc('count_family_ai_requests_month', {
       p_family_id: familyId,

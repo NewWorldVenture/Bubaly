@@ -1,5 +1,6 @@
 // Provider-agnostic event normalization + the discovery window. Pure + tested.
 // Currently maps Ticketmaster Discovery API responses into our weekend_events shape.
+import { instantForIcsLocalTime, isValidTimezone } from '@/lib/time/zoned';
 
 export type NormalizedEvent = {
   source: string;
@@ -24,6 +25,30 @@ export type NormalizedEvent = {
   distance_miles: number | null;
   is_family_friendly: boolean;
 };
+
+/**
+ * The instant a civil date (`YYYY-MM-DD`) begins in `timeZone`, as
+ * `YYYY-MM-DDTHH:MM:SSZ`. An event published with a DATE and no time is an
+ * all-day event on that date where the family is; written as UTC midnight it
+ * was 5 PM the evening before in California and filed under that day. UTC
+ * when no usable zone is given, which is what it always was. Null for a value
+ * that is not a date.
+ */
+export function civilDayStart(dateKey: string, timeZone: string | null | undefined): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey);
+  if (!m) return null;
+  const zone = timeZone && isValidTimezone(timeZone) ? timeZone : 'UTC';
+  const at = instantForIcsLocalTime(+m[1], +m[2], +m[3], 0, zone);
+  if (!at || Number.isNaN(at.getTime())) return null;
+  return at.toISOString().replace('.000Z', 'Z');
+}
+
+/** The day after a civil date, as `YYYY-MM-DD`. */
+function nextDayKey(dateKey: string): string {
+  const next = new Date(`${dateKey}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return next.toISOString().slice(0, 10);
+}
 
 /** ISO start/end for a discovery window of `days` days from `now` (inclusive). */
 export function discoveryWindow(days: number, now: Date = new Date()): { startISO: string; endISO: string } {
@@ -50,7 +75,7 @@ const pickImage = (images: unknown): string | null => {
 type TMEvent = {
   id?: string; name?: string; url?: string; info?: string; pleaseNote?: string;
   images?: unknown;
-  dates?: { start?: { dateTime?: string; localDate?: string }; end?: { dateTime?: string } };
+  dates?: { start?: { dateTime?: string; localDate?: string }; end?: { dateTime?: string }; timezone?: string };
   classifications?: { segment?: { name?: string }; genre?: { name?: string }; family?: boolean }[];
   priceRanges?: { min?: number; max?: number; currency?: string }[];
   distance?: number; units?: string;
@@ -59,8 +84,19 @@ type TMEvent = {
 
 const kmToMiles = (km: number) => km * 0.621371;
 
-/** Map one Ticketmaster event into our normalized shape. */
-export function normalizeTicketmaster(e: TMEvent): NormalizedEvent {
+/**
+ * Map one Ticketmaster event into our normalized shape.
+ *
+ * An event with a date and no time is an all-day event ON THAT DATE: a fair on
+ * Saturday 17 October is on Saturday for the family planning it, wherever the
+ * provider files the venue. It is placed at that date's midnight in the
+ * FAMILY's zone (`timeZone`) and runs to the next, like an all-day ICS event,
+ * so the planner files it under that day and calls it all day. The event's
+ * own zone is used only when the family's is unknown. Placing it in the
+ * event's zone put a Chicago fair at 10 PM on Friday for a family in
+ * California. A timed event keeps its own instant.
+ */
+export function normalizeTicketmaster(e: TMEvent, timeZone: string | null = null): NormalizedEvent {
   const venue = e._embedded?.venues?.[0];
   const cls = e.classifications?.[0];
   const price = e.priceRanges?.[0];
@@ -71,6 +107,8 @@ export function normalizeTicketmaster(e: TMEvent): NormalizedEvent {
     ? (e.units === 'km' ? kmToMiles(e.distance) : e.distance)
     : null;
   const category = cls?.genre?.name && cls.genre.name !== 'Undefined' ? cls.genre.name : (cls?.segment?.name ?? null);
+  const localDate = e.dates?.start?.localDate ?? null;
+  const zone = timeZone && isValidTimezone(timeZone) ? timeZone : (e.dates?.timezone && isValidTimezone(e.dates.timezone) ? e.dates.timezone : null);
 
   return {
     source: 'ticketmaster',
@@ -85,8 +123,8 @@ export function normalizeTicketmaster(e: TMEvent): NormalizedEvent {
     postal_code: venue?.postalCode ?? null,
     latitude: Number.isFinite(lat) ? lat : null,
     longitude: Number.isFinite(lon) ? lon : null,
-    starts_at: e.dates?.start?.dateTime ?? (e.dates?.start?.localDate ? `${e.dates.start.localDate}T00:00:00Z` : null),
-    ends_at: e.dates?.end?.dateTime ?? null,
+    starts_at: e.dates?.start?.dateTime ?? (localDate ? civilDayStart(localDate, zone) : null),
+    ends_at: e.dates?.end?.dateTime ?? (!e.dates?.start?.dateTime && localDate ? civilDayStart(nextDayKey(localDate), zone) : null),
     url: e.url ?? null,
     image_url: pickImage(e.images),
     price_min_cents: toCents(price?.min),
@@ -98,8 +136,8 @@ export function normalizeTicketmaster(e: TMEvent): NormalizedEvent {
 }
 
 /** Map a full Ticketmaster Discovery response into normalized events. */
-export function normalizeTicketmasterResponse(json: unknown): NormalizedEvent[] {
+export function normalizeTicketmasterResponse(json: unknown, timeZone: string | null = null): NormalizedEvent[] {
   const events = (json as { _embedded?: { events?: TMEvent[] } })?._embedded?.events;
   if (!Array.isArray(events)) return [];
-  return events.map(normalizeTicketmaster);
+  return events.map((event) => normalizeTicketmaster(event, timeZone));
 }

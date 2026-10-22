@@ -107,20 +107,31 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
   }), [trip, members, lodging, transportTotal, transportBooked, activities, reservations, packing, docs, emergency, budget, daysWithItems]);
 
   // Persist the latest score so the trips list can display it (insert only when changed).
+  //
+  // Only a score computed from reads that all SUCCEEDED. A failed read leaves
+  // its section empty, and an empty section scores 0: this saved that lower
+  // score while the page itself showed "could not load", and the trips list
+  // and reports then showed it as the trip's readiness.
   const lastSaved = useRef<number | null>(null);
   useEffect(() => {
-    if (loading || !trip) return;
+    if (loading || readError || !trip) return;
     if (lastSaved.current === readiness.score) return;
     lastSaved.current = readiness.score;
     (async () => {
       const sb = createClient();
-      const { data: latest } = await sb.from('vacation_travel_scores').select('score').eq('vacation_id', vacationId).order('computed_at', { ascending: false }).limit(1).maybeSingle();
+      const { data: latest, error: latestError } = await settle(sb.from('vacation_travel_scores').select('score').eq('family_id', familyId).eq('vacation_id', vacationId).order('computed_at', { ascending: false }).limit(1).maybeSingle());
+      if (latestError) {
+        // Unknown is not "different": try again on the next good read.
+        lastSaved.current = null;
+        console.error('[trip] readiness snapshot read failed', { message: latestError.message });
+        return;
+      }
       if (latest?.score === readiness.score) return;
-      const { error } = await settle(sb.from('vacation_travel_scores').insert({ family_id: familyId, vacation_id: vacationId, score: readiness.score, breakdown: readiness.factors as never }));
-      if (error) console.error('[trip] readiness snapshot failed', { message: error.message });
+      const { data: saved, error } = await settle(sb.from('vacation_travel_scores').insert({ family_id: familyId, vacation_id: vacationId, score: readiness.score, breakdown: readiness.factors as never }).select('id'));
+      if (error || wroteNoRows(saved)) console.error('[trip] readiness snapshot failed', { message: error?.message ?? 'no row written' });
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readiness.score, loading, trip, familyId, vacationId]);
+  }, [readiness.score, loading, readError, trip, familyId, vacationId]);
 
   const openRecos = recos.filter((r) => r.status === 'open').sort((a, b) => b.severity - a.severity);
   const [refreshing, setRefreshing] = useState(false);

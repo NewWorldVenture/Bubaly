@@ -19,6 +19,8 @@ import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { dayKeyInTz, zonedDayBoundsMs, addDaysToDayKey, weekStartDayKey, scopeFromUserContext } from '@/lib/services/scope';
 import { readCompleteCalendarOccurrences, projectCalendarOccurrences } from '@/lib/services/calendar/search-occurrences';
 import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from '@/lib/calendar/source-capability';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { computeBalances } from '@/lib/rewards/points';
 
 const ACCENT = ['bg-violet-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-blue-500', 'bg-teal-500'];
 
@@ -90,7 +92,8 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
 
   const [
     { data: myChores },
-    { data: myEarned },
+    { data: myEarned, error: myEarnedError },
+    { data: mySpent, error: mySpentError },
     { count: myOpenCount },
     { count: myDoneCount },
     calendarRes,
@@ -102,11 +105,27 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
       .eq('family_id', familyId).eq('member_id', myMemberId)
       .in('status', ['todo', 'in_progress', 'submitted'])
       .order('due_at', { nullsFirst: false }).limit(8),
-    // Points I've earned (approved/done assignments)
-    supabase.from('chore_assignments')
-      .select('points_awarded')
-      .eq('family_id', familyId).eq('member_id', myMemberId)
-      .in('status', ['approved', 'done']).limit(500),
+    // My points ledger, read whole: what I earned (APPROVED assignments — the
+    // set lib/rewards/points and 0439's guard count) and what I spent (approved
+    // or fulfilled redemptions). "Points to spend" used to be lifetime earned
+    // over 500 rows of approved-or-'done', with redemptions never read — so a
+    // child who had just spent 100 points was told they still had 100.
+    // Paged on the id, not on offsets (readAllById): these are summed, and an
+    // offset read repeats a row when one is written between its pages.
+    readAllByIdAsQuery<{ id: string; member_id: string; status: string; points_awarded: number | null }>((after, limit) => {
+      let q = supabase.from('chore_assignments')
+        .select('id, member_id, status, points_awarded')
+        .eq('family_id', familyId).eq('member_id', myMemberId).eq('status', 'approved');
+      if (after) q = q.gt('id', after);
+      return q.order('id').limit(limit);
+    }, { max: 50_000 }),
+    readAllByIdAsQuery<{ id: string; member_id: string; status: 'requested' | 'approved' | 'fulfilled' | 'rejected'; cost_points: number }>((after, limit) => {
+      let q = supabase.from('reward_redemptions')
+        .select('id, member_id, status, cost_points')
+        .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['approved', 'fulfilled']);
+      if (after) q = q.gt('id', after);
+      return q.order('id').limit(limit);
+    }, { max: 50_000 }),
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['todo', 'in_progress']),
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
@@ -159,7 +178,13 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
   const choreById = new Map((chores ?? []).map((c) => [c.id, c]));
   const memberById = new Map((members ?? []).map((m) => [m.id, m]));
 
-  const myPoints = (myEarned ?? []).reduce((sum, a) => sum + (a.points_awarded ?? 0), 0);
+  // computeBalances is the rewards page's arithmetic and 0439's: earned from
+  // approved chores, less approved or fulfilled redemptions. A ledger that
+  // could not be read is shown as unknown and nothing reads as affordable.
+  const ledgerRead = !myEarnedError && !mySpentError && myEarned !== null && mySpent !== null;
+  const [myBalance] = computeBalances([myMemberId], myEarned ?? [], mySpent ?? []);
+  const myPoints: number | null = ledgerRead ? myBalance.earned : null;
+  const pointsToSpend: number | null = ledgerRead ? myBalance.available : null;
   const openCount = myOpenCount ?? 0;
   const doneCount = myDoneCount ?? 0;
 
@@ -214,7 +239,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
         <StatCard href="/dashboard/calendar" label={tr('personalDashboard.myEventsToday')} value={calendarUnavailable ? '—' : todayCalendarEvents.length} icon={Calendar} bg="bg-blue-600" />
         {isKid ? (
           <>
-            <StatCard href="/dashboard/chores" label={tr('personalDashboard.pointsEarned')} value={myPoints} icon={Star} bg="bg-amber-500" />
+            <StatCard href="/dashboard/chores" label={tr('personalDashboard.pointsEarned')} value={myPoints ?? '—'} icon={Star} bg="bg-amber-500" />
             <StatCard href="/dashboard/chores" label={tr('personalDashboard.tasksDone')} value={doneCount} icon={Trophy} bg="bg-emerald-600" />
           </>
         ) : manager ? (
@@ -344,12 +369,12 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
             </div>
             <div className="mb-4 flex items-center gap-2 rounded-xl bg-surface/40 p-3">
               <Award className="h-5 w-5 text-amber-400" />
-              <p className="text-sm">{tr('personalDashboard.youHave')} <span className="font-bold text-amber-400">{myPoints}</span> {tr('personalDashboard.pointsToSpend')}</p>
+              <p className="text-sm">{tr('personalDashboard.youHave')} <span className="font-bold text-amber-400">{pointsToSpend ?? '—'}</span> {tr('personalDashboard.pointsToSpend')}</p>
             </div>
             {rewards && rewards.length > 0 ? (
               <ul className="space-y-2.5">
                 {rewards.map((rw) => {
-                  const affordable = myPoints >= rw.cost_points;
+                  const affordable = pointsToSpend !== null && pointsToSpend >= rw.cost_points;
                   return (
                     <li key={rw.id} className="flex items-center gap-3 rounded-xl bg-surface/40 p-3">
                       <Star className={cn('h-4 w-4', affordable ? 'text-amber-400' : 'text-muted/40')} />

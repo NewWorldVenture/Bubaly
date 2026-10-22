@@ -644,6 +644,25 @@ describe('the wall clock', () => {
     expect(new Date(String(fake.run.run_after)).getTime()).toBe(fake.now + 120 * 60_000);
     expect(fake.step('s3').status).toBe('queued');
   });
+
+  it.each([1e300, 144_000_000_000])('fails an overflowing persisted follow-up delay (%s) without scheduling or dispatching its dependent', async (delayMinutes) => {
+    const fake = makeFake({
+      steps: [
+        { id: 'wait', step_type: 'followup', tool_name: null, input_json: { delayMinutes } },
+        { id: 'dependent', dependency_ids: ['wait'] },
+      ],
+    });
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(result.status).toBe('failed');
+    expect(fake.step('wait').status).toBe('failed');
+    expect(fake.step('wait').error).toMatch(/follow-up.*time/i);
+    expect(fake.calls).toEqual([]);
+    expect(fake.eventTypes()).toContain('step_failed');
+    expect(fake.eventTypes()).not.toContain('followup_scheduled');
+    expect(fake.run.run_after).toBeUndefined();
+  });
 });
 
 describe('cancellation', () => {

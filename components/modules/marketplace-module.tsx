@@ -481,8 +481,8 @@ export function MarketplaceModule({
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium text-fg">
                     {memberName(o.member_id)}
-                    {/* Accepting records the order at this amount when there is one. */}
-                    {o.amount_cents ? <span className="font-normal text-muted"> · {offerAmountLabel(o.amount_cents, locale.code)}</span> : null}
+                    {/* Accepting records the order at this amount when there is one; zero is one. */}
+                    {o.amount_cents != null ? <span className="font-normal text-muted"> · {offerAmountLabel(o.amount_cents, locale.code)}</span> : null}
                   </div>
                   {o.message && <p className="truncate text-xs text-muted">{o.message}</p>}
                 </div>

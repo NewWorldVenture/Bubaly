@@ -407,6 +407,10 @@ function NoteModal({ note, onClose, onSaved }: {
   const [selectedColor, setSelectedColor] = useState((note as Record<string, unknown> | null)?.color as string ?? 'default');
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [bodyValue, setBodyValue] = useState(note?.body ?? '');
+  // What the note held when this editor OPENED — captured once, so a newer copy
+  // of the note arriving while the editor is open does not quietly become the
+  // version this save is allowed to replace.
+  const [base] = useState(() => (note ? { title: note.title ?? null, body: note.body ?? '' } : null));
   const [aiLoading, setAiLoading] = useState(false);
   const [insights, setInsights] = useState<NotesInsights | null>(null);
 
@@ -450,7 +454,7 @@ function NoteModal({ note, onClose, onSaved }: {
     if (!body && !title) return toastError(t('notesModule.noteMustHaveContent'));
     setLoading(true);
     try {
-      const res = await saveNoteAction(note?.id ?? null, { title, body: body ?? '' });
+      const res = await saveNoteAction(note?.id ?? null, { title, body: body ?? '', ...(base ? { base } : {}) });
       if (!res.ok) {
         if (active.current) toastError(res.error);
         return;

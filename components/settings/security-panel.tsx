@@ -236,11 +236,11 @@ export function SecurityPanel() {
                   <h4 className="text-sm font-semibold">{t('securityPanel.scanTitle')}</h4>
                   <p className="mt-1 text-xs text-muted">{t('securityPanel.scanHelp')}</p>
                   <div className="mt-3 flex flex-col items-start gap-4 sm:flex-row">
-                    {/* Supabase returns the QR as an SVG document; it is rendered as an
-                        image so nothing in it can run, and never logged. */}
+                    {/* The Supabase SDK already returns an SVG data URL. Keep it
+                        intact as an image; adding a second prefix breaks decoding. */}
                     {/* eslint-disable-next-line @next/next/no-img-element -- a device-local data: URI holding the TOTP secret; it must never pass through an image loader */}
                     <img
-                      src={`data:image/svg+xml;utf-8,${encodeURIComponent(enrolment.qrCode)}`}
+                      src={enrolment.qrCode}
                       alt={t('securityPanel.qrAlt')}
                       width={176}
                       height={176}

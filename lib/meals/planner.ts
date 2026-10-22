@@ -3,7 +3,7 @@
 // and soon-to-expire pantry items, asks the model to fill a week, then maps the
 // answer back to real rows. All deterministic logic lives here for testing.
 
-import type { MealType } from '@/lib/database.types';
+import type { Json, MealType } from '@/lib/database.types';
 import { parseModelJSON } from '@/lib/meals/nutrition';
 import { quickMealHint, type BusyNight } from '@/lib/meals/week-context';
 import { mealWeekDays } from '@/lib/meals/week';
@@ -19,8 +19,8 @@ export interface Candidate {
   votes: number;          // family vote score (higher = more loved)
 }
 
-export interface MealRow { id: string; name: string; meal_type: string }
-export interface RecipeRow { id: string; name: string; category: string; allergy_flags?: string[] | null }
+export interface MealRow { id: string; name: string; meal_type: string; ingredients?: Json | null }
+export interface RecipeRow { id: string; name: string; category: string; allergy_flags?: string[] | null; ingredients?: Json | null }
 
 /** Build the candidate dish list the model chooses from. Recipes carry their
  *  allergy flags; `voteScore` maps a dish name/id → its family vote tally. */
@@ -93,7 +93,10 @@ export function buildPlannerUser(req: PlannerRequest): string {
   const lines: string[] = [];
   lines.push(`Week starting ${req.weekStart} (Mon–Sun: ${dates.join(', ')}).`);
   lines.push(`Fill these meal slots each day: ${req.mealTypes.join(', ')}.`);
-  if (req.dietary?.length) lines.push(`Dietary constraints (strict): ${fenceUntrusted('dietary', req.dietary.join(', '))}.`);
+  // The long-form fence: the list now carries the household's recorded
+  // allergies, and the row fence cuts at 400 characters — an allergy is not
+  // something to lose off the end of a line.
+  if (req.dietary?.length) lines.push(`Dietary constraints (strict): ${fenceUntrustedBlock('dietary', req.dietary.join(', '), 4_000)}`);
   if (req.expiring?.length) lines.push(`Use up these expiring pantry items if you can: ${fenceUntrustedBlock('expiring_pantry', req.expiring.join(', '), 2_000)}`);
   // The calendar's own answer to "which nights are we not cooking?". Absent
   // when the week is clear, so the model reads a constraint or nothing at all

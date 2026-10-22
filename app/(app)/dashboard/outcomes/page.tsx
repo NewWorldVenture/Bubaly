@@ -16,6 +16,7 @@ import { RelationshipInsights } from '@/components/reasoning/relationship-insigh
 import { ErrorState } from '@/components/ui/states';
 import { countFromResult, countMatchingResult } from '@/lib/outcomes/discovery';
 import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
+import { readOnOpenGroceryLists } from '@/lib/services/groceries';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -43,8 +44,9 @@ export default async function OutcomesPage({ searchParams }: { searchParams?: Pr
       .eq('family_id', familyId).gte('starts_at', dayStart).lt('starts_at', dayEnd),
     supabase.from('todo_items').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('is_done', false).lt('due_date', todayKey),
-    supabase.from('grocery_items').select('id', { count: 'exact', head: true })
-      .eq('family_id', familyId).eq('is_checked', false),
+    // Only lists the family has not archived (readOnOpenGroceryLists).
+    readOnOpenGroceryLists(supabase, familyId, (lists) => supabase.from('grocery_items').select('id', { count: 'exact', head: true })
+      .eq('family_id', familyId).in('list_id', lists).eq('is_checked', false)),
     supabase.from('family_members').select('birthday', { count: 'exact' }).eq('family_id', familyId).eq('is_active', true),
   ]);
 

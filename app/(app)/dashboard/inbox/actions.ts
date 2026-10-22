@@ -14,9 +14,17 @@
 // make — an event, a task, a notification — waits for a parent or adult to
 // approve it, whoever pressed the button (lib/ai/runs/executor.ts runStep).
 //
-// THE HANDLED CLAIM: `ai_handled` is written only after `submitRequest`
-// returns, i.e. only once an `ai_requests` row exists. If the intake fails, the
-// row keeps saying "not handled", because it isn't.
+// WHO MAY PRESS IT: a parent or adult, as for every other way of filing a
+// family message (lib/services/inbox `mayFile`). The refusal comes FIRST: it
+// used to come from `markInboxMessageHandled`, after `submitRequest` had
+// already filed a request and planned a run — so a teen was told it failed,
+// the message stayed "not handled", and the parent who pressed next filed it
+// a second time.
+//
+// THE HANDLED CLAIM: before filing, the row is CLAIMED (`ai_handled` set only
+// where it is still false), so two parents pressing together file once: the
+// second finds it already with Bubaly. If the intake then fails, the claim is
+// given back and the row says "not handled" again, because it isn't.
 //
 // WHAT THIS CANNOT PERSIST: `family_inbox_messages` has no `request_id` column,
 // so the created run id is returned to the caller for THIS response only — the
@@ -32,7 +40,10 @@ import { isAIConfigured } from '@/lib/ai/provider';
 import { assertAIAccess } from '@/lib/server/ai-access';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { scopeFromUserContext } from '@/lib/services/scope';
-import { archiveInboxMessage, loadInboxMessage, markInboxMessageHandled } from '@/lib/services/inbox';
+import {
+  archiveInboxMessage, claimInboxMessageForFiling, loadInboxMessage, markInboxMessageHandled, releaseInboxMessageClaim,
+} from '@/lib/services/inbox';
+import { isManager } from '@/lib/constants/roles';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 
@@ -72,6 +83,10 @@ export async function handleInboxMessageAction(
   if (!messageId) return { ok: false, error: t('inboxActions.thatMessageCouldNotBe'), code: 'not_found' };
 
   const ctx = await requireUserContext();
+  // Before anything is read, limited or filed (see WHO MAY PRESS IT above).
+  if (!isManager(ctx.active.role)) {
+    return { ok: false, error: t('inboxActions.onlyAParentOrAdultCanHandle'), code: 'denied' };
+  }
   const supabase = await createServer();
   const scope = scopeFromUserContext(ctx, supabase);
 
@@ -94,25 +109,48 @@ export async function handleInboxMessageAction(
     return { ok: false, error: t('inboxActions.bubalyIsNotConnectedTo'), code: 'not_configured' };
   }
 
-  const filed = await submitRequest(
-    scope,
-    { text, context: { module: 'inbox' }, clientRequestId: clientRequestId ?? null, origin: 'inbox' },
-    { startedAtMs: startedAt },
-  );
-  if (!filed.ok) return { ok: false, error: filed.error, code: filed.code };
+  // Every write here needs the service role: 0214 gives members SELECT and no more.
+  const writer = { ...scope, db: createServiceClient() };
+  const claim = await claimInboxMessageForFiling(writer, messageId);
+  if (!claim.ok) return { ok: false, error: claim.error, code: claim.code };
+  // Someone else's press got there first: it is already with Bubaly.
+  if (!claim.data) return { ok: true, runPath: null, handled: true };
 
-  // Only now — a request row exists — may the inbox say "handled". The write
-  // needs the service role: 0214 gives members SELECT and no more.
-  const handled = await markInboxMessageHandled({ ...scope, db: createServiceClient() }, messageId);
-  if (!handled.ok) return { ok: false, error: handled.error, code: handled.code };
+  let filed: Awaited<ReturnType<typeof submitRequest>>;
+  try {
+    filed = await submitRequest(
+      scope,
+      { text, context: { module: 'inbox' }, clientRequestId: clientRequestId ?? null, origin: 'inbox' },
+      { startedAtMs: startedAt },
+    );
+  } catch (error) {
+    await giveBackClaim(writer, messageId);
+    throw error;
+  }
+  if (!filed.ok) {
+    await giveBackClaim(writer, messageId);
+    return { ok: false, error: filed.error, code: filed.code };
+  }
+
+  // A request row exists. This also files the message as read; the handled
+  // flag itself is already true from the claim, so a failure here does not
+  // un-file anything — the request WAS filed, and the reply says so.
+  const handled = await markInboxMessageHandled(writer, messageId);
+  if (!handled.ok) console.error('[inbox] filed a request but could not mark the message read', { messageId, error: handled.error });
 
   revalidatePath('/dashboard/inbox');
   revalidatePath('/dashboard/front-desk');
   return {
     ok: true,
     runPath: filed.data.runId ? runPagePath(filed.data.runId) : null,
-    handled: handled.data.ai_handled === true,
+    handled: handled.ok ? handled.data.ai_handled === true : true,
   };
+}
+
+/** The intake failed: the message is not with Bubaly, so the row must not say it is. */
+async function giveBackClaim(writer: Parameters<typeof releaseInboxMessageClaim>[0], messageId: string): Promise<void> {
+  const released = await releaseInboxMessageClaim(writer, messageId);
+  if (!released.ok) console.error('[inbox] could not release a filing claim after the intake failed', { messageId, error: released.error });
 }
 
 /** Archive an inbox message: out of the queue, still in the history. */

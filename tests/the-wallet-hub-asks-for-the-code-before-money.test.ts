@@ -30,7 +30,7 @@ beforeEach(() => {
     active: { familyId: FAMILY, role: 'parent', member: { id: 'mem-1' }, family: { timezone: 'UTC' } },
   });
   db = createInMemorySupabase();
-  Object.assign(db.auth, { mfa: { getAuthenticatorAssuranceLevel: mocks.aal } });
+  Object.assign(db.auth, { getSession: async () => ({ data: { session: { access_token: 'synthetic-assurance-token' } }, error: null }), mfa: { getAuthenticatorAssuranceLevel: mocks.aal } });
   db.replace('transactions', [{ id: 'tx-1', family_id: FAMILY, name: 'Rent', amount: 1200 }]);
   db.replace('financial_accounts', [{ id: 'acct-1', family_id: FAMILY, name: 'Checking' }]);
   db.replace('wallet_cards', [{ id: 'card-1', family_id: FAMILY, name: 'Library card' }]);

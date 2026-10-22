@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { Resend } from 'resend';
 import { appBaseUrl } from '@/lib/server/app-url';
+import { isChildLoginEmail } from '@/lib/onboarding/child-login';
 
 let resendClient: Resend | null = null;
 
@@ -35,6 +36,11 @@ export const APP_URL = appBaseUrl(
   process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL,
 );
 
+/** Whether any recipient is a kid login's synthetic, never-delivered address. */
+export function addressesAKidLogin(to: string | string[]): boolean {
+  return (Array.isArray(to) ? to : [to]).some((address) => isChildLoginEmail(address));
+}
+
 type SendReactArgs = {
   to: string | string[];
   subject: string;
@@ -56,6 +62,15 @@ export async function sendReactEmail({
   replyTo,
   idempotencyKey,
 }: SendReactArgs): Promise<{ ok: boolean; skipped?: boolean }> {
+  // Never to a kid login's synthetic address (lib/onboarding/child-login.ts):
+  // nothing is ever delivered there and the domain is not Bubaly's, so a send
+  // is either a bounce against the sender's reputation or a child's data in a
+  // stranger's inbox. Refused before the provider is asked, and reported as
+  // not sent.
+  if (addressesAKidLogin(to)) {
+    console.error('[email refused — a kid login address is never mailed]', { subject });
+    return { ok: false };
+  }
   if (!emailEnabled()) {
     console.info(`[email skipped — no RESEND_API_KEY] to=${to} subject="${subject}"`);
     return { ok: true, skipped: true };
