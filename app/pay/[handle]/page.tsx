@@ -1,9 +1,16 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createServiceClient } from '@/lib/supabase/server';
 import { normalizeHandle } from '@/lib/wallet/pay-handle';
 import { getTranslations } from '@/lib/i18n/server';
+import { clientIp } from '@/lib/server/rate-limit';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+
+// Pay-ID lookups one address may make a minute before it is told to try later.
+// Not exported: a page module may only export what Next.js knows. Audit N3.
+const PAY_RESOLVE_PER_MINUTE = 20;
 
 // The tab title is copy like any other: it was English in every locale.
 // Audit C1-S9-100.
@@ -21,6 +28,16 @@ export default async function PayHandlePage({ params }: { params: Promise<{ hand
   const { handle: raw } = await params;
   const handle = normalizeHandle(raw);
   const supabase = createServiceClient();
+
+  // Per address, before any read. A Pay-ID is a human-chosen handle of 3–20
+  // characters (lib/wallet/pay-handle.ts), so a dictionary of first names walked
+  // every active one and collected (child's name, family name, live gift token)
+  // from the page this forwards to, at request speed — the pledge action was
+  // limited, the two public READ pages were not. The refusal is the same shell
+  // a failed read draws, so it says nothing about whether this handle exists.
+  // Audit N3.
+  const limited = await enforceRequestRateLimit(supabase, `pay:${clientIp(await headers())}`, { limit: PAY_RESOLVE_PER_MINUTE });
+  if (!limited.ok) return <Unavailable t={t} />;
 
   // Both reads below dropped their `error`, and both failure modes landed on the
   // same dead-end as a handle that genuinely has no link. So a refused or failed

@@ -84,9 +84,28 @@ begin
 
   -- ── The marketplace must still BE a marketplace ───────────────────────────
   -- setOrderStatusAction (app/(app)/marketplace/actions.ts) updates `status`
-  -- alone; a party must keep being able to advance their own order.
-  update public.marketplace_orders set status = 'returned' where id = ord;
-  get diagnostics n = row_count;
+  -- alone; a party must keep being able to advance their own order. Where the
+  -- held 0518 is installed, `returned` and `completed` are the seller's steps,
+  -- as they are in the action: the buyer's is refused with 0518's own 42501
+  -- and the seller advances the order. Under the released rule either may.
+  if to_regprocedure('public.marketplace_order_is_finished_by_its_seller()') is null then
+    update public.marketplace_orders set status = 'returned' where id = ord;
+    get diagnostics n = row_count;
+  else
+    refused := false;
+    begin
+      update public.marketplace_orders set status = 'returned' where id = ord;
+    exception when insufficient_privilege then
+      refused := sqlerrm = 'Only the seller marks a marketplace order returned or completed';
+    end;
+    if not refused then
+      raise exception '0518: a BUYER marked their own order returned, which is the seller''s step';
+    end if;
+    perform set_config('request.jwt.claim.sub', ua::text, true);
+    update public.marketplace_orders set status = 'returned' where id = ord;
+    get diagnostics n = row_count;
+    perform set_config('request.jwt.claim.sub', uc::text, true);
+  end if;
   if n <> 1 then
     raise exception '0409: a party could not advance their own order (% row(s)) — the fix went too far', n;
   end if;

@@ -4,6 +4,11 @@
 // local-part, file it into the unified inbox, run the AI concierge, and (best
 // effort) send a courteous auto-reply. Accepts multipart/form-data OR JSON.
 //
+// Anyone on the Internet can mail the address, so the concierge, the
+// attachment extraction and the auto-reply are each budgeted, the reply goes
+// only to a sender the headers allow, and it is marked automatic — see
+// lib/contact-center/inbound-mail.ts for the rules and why (audit N1, N2, N6).
+//
 // Auth: fail-closed. Requires CONTACT_CENTER_INBOUND_SECRET, presented as the
 // x-inbound-secret header, as the password of HTTP Basic credentials, or as
 // ?key= (see `authorized`). Without the secret set it rejects every request, in
@@ -15,7 +20,16 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { settle } from '@/lib/supabase/settle';
 import { readBoundedRequestFormData, readBoundedRequestText } from '@/lib/server/bounded-request-body';
 import { familyReplySender, sendEmail } from '@/lib/server/email';
+import { FROM_EMAIL } from '@/lib/email';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { canonicalMailbox } from '@/lib/server/canonical-mailbox';
 import { parseRecipientLocal, buildBubalyAddress } from '@/lib/contact-center/address';
+import {
+  AUTO_REPLY_HEADERS, DAY_MS, EMAIL_CONCIERGE_PER_FAMILY_PER_DAY, EMAIL_CONCIERGE_PER_SENDER_PER_DAY,
+  EMAIL_REPLY_PER_FAMILY_PER_DAY, EMAIL_REPLY_PER_SENDER_PER_DAY, MAX_REPLY_SUBJECT,
+  decideAutoReplyRecipient, parseSingleMailbox, withheldConcierge,
+} from '@/lib/contact-center/inbound-mail';
+import { safeContactText, safeSubjectText } from '@/lib/contact-center/text';
 import {
   resolveFamilyByEmailLocalResult, getOrCreateChannelResult, recordOutboundMessage,
   routeInboundToPlanner, fileInboundPaperwork, familyScopedEmailRef,
@@ -38,8 +52,38 @@ import { FAMILY_EMAIL_MIN_PLAN_LEVEL } from '@/lib/constants/plans';
 // urgent receipt only when aiIntent is 'urgent' — and attemptUrgentDelivery
 // carries the send, with a retry and a 503 instead of a swallowed catch. The
 // decision did not move; the import did, so it is not re-added here.
-import { fileEmailAttachments, MAX_MULTIPART_EMAIL_BYTES } from '@/lib/services/paperwork/email-attachments';
+import { fileEmailAttachments, MAX_MULTIPART_EMAIL_BYTES, type EmailAttachmentResult } from '@/lib/services/paperwork/email-attachments';
 import { secretEquals } from '@/lib/server/secret-equals';
+
+type Admin = ReturnType<typeof createServiceClient>;
+
+/**
+ * Whether this message may run the concierge (one model call) and have its
+ * attachments extracted (OCR): per sender inbox when From is one mailbox, then
+ * per family address, over a day (lib/contact-center/inbound-mail.ts). The
+ * narrower budget is charged first, so a sender over its own budget does not
+ * spend the family's. Fail-closed like every durable limiter here: unreadable
+ * means withheld, and the message is still filed with the deterministic
+ * classification. Audit N1.
+ */
+async function conciergeBudgetAllows(admin: Admin, familyId: string, senderMailbox: string | null): Promise<boolean> {
+  if (senderMailbox) {
+    const sender = await enforceRequestRateLimit(admin, `cc-email:sender:${familyId}:${canonicalMailbox(senderMailbox)}`,
+      { limit: EMAIL_CONCIERGE_PER_SENDER_PER_DAY, windowMs: DAY_MS });
+    if (!sender.ok) return false;
+  }
+  const family = await enforceRequestRateLimit(admin, `cc-email:family:${familyId}`, { limit: EMAIL_CONCIERGE_PER_FAMILY_PER_DAY, windowMs: DAY_MS });
+  return family.ok;
+}
+
+/** Whether one more auto-reply may reach this inbox from this family address today. Audit N2, N6. */
+async function replyBudgetAllows(admin: Admin, familyId: string, to: string): Promise<boolean> {
+  const sender = await enforceRequestRateLimit(admin, `cc-email-reply:${familyId}:${canonicalMailbox(to)}`,
+    { limit: EMAIL_REPLY_PER_SENDER_PER_DAY, windowMs: DAY_MS });
+  if (!sender.ok) return false;
+  const family = await enforceRequestRateLimit(admin, `cc-email-reply:${familyId}`, { limit: EMAIL_REPLY_PER_FAMILY_PER_DAY, windowMs: DAY_MS });
+  return family.ok;
+}
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -193,8 +237,24 @@ export async function POST(req: NextRequest) {
   }
   const channel = channelResult.data;
   const familyLabel = familyResult.data?.name || 'the family';
+  const text = body || subject || '';
 
-  const result = await runConcierge({ channel: 'email', from: from ?? undefined, text: body || subject || '', familyLabel });
+  // The concierge (a model call) and the attachment extraction (OCR) are
+  // budgeted per sender inbox and per family address BEFORE the model is asked.
+  // Anyone can mail this address with a fresh Message-Id each time, and until
+  // now every one of them was one model call and one extraction pass; the only
+  // budget on the whole path was the urgent SMS lane's. Over budget the message
+  // is still filed — with the deterministic classification the concierge
+  // itself falls back to — and the extraction and the auto-reply are withheld
+  // (lib/contact-center/inbound-mail.ts; audit N1).
+  const senderMailbox = parseSingleMailbox(from);
+  const withinConciergeBudget = await conciergeBudgetAllows(admin, familyId, senderMailbox);
+  if (!withinConciergeBudget) {
+    console.warn('[contact-center] inbound email over the concierge budget: filed with the deterministic classification; attachments and auto-reply withheld', { familyId });
+  }
+  const result = withinConciergeBudget
+    ? await runConcierge({ channel: 'email', from: from ?? undefined, text, familyLabel })
+    : withheldConcierge(text, familyLabel);
   let filed: Awaited<ReturnType<typeof captureInboundWithUrgency>>;
   try { filed = await captureInboundWithUrgency(admin, {
     familyId, channel: 'email', from: from ?? undefined, to, subject: subject ?? undefined,
@@ -250,10 +310,14 @@ export async function POST(req: NextRequest) {
   // Every delivery retries attachments independently, including a duplicate
   // inbox message. Previously saved documents survive later failures and are
   // re-read by deterministic id, without repeating OCR or overwriting edits.
-  const attachmentResult = await fileEmailAttachments(admin, {
-    familyId, inboxMessageId: filed.messageId, providerRef: filed.providerRef,
-    sender: from, subject, files: attachments,
-  });
+  // Over the concierge budget nothing is extracted: each file is reported
+  // skipped, so the provider's record of this delivery says what happened.
+  const attachmentResult: { ok: boolean; results: EmailAttachmentResult[] } = withinConciergeBudget
+    ? await fileEmailAttachments(admin, {
+      familyId, inboxMessageId: filed.messageId, providerRef: filed.providerRef,
+      sender: from, subject, files: attachments,
+    })
+    : { ok: true, results: attachments.map((file) => ({ filename: safeContactText(file.name, 255) || 'attachment', status: 'skipped', reason: 'concierge_budget' })) };
   if (!attachmentResult.ok) {
     return NextResponse.json({ ok: false, retryable: true, attachments: attachmentResult.results }, {
       status: 503, headers: { 'Retry-After': '30' },
@@ -262,27 +326,55 @@ export async function POST(req: NextRequest) {
 
   if (urgentOutcome === 'failed') return new NextResponse('Urgent delivery state temporarily unavailable', { status: 503 });
   // Auto-reply acknowledges intake; it does not assert that the fallback text arrived.
-  if (channel?.ai_concierge_enabled !== false && result.intent !== 'spam' && from) {
+  //
+  // WHO it goes to is decided from the headers, never taken from them
+  // (lib/contact-center/inbound-mail.ts; audit N2, N6). The message is filed
+  // above either way — only the reply is withheld — for: mail that says it is
+  // automatic or list traffic (a responder's answer re-entered here under a
+  // fresh Message-Id, so the once-per-message reservation below never stopped
+  // the loop), a sender the provider says failed SPF/DKIM/DMARC, a From that is
+  // not exactly one mailbox, our own domain or sender, and bounce/no-reply/
+  // kid-login mailboxes. A message over the concierge budget gets no reply.
+  const autoReply = withinConciergeBudget && channel?.ai_concierge_enabled !== false && result.intent !== 'spam'
+    ? decideAutoReplyRecipient(fields, from, FROM_EMAIL)
+    : null;
+  if (autoReply && !autoReply.ok) console.info('[contact-center] email auto-reply withheld', { familyId, reason: autoReply.reason });
+  if (autoReply?.ok) {
     try {
       // Once per message, not once per delivery: everything above re-runs on a
       // redelivery, and this is the only step with an effect outside Bubaly.
       const reservation = { familyId, providerRef: filed.providerRef, messageId: filed.messageId };
       if (!await reserveEmailReply(admin, reservation)) return NextResponse.json({ ok: true, intent: result.intent, attachments: attachmentResult.results });
+      // Budgeted per sender inbox and per family address, charged once per
+      // message (after the reservation, so a redelivery is never charged
+      // twice). Over budget — or with the limiter unreadable — the message is
+      // filed and only the reply is withheld: the bound a responder that
+      // ignores Auto-Submitted runs into.
+      if (!await replyBudgetAllows(admin, familyId, autoReply.to)) {
+        console.warn('[contact-center] email auto-reply withheld: over budget', { familyId });
+        await finishEmailReply(admin, reservation, false);
+        return NextResponse.json({ ok: true, intent: result.intent, attachments: attachmentResult.results });
+      }
       const reply = filed.escalated ? (await getTranslations())('contactUrgent.replySaved') : result.reply;
       // Keep replies on the family's thread while respecting the configured
       // sender domain. The footer and message body are plain text in HTML.
       const familyAddress = buildBubalyAddress(local);
       const escapedFamilyLabel = familyLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+      // The sender's subject is a stranger's text: stripped of control
+      // characters and bounded before it becomes a Bubaly-signed subject line.
+      const replySubject = subject ? safeSubjectText(subject, MAX_REPLY_SUBJECT) : '';
       const sent = await sendEmail({
-        to: from,
+        to: autoReply.to,
         from: familyReplySender(familyLabel, familyAddress),
         replyTo: familyAddress,
-        subject: subject ? `Re: ${subject}` : `Message received — ${familyLabel}`,
+        subject: replySubject ? `Re: ${replySubject}` : `Message received — ${familyLabel}`,
         html: `<p>${reply.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</p><p style="color:#888;font-size:12px">— ${escapedFamilyLabel} via ${familyAddress}</p>`,
+        // Marked automatic, so a compliant responder on the other side stays quiet.
+        headers: AUTO_REPLY_HEADERS,
       });
       await finishEmailReply(admin, reservation, !!sent?.ok && !sent.skipped);
       if (sent.ok && !sent.skipped) {
-        await recordOutboundMessage(admin, { familyId, channel: 'email', to: from, body: reply });
+        await recordOutboundMessage(admin, { familyId, channel: 'email', to: autoReply.to, body: reply });
       }
     } catch (error) { console.error('[contact-center] email auto-reply failed', error); }
   }

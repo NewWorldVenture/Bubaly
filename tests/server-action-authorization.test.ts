@@ -69,7 +69,7 @@ const GUARDS = new Set([
  */
 const PUBLIC_BY_DESIGN: Record<string, string> = {
   'app/reviews/new/actions.ts:submitReviewAction':
-    'public review form; writes status pending unless it clears the configured auto-approve threshold',
+    'public review form; a stranger\'s review is written pending, and only a signed-in member\'s can clear the configured auto-approve threshold',
   'app/s/[slug]/actions.ts:submitResponseAction':
     'public survey form; respondents may be anonymous, and the slug must resolve to an active survey',
   'app/gift/actions.ts:submitGiftPledgeAction':
