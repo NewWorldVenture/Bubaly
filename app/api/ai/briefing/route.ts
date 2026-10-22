@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
       groceryResult,
       { data: reminders },
       { data: mealPlans },
-      { data: appointments },
+      { data: appointments, error: appointmentsError },
       { data: bills, error: billsError },
       { data: medSchedules, error: medsError },
       { data: maintenance, error: maintenanceError },
@@ -199,10 +199,13 @@ export async function POST(req: NextRequest) {
     // a failed read became "CHORES DUE TODAY (0)" and a digest with nothing in
     // it ("You're all caught up"), at 200. The cron's delivery
     // (lib/briefing/deliver.ts) already fails closed on every digest read.
-    const householdReadError = choresError ?? billsError ?? medsError ?? maintenanceError ?? warrantiesError ?? tripsError ?? pantryError;
+    // Medical appointments as well: a failed read became "MEDICAL APPOINTMENTS
+    // THIS WEEK: - None", and the brief said there was no appointment to get
+    // a child to. The weekly brief already refuses on the same read.
+    const householdReadError = choresError ?? appointmentsError ?? billsError ?? medsError ?? maintenanceError ?? warrantiesError ?? tripsError ?? pantryError;
     if (householdReadError) {
       console.error('[api/ai/briefing] household read failed', {
-        chores: Boolean(choresError), bills: Boolean(billsError), medications: Boolean(medsError), maintenance: Boolean(maintenanceError),
+        chores: Boolean(choresError), appointments: Boolean(appointmentsError), bills: Boolean(billsError), medications: Boolean(medsError), maintenance: Boolean(maintenanceError),
         warranties: Boolean(warrantiesError), trips: Boolean(tripsError), pantry: Boolean(pantryError), error: householdReadError,
       });
       return NextResponse.json({ error: tr('briefing.failedToGenerateBriefing') }, { status: 503 });
