@@ -20,7 +20,7 @@ import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isValidTimezone } from '@/lib/time/zoned';
 import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
 import { forgetMemberLocation } from '@/lib/location/retention';
-import { closePendingInvitesFor } from '@/lib/server/member-invites';
+import { closePendingInvitesFor, revokeInvitesIssuedBy } from '@/lib/server/member-invites';
 import { recordTrustChange } from '@/lib/trust/ledger';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
@@ -267,9 +267,13 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result<
   if (!forgotten.ok) console.error('[admin-action] removed member location was not cleared', { memberId, failures: forgotten.failures });
   // Every pending invite to them is revoked too, or a second one they hold
   // brings them back (accept_invite reactivates the row). Stands if it fails.
-  const invitesRevoked = await closePendingInvitesFor(supabase, member.family_id, member, 'revoked');
+  // So are the pending invites THEY issued, which accept_invite would still
+  // honour at the role they chose (revokeInvitesIssuedBy).
+  const invitesToThemClosed = await closePendingInvitesFor(supabase, member.family_id, member, 'revoked');
+  const invitesByThemRevoked = await revokeInvitesIssuedBy(supabase, member.family_id, member.user_id);
+  const invitesRevoked = invitesToThemClosed && invitesByThemRevoked;
 
-  await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name, login_revocation: loginRevocation, location_forgotten: forgotten.ok, invites_revoked: invitesRevoked } });
+  await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name, login_revocation: loginRevocation, location_forgotten: forgotten.ok, invites_revoked: invitesRevoked, invites_they_issued_revoked: invitesByThemRevoked } });
   revalidatePath('/admin/users');
   const warning = loginRevocation === 'failed'
     ? t('familyModule.removedButLoginStillActive')

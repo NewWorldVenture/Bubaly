@@ -170,7 +170,7 @@ export const tripTools: ToolDefinition[] = [
         : `Added ${plural(added, 'item')} across ${plural(output.lists.length, 'packing list')}`;
     },
     execute: async (scope, input) => {
-      const member = await resolveAssigneeId(scope, { assignee: input.member, assignee_id: input.member_id });
+      const member = await resolveAssigneeId(scope, { assignee: input.member, assignee_id: input.member_id }, { requireActive: true });
       if (!member.ok) return member;
       const res = await generatePackingList(scope, input.vacation_id, { memberId: member.data, perTraveler: input.per_traveler ?? true });
       if (!res.ok) return res;
@@ -381,7 +381,7 @@ export const tripTools: ToolDefinition[] = [
       : `Added a care task for ${output.created.map((c) => c.pet_name).join(', ')}`),
     consequences: (input) => [`Adds one to-do per family pet for trip ${input.vacation_id ?? ''}. Nothing is booked with a sitter or a kennel.`],
     execute: async (scope, input) => {
-      const assignee = await resolveAssigneeId(scope, { assignee: input.assignee, assignee_id: input.assignee_id });
+      const assignee = await resolveAssigneeId(scope, { assignee: input.assignee, assignee_id: input.assignee_id }, { requireActive: true });
       if (!assignee.ok) return assignee;
       const res = await createPetCareTasks(scope, input.vacation_id, assignee.data ? { assigneeId: assignee.data } : {});
       if (!res.ok) return res;

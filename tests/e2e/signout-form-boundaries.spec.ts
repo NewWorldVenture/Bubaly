@@ -64,6 +64,9 @@ async function fixture(page: Page, control: Control = 'plain', locale = 'en-US')
       '@/components/ui/toast': { useToast: () => ({ success() {}, error() {} }) },
       '@/components/app/app-context': { useApp: () => ({ role: 'child', members: [], userEmail: 'fixture@example.invalid' }) },
       '@/app/(app)/account/actions': { reopenAccountAction: async () => { throw new Error('Unrelated action'); }, closeAccountAction: async () => { throw new Error('Unrelated action'); } },
+      // account-closed-gate offers a member's other, open families through the
+      // family switcher's action; no family is offered in this fixture.
+      '@/app/(app)/actions': { setActiveFamilyAction: async () => { throw new Error('Unrelated action'); } },
       '@/lib/constants/plans': { BASIC_ANNUAL_CENTS: 11988, PLUS_ANNUAL_CENTS: 23988 },
       '@/lib/utils/format': { fmtDateTime: value => value },
       // Formatting is not what this fixture is about (TIME-003 moved these

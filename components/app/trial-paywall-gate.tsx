@@ -70,7 +70,9 @@ export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null 
     const res = await closeAccountAction();
     setBusy(null);
     if (res.ok) { success(t('trialPaywallGate.yourAccountIsClosedYour')); window.location.reload(); }
-    else toastError(res.error);
+    // Closing cancels the billing, so a password-only session of a parent with
+    // an authenticator is sent for the code first, as checkout above is.
+    else reportRefusal(res, toastError);
   }
 
   return (

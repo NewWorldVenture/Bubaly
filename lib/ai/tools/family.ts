@@ -34,19 +34,26 @@ const memberShape = z.object({
  *
  * Returns `ok(null)` only when neither was supplied — an unassigned item is a
  * legitimate request. A name nobody answers to is an error, not a null.
+ *
+ * `requireActive` is what every WRITE tool passes: a removed member's id (the
+ * model lists former members with `include_inactive`, or reuses a remembered
+ * id) must not become the assignee of a new to-do, chore, reminder, event or
+ * trip task — the row would be invisible to every active member's "mine" view
+ * and the removed person would keep accruing the family's work. Read tools
+ * leave it unset, so a search for a former member's items keeps working. The
+ * name path resolves active members only either way (resolveMemberByName).
  */
 export async function resolveAssigneeId(
   scope: ServiceScope,
   input: { assignee_id?: string | null; assignee?: string | null },
+  opts: { requireActive?: boolean } = {},
 ): Promise<ServiceResult<string | null>> {
   if (input.assignee_id) {
     // An id is untrusted model input like a name is: the FKs these ids land in
     // accept any household's member, so the family boundary is checked here.
-    // Inactive members still resolve, so a search for a former member's items
-    // keeps working; write paths that need a current member check that too.
     const { data, error } = await scope.db
       .from('family_members')
-      .select('id')
+      .select('id, is_active')
       .eq('id', input.assignee_id)
       .eq('family_id', scope.familyId)
       .maybeSingle();
@@ -55,6 +62,9 @@ export async function resolveAssigneeId(
       return fail('Could not check who that is.', { code: SERVICE_CODES.db });
     }
     if (!data) return fail('That person is not in this family.', { code: SERVICE_CODES.notFound });
+    if (opts.requireActive && data.is_active === false) {
+      return fail('That person is no longer in this family.', { code: SERVICE_CODES.notFound });
+    }
     return ok(data.id);
   }
   const name = input.assignee?.trim();

@@ -161,11 +161,21 @@ export async function GET(req: NextRequest) {
     });
   const nowIso = new Date().toISOString();
 
+  // Auctions of OPEN families only. A family that closed its account
+  // (families.closed_at) cannot see a sale, and every delivery cron skips its
+  // notices, so settling its auction created an order naming a seller who
+  // hears nothing until they reopen — the buyer waiting on them meanwhile.
+  // The listing stays `available` and is settled by the first run after the
+  // family reopens. Same shape as cron/wallet-allowance's rule, with the
+  // embed named by its column: marketplace_listings has a second foreign key
+  // into families (highest_bidder_family_id), and an unhinted `families(...)`
+  // is ambiguous to PostgREST.
   const { data: due, error } = await admin
     .from('marketplace_listings')
-    .select('id')
+    .select('id, family:families!family_id!inner(closed_at)')
     .eq('sale_format', 'auction').eq('status', 'available')
     .lt('auction_ends_at', nowIso)
+    .is('family.closed_at', null)
     .limit(BATCH);
   if (error) return NextResponse.json({ ok: false, error: t('closeAuctions.couldNotLoadAuctions') }, { status: 500 });
 

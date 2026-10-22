@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { extractBearerToken, getBearerUserContext } from '@/lib/supabase/bearer';
+import { bearerRefusalStatus, extractBearerToken, getBearerUserContext } from '@/lib/supabase/bearer';
 import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
 import { readDisplayCalendarOccurrences } from '@/lib/calendar/display-occurrences';
 
@@ -12,7 +12,8 @@ export async function GET(req: NextRequest) {
     const token = extractBearerToken(req.headers.get('authorization'));
     if (!token) return json({ code: 'invalid_token' }, 401);
     const auth = await getBearerUserContext(token);
-    if (!auth.ok) return json({ code: auth.reason }, auth.reason === 'invalid_token' ? 401 : auth.reason === 'needs_family' ? 403 : 503);
+    // 'account_closed' is a 403 the phone already understands from /api/ai.
+    if (!auth.ok) return json({ code: auth.reason }, bearerRefusalStatus(auth.reason));
     const { ctx, supabase } = auth;
     if (req.headers.get('X-Bubaly-User-Id') !== ctx.user.id || req.headers.get('X-Bubaly-Family-Id') !== ctx.active.familyId) {
       return json({ code: 'context_changed' }, 409);

@@ -151,6 +151,15 @@ describe('POST /api/ai auth', () => {
     expect(cookieRes.status).toBe(200);
     expect(ensureActiveFamily).toHaveBeenCalled();
   });
+
+  it('403s a bearer user whose family closed its account, with the code the phone already reads, and never falls back to cookies', async () => {
+    getBearerUserContext.mockResolvedValue({ ok: false, reason: 'account_closed' });
+    const { POST } = await import('@/app/api/ai/route');
+    const res = await POST(post({ conversationId: CONVERSATION, message: 'hi' }, { authorization: 'Bearer tok' }));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: 'account_closed', needLevel: 1 });
+    expect(getUserContext).not.toHaveBeenCalled();
+  });
 });
 
 describe('POST /api/ai transports', () => {
