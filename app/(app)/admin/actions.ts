@@ -597,6 +597,11 @@ export async function adminDeleteDocumentAction(documentId: string, _storagePath
     .from('documents').select('family_id, title, storage_path').eq('id', documentId).maybeSingle();
   if (docError) return actionFailure(docError, t('actions.couldNotLoadThatDocument'));
   if (!doc) return { ok: false, error: t('actions.documentNotFound') };
+  // Nothing ties a row's path to the row's family (the held 0499's recorded
+  // lead), and the service role removes whatever object it is named: a row
+  // naming another family's file would delete that family's file. Refused, as
+  // View refuses it, before anything is removed; the row stays to be looked at.
+  if (!isFamilyDocumentPath(doc.family_id, doc.storage_path)) return { ok: false, error: t('actions.couldNotRemoveTheDocument') };
 
   // SEC-015: a refused delete and an absent object are both `error: null,
   // data: []`, so the returned list is what says the object is gone.
