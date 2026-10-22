@@ -400,3 +400,22 @@ describe('wantsJsonTransport', () => {
     expect(wantsJsonTransport(req(undefined, 'mode=json'), {})).toBe(true);
   });
 });
+
+describe('assistant request cancellation', () => {
+  it.each([false, true])('forwards the actual request signal (already stopped: %s) to the engine', async (alreadyStopped) => {
+    getUserContext.mockResolvedValue(ctx);
+    const stopped = new AbortController();
+    if (alreadyStopped) stopped.abort();
+    const req = new NextRequest('http://localhost/api/ai', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: stopped.signal,
+      body: JSON.stringify({ conversationId: CONVERSATION, message: 'Save two notes' }),
+    });
+    const { POST } = await import('@/app/api/ai/route');
+    await POST(req);
+    const input = createAssistantStream.mock.calls[0][0];
+    expect(input.signal).toBe(req.signal);
+    expect(input.signal.aborted).toBe(alreadyStopped);
+    stopped.abort();
+    expect(input.signal.aborted).toBe(true);
+  });
+});

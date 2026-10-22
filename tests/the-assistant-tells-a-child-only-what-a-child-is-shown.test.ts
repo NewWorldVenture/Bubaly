@@ -5,25 +5,24 @@ import { buildAssistantTools, type AssistantCtx } from '@/lib/assistant/tools';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
 /**
- * THE ASSISTANT TELLS A CHILD ONLY WHAT A CHILD IS SHOWN (AI-001).
+ * THE ASSISTANT IS TOLD WHO IS ASKING, AND A ROLE NOBODY HAS IS NOT A
+ * MANAGER (AI-001).
  *
- * Home, Needs You and the daily briefing read a family's pending money
- * approvals (`parent_approvals`: what was asked for and how much) and the
- * count of chores awaiting sign-off for a MANAGER only; a child's list is
- * built with neither. Row-level security does not draw that line —
- * `parent_approvals_select` (0251) is any member — so the pages draw it
- * themselves.
+ * `list_pending_decisions` reads pending money approvals and the chore
+ * sign-off count for a parent or adult only (main, 88c67b771, and
+ * tests/pending-decisions-keep-money-for-the-managers.test.ts); an unknown
+ * role is not a manager. That rule is only as good as the role the caller
+ * hands it.
  *
- * Bubaly's `list_pending_decisions` read both for whoever was talking to it.
- * A child asking "what needs me?" heard about a sibling's $50 request and was
- * asked to sign off chores they cannot sign off. It also read renewals and
- * expiring documents, which the assistant's own prompt policy keeps to adults
- * (lib/ai/context/policy.ts: the money and documents slices, §4) and which
- * Home and Needs You show nobody in this list.
+ * /api/ai/chat passes the member's role. The assistant engine
+ * (`prepareAssistantTurn`, behind /api/ai) passed `scope.role`, which falls
+ * back to 'adult' when the caller is not on the roster and the request names
+ * no role: the one caller nobody can vouch for was handed the household's
+ * money decisions as a manager. The engine now passes the caller's REAL role,
+ * or null.
  */
 
 const FAMILY = '00000000-0000-4000-8000-00000000fa11';
-const PARENT = '00000000-0000-4000-8000-00000000ad11';
 const KID = '00000000-0000-4000-8000-00000000c111';
 const SIBLING_USER = '00000000-0000-4000-8000-00000000aa12';
 
@@ -36,55 +35,24 @@ function household() {
   }]);
   db.seed('chore_assignments', [
     { id: '00000000-0000-4000-8000-0000000000b1', family_id: FAMILY, status: 'submitted' },
-    { id: '00000000-0000-4000-8000-0000000000b2', family_id: FAMILY, status: 'submitted' },
   ]);
-  db.seed('grocery_items', [{ id: '00000000-0000-4000-8000-0000000000c1', family_id: FAMILY, is_checked: false }]);
-  const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString();
-  db.seed('renewals', [{
-    id: '00000000-0000-4000-8000-0000000000d1', family_id: FAMILY, title: 'Car insurance', expires_at: inDays(5),
-    reminder_days: 14, status: 'active', created_at: '2026-09-01T00:00:00.000Z',
-  }]);
-  db.seed('documents', [{ id: '00000000-0000-4000-8000-0000000000e1', family_id: FAMILY, title: "Dana's passport", expires_at: inDays(10) }]);
   return db;
 }
 
-const ctxFor = (role: string | null, memberId: string): AssistantCtx => ({
-  familyId: FAMILY, userId: `${memberId}-user`, memberId, role,
-  members: [{ id: PARENT, display_name: 'Dana' }, { id: KID, display_name: 'Sam' }], tz: 'UTC',
+const ctxFor = (role: string | null): AssistantCtx => ({
+  familyId: FAMILY, userId: `${KID}-user`, memberId: KID, role,
+  members: [{ id: KID, display_name: 'Sam' }], tz: 'UTC',
 });
 
-async function pending(role: string | null, memberId: string) {
-  const tool = buildAssistantTools(household() as never, ctxFor(role, memberId)).find((t) => t.name === 'list_pending_decisions');
-  if (!tool) throw new Error('list_pending_decisions missing');
-  const res = await tool.execute({}) as { ok: boolean; items: { title: string }[] };
-  expect(res.ok).toBe(true);
-  return res.items.map((i) => i.title);
-}
-
-describe('list_pending_decisions follows the pages\' role rule', () => {
-  it('a parent hears the money request and the chores waiting on them', async () => {
-    const titles = await pending('parent', PARENT);
-    expect(titles.some((t) => t.includes('$50')), JSON.stringify(titles)).toBe(true);
-    expect(titles).toContain('2 chores awaiting approval');
-    expect(titles.some((t) => t.startsWith('Renew Car insurance')), JSON.stringify(titles)).toBe(true);
-    expect(titles.some((t) => t.startsWith("Dana's passport")), JSON.stringify(titles)).toBe(true);
+describe('a caller whose role is not known', () => {
+  it('is not handed the money approvals or the sign-off count', async () => {
+    const tool = buildAssistantTools(household() as never, ctxFor(null)).find((t) => t.name === 'list_pending_decisions');
+    if (!tool) throw new Error('list_pending_decisions missing');
+    const res = await tool.execute({}) as { ok: boolean; items: { title: string }[] };
+    expect(res.ok).toBe(true);
+    const titles = res.items.map((i) => i.title);
+    expect(titles.some((t) => t.includes('$50') || /approv/i.test(t)), JSON.stringify(titles)).toBe(false);
   });
-
-  it('an adult manager hears them too', async () => {
-    const titles = await pending('adult', PARENT);
-    expect(titles.some((t) => t.includes('$50')), JSON.stringify(titles)).toBe(true);
-    expect(titles).toContain('2 chores awaiting approval');
-  });
-
-  for (const role of ['child', 'teen', 'caregiver', 'guest', null]) {
-    it(`a ${role ?? 'roleless'} caller hears neither, and still hears the rest`, async () => {
-      const titles = await pending(role, KID);
-      expect(titles.some((t) => t.includes('$50') || /approv/i.test(t)), JSON.stringify(titles)).toBe(false);
-      expect(titles.some((t) => /Car insurance|passport/i.test(t)), JSON.stringify(titles)).toBe(false);
-      // Not an empty answer: what any member is shown is still there.
-      expect(titles).toContain('Grocery list needs updating');
-    });
-  }
 });
 
 describe('every chat entry point says who is asking', () => {

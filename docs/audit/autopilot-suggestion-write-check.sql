@@ -38,7 +38,9 @@
 --      `audit_logs.actor_id`. /dashboard/autopilot and lib/home/completed.ts
 --      render resolved rows back to the family as its own decision history;
 --   6. a parent cannot sign for the child either — identity, not role;
---   7. reads are untouched;
+--   7. reads are untouched by 0327 (0486 later reads an insurance, finance or
+--      renewal card by its audience; this probe's cards are everyone's, and
+--      an-autopilot-card-is-read-by-its-audience-check.sql holds that rule);
 --   8. `anon` holds no INSERT (0290's argument);
 --   9. NEGATIVE CONTROL: drop the new guards, leaving 0085's permissive policy
 --      exactly as it was, and require the erasure and the false attribution to
@@ -151,7 +153,7 @@ begin
       failures := array_append(failures, 'a child''s forged-resolver INSERT reached a unique index, so RLS did not refuse it');
   end;
 
-  -- 4. Reads stay open, deliberately.
+  -- 4. Reads stay open, deliberately (these are everyone's cards under 0486).
   select count(*) into n from public.autopilot_suggestions where family_id = fam;
   if n = 0 then
     failures := array_append(failures, 'a child can no longer READ the Autopilot queue — that is a change of decision; update finalaudit.md and this probe');

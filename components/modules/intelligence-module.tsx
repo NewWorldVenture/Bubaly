@@ -12,7 +12,7 @@ import { useApp } from '@/components/app/app-context';
 import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { ErrorState } from '@/components/ui/states';
@@ -47,7 +47,7 @@ export function IntelligenceModule({
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
 
-  const { data: rows, loading, error, refresh } = useRealtimeQuery<Consent>({
+  const { data: rows, loading, error, refresh, setData } = useRealtimeQuery<Consent>({
     table: 'network_consent', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('network_consent').select('*').eq('family_id', familyId),
   });
@@ -63,24 +63,41 @@ export function IntelligenceModule({
   const insights = useMemo(() => visibleInsights(candidates, consent), [candidates, consent]);
   const contributing = isContributing(consent);
 
-  async function persist(next: ConsentState) {
+  // `network_consent` is not in REALTIME_TABLES, so no channel ever moves this
+  // screen. Each toggle builds the NEXT state from `consent`, so after a write
+  // the row it wrote is put on screen before the toggles come back: built from
+  // the page-load row instead, a tap after "Leave network" rejoined the family
+  // and a second scope switched off turned the first one back on — consent the
+  // nightly aggregation then honours. `saving` holds every toggle until then.
+  async function save(write: () => PromiseLike<{ data: Consent[] | null; error: unknown }>, done: string) {
     setSaving(true);
-    const sb = createClient();
-    const { error } = await sb.from('network_consent').upsert({
+    try {
+      const { data: saved, error } = await write();
+      if (error) { toastError(describeDbError(error)); return; }
+      if (wroteNoRows(saved)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+      setData(saved as Consent[]);
+      success(done);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const toggleMaster = () => {
+    const next: ConsentState = { enabled: !consent.enabled, scopes: consent.enabled ? {} : consent.scopes };
+    return save(() => createClient().from('network_consent').upsert({
       family_id: familyId,
       enabled: next.enabled,
       scopes: next.scopes,
       consented_by: next.enabled ? userId : null,
       consented_at: next.enabled ? new Date().toISOString() : null,
-    }, { onConflict: 'family_id' });
-    setSaving(false);
-    if (error) { toastError(describeDbError(error)); return; }
-    success(next.enabled ? t('intelligence.preferencesSaved') : t('intelligence.leftTheNetwork'));
-  }
-
-  const toggleMaster = () => persist({ enabled: !consent.enabled, scopes: consent.enabled ? {} : consent.scopes });
+    }, { onConflict: 'family_id' }).select('*'), next.enabled ? t('intelligence.preferencesSaved') : t('intelligence.leftTheNetwork'));
+  };
+  // A scope switch changes the scopes and nothing else. Joining or leaving is
+  // the master switch's decision alone, so this never writes `enabled`.
   const toggleScope = (k: ConsentScope) =>
-    persist({ enabled: true, scopes: { ...consent.scopes, [k]: !consent.scopes[k] } });
+    save(() => createClient().from('network_consent')
+      .update({ scopes: { ...consent.scopes, [k]: !consent.scopes[k] } })
+      .eq('family_id', familyId).select('*'), t('intelligence.preferencesSaved'));
 
   if (loading) return <div className="rounded-xl border border-border bg-surface/40 p-4 text-sm text-muted">{t('intelligence.loadingIntelligencePreferences')}</div>;
   if (error) return <ErrorState message={t('intelligenceModule.couldNotLoadIntelligencePreferences')} onRetry={refresh} />;

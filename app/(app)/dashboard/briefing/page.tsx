@@ -6,6 +6,7 @@ import { isFeaturePreviewOnly } from '@/lib/server/feature-entitlement';
 import { BriefingModule } from '@/components/modules/briefing-module';
 import { ChangeRecap } from '@/components/operating-index/change-recap';
 import { loadOperatingIndex } from '@/lib/operating-index/server';
+import { readsHouseholdMoney } from '@/lib/finance/household-money';
 import { ActivationBeacon } from '@/components/analytics/activation-beacon';
 import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
@@ -46,7 +47,9 @@ export default async function BriefingPage() {
     // tests/operating-index-today-anchor.test.ts), and persists today's row — so
     // opening the brief is now what makes today's snapshot exist for every other
     // surface, instead of the brief being the one that reads a stale pair.
-    loadOperatingIndex(supabase, ctx.active.familyId, tz),
+    // Persisted only from a parent's or an adult's visit (SnapshotReach): a
+    // narrower view's reading is its reader's, not the household's day.
+    loadOperatingIndex(supabase, ctx.active.familyId, tz, readsHouseholdMoney(ctx.active.role) ? 'household' : 'member'),
     // R2: the briefing reasons over Knowledge Graph relationships (hub / ripple /
     // coverage). A failed read must remain visible because the relationship
     // section is derived from source-of-truth data.

@@ -92,7 +92,7 @@ export function GoalsModule() {
       ) : (
         <>
           {active.length > 0 && (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {active.map((g) => (
                 <GoalCard key={g.id} goal={g} pending={pendingFor(g.id)} onEdit={() => setEditing(g)} onDelete={canDelete ? remove : undefined} onProgress={updateProgress} />
               ))}
@@ -102,7 +102,7 @@ export function GoalsModule() {
           {completed.length > 0 && (
             <div>
               <h2 className="mb-3 text-sm font-semibold text-muted">{t('goals.completed')}</h2>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {completed.map((g) => (
                   <GoalCard key={g.id} goal={g} pending={pendingFor(g.id)} onEdit={() => setEditing(g)} onDelete={canDelete ? remove : undefined} onProgress={updateProgress} />
                 ))}
@@ -137,7 +137,7 @@ function GoalCard({ goal, pending, onEdit, onDelete, onProgress }: {
   const { fmtDate } = useFormat();
   const t = useTranslations();
   return (
-    <Card className={cn('flex flex-col gap-3', goal.is_complete && 'opacity-70')}>
+    <Card className="flex flex-col gap-3">
       <div className="flex items-start justify-between gap-2">
         <div className="focus-ring min-w-0 flex-1 cursor-pointer" onClick={onEdit}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onEdit(); } }}

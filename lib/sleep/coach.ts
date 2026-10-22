@@ -40,6 +40,28 @@ const DAY_MS = 86_400_000;
 const dateOnly = (v: string | Date) => (typeof v === 'string' ? new Date(`${v.slice(0, 10)}T00:00:00`) : new Date(v.getFullYear(), v.getMonth(), v.getDate()));
 export const dayDiff = (from: string | Date, to: string | Date) => Math.round((dateOnly(to).getTime() - dateOnly(from).getTime()) / DAY_MS);
 
+/**
+ * The evening a night began on, as `YYYY-MM-DD`: the day before its
+ * `sleep_date`.
+ *
+ * A night is filed under the morning it ENDED (LogForm sets `sleep_date` from
+ * the wake time), while a check-in records that day's habits and a routine's
+ * "Nights" are bedtime evenings. Pairing either with `sleep_date` itself
+ * matched each to the night BEFORE it. Calendar arithmetic on the date alone,
+ * so no zone or daylight-saving change can move it.
+ */
+export function bedtimeEvening(sleepDate: string): string {
+  const [y, m, d] = sleepDate.slice(0, 10).split('-').map(Number);
+  const evening = new Date(Date.UTC(y, m - 1, d - 1));
+  return evening.toISOString().slice(0, 10);
+}
+
+/** Sun = 0 … Sat = 6 of a `YYYY-MM-DD`, read as a calendar date. */
+const weekdayOf = (day: string) => {
+  const [y, m, d] = day.slice(0, 10).split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+};
+
 /** Minutes between two ISO timestamps (wake after bed; never negative). */
 export function durationMinutes(bedtime: string, wakeTime: string): number {
   const ms = new Date(wakeTime).getTime() - new Date(bedtime).getTime();
@@ -95,11 +117,20 @@ export function consistencyScore(logs: SleepLogLike[], timeZone?: string | null)
   return Math.max(0, Math.min(100, Math.round(100 - (sd / 90) * 100)));
 }
 
-/** Share of logged nights that started within 30 minutes of the routine's target bedtime. */
+/**
+ * Share of logged nights that started within 30 minutes of the routine's target bedtime.
+ *
+ * `days_of_week` are the routine's NIGHTS — bedtime evenings, as RoutineForm
+ * labels them — so each night is matched by the evening it began, not by the
+ * morning in its `sleep_date`. A Sun–Thu school-night routine used to drop
+ * Thursday night and score Saturday night against the school-night bedtime.
+ * The evening comes from the date, not the bedtime's own weekday, so a
+ * 00:30 bedtime still belongs to the evening before (the 04:00 rule above).
+ */
 export function routineAdherence(routine: RoutineLike | null | undefined, logs: SleepLogLike[], timeZone?: string | null): number | null {
   if (!routine || !logs.length) return null;
   const target = timeToMinutes(routine.target_bedtime);
-  const applicable = logs.filter((l) => routine.days_of_week.includes(dateOnly(l.sleep_date).getDay()));
+  const applicable = logs.filter((l) => routine.days_of_week.includes(weekdayOf(bedtimeEvening(l.sleep_date))));
   if (!applicable.length) return null;
   const onTime = applicable.filter((l) => Math.abs(minutesOfDay(l.bedtime, timeZone) - target) <= 30).length;
   return Math.round((onTime / applicable.length) * 100);
@@ -119,7 +150,13 @@ export function sleepTrend(logs: SleepLogLike[]): SleepTrend {
 
 export type HabitCorrelation = { factor: string; withFactor: number | null; withoutFactor: number | null; deltaMinutes: number | null; nights: number };
 
-/** Average sleep on nights with vs without a habit (screens in bed, late caffeine, exercise). */
+/**
+ * Average sleep on nights with vs without a habit (screens in bed, late caffeine, exercise).
+ *
+ * A check-in dated D is that day's habits; the night they can affect is the
+ * one that STARTED on D, filed under D+1. Joining it to the night filed under
+ * D credited Tuesday afternoon's coffee to Monday night's sleep.
+ */
 export function habitCorrelations(logs: SleepLogLike[], checkins: CheckinLike[]): HabitCorrelation[] {
   const byDate = new Map(checkins.map((c) => [`${c.member_id}:${c.checkin_date}`, c]));
   const factors: { factor: string; key: keyof Pick<CheckinLike, 'screens_in_bed' | 'caffeine_after_2pm' | 'exercised'> }[] = [
@@ -130,7 +167,7 @@ export function habitCorrelations(logs: SleepLogLike[], checkins: CheckinLike[])
   return factors.map(({ factor, key }) => {
     const withF: number[] = []; const without: number[] = [];
     for (const l of logs) {
-      const c = byDate.get(`${l.member_id}:${l.sleep_date}`);
+      const c = byDate.get(`${l.member_id}:${bedtimeEvening(l.sleep_date)}`);
       if (!c) continue;
       (c[key] ? withF : without).push(l.duration_min);
     }

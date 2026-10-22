@@ -18,6 +18,10 @@ const fetchWithDeadline = vi.fn();
 const cookieClient = { from: () => cookieClient, auth: { getUser: async () => ({ data: { user: { id: 'user-1' } } }) } } as Record<string, unknown>;
 const bearerClient = { from: () => bearerClient } as Record<string, unknown>;
 
+// The account-standing gate (a closed or trial-ended family is refused) has its
+// own test, tests/the-free-ai-helpers-refuse-a-closed-or-trial-ended-family.test.ts.
+// The family here is open, so the gate is answered rather than seeded.
+vi.mock('@/lib/server/account-standing', () => ({ refuseClosedOrTrialEnded: async () => null }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => cookieClient }));
 vi.mock('@/lib/supabase/auth', () => ({ getUserContext: () => getUserContext() }));
@@ -32,6 +36,18 @@ vi.mock('@/lib/server/feature-tiers', () => ({
   getResolvedFeatureTiers: async () => ({ 'ai-requests': 'free' }),
   getFeatureTiersByHref: async () => ({}),
 }));
+// The authenticator under test is the real one. The Free allowance and the usage
+// record beside it (N17) have their own cases in
+// tests/the-free-plans-ai-allowance-holds-on-every-helper.test.ts; here they admit and pass through.
+vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
+  assertAIAccess: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+  assertAIAllowance: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+}));
+vi.mock('@/lib/ai/observability', () => ({
+  withAiRequest: (_s: unknown, _f: unknown, run: (o: { requestId: string; used: () => void; failed: () => void }) => unknown) =>
+    run({ requestId: 'request-1', used: () => {}, failed: () => {} }),
+}));
 vi.mock('@/lib/ai/settings', () => ({ getOpenAIKey: (...a: unknown[]) => getOpenAIKey(...a) }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: (...a: unknown[]) => enforceAIRateLimit(...a) }));
 vi.mock('@/lib/server/fetch-with-deadline', () => ({ fetchWithDeadline: (...a: unknown[]) => fetchWithDeadline(...a) }));
@@ -39,7 +55,8 @@ vi.mock('@/lib/server/fetch-with-deadline', () => ({ fetchWithDeadline: (...a: u
 const ctx = {
   user: { id: 'user-1', email: 'parent@example.com' },
   memberships: [],
-  active: { familyId: 'fam-1', role: 'parent', family: { name: 'Fam', timezone: 'America/Chicago' } },
+  // A signed-in member, as every resolved context carries; the call is recorded under them.
+  active: { familyId: 'fam-1', role: 'parent', member: { id: 'member-1' }, family: { name: 'Fam', timezone: 'America/Chicago' } },
 };
 
 function audioForm() {

@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join as nativeJoin } from 'node:path';
+const join = (...parts: string[]): string => nativeJoin(...parts).replace(/\\/g, '/');
 import { createElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import {

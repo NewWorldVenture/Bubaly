@@ -47,27 +47,160 @@ export function decodeEntities(text: string): string {
     const key = name.toLowerCase();
     if (key.startsWith('#x')) {
       const code = Number.parseInt(key.slice(2), 16);
-      return Number.isFinite(code) && code > 0 ? String.fromCodePoint(code) : match;
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : match;
     }
     if (key.startsWith('#')) {
       const code = Number.parseInt(key.slice(1), 10);
-      return Number.isFinite(code) && code > 0 ? String.fromCodePoint(code) : match;
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : match;
     }
     return ENTITIES[key] ?? match;
   });
 }
 
+// ── Scanning, in one pass ────────────────────────────────────────────────────
+//
+// Everything below finds a tag with indexOf, never with a regular expression.
+// The expressions this replaced — `<item…>([\s\S]*?)<\/item>`, the same lazy
+// pair for every tag, `<[^>]*>` and the CDATA unwrap — each rescanned to the
+// end of the document from EVERY opener that had no closer, so a body of
+// `<item>` repeated with no `</item>` cost time in the square of its length:
+// measured, 200 KB took 2.5 s, and fetchPublicFeed admits 4 MB (about a
+// thousand seconds). The parse is synchronous, so that was a server instance's
+// event loop held for the whole of it, and the nightly library-feeds cron dying
+// on that one feed every night, ahead of every family's subscriptions.
+//
+// The rule that keeps each scan linear is the one the regular expressions
+// encoded and then wasted: when an opener has no closer after it, no later
+// opener has one either, so the scan STOPS instead of retrying at the next one.
+
+/**
+ * `text` lower-cased without moving any character, so an index found in it is
+ * an index into `text`. toLowerCase() keeps every UTF-16 length except a few
+ * expanding mappings ('İ'); for those, only ASCII is folded, which is all a
+ * tag name needs.
+ */
+function foldCase(text: string): string {
+  const lower = text.toLowerCase();
+  return lower.length === text.length ? lower : text.replace(/[A-Z]+/g, (run) => run.toLowerCase());
+}
+
+const isNameChar = (c: string | undefined) => c !== undefined && ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c === '-');
+const isSpace = (c: string | undefined) => c !== undefined && /\s/.test(c);
+
+type Span = { start: number; end: number };
+
+/**
+ * The first opening tag `name` at or after `from` in `lower` (case-folded), as
+ * the expression `<(?:[a-z0-9-]+:)?name(?:\s[^>]*)?\/?>` found it: a namespace
+ * prefix only when `prefixed`, and the bare `<name/>` only when `selfClosing`.
+ * `end` is just past its `>`.
+ */
+function openTag(lower: string, name: string, from: number, prefixed: boolean, selfClosing: boolean): Span | null {
+  for (let at = from; ;) {
+    const hit = lower.indexOf(name, at);
+    if (hit < 0) return null;
+    at = hit + 1;
+    let start = -1;
+    if (lower[hit - 1] === '<') start = hit - 1;
+    else if (prefixed && lower[hit - 1] === ':') {
+      let i = hit - 2;
+      while (isNameChar(lower[i])) i -= 1;
+      if (i < hit - 2 && lower[i] === '<') start = i;
+    }
+    if (start < from) continue;
+    const after = hit + name.length;
+    const next = lower[after];
+    if (next === undefined) return null;
+    if (next === '>') return { start, end: after + 1 };
+    if (selfClosing && next === '/' && lower[after + 1] === '>') return { start, end: after + 2 };
+    if (isSpace(next)) {
+      const close = lower.indexOf('>', after);
+      // No `>` anywhere after this one: no later opener can close either.
+      return close < 0 ? null : { start, end: close + 1 };
+    }
+  }
+}
+
+/** The first `</name>` (or `</prefix:name>` when `prefixed`) that begins at or after `from`. */
+function closeTag(lower: string, name: string, from: number, prefixed: boolean): Span | null {
+  const needle = `${name}>`;
+  for (let at = from; ;) {
+    const hit = lower.indexOf(needle, at);
+    if (hit < 0) return null;
+    at = hit + 1;
+    let start = -1;
+    if (lower[hit - 1] === '/' && lower[hit - 2] === '<') start = hit - 2;
+    else if (prefixed && lower[hit - 1] === ':') {
+      let i = hit - 2;
+      while (isNameChar(lower[i])) i -= 1;
+      if (i < hit - 2 && lower[i] === '/' && lower[i - 1] === '<') start = i - 1;
+    }
+    if (start >= from) return { start, end: hit + needle.length };
+  }
+}
+
+/** Every opening tag `name` in `xml`, each scan resuming after the last tag's `>`. */
+function openTags(xml: string, name: string, prefixed: boolean): string[] {
+  const lower = foldCase(xml);
+  const tags: string[] = [];
+  for (let span = openTag(lower, name, 0, prefixed, true); span; span = openTag(lower, name, span.end, prefixed, true)) {
+    tags.push(xml.slice(span.start, span.end));
+  }
+  return tags;
+}
+
+/** The first opening tag `name` in `block`, as written. */
+function firstOpenTag(block: string, name: string, prefixed: boolean): string | null {
+  const span = openTag(foldCase(block), name, 0, prefixed, true);
+  return span ? block.slice(span.start, span.end) : null;
+}
+
+/** `<![CDATA[…]]>` replaced by what it wraps. */
+function unwrapCdata(text: string): string {
+  let out = '';
+  let pos = 0;
+  for (;;) {
+    const open = text.indexOf('<![CDATA[', pos);
+    if (open < 0) break;
+    const close = text.indexOf(']]>', open + 9);
+    if (close < 0) break;
+    out += text.slice(pos, open) + text.slice(open + 9, close);
+    pos = close + 3;
+  }
+  return out + text.slice(pos);
+}
+
+/** Each `<…>` replaced by a space. */
+function stripTags(text: string): string {
+  let out = '';
+  let pos = 0;
+  for (;;) {
+    const open = text.indexOf('<', pos);
+    if (open < 0) break;
+    const close = text.indexOf('>', open + 1);
+    if (close < 0) break;
+    out += `${text.slice(pos, open)} `;
+    pos = close + 1;
+  }
+  return out + text.slice(pos);
+}
+
 /** Text content of an element: CDATA unwrapped, tags stripped, entities decoded. */
 export function textContent(raw: string | null | undefined): string {
   if (!raw) return '';
-  const withoutCdata = raw.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
-  return decodeEntities(withoutCdata.replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
+  return decodeEntities(stripTags(unwrapCdata(raw))).replace(/\s+/g, ' ').trim();
 }
 
 /** First match of a tag, on any namespace prefix. */
 function tagContent(xml: string, tag: string): string | null {
-  const pattern = new RegExp(`<(?:[a-z0-9-]+:)?${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/(?:[a-z0-9-]+:)?${tag}>`, 'i');
-  return pattern.exec(xml)?.[1] ?? null;
+  const lower = foldCase(xml);
+  const name = tag.toLowerCase();
+  const open = openTag(lower, name, 0, true, false);
+  if (!open) return null;
+  // The first closer after the FIRST opener: when it has none, no later opener
+  // does, which is where the lazy expression used to spend its time.
+  const close = closeTag(lower, name, open.end, true);
+  return close ? xml.slice(open.end, close.start) : null;
 }
 
 /** An attribute from a tag, quoted either way. */
@@ -85,17 +218,25 @@ function attr(tag: string, name: string): string | null {
 export function parseDuration(raw: string | null | undefined): number | null {
   const text = (raw ?? '').trim();
   if (!text) return null;
-  if (/^\d+$/.test(text)) {
-    const seconds = Number(text);
-    return seconds > 0 ? seconds : null;
-  }
+  if (/^\d+$/.test(text)) return storable(Number(text));
   const parts = text.split(':');
   if (parts.length < 2 || parts.length > 3 || parts.some((part) => !/^\d+$/.test(part.trim()))) return null;
   const numbers = parts.map((part) => Number(part.trim()));
   const seconds = numbers.length === 3
     ? numbers[0] * 3600 + numbers[1] * 60 + numbers[2]
     : numbers[0] * 60 + numbers[1];
-  return seconds > 0 ? seconds : null;
+  return storable(seconds);
+}
+
+/**
+ * `library_items.duration_seconds` is an `integer` (0284). A value past it —
+ * '99999999:00', or milliseconds where seconds belong — raised 22003 and
+ * failed the feed's WHOLE upsert on every refresh, so one bad episode stopped
+ * the subscription gaining any other. Unknown, like any other junk.
+ */
+const MAX_STORED_SECONDS = 2_147_483_647;
+function storable(seconds: number): number | null {
+  return seconds > 0 && seconds <= MAX_STORED_SECONDS ? seconds : null;
 }
 
 /** A publication date as an ISO string, or null when it is unusable. */
@@ -123,26 +264,42 @@ export function safeFeedUrl(raw: string | null | undefined): string | null {
   }
 }
 
+/** The inside of each `<name>…</name>`, at most MAX_FEED_ITEMS of them. */
+function blocksOf(xml: string, lower: string, name: string): string[] {
+  const blocks: string[] = [];
+  let pos = 0;
+  while (blocks.length < MAX_FEED_ITEMS) {
+    const open = openTag(lower, name, pos, false, false);
+    if (!open) break;
+    const close = closeTag(lower, name, open.end, false);
+    if (!close) break;
+    blocks.push(xml.slice(open.end, close.start));
+    pos = close.end;
+  }
+  return blocks;
+}
+
 function itemBlocks(xml: string): string[] {
-  const rss = [...xml.matchAll(/<item(?:\s[^>]*)?>([\s\S]*?)<\/item>/gi)].map((m) => m[1]);
+  const lower = foldCase(xml);
+  const rss = blocksOf(xml, lower, 'item');
   if (rss.length) return rss;
-  return [...xml.matchAll(/<entry(?:\s[^>]*)?>([\s\S]*?)<\/entry>/gi)].map((m) => m[1]);
+  return blocksOf(xml, lower, 'entry');
 }
 
 /** The playable file, from wherever this generator decided to put it. */
 function mediaUrlFor(block: string): string | null {
-  const enclosure = /<enclosure(?:\s[^>]*)?\/?>/i.exec(block)?.[0];
+  const enclosure = firstOpenTag(block, 'enclosure', false);
   const fromEnclosure = enclosure ? safeFeedUrl(attr(enclosure, 'url')) : null;
   if (fromEnclosure) return fromEnclosure;
 
-  const media = /<(?:[a-z0-9-]+:)?content(?:\s[^>]*)?\/?>/i.exec(block)?.[0];
+  const media = firstOpenTag(block, 'content', true);
   const fromMedia = media ? safeFeedUrl(attr(media, 'url')) : null;
   if (fromMedia) return fromMedia;
 
   // Atom puts it on a link with rel="enclosure".
-  for (const link of block.matchAll(/<link(?:\s[^>]*)?\/?>/gi)) {
-    if ((attr(link[0], 'rel') ?? '').toLowerCase() === 'enclosure') {
-      const href = safeFeedUrl(attr(link[0], 'href'));
+  for (const link of openTags(block, 'link', false)) {
+    if ((attr(link, 'rel') ?? '').toLowerCase() === 'enclosure') {
+      const href = safeFeedUrl(attr(link, 'href'));
       if (href) return href;
     }
   }
@@ -153,10 +310,10 @@ function mediaUrlFor(block: string): string | null {
 function pageUrlFor(block: string): string | null {
   const fromInline = safeFeedUrl(textContent(tagContent(block, 'link')));
   if (fromInline) return fromInline;
-  for (const link of block.matchAll(/<link(?:\s[^>]*)?\/?>/gi)) {
-    const rel = (attr(link[0], 'rel') ?? 'alternate').toLowerCase();
+  for (const link of openTags(block, 'link', false)) {
+    const rel = (attr(link, 'rel') ?? 'alternate').toLowerCase();
     if (rel === 'alternate') {
-      const href = safeFeedUrl(attr(link[0], 'href'));
+      const href = safeFeedUrl(attr(link, 'href'));
       if (href) return href;
     }
   }
@@ -164,10 +321,20 @@ function pageUrlFor(block: string): string | null {
 }
 
 function imageUrlFor(block: string): string | null {
-  const image = /<(?:[a-z0-9-]+:)?image(?:\s[^>]*)?\/?>/i.exec(block)?.[0];
+  const image = firstOpenTag(block, 'image', true);
   const fromAttr = image ? safeFeedUrl(attr(image, 'href') ?? attr(image, 'url')) : null;
   if (fromAttr) return fromAttr;
   return safeFeedUrl(textContent(tagContent(block, 'url')));
+}
+
+/** A stable 32-bit FNV-1a of `text`, as hex: the same entry, the same key, on every refresh. */
+function fingerprint(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
 export function parseFeed(xml: string, now: Date = new Date()): ParsedFeed | null {
@@ -182,11 +349,22 @@ export function parseFeed(xml: string, now: Date = new Date()): ParsedFeed | nul
   // A document with neither a title nor a single entry is not a feed we can use.
   if (!title && blocks.length === 0) return null;
 
-  const items: ParsedFeedItem[] = blocks.map((block, index) => {
+  const items: ParsedFeedItem[] = blocks.map((block) => {
     const itemTitle = textContent(tagContent(block, 'title'));
     const mediaUrl = mediaUrlFor(block);
+    const pageUrl = pageUrlFor(block);
+    const publishedAt = parseFeedDate(
+      textContent(tagContent(block, 'pubDate'))
+      || textContent(tagContent(block, 'published'))
+      || textContent(tagContent(block, 'updated')),
+      now,
+    );
+    // The row's key on every refresh (family_id, feed_key, guid), so it names
+    // the ENTRY, never where the entry sits: keyed `${title}#${index}`, a
+    // page-link-only item moved key each time the publisher added a post above
+    // it, and every refresh filed the whole feed again under new keys.
     const guid = textContent(tagContent(block, 'guid')) || textContent(tagContent(block, 'id'))
-      || mediaUrl || `${itemTitle}#${index}`;
+      || mediaUrl || pageUrl || `entry:${fingerprint(`${itemTitle}\u0000${publishedAt ?? ''}`)}`;
     return {
       guid: guid.slice(0, 400),
       title: itemTitle.slice(0, 300) || 'Untitled',
@@ -194,15 +372,10 @@ export function parseFeed(xml: string, now: Date = new Date()): ParsedFeed | nul
         || textContent(tagContent(block, 'summary'))
         || textContent(tagContent(block, 'content'))).slice(0, 2000),
       mediaUrl,
-      pageUrl: pageUrlFor(block),
+      pageUrl,
       imageUrl: imageUrlFor(block),
       durationSeconds: parseDuration(textContent(tagContent(block, 'duration'))),
-      publishedAt: parseFeedDate(
-        textContent(tagContent(block, 'pubDate'))
-        || textContent(tagContent(block, 'published'))
-        || textContent(tagContent(block, 'updated')),
-        now,
-      ),
+      publishedAt,
     };
   });
 

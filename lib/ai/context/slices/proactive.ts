@@ -20,37 +20,23 @@ import { loadReasoningReport } from '@/lib/reasoning/engine-server';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { settle } from '@/lib/supabase/settle';
+import { suggestionVisibleTo } from '@/lib/autopilot/audience';
+import { readVisiblePrefix } from '@/lib/autopilot/visible-prefix';
 import { dayKeyInZone, zonedTimeMs } from '@/lib/schedule/zoned';
 import type { SliceDefinition } from '../policy';
+// The suggestion queues are household-wide and can mention budgets, bills or
+// documents. Those areas are manager-only (§4, `SLICE_ACCESS`), so for anyone
+// else an item whose words touch them is dropped here — the same rule the
+// money and documents slices enforce by not loading. The reasoning report is
+// composed for this reader instead, by where each item comes from
+// (lib/operating-index/audience.ts), as the reasoning page is: the words are
+// run only over the items an Autopilot card or an approval request worded.
+import { managerOnlyText } from '../manager-only';
+import { wordedByItsSource } from '@/lib/operating-index/audience';
 
 const MAX_ITEMS_PER_ANSWER = 3;
 const MAX_SUGGESTIONS = 8;
 const MAX_SIGNALS = 8;
-
-/**
- * The reasoning report and the suggestion queues are household-wide and can
- * mention budgets, bills or documents. Those areas are manager-only (§4,
- * `SLICE_ACCESS`), so for anyone else an item that touches them is dropped
- * here — the same rule the money and documents slices enforce by not loading.
- *
- * Every form of each word is spelled out. The filter matches WHOLE words, so a
- * stem never matches (`\bfinanc\b` matched nothing: there is no boundary
- * inside "financial") and a singular misses its plural ("documents",
- * "transactions", "accounts", "passports" and "subscriptions" all reached a
- * child's prompt). Tax is listed exactly, so a taxi to the airport is not
- * withheld (AI-001).
- */
-const MANAGER_ONLY_RE = new RegExp(`\\b(?:${[
-  'budgets?', 'bills?', 'spend(?:s|ing)?', 'spent', 'money', 'financ(?:e|es|ed|ial|ially|ing)',
-  'transactions?', 'accounts?', 'salar(?:y|ies)', 'incomes?', 'documents?', 'passports?', 'insurance',
-  'tax(?:es|ed)?', 'vaults?', 'subscriptions?', 'banks?', 'banking', 'loans?', 'debts?', 'mortgages?',
-  'invest(?:s|ed|ing|ment|ments)?',
-].join('|')})\\b`, 'i');
-
-/** True when any part names a manager-only area. Exported for its tests. */
-export function managerOnlyText(...parts: (string | null | undefined)[]): boolean {
-  return MANAGER_ONLY_RE.test(parts.filter(Boolean).join(' '));
-}
 
 /**
  * The words this slice reads a hard signal in: en-US, explicitly. Its reader is
@@ -67,7 +53,7 @@ const MODEL_LOCALE: LocaleCode = 'en-US';
 const modelText = (key: string, params?: Record<string, string | number>) => translate(getMessages(MODEL_LOCALE), key, params);
 
 export type ProactiveSliceData = {
-  counts: FamilySignals['counts'] | null;
+  counts: (Omit<FamilySignals['counts'], 'homeworkDueSoon' | 'sportsThisWeek'> & Partial<Pick<FamilySignals['counts'], 'homeworkDueSoon' | 'sportsThisWeek'>>) | null;
   stress: { score: number; level: string } | null;
   report: {
     allClear: boolean;
@@ -145,16 +131,53 @@ export const proactiveSlice: SliceDefinition = {
     const termHorizon = addDaysInZone(todayKey, SCHOOL_START_WINDOW_DAYS);
     const petSince = addDaysInZone(todayKey, -8);
 
+    // A guest is not handed the children's school and sports through this
+    // slice. The activities slice carries them, and education and homework are
+    // the household's own, not a guest's; this slice must not be the side door
+    // to the same rows. So for a guest the term-start read is not made (no
+    // school_start transition, no camp it implies) and the counts line leaves
+    // out homework and sports. Children, teens and caregivers keep both.
+    const schoolVisible = env.viewer.canManage || env.viewer.role !== 'guest';
+    const noTerms: { data: { title: string; starts_at: string }[]; error: null } = { data: [], error: null };
+
+    const canManage = env.viewer.canManage;
+    let withheld = 0;
+    const withhold = (managersOnly: boolean): boolean => {
+      if (canManage || !managersOnly) return true;
+      withheld += 1;
+      return false;
+    };
+    const keep = (...parts: (string | null | undefined)[]): boolean => withhold(managerOnlyText(...parts));
+
     const [signals, report, liveSignals, autopilot, recommendations, terms, pets, projects, plans] = await Promise.all([
       loadSignals(scope.familyId, env.tz, env.now),
-      loadReasoningReport(scope.db, scope.familyId, env.tz, MODEL_LOCALE, modelText, env.now),
+      // Composed for this reader (ReasoningViewer): for anyone who does not
+      // read the household's money, its drift, its money and paperwork moves
+      // and its money items are left out by where each comes from, as on the
+      // reasoning page. The household's daily operating index is kept only
+      // from a manager's or the system's client (SnapshotReach), never from
+      // one RLS may give less of the household.
+      loadReasoningReport(scope.db, scope.familyId, env.tz, MODEL_LOCALE, modelText, canManage ? 'household' : 'member', env.now, { readsHouseholdMoney: canManage }),
       settle(scope.db.from('family_signals').select('kind, title, detail, score, evidence').eq('family_id', scope.familyId).eq('status', 'active').order('score', { ascending: false }).limit(MAX_SIGNALS)),
-      settle(scope.db.from('autopilot_suggestions').select('id, title, detail, urgency, action_label').eq('family_id', scope.familyId).eq('status', 'open').order('urgency', { ascending: false }).limit(MAX_SUGGESTIONS)),
+      // The first eight open cards this reader may be handed, the rules applied
+      // BEFORE the eight are taken (lib/autopilot/visible-prefix.ts): the card's
+      // own audience (lib/autopilot/audience.ts) — an unused-subscription flag
+      // carries no word the filter below knows, and it is not a guest's to read
+      // whatever its wording — and then that filter. Taken first, eight cards a
+      // child is not shown left their context with none of the cards that are.
+      settle(readVisiblePrefix((from, to) => scope.db.from('autopilot_suggestions').select('id, title, detail, urgency, action_label, kind, source_kind, member_id')
+        .eq('family_id', scope.familyId).eq('status', 'open').order('urgency', { ascending: false }).order('id').range(from, to), {
+        limit: MAX_SUGGESTIONS,
+        visible: (s) => (canManage || suggestionVisibleTo(s, { role: env.viewer.role, memberId: env.viewer.memberId }))
+          && keep(s.title, s.detail, s.action_label),
+      })),
       settle(scope.db.from('family_ai_recommendations').select('id, title, body, priority, category').eq('family_id', scope.familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(MAX_SUGGESTIONS)),
       // The four life-event reads take settle() like the three above them: this
       // slice loads inside a context build, and a rejected read here would throw
       // out of the whole build rather than degrade one slice.
-      settle(scope.db.from('school_events').select('title, starts_at').eq('family_id', scope.familyId).gte('starts_at', dayStartIso(todayKey)).lte('starts_at', dayEndIso(termHorizon)).limit(50)),
+      schoolVisible
+        ? settle(scope.db.from('school_events').select('title, starts_at').eq('family_id', scope.familyId).gte('starts_at', dayStartIso(todayKey)).lte('starts_at', dayEndIso(termHorizon)).limit(50))
+        : Promise.resolve(noTerms),
       settle(scope.db.from('pets').select('name, created_at').eq('family_id', scope.familyId).gte('created_at', dayStartIso(petSince)).limit(20)),
       settle(scope.db.from('home_projects').select('title, status').eq('family_id', scope.familyId).in('status', ['idea', 'planning', 'quoting']).limit(20)),
       // ACTIVE only — a completed plan is history, not a live plan, and
@@ -176,24 +199,29 @@ export const proactiveSlice: SliceDefinition = {
       activePlanKeys: (plans.data ?? []).map((p) => p.template_key),
     }).slice(0, MAX_LIFE_EVENTS);
 
-    const canManage = env.viewer.canManage;
-    let withheld = 0;
-    const keep = (...parts: (string | null | undefined)[]): boolean => {
-      if (canManage || !managerOnlyText(...parts)) return true;
-      withheld += 1;
-      return false;
-    };
+    // The structured slice is persisted as requester-readable context too.
+    // Redact before returning it, rather than hiding only the prompt words.
+    // Copy the source counts so one guest build cannot change another reader's.
+    const counts: ProactiveSliceData['counts'] = signals ? { ...signals.counts } : null;
+    if (counts && !schoolVisible) {
+      delete counts.homeworkDueSoon;
+      delete counts.sportsThisWeek;
+    }
 
     const data: ProactiveSliceData = {
-      counts: signals?.counts ?? null,
+      counts,
       stress: signals ? { score: signals.stress.score, level: signals.stress.level } : null,
       report: {
         allClear: report.allClear,
         answers: report.answers.map((a) => ({
           id: a.id, question: a.question, status: a.status,
           headline: keep(a.headline) ? a.headline : 'Some items are only shown to the adults who manage the family.',
+          // The report is already this reader's. The words are run again only
+          // over an item an Autopilot card or an approval request worded: the
+          // rest are worded from the calendar and the family's names, and
+          // "“Bill's recital” overlaps “Swim practice”" is a child's to read.
           items: a.items
-            .filter((i) => keep(i.title, i.detail, i.href))
+            .filter((i) => withhold(wordedByItsSource(i.href) && managerOnlyText(i.title, i.detail)))
             .slice(0, MAX_ITEMS_PER_ANSWER)
             .map((i) => ({ title: i.title, detail: i.detail ?? null })),
         })),
@@ -201,7 +229,9 @@ export const proactiveSlice: SliceDefinition = {
       },
       signals: (liveSignals.data ?? []).map((s) => ({ kind: s.kind, ...signalWordsFor(s, MODEL_LOCALE, modelText), score: s.score }))
         .filter((s) => keep(s.kind, s.title, s.detail)),
-      autopilot: (autopilot.data ?? []).filter((s) => keep(s.title, s.detail, s.action_label)).map((s) => ({ id: s.id, title: s.title, detail: s.detail, urgency: s.urgency, actionLabel: s.action_label })),
+      // Already this reader's: both rules were applied as the cards were read.
+      autopilot: (autopilot.data ?? [])
+        .map((s) => ({ id: s.id, title: s.title, detail: s.detail, urgency: s.urgency, actionLabel: s.action_label })),
       recommendations: (recommendations.data ?? []).filter((r) => keep(r.category, r.title, r.body)).map((r) => ({ id: r.id, title: r.title, body: r.body, priority: r.priority, category: r.category })),
       lifeEvents,
       withheld,
@@ -215,8 +245,7 @@ export const proactiveSlice: SliceDefinition = {
         `${c.overdueTasks} overdue task${c.overdueTasks === 1 ? '' : 's'}`,
         `${c.dueTodayTasks} due today`,
         ...(canManage ? [`${c.overdueBills} overdue bill${c.overdueBills === 1 ? '' : 's'}`, `${c.billsDueSoon} due soon`] : []),
-        `${c.homeworkDueSoon} homework due soon`,
-        `${c.sportsThisWeek} sports this week`,
+        ...(schoolVisible ? [`${c.homeworkDueSoon} homework due soon`, `${c.sportsThisWeek} sports this week`] : []),
         `${c.plannedMeals} meals planned`,
       ];
       if (c.emptyGrocery) bits.push('grocery list empty');

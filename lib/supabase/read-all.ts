@@ -189,3 +189,93 @@ export async function readAllAsQuery<T, E = { message: string }>(
   if (error) return { data: null, count: null, error, truncated };
   return { data: rows, count: null, error: null, truncated };
 }
+
+/**
+ * `readAll` for a set that is SUMMED while it may be written to: pages on
+ * `id > last` instead of offsets.
+ *
+ * An offset read of a live table repeats or skips rows when one is written
+ * between its pages. A row inserted (or newly matching) ahead of the next
+ * offset pushes the previous page's last row onto the next page, and a ledger
+ * summed from that read counts it twice: a child's new reward REQUEST, which
+ * spends nothing, made an old approved redemption subtract again. A row
+ * deleted ahead of it drops one row off the read instead.
+ *
+ * Paging on the key reads each row AT MOST once, in id order: no write between
+ * pages can bring a row back. A row present for the whole read is read exactly
+ * once. It is not a snapshot: a row deleted before its page is not read, a row
+ * changed after its page keeps the value it was read with, and a row added
+ * mid-read is read only if its id is past the cursor. `page(after, limit)` must
+ * filter `.gt('id', after)` when `after` is not null, order by `id` ascending,
+ * and `.limit(limit)`:
+ *
+ *   readAllById<Row>((after, limit) => {
+ *     let q = sb.from('reward_redemptions').select('id, …').eq('family_id', familyId);
+ *     if (after) q = q.gt('id', after);
+ *     return q.order('id').limit(limit);
+ *   }, { max: 50_000 });
+ *
+ * A page whose ids do not climb past the last one read is refused rather than
+ * appended, so a caller that forgot the order or the filter gets an error, not
+ * a doubled row or an endless loop. The ceiling, the one-row probe past it and
+ * `failOnMax` behave exactly as in `readAll`, as does a transport failure.
+ */
+export async function readAllById<T extends { id: string }, E = { message: string }>(
+  page: (after: string | null, limit: number) => PromiseLike<PageResult<T, E>>,
+  options: { max?: number; failOnMax?: boolean } = {},
+): Promise<{ rows: T[]; error: E | { message: string } | null; truncated: boolean }> {
+  const ceiling = options.max ?? DEFAULT_MAX_ROWS;
+  const probe = ceiling + 1;
+  const rows: T[] = [];
+  let after: string | null = null;
+
+  while (rows.length < probe) {
+    const want = Math.min(PAGE_SIZE, probe - rows.length);
+    let data: T[] | null;
+    let error: E | { message: string } | null;
+    try {
+      ({ data, error } = await page(after, want));
+    } catch (cause) {
+      return { rows, error: { message: cause instanceof Error ? cause.message : String(cause) }, truncated: false };
+    }
+    if (error) return { rows, error, truncated: false };
+    if (!Array.isArray(data)) return { rows, error: new Error('The data page was unavailable'), truncated: false };
+    if (data.length === 0) return { rows, error: null, truncated: false };
+
+    for (const row of data) {
+      if (typeof row.id !== 'string' || (after !== null && !(row.id > after))) {
+        return { rows, error: { message: 'readAllById: a page did not climb past the last id read.' }, truncated: false };
+      }
+      rows.push(row);
+      after = row.id;
+    }
+  }
+
+  const capped = rows.slice(0, ceiling);
+  if (options.max === undefined) {
+    return {
+      rows: capped,
+      error: { message: `readAllById stopped at ${ceiling} rows; the query is probably not terminating.` },
+      truncated: true,
+    };
+  }
+  if (options.failOnMax === false) return { rows: capped, error: null, truncated: true };
+  return {
+    rows: capped,
+    error: {
+      message: `readAllById reached the caller's max of ${ceiling} rows and more remain. `
+        + 'These rows are a PREFIX, not the whole set — treat this as a failed read, or raise the max.',
+    },
+    truncated: true,
+  };
+}
+
+/** `readAllById` in the shape a Supabase query answers, as `readAllAsQuery` is for `readAll`. */
+export async function readAllByIdAsQuery<T extends { id: string }, E = { message: string }>(
+  page: (after: string | null, limit: number) => PromiseLike<PageResult<T, E>>,
+  options: { max?: number; failOnMax?: boolean } = {},
+): Promise<{ data: T[] | null; count: null; error: E | { message: string } | null; truncated: boolean }> {
+  const { rows, error, truncated } = await readAllById<T, E>(page, options);
+  if (error) return { data: null, count: null, error, truncated };
+  return { data: rows, count: null, error: null, truncated };
+}

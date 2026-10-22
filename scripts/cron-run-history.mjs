@@ -11,6 +11,17 @@ import { CATCH_UP_MAX_MINUTES } from './cron-dispatch.mjs';
 
 const WORKFLOW_FILE = 'cron-dispatch.yml';
 const PAGE_SIZE = 100;
+// One budget for the entire lookup, including headers, bodies and every page.
+// Leave the ten-minute job enough time to dispatch its normal fixed-window
+// sweep when history is unavailable; a fresh page never resets this deadline.
+const LOOKUP_TIMEOUT_MS = 30_000;
+
+function failedLookup(error, token) {
+  let safeMessage = String(error instanceof Error ? error.message : error);
+  if (typeof token === 'string' && token) safeMessage = safeMessage.split(token).join('[redacted]');
+  safeMessage = safeMessage.replace(/[\r\n]+/g, ' ').slice(0, 200);
+  return { lookup: 'failed', since: '', source: 'failure', reason: safeMessage || 'Unknown Actions API failure.' };
+}
 
 function validTimestamp(value, nowMs) {
   if (typeof value !== 'string' || !value.trim()) return null;
@@ -56,7 +67,32 @@ function workflowRunsUrl({ repo, status, created, apiBaseUrl, perPage = PAGE_SIZ
   return url;
 }
 
-async function fetchPage(url, { token, fetchImpl, expectedPath, expectedStatus, expectedCreated, expectedPerPage }) {
+async function readJson(response, signal) {
+  if (!response.body) return response.json();
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let text = '';
+  // Cancelling the reader also settles a pending read on a native Response
+  // stream. Do not await cancellation: a stuck transport cleanup must not
+  // consume the budget reserved for the workflow's fallback dispatch.
+  const abort = () => { void reader.cancel(signal.reason).catch(() => {}); };
+  signal.addEventListener('abort', abort, { once: true });
+  try {
+    while (true) {
+      signal.throwIfAborted();
+      const chunk = await reader.read();
+      signal.throwIfAborted();
+      if (chunk.done) return JSON.parse(text + decoder.decode());
+      text += decoder.decode(chunk.value, { stream: true });
+    }
+  } finally {
+    signal.removeEventListener('abort', abort);
+    reader.releaseLock();
+  }
+}
+
+async function fetchPage(url, { token, fetchImpl, signal, expectedPath, expectedStatus, expectedCreated, expectedPerPage }) {
+  signal.throwIfAborted();
   const response = await fetchImpl(url, {
     method: 'GET',
     headers: {
@@ -65,9 +101,17 @@ async function fetchPage(url, { token, fetchImpl, expectedPath, expectedStatus, 
       'X-GitHub-Api-Version': '2022-11-28',
     },
     redirect: 'error',
+    signal,
   });
-  if (!response.ok) throw new Error(`Actions API returned HTTP ${response.status}.`);
-  const body = await response.json();
+  // Real fetch observes the signal. Also dispose of a response from an injected
+  // or delayed transport that resolved after abort, without reading or paging it.
+  if (signal.aborted || !response.ok) {
+    void response.body?.cancel(signal.reason).catch(() => {});
+    signal.throwIfAborted();
+    throw new Error(`Actions API returned HTTP ${response.status}.`);
+  }
+  const body = await readJson(response, signal);
+  signal.throwIfAborted();
   const runs = workflowRunsFrom(body);
   const next = nextLink(response.headers.get('link'));
   if (next) {
@@ -80,7 +124,7 @@ async function fetchPage(url, { token, fetchImpl, expectedPath, expectedStatus, 
   return { runs, next: null, totalCount: body.total_count };
 }
 
-async function scanRuns(firstUrl, { token, fetchImpl, status }) {
+async function scanRuns(firstUrl, { token, fetchImpl, signal, status }) {
   const expectedPath = firstUrl.pathname;
   const expectedCreated = firstUrl.searchParams.get('created');
   const expectedPerPage = firstUrl.searchParams.get('per_page');
@@ -92,7 +136,7 @@ async function scanRuns(firstUrl, { token, fetchImpl, status }) {
     const key = url.toString();
     if (pages.has(key)) throw new Error('Actions API repeated a workflow-run pagination link.');
     pages.add(key);
-    const page = await fetchPage(url, { token, fetchImpl, expectedPath, expectedStatus: status ?? null, expectedCreated, expectedPerPage });
+    const page = await fetchPage(url, { token, fetchImpl, signal, expectedPath, expectedStatus: status ?? null, expectedCreated, expectedPerPage });
     runs.push(...page.runs);
     totalCount = page.totalCount;
     if (!page.next && runs.length < totalCount) {
@@ -107,13 +151,14 @@ async function scanRuns(firstUrl, { token, fetchImpl, status }) {
  * Returns a safe catch-up boundary or a failed lookup result. The current run
  * is excluded explicitly even though an in-progress run is not a success.
  */
-export async function discoverCatchUpBoundary({
+async function findCatchUpBoundary({
   token,
   repo,
   currentRunId,
   fetchImpl = fetch,
   now = new Date(),
   apiBaseUrl = 'https://api.github.com',
+  signal,
 }) {
   try {
     if (typeof token !== 'string' || !token.trim()) throw new Error('The workflow token is missing.');
@@ -128,6 +173,7 @@ export async function discoverCatchUpBoundary({
     const successfulPage = await fetchPage(successfulUrl, {
       token,
       fetchImpl,
+      signal,
       expectedPath: successfulUrl.pathname,
       expectedStatus: 'success',
       expectedCreated: null,
@@ -150,7 +196,7 @@ export async function discoverCatchUpBoundary({
     // (manual runs are excluded by event).
     // That stays below the Actions endpoint's 1,000-result search ceiling.
     const recentUrl = workflowRunsUrl({ repo, status: null, created: `>=${floor}`, apiBaseUrl });
-    const recent = await scanRuns(recentUrl, { token, fetchImpl, status: null });
+    const recent = await scanRuns(recentUrl, { token, fetchImpl, signal, status: null });
     if (recent.totalCount >= 1_000) {
       throw new Error('Actions API reached its 1,000-result search limit for the 24-hour workflow history.');
     }
@@ -170,6 +216,7 @@ export async function discoverCatchUpBoundary({
       const olderPage = await fetchPage(olderUrl, {
         token,
         fetchImpl,
+        signal,
         expectedPath: olderUrl.pathname,
         expectedStatus: null,
         expectedCreated: `<${floor}`,
@@ -190,6 +237,7 @@ export async function discoverCatchUpBoundary({
     const latestPage = await fetchPage(latestUrl, {
       token,
       fetchImpl,
+      signal,
       expectedPath: latestUrl.pathname,
       expectedStatus: null,
       expectedCreated: null,
@@ -202,10 +250,39 @@ export async function discoverCatchUpBoundary({
     if (olderRun) return { lookup: 'ok', since: floor, source: 'history-capped' };
     return { lookup: 'ok', since: '', source: 'first-run' };
   } catch (error) {
-    let safeMessage = String(error instanceof Error ? error.message : error);
-    if (typeof token === 'string' && token) safeMessage = safeMessage.split(token).join('[redacted]');
-    safeMessage = safeMessage.replace(/[\r\n]+/g, ' ').slice(0, 200);
-    return { lookup: 'failed', since: '', source: 'failure', reason: safeMessage || 'Unknown Actions API failure.' };
+    return failedLookup(error, token);
+  }
+}
+
+/** @returns {Promise<{ lookup: string, since: string, source: string, reason?: string }>} */
+export async function discoverCatchUpBoundary({
+  token,
+  repo,
+  currentRunId,
+  fetchImpl = fetch,
+  now = new Date(),
+  apiBaseUrl = 'https://api.github.com',
+}) {
+  const controller = new AbortController();
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let timer;
+  /** @type {Promise<never>} */
+  const expired = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error(`Actions API history lookup exceeded ${LOOKUP_TIMEOUT_MS} ms.`);
+      controller.abort(error);
+      reject(error);
+    }, LOOKUP_TIMEOUT_MS);
+  });
+  try {
+    // The race bounds even a transport that fails to settle on abort. All
+    // subsequent reads and requests check the same signal, so a late response
+    // cannot start another page or replace this invocation's failed result.
+    return await Promise.race([findCatchUpBoundary({ token, repo, currentRunId, fetchImpl, now, apiBaseUrl, signal: controller.signal }), expired]);
+  } catch (error) {
+    return failedLookup(error, token);
+  } finally {
+    clearTimeout(timer);
   }
 }
 

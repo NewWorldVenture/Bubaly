@@ -15,6 +15,57 @@ const MAX_CHUNKS = 4096;
 let generationSequence = 0;
 const queues = new WeakMap<KeyValueStore, Map<string, Promise<unknown>>>();
 const writeStates = new WeakMap<KeyValueStore, { revisions: Map<string, number>; blocks: Map<string, number> }>();
+type SignOutOwner = {
+  identity: string | null;
+  accessToken: string | null;
+  userId: string | null;
+  unreadable: boolean;
+  capturing: boolean;
+  issuedDuringCapture: Set<string | null>;
+  superseded: boolean;
+  committing: boolean;
+  removed: boolean;
+  released: Promise<void>;
+  release: () => void;
+};
+const signOutOwners = new WeakMap<KeyValueStore, Map<string, SignOutOwner>>();
+
+export class SessionRemovalChangedError extends AuthRetryableFetchError {
+  constructor() {
+    // Refresh must treat refused old cleanup as non-destructive, while the
+    // explicit logout wrapper treats this code as a final ownership refusal.
+    super('The active session changed during sign-out.', 0);
+    this.code = 'session_removal_changed';
+  }
+}
+
+export type SessionSignOut = {
+  isCurrent(): boolean;
+  didRemove(): boolean;
+  finish(): void;
+};
+
+// This is an ownership comparison, never token verification or authorization.
+// A session_id survives refresh; a fresh login by the same user gets a new ID.
+// Decode without depending on browser atob in the native JavaScript runtime.
+function sessionIdentity(value: string | null): string | null {
+  if (value === null) return null;
+  try {
+    const session = JSON.parse(value) as { access_token?: unknown; user?: { id?: unknown } };
+    if (typeof session.access_token !== 'string' || typeof session.user?.id !== 'string') return value;
+    const payload = session.access_token.split('.')[1];
+    if (!payload || payload.length > 65536 || !/^[A-Za-z0-9_-]+={0,2}$/.test(payload)) return value;
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    let bits = 0; let count = 0; let decoded = '';
+    for (const character of payload.replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '')) {
+      bits = (bits << 6) | alphabet.indexOf(character); count += 6;
+      if (count >= 8) { count -= 8; decoded += String.fromCharCode((bits >>> count) & 255); }
+    }
+    const claims = JSON.parse(decoded) as { session_id?: unknown; sub?: unknown };
+    if (typeof claims.session_id !== 'string' || !claims.session_id || claims.sub !== session.user.id) return value;
+    return JSON.stringify([session.user.id, claims.session_id]);
+  } catch { return value; }
+}
 
 export class SessionWriteBlockedError extends AuthRetryableFetchError {
   constructor() {
@@ -74,13 +125,20 @@ export function createChunkedStore(backing: KeyValueStore, size = SECURE_CHUNK_S
   removeItemIf(key: string, shouldRemove: () => boolean): Promise<boolean>;
   writeRevision(key: string): number;
   blockWrites(key: string): () => void;
+  beginSessionSignOut(key: string): Promise<SessionSignOut>;
+  assertSessionSignOutOwner(key: string, accessToken: string): void;
 } {
   const pending = queues.get(backing) ?? new Map<string, Promise<unknown>>();
   queues.set(backing, pending);
   const writes = writeStates.get(backing) ?? { revisions: new Map<string, number>(), blocks: new Map<string, number>() };
   writeStates.set(backing, writes);
+  const owners = signOutOwners.get(backing) ?? new Map<string, SignOutOwner>();
+  signOutOwners.set(backing, owners);
   function serialize<T>(key: string, run: () => Promise<T>): Promise<T> {
-    const result = (pending.get(key) ?? Promise.resolve()).catch(() => {}).then(run).catch(() => {
+    const result = (pending.get(key) ?? Promise.resolve()).catch(() => {}).then(run).catch(error => {
+      // Preserve ownership refusals so the explicit logout wrapper cannot
+      // mistake them for unavailable storage and enter its clearing fallback.
+      if (error instanceof SessionRemovalChangedError || error instanceof SessionWriteBlockedError) throw error;
       // A locked/unavailable Keychain is not an absent or rejected session.
       throw new SessionStorageUnavailableError();
     });
@@ -91,31 +149,72 @@ export function createChunkedStore(backing: KeyValueStore, size = SECURE_CHUNK_S
   // Cleanup happens only after the logical commit. Failure to remove obsolete
   // encrypted chunks must not turn a successful session save into a failed one.
   const cleanup = (keys: string[]) => Promise.allSettled(keys.map(name => backing.removeItem(name)));
-  const removeItemIf = (key: string, shouldRemove: () => boolean) => serialize(key, async () => {
+  const readValue = async (key: string): Promise<string | null> => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const raw = await backing.getItem(key);
+      const names = chunkKeys(key, raw);
+      if (!names) return raw;
+      const parts = await Promise.all(names.map(name => backing.getItem(name)));
+      if (await backing.getItem(key) !== raw) continue;
+      if (parts.some(part => part === null)) throw new SessionStorageUnavailableError();
+      return parts.join('');
+    }
+    throw new SessionStorageUnavailableError();
+  };
+  const removeItemIf = (key: string, shouldRemove: () => boolean) => {
+    // Capture at issuance, not when the queued removal eventually runs. The
+    // SDK's refresh epoch cleanup can be queued behind the original logout.
+    const owner = owners.get(key);
+    return serialize(key, async () => {
+      let previous: string[] = [];
+      try { previous = chunkKeys(key, await backing.getItem(key)) ?? []; } catch { /* Still clear a damaged session explicitly. */ }
+      // A newer sign-in can arrive while this deletion waits behind a save or
+      // while native storage is being read. Check ownership at the commit point.
+      if (!shouldRemove()) return false;
+      if (owner) {
+        let current: string | null = null;
+        let unreadable = false;
+        try { current = sessionIdentity(await readValue(key)); } catch { unreadable = true; }
+        if (owner.superseded || (!owner.unreadable && (unreadable
+          || (current !== owner.identity && !(owner.committing && current === null))))) {
+          throw new SessionRemovalChangedError();
+        }
+        // No await separates the last ownership check from closing admission.
+        // New logins can wait here, but never during the provider HTTP request.
+        owner.committing = true;
+      }
+      await backing.removeItem(key);
+      if (owner) owner.removed = true;
+      await cleanup(previous);
+      return true;
+    });
+  };
+  const commitValue = (key: string, value: string) => serialize(key, async () => {
+    const raw = await backing.getItem(key);
     let previous: string[] = [];
-    try { previous = chunkKeys(key, await backing.getItem(key)) ?? []; } catch { /* Still clear a damaged session explicitly. */ }
-    // A newer sign-in can arrive while this deletion waits behind a save or
-    // while native storage is being read. Check ownership at the commit point.
-    if (!shouldRemove()) return false;
-    await backing.removeItem(key);
+    try { previous = chunkKeys(key, raw) ?? []; } catch { /* Replace a damaged generation. */ }
+    const chunks = splitChunks(value, size);
+    if (chunks.length > MAX_CHUNKS) throw new Error('Secure session value is too large');
+    const chunked = chunks.length > 1 || value.startsWith(HEADER_PREFIX) || value.startsWith(GENERATION_PREFIX);
+    const generation = `${Date.now().toString(36)}-${(++generationSequence).toString(36)}-${Math.random().toString(36).slice(2)}`;
+    const header = chunked ? `${GENERATION_PREFIX}${generation}:${chunks.length}` : value;
+    const names = chunked ? chunks.map((_, index) => `${key}.${generation}.${index}`) : [];
+    try {
+      for (const [index, name] of names.entries()) await backing.setItem(name, chunks[index]);
+    } catch (error) {
+      await cleanup(names); throw error;
+    }
+    try { await backing.setItem(key, header); }
+    catch (error) {
+      let committed: string | null;
+      try { committed = await backing.getItem(key); } catch { throw error; }
+      if (committed !== header) { await cleanup(names); throw error; }
+    }
     await cleanup(previous);
-    return true;
   });
   return {
     getItem(key) {
-      return serialize(key, async () => {
-        for (let attempt = 0; attempt < 3; attempt++) {
-          const raw = await backing.getItem(key);
-          const names = chunkKeys(key, raw);
-          if (!names) return raw;
-          const parts = await Promise.all(names.map(name => backing.getItem(name)));
-          // Another adapter may have committed or signed out during this read.
-          if (await backing.getItem(key) !== raw) continue;
-          if (parts.some(part => part === null)) throw new SessionStorageUnavailableError();
-          return parts.join('');
-        }
-        throw new SessionStorageUnavailableError();
-      });
+      return serialize(key, () => readValue(key));
     },
     setItem(key, value) {
       // Do not park and replay writes during explicit sign-out: a delayed old
@@ -123,40 +222,65 @@ export function createChunkedStore(backing: KeyValueStore, size = SECURE_CHUNK_S
       // The SDK returns this recognized retryable error without claiming success.
       if (writes.blocks.has(key)) return Promise.reject(new SessionWriteBlockedError());
       writes.revisions.set(key, (writes.revisions.get(key) ?? 0) + 1);
-      return serialize(key, async () => {
-        const raw = await backing.getItem(key);
-        let previous: string[] = [];
-        // A fresh sign-in can replace a damaged header, but a failed Keychain
-        // read must still stop the write before anything changes.
-        try { previous = chunkKeys(key, raw) ?? []; } catch { /* No valid old generation to clean. */ }
-        const chunks = splitChunks(value, size);
-        if (chunks.length > MAX_CHUNKS) throw new Error('Secure session value is too large');
-        const chunked = chunks.length > 1 || value.startsWith(HEADER_PREFIX) || value.startsWith(GENERATION_PREFIX);
-        const generation = `${Date.now().toString(36)}-${(++generationSequence).toString(36)}-${Math.random().toString(36).slice(2)}`;
-        const header = chunked ? `${GENERATION_PREFIX}${generation}:${chunks.length}` : value;
-        const names = chunked ? chunks.map((_, index) => `${key}.${generation}.${index}`) : [];
-        try {
-          for (const [index, name] of names.entries()) await backing.setItem(name, chunks[index]);
-        } catch (error) {
-          await cleanup(names);
-          throw error;
-        }
-        try { await backing.setItem(key, header); }
-        catch (error) {
-          // A rejected native write can be ambiguous. Do not delete the new
-          // generation unless it is known not to be the committed pointer.
-          let committed: string | null;
-          try { committed = await backing.getItem(key); } catch { throw error; }
-          if (committed !== header) { await cleanup(names); throw error; }
-        }
-        await cleanup(previous);
-      });
+      const owner = owners.get(key);
+      if (owner?.committing) {
+        // Never replay a delayed refresh of the session being removed.
+        if (sessionIdentity(value) === owner.identity) return Promise.reject(new SessionWriteBlockedError());
+        // Park outside the per-key queue so SIGNED_OUT subscribers can read
+        // the now-empty store without waiting on the new login they precede.
+        return owner.released.then(() => commitValue(key, value));
+      }
+      if (owner?.capturing) owner.issuedDuringCapture.add(sessionIdentity(value));
+      else if (owner && sessionIdentity(value) !== owner.identity) owner.superseded = true;
+      return commitValue(key, value);
     },
     removeItem(key) {
       return removeItemIf(key, () => true).then(() => {});
     },
     removeItemIf,
     writeRevision: key => writes.revisions.get(key) ?? 0,
+    assertSessionSignOutOwner(key, accessToken) {
+      const owner = owners.get(key);
+      if (!owner) return;
+      const tokenIdentity = sessionIdentity(JSON.stringify({ access_token: accessToken, user: { id: owner.userId } }));
+      if (owner.superseded || !accessToken || (!owner.unreadable
+        && accessToken !== owner.accessToken && tokenIdentity !== owner.identity)) {
+        owner.superseded = true;
+        throw new SessionRemovalChangedError();
+      }
+    },
+    async beginSessionSignOut(key) {
+      if (owners.has(key)) throw new SessionRemovalChangedError();
+      let release!: () => void;
+      const owner: SignOutOwner = { identity: null, accessToken: null, userId: null, unreadable: false,
+        capturing: true, issuedDuringCapture: new Set(), superseded: false,
+        committing: false, removed: false, released: new Promise<void>(done => { release = done; }),
+        release: () => release() };
+      owners.set(key, owner);
+      try {
+        const value = await serialize(key, () => readValue(key));
+        owner.identity = sessionIdentity(value);
+        try {
+          const session = value ? JSON.parse(value) as { access_token?: unknown; user?: { id?: unknown } } : null;
+          owner.accessToken = typeof session?.access_token === 'string' ? session.access_token : null;
+          owner.userId = typeof session?.user?.id === 'string' ? session.user.id : null;
+        } catch { /* A damaged session still permits an explicit local clear. */ }
+      }
+      catch { owner.unreadable = true; }
+      // A same-session refresh may issue its write while the initial native
+      // read is awaiting storage. Compare those writes only after A is known.
+      owner.superseded ||= [...owner.issuedDuringCapture].some(identity => owner.unreadable || identity !== owner.identity);
+      owner.issuedDuringCapture.clear();
+      owner.capturing = false;
+      return {
+        isCurrent: () => !owner.superseded,
+        didRemove: () => owner.removed,
+        finish() {
+          if (owners.get(key) === owner) owners.delete(key);
+          owner.release();
+        },
+      };
+    },
     blockWrites(key) {
       writes.blocks.set(key, (writes.blocks.get(key) ?? 0) + 1);
       let released = false;

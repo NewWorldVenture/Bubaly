@@ -11,6 +11,8 @@ import { createServer } from '@/lib/supabase/server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { readFamilyOrders } from '@/lib/marketplace/schema-compat';
+import { cancelOrderPickup } from '@/lib/marketplace/pickup-server';
+import { SELLER_ONLY_ORDER_STEPS } from '@/lib/marketplace/order-lifecycle';
 
 type Failure = { ok: false; error: string };
 type Result = { ok: true } | Failure;
@@ -149,7 +151,7 @@ export async function setOrderStatusAction(orderId: string, status: string): Pro
   // buyer's as buyer_family_id.
   const { data: order, error: orderError } = await readFamilyOrders(ctx.active.familyId, (scope) => scope(supabase
     .from('marketplace_orders')
-    .select('id, status, family_id')
+    .select('id, status, family_id, seller_member')
     .eq('id', orderId))
     .maybeSingle());
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
@@ -160,6 +162,12 @@ export async function setOrderStatusAction(orderId: string, status: string): Pro
     // Said so in the viewer's language, and without echoing `status`, which the
     // caller supplies. (I18N-002)
     return { ok: false, error: t('marketplace.orderStepNoLongerAvailable') };
+  }
+  // Returned and complete are the seller's word (the lender's, on a rent or a
+  // borrow). RLS lets either party write the row, so this is where it is
+  // decided; the Orders page offers those steps to the seller alone.
+  if (SELLER_ONLY_ORDER_STEPS.has(status) && order.seller_member !== ctx.active.member.id) {
+    return { ok: false, error: t('marketplace.onlyTheSellerFinishesAnOrder') };
   }
 
   // CLAIM the transition rather than assuming it. The status was validated
@@ -183,6 +191,13 @@ export async function setOrderStatusAction(orderId: string, status: string): Pro
     .select('id');
   if (error) return actionFailure('update the order', t('marketplace.couldNotUpdateTheOrder'), error);
   if (wroteNoRows(advanced)) return { ok: false, error: t('actions.orderNotFound') };
+  // An order that is off takes its pickup with it. The Orders page stops
+  // showing the pickup once the order is cancelled, so nothing else would ever
+  // take it — or its family-calendar event — down.
+  // The pickup row is the order's family's; a calendar event is in the
+  // family of whoever confirmed it, which the caller can only remove from
+  // their own (see cancelOrderPickup).
+  if (status === 'cancelled') await cancelOrderPickup(supabase, orderId, order.family_id, ctx.active.familyId);
   revalidatePath(`${MARKETPLACE}/orders`);
   return { ok: true };
 }

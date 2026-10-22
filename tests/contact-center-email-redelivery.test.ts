@@ -4,6 +4,7 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
+import { rateLimitHit } from './helpers/rate-limit-rpc';
 
 const mocks = vi.hoisted(() => ({ admin: vi.fn(), sendEmail: vi.fn(), concierge: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: mocks.admin }));
@@ -37,12 +38,20 @@ beforeEach(() => {
   vi.resetModules(); vi.resetAllMocks();
   vi.stubEnv('NODE_ENV', 'production');
   vi.stubEnv('CONTACT_CENTER_INBOUND_SECRET', 'synthetic-inbound-secret');
+  // The per-sender budget keys hold an address, which the durable limiter
+  // digests under a server secret and refuses to store without one in
+  // production (audit N1; the-rate-limit-table-is-not-a-visitor-log).
+  vi.stubEnv('INTERNAL_SECRET', 'synthetic-internal-secret');
   vi.stubEnv('EMAIL_FROM', 'Bubaly <notifications@bubaly.com>');
   vi.stubGlobal('fetch', vi.fn(() => { throw new Error('Unexpected external request'); }));
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   db = createInMemorySupabase({
     uniques: { notifications: [['id']], ai_tool_calls: [['id'], ['family_id', 'idempotency_key']], family_inbox_messages: [['channel', 'provider_ref']] },
     defaults: { family_inbox_messages: { ai_handled: false, direction: 'inbound', status: 'new' } },
+    // The concierge and the auto-reply are budgeted through the durable limiter
+    // (audit N1); a database that lacks the function reads as "unavailable" and
+    // withholds both.
+    rpc: { rate_limit_hit: rateLimitHit },
   });
   db.seed('families', [{ id: OURS, name: 'Ours', timezone: 'UTC' }, { id: THEIRS, name: 'Theirs', timezone: 'UTC' }]);
   db.seed('subscriptions', [{ family_id: OURS, plan: 'plus', status: 'active' }, { family_id: THEIRS, plan: 'plus', status: 'active' }]);

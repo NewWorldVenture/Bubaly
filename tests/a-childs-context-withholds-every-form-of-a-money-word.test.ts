@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { managerOnlyText } from '@/lib/ai/context/slices/proactive';
+import { managerOnlyText } from '@/lib/ai/context/manager-only';
 
 /**
  * A CHILD'S CONTEXT WITHHOLDS EVERY FORM OF A MONEY WORD (AI-001).
@@ -8,13 +8,16 @@ import { managerOnlyText } from '@/lib/ai/context/slices/proactive';
  * carries. Its reasoning report, signals, autopilot suggestions and
  * recommendations can mention budgets, bills or documents, which are
  * manager-only (§4, SLICE_ACCESS), so for anyone else an item that touches
- * them is dropped by a word filter.
+ * them is dropped by a word filter (lib/ai/context/manager-only.ts).
  *
  * The filter matched whole words in the SINGULAR only, and one stem that can
  * never be a whole word: `\bfinanc\b` does not match "finance" or
  * "financial", because there is no word boundary inside a word. So "2
  * documents expire this month", "3 unusual transactions" and "Financial goal:
  * $1,200 of $5,000" reached a child's prompt, and Bubaly could repeat them.
+ * The plurals and the financ- stem have since been fixed on main; the past
+ * tense ("You spent $40 more") and the money words that are none of those
+ * (a mortgage, a loan, investments) still reached a child.
  */
 describe('what a manager-only item may be worded as', () => {
   it.each([

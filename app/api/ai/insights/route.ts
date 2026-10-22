@@ -1,22 +1,29 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { settle, describeReadError } from '@/lib/supabase/settle';
+import { settle, settleAll, describeReadError } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
+import { dayKeyIn } from '@/lib/time/zoned';
+import { isWithheldFromGuest } from '@/lib/auth/guest-scope';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
 import { INSIGHTS, isInsightKind, MANAGER_ONLY_INSIGHTS, type InsightData, type InsightKind } from '@/lib/ai/insights';
+import { insightReadRefused } from '@/lib/ai/insight-read-domains';
 import { isManager } from '@/lib/constants/roles';
+import { readsEveryNote } from '@/lib/care/note-scope';
 import { isExpiredFact, isSensitiveMemory } from '@/lib/services/memory';
 import { loadAISettingsFor } from '@/lib/services/ai-settings';
+import { readOnOpenGroceryLists } from '@/lib/services/groceries';
 import type { ServiceScope } from '@/lib/services/types';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
-import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
-import { INSIGHT_FEATURE_HREFS } from '@/lib/ai/insight-features';
+import { refuseIfLocked, refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
+import { accessDeniedResponse, assertAIAllowance } from '@/lib/server/ai-access';
+import { insightFeatureHrefs } from '@/lib/ai/insight-features';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
+import { readAll, readAllByIdAsQuery } from '@/lib/supabase/read-all';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -53,6 +60,21 @@ export async function POST(req: Request) {
   if (MANAGER_ONLY_INSIGHTS.has(kind) && !isManager(ctx.active.role)) {
     return NextResponse.json({ error: t('insights.thatSummaryIsForThe') }, { status: 403 });
   }
+  // A summary of school, sports, trips, homework or the timetable answers to
+  // the same view rule as the assistant's read tools for that domain
+  // (INSIGHT_READ_DOMAINS in lib/ai/insight-read-domains.ts, which the
+  // screens' buttons read too): a guest is refused all five, a child the trips
+  // one.
+  if (insightReadRefused(kind, ctx.active.role)) {
+    return NextResponse.json({ error: t('insights.thatSummaryIsForThe') }, { status: 403 });
+  }
+  // A guest is sent away from the pages over the household's money, medical
+  // and insurance records (lib/auth/guest-scope.ts), and a summary of the same
+  // rows answers to the same rule: the utilities page let a guest in and both
+  // of its AI answers summarised every bill for them.
+  if (ctx.active.role === 'guest' && (insightFeatureHrefs(kind) ?? []).some(isWithheldFromGuest)) {
+    return NextResponse.json({ error: t('insights.thatSummaryIsForThe') }, { status: 403 });
+  }
 
   const question = typeof body.question === 'string' ? body.question.slice(0, 1000) : undefined;
   const params = { ...(body.params ?? {}), ...(question ? { question } : {}) };
@@ -65,22 +87,44 @@ export async function POST(req: Request) {
   // on the surface that costs money per request. Gated per kind rather than on
   // the whole set, because `refuseUnlessEntitled` admits a caller entitled to
   // ANY href it is handed and every family is entitled to something.
-  const gatedHrefs = INSIGHT_FEATURE_HREFS[kind];
-  if (gatedHrefs) {
-    const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, gatedHrefs);
-    if (refused) return refused;
-  }
+  //
+  // An alias (`grocery` for `shopping`) answers to its kind's gate, and a kind
+  // no gated page renders still answers to the family's lock: a trial that
+  // ended unpaid or a closed account is refused every model call, which
+  // `refuseUnlessEntitled` says for the mapped kinds and nothing said for the
+  // others.
+  const gatedHrefs = insightFeatureHrefs(kind);
+  const refused = gatedHrefs
+    ? await refuseUnlessEntitled(supabase, ctx.active.familyId, gatedHrefs)
+    : await refuseIfLocked(supabase, ctx.active.familyId);
+  if (refused) return refused;
 
   const limited = await enforceAIRateLimit(supabase, `ai-insights:${ctx.user.id}`, { limit: 20 });
   if (!limited.ok) return NextResponse.json(
     { error: t('insights.tooManyAiInsightRequests') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
+  // Every kind is a model call, so the Free plan's monthly AI allowance
+  // applies here as it does at /api/ai and on the Habits, Journal and Notes
+  // helpers: these rows count toward the limit the assistant refuses on, so a
+  // Free family past its ten kept getting a summary from every free module's
+  // AI Assist while being refused there. A paid plan's allowance is unlimited,
+  // so this asks nothing more of it. The allowance alone: whether a kind is
+  // available is its own module's gate above, not the assistant's tier or its
+  // Off switch (which turned every module's AI Assist into a 404).
+  const access = await assertAIAllowance(ctx, { db: supabase });
+  if (!access.ok) return accessDeniedResponse(access);
   const familyId = ctx.active.familyId;
   const tz = ctx.active.family.timezone || 'America/New_York';
+  // The family's day, for the kinds that ask "what is still ahead" of a DATE
+  // column (rides, celebrations). Greenwich's day is a different one for hours
+  // of every evening west of it and every morning east of it.
+  const todayKey = dayKeyIn(new Date(), tz);
 
-  // The roster read directly beside this one — `fetchRows` — already fails the
-  // request with a 500 when it cannot load. This one dropped its error and fed
+  // The roster read directly beside this one — `fetchRows` — fails the request
+  // with a 500 when a read it checks with `required()` fails (every household
+  // module kind and purchase_advisor; see the note above `required`). This one
+  // dropped its error and fed
   // an empty member list into the same prompt, so the insight was generated for
   // a family the model was told has no members: every name, every per-child
   // observation, silently absent from an answer that still reads as complete.
@@ -98,6 +142,8 @@ export async function POST(req: Request) {
     rows = await fetchRows(kind, supabase, familyId, params, {
       role: ctx.active.role,
       memberId: ctx.active.member.id,
+      userId: ctx.user.id,
+      todayKey,
     });
   } catch (err) {
     console.error('AI insights data load failed:', err);
@@ -112,6 +158,8 @@ export async function POST(req: Request) {
   const data: InsightData = {
     familyName: ctx.active.family.name ?? 'Your family',
     now,
+    todayKey,
+    timeZone: tz,
     members: (members ?? []).map((m) => ({ id: m.id as string, name: m.display_name as string })),
     rows,
     params,
@@ -154,18 +202,34 @@ export async function POST(req: Request) {
 
 const eq = (sb: SupabaseClient, table: string, familyId: string) => sb.from(table).select('*').eq('family_id', familyId);
 
+/** The statuses a sign-up is still open in (`isOpen`, lib/opportunities/deadlines.ts). */
+const OPEN_OPPORTUNITY_STATUSES = ['interested', 'waitlisted'];
+
 /**
  * Fail closed on a read the prompt would otherwise describe as an empty, healthy
  * state. The route catches this and answers "could not load data" — a refused
  * query must never reach a model as "nothing found".
+ *
+ * supabase-js resolves EVERY failure — a PostgREST error and a transport one
+ * alike — as `{ data: null, error }` rather than throwing, so the route's
+ * try/catch never sees a read that `x.data ?? []` swallowed. For thirteen
+ * household kinds that is exactly what happened: a failed inventory read
+ * became "Nothing catalogued yet.", a failed `moves` read became "No move
+ * planned yet.", and the answer came back at HTTP 200. Each of those kinds now
+ * passes every read through here, parent reads before the ids derived from
+ * them. (RLS filtering is not an error and still reads as fewer rows.)
  */
-function required(reads: [string, { message?: string } | null][]): void {
+function required(reads: [string, { message?: string } | null | undefined][]): void {
   const failed = reads.find(([, error]) => Boolean(error));
   if (failed) throw new Error(`${failed[0]} read failed: ${failed[1]?.message ?? 'unknown error'}`);
 }
 
-/** Who is asking. Only `purchase_advisor` needs it so far, and it needs both. */
-type Viewer = { role: string; memberId: string | null };
+/**
+ * Who is asking, and on which family day. `purchase_advisor` and `wishlists`
+ * need the member (gift state is hidden from the person a wish belongs to);
+ * `rides` needs the day.
+ */
+type Viewer = { role: string; memberId: string | null; userId: string; todayKey: string };
 
 async function fetchRows(
   kind: InsightKind,
@@ -183,6 +247,7 @@ async function fetchRows(
         eq(sb, 'chores', familyId).eq('is_active', true).limit(40),
         sb.from('chore_assignments').select('*').eq('family_id', familyId).in('status', ['todo', 'in_progress', 'submitted']).limit(60),
   ]);
+      required([['chores', chores.error], ['chore_assignments', asg.error]]);
       return { chores: chores.data ?? [], chore_assignments: asg.data ?? [] };
     }
     case 'closet': {
@@ -190,6 +255,7 @@ async function fetchRows(
         eq(sb, 'wardrobe_items', familyId).in('status', ['active', 'laundry', 'outgrown']).order('member_id').limit(160),
         eq(sb, 'outfit_logs', familyId).gte('worn_on', since(30).slice(0, 10)).order('worn_on', { ascending: false }).limit(60),
       ]);
+      required([['wardrobe_items', items.error], ['outfit_logs', logs.error]]);
       return { wardrobe_items: items.data ?? [], outfit_logs: logs.data ?? [] };
     }
     case 'watchlist': {
@@ -198,6 +264,7 @@ async function fetchRows(
         eq(sb, 'watchlist_votes', familyId).limit(300),
         eq(sb, 'watch_sessions', familyId).order('watched_on', { ascending: false }).limit(30),
       ]);
+      required([['watchlist_titles', titles.error], ['watchlist_votes', votes.error], ['watch_sessions', sessions.error]]);
       return { watchlist_titles: titles.data ?? [], watchlist_votes: votes.data ?? [], watch_sessions: sessions.data ?? [] };
     }
     case 'inventory': {
@@ -206,14 +273,33 @@ async function fetchRows(
         eq(sb, 'inventory_items', familyId).neq('status', 'disposed').order('updated_at', { ascending: false }).limit(200),
         eq(sb, 'inventory_moves', familyId).order('moved_at', { ascending: false }).limit(20),
       ]);
+      required([['home_locations', locations.error], ['inventory_items', items.error], ['inventory_moves', moves.error]]);
       return { home_locations: locations.data ?? [], inventory_items: items.data ?? [], inventory_moves: moves.data ?? [] };
     }
     case 'sleep': {
+      // Whose nights a summary is built from is the Sleep page's rule (the
+      // held 0506, lib/health/record-scope.ts): a parent or adult reads every
+      // member's; anyone else their own record and the entries they logged.
+      // The page shows a child only that, and this coach listed every member
+      // by name with their nights, mood and energy. Narrowed before the limit,
+      // as the 'medical' case does, rather than left to RLS.
+      //
+      // A COACH SUMMARY IS BUILT FROM A WHOLE RECORD. The entries a
+      // non-manager logged for someone else are part of that member's record,
+      // which the page shows them without a summary (an 'authored' scope): a
+      // caregiver's coach built from the nights they logged for a ward read as
+      // the ward's whole record. So a non-manager is coached on their own
+      // record only — not on what they logged for others — and with no member
+      // record of their own on nothing.
+      const ownRecord = isManager(viewer.role) ? null : viewer.memberId;
+      if (!isManager(viewer.role) && !ownRecord) return { sleep_logs: [], bedtime_routines: [], sleep_checkins: [] };
+      const mine = <Q extends { eq: (column: 'member_id', value: string) => Q }>(query: Q): Q => (ownRecord ? query.eq('member_id', ownRecord) : query);
       const [logs, routines, checkins] = await Promise.all([
-        eq(sb, 'sleep_logs', familyId).gte('sleep_date', since(21).slice(0, 10)).order('sleep_date', { ascending: false }).limit(120),
-        eq(sb, 'bedtime_routines', familyId).eq('is_active', true).limit(30),
-        eq(sb, 'sleep_checkins', familyId).gte('checkin_date', since(21).slice(0, 10)).order('checkin_date', { ascending: false }).limit(80),
+        mine(eq(sb, 'sleep_logs', familyId)).gte('sleep_date', since(21).slice(0, 10)).order('sleep_date', { ascending: false }).limit(120),
+        mine(eq(sb, 'bedtime_routines', familyId)).eq('is_active', true).limit(30),
+        mine(eq(sb, 'sleep_checkins', familyId)).gte('checkin_date', since(21).slice(0, 10)).order('checkin_date', { ascending: false }).limit(80),
       ]);
+      required([['sleep_logs', logs.error], ['bedtime_routines', routines.error], ['sleep_checkins', checkins.error]]);
       return { sleep_logs: logs.data ?? [], bedtime_routines: routines.data ?? [], sleep_checkins: checkins.data ?? [] };
     }
     case 'declutter': {
@@ -222,46 +308,56 @@ async function fetchRows(
         eq(sb, 'declutter_missions', familyId).order('scheduled_for', { ascending: false, nullsFirst: false }).limit(60),
         eq(sb, 'declutter_sessions', familyId).order('started_at', { ascending: false }).limit(20),
       ]);
+      required([['declutter_zones', zones.error], ['declutter_missions', missions.error], ['declutter_sessions', sessions.error]]);
       return { declutter_zones: zones.data ?? [], declutter_missions: missions.data ?? [], declutter_sessions: sessions.data ?? [] };
     }
     case 'moving': {
       const live = await eq(sb, 'moves', familyId).neq('status', 'cancelled').order('move_date', { ascending: false }).limit(1);
+      // Checked before `mv` is derived: a failed read is not "No move planned yet."
+      required([['moves', live.error]]);
       const mv = live.data?.[0];
       if (!mv) return { moves: [], move_tasks: [], move_boxes: [] };
       const [tasks, boxes] = await Promise.all([
         eq(sb, 'move_tasks', familyId).eq('move_id', mv.id).order('due_date', { ascending: true, nullsFirst: false }).limit(80),
         eq(sb, 'move_boxes', familyId).eq('move_id', mv.id).order('box_number').limit(80),
       ]);
+      required([['move_tasks', tasks.error], ['move_boxes', boxes.error]]);
       return { moves: [mv], move_tasks: tasks.data ?? [], move_boxes: boxes.data ?? [] };
     }
     case 'projects': {
       const live = await eq(sb, 'home_projects', familyId).not('status', 'in', '("done","cancelled")').order('priority').order('updated_at', { ascending: false }).limit(12);
+      required([['home_projects', live.error]]);
       const ids = (live.data ?? []).map((p) => p.id);
       if (!ids.length) return { home_projects: [], project_materials: [], project_quotes: [] };
       const [materials, quotes] = await Promise.all([
         eq(sb, 'project_materials', familyId).in('project_id', ids).limit(120),
         eq(sb, 'project_quotes', familyId).in('project_id', ids).limit(60),
       ]);
+      required([['project_materials', materials.error], ['project_quotes', quotes.error]]);
       return { home_projects: live.data ?? [], project_materials: materials.data ?? [], project_quotes: quotes.data ?? [] };
     }
     case 'career': {
       const live = await eq(sb, 'career_profiles', familyId).eq('is_active', true).order('updated_at', { ascending: false }).limit(4);
+      required([['career_profiles', live.error]]);
       const ids = (live.data ?? []).map((p) => p.id);
       if (!ids.length) return { career_profiles: [], job_applications: [], resume_versions: [] };
       const [apps, resumes] = await Promise.all([
         eq(sb, 'job_applications', familyId).in('profile_id', ids).order('updated_at', { ascending: false }).limit(60),
         eq(sb, 'resume_versions', familyId).in('profile_id', ids).order('is_primary', { ascending: false }).limit(8),
       ]);
+      required([['job_applications', apps.error], ['resume_versions', resumes.error]]);
       return { career_profiles: live.data ?? [], job_applications: apps.data ?? [], resume_versions: resumes.data ?? [] };
     }
     case 'language': {
       const live = await eq(sb, 'language_goals', familyId).eq('is_active', true).order('updated_at', { ascending: false }).limit(4);
+      required([['language_goals', live.error]]);
       const ids = (live.data ?? []).map((g) => g.id);
       if (!ids.length) return { language_goals: [], language_sessions: [], vocab_cards: [] };
       const [sessions, cards] = await Promise.all([
         eq(sb, 'language_sessions', familyId).in('goal_id', ids).order('practiced_on', { ascending: false }).limit(60),
         eq(sb, 'vocab_cards', familyId).in('goal_id', ids).order('due_on').limit(300),
       ]);
+      required([['language_sessions', sessions.error], ['vocab_cards', cards.error]]);
       return { language_goals: live.data ?? [], language_sessions: sessions.data ?? [], vocab_cards: cards.data ?? [] };
     }
     case 'calendar': {
@@ -276,15 +372,23 @@ async function fetchRows(
     }
     case 'expenses': {
       const ex = await eq(sb, 'expense_splits', familyId).gte('spent_on', since(60).slice(0, 10)).order('spent_on', { ascending: false }).limit(120);
+      // A failed read is not "$0.00 across 0 entries" with savings advice built
+      // on it.
+      required([['expense_splits', ex.error]]);
       return { expense_splits: ex.data ?? [] };
     }
     case 'grocery':
     case 'shopping': {
-      const items = await eq(sb, 'grocery_items', familyId).eq('is_checked', false).limit(120);
+      // Only lists the family has not archived (readOnOpenGroceryLists).
+      const items = await readOnOpenGroceryLists(sb as ServiceScope['db'], familyId, (lists) => eq(sb, 'grocery_items', familyId).in('list_id', lists).eq('is_checked', false).limit(120));
+      required([['grocery_items', items.error]]);
       return { grocery_items: items.data ?? [] };
     }
     case 'homework': {
-      const hw = await eq(sb, 'homework_assignments', familyId).neq('status', 'done').order('due_at', { ascending: true, nullsFirst: false }).limit(60);
+      // Open = still to do (lib/homework/board.ts isOpen): `.neq('done')` listed
+      // submitted work under "Open homework".
+      const hw = await eq(sb, 'homework_assignments', familyId).in('status', ['assigned', 'in_progress']).order('due_at', { ascending: true, nullsFirst: false }).limit(60);
+      required([['homework_assignments', hw.error]]);
       return { homework_assignments: hw.data ?? [] };
     }
     case 'medications': {
@@ -295,10 +399,12 @@ async function fetchRows(
     }
     case 'subscriptions': {
       const subs = await eq(sb, 'subscriptions_tracked', familyId).limit(80);
+      required([['subscriptions_tracked', subs.error]]);
       return { subscriptions_tracked: subs.data ?? [] };
     }
     case 'todos': {
       const todos = await eq(sb, 'todo_items', familyId).eq('is_done', false).order('due_date', { ascending: true, nullsFirst: false }).limit(80);
+      required([['todo_items', todos.error]]);
       return { todo_items: todos.data ?? [] };
     }
     case 'trips': {
@@ -309,8 +415,21 @@ async function fetchRows(
       return { trips: trips.data ?? [], trip_items: items.data ?? [] };
     }
     case 'wishlists': {
-      const items = await eq(sb, 'wishlist_items', familyId).eq('is_purchased', false).limit(60);
-      return { wishlist_items: items.data ?? [] };
+      // Gift state is hidden from the person a wish belongs to, as in
+      // purchase_advisor below. Reading only the unbought wishes left a
+      // person's OWN bought ones out of the prompt, so asking for "everything
+      // on my list" and comparing the answer with the list on screen told them
+      // which presents were already wrapped. Their own rows go in with the gift
+      // state stripped; only other members' bought wishes are left out.
+      const items = await eq(sb, 'wishlist_items', familyId).order('created_at', { ascending: false }).limit(200);
+      required([['wishlist_items', items.error]]);
+      const visible = (items.data ?? []).flatMap((w) => {
+        if (viewer.memberId && String(w.member_id ?? '') === viewer.memberId) {
+          return [{ ...w, is_purchased: false, claimed_by: null, claimed_at: null }];
+        }
+        return w.is_purchased ? [] : [w];
+      });
+      return { wishlist_items: visible };
     }
     // "Before you buy" — everything the household already OWNS, plus what it
     // remembers preferring. No budgets or transactions: the money check is the
@@ -385,10 +504,16 @@ async function fetchRows(
         eq(sb, 'home_assets', familyId).limit(40),
         sb.from('maintenance_tasks').select('*').eq('family_id', familyId).neq('status', 'done').order('due_at', { ascending: true, nullsFirst: false }).limit(40),
   ]);
+      // A failed read reached the model as "Home assets: none" and came back a
+      // confident "no upkeep due" at 200.
+      required([['home_assets', assets.error], ['maintenance_tasks', tasks.error]]);
       return { home_assets: assets.data ?? [], maintenance_tasks: tasks.data ?? [] };
     }
     case 'notifications': {
       const n = await eq(sb, 'notifications', familyId).lte('send_at', nowIso).order('send_at', { ascending: false }).limit(60);
+      // A failed read reached the model as "Recent notifications: none", and its
+      // "nothing needs your attention" came back at 200.
+      required([['notifications', n.error]]);
       return { notifications: n.data ?? [] };
     }
     case 'messages': {
@@ -399,16 +524,22 @@ async function fetchRows(
     }
     case 'weather': {
       const locs = await eq(sb, 'weather_locations', familyId).order('sort_order').limit(10);
+      required([['weather_locations', locs.error]]);
       return { weather_locations: locs.data ?? [] };
     }
     case 'settings': {
-      const [ev, todos, chores, meals, docs] = await Promise.all([
+      // settleAll: one read that never completes would otherwise reject the
+      // batch, and reach the log as a bare transport error naming no read.
+      const [ev, todos, chores, meals, docs] = await settleAll([
         eq(sb, 'calendar_events', familyId).gte('starts_at', nowIso).limit(50),
         eq(sb, 'todo_items', familyId).limit(50),
         eq(sb, 'chores', familyId).limit(50),
         sb.from('meals').select('id').eq('family_id', familyId).limit(50),
         sb.from('documents').select('id').eq('family_id', familyId).limit(50),
-  ]);
+      ]);
+      // Five failed reads were "Activity counts: 0" and a confident "set up your
+      // calendar" to a family with a full one.
+      required([['calendar_events', ev.error], ['todo_items', todos.error], ['chores', chores.error], ['meals', meals.error], ['documents', docs.error]]);
       return {
         calendar_events: ev.data ?? [], todo_items: todos.data ?? [], chores: chores.data ?? [],
         meals: meals.data ?? [], documents: docs.data ?? [],
@@ -419,6 +550,7 @@ async function fetchRows(
         settle(sb.from('meal_plans').select('*').eq('family_id', familyId).gte('plan_date', since(7)).order('plan_date').limit(30)),
         settle(sb.from('meals').select('id, name, meal_type, notes').eq('family_id', familyId).order('created_at', { ascending: false }).limit(20)),
       ]);
+      required([['meal_plans', plans.error], ['meals', mealRows.error]]);
       return { meal_plans: plans.data ?? [], meals: mealRows.data ?? [] };
     }
     case 'reminders': {
@@ -426,42 +558,70 @@ async function fetchRows(
       return { family_reminders: r.data ?? [] };
     }
     case 'notes': {
+      // Checked like every other kind (see required()): a refused read used to
+      // reach the model as "No notes yet." and come back at HTTP 200.
       const n = await eq(sb, 'notes', familyId).order('updated_at', { ascending: false }).limit(15);
+      required([['notes', n.error]]);
       return { notes: n.data ?? [] };
     }
     case 'recipes': {
       const [recipes, pantry] = await Promise.all([
         eq(sb, 'family_recipes', familyId).order('created_at', { ascending: false }).limit(15),
-        eq(sb, 'pantry_items', familyId).eq('is_out_of_stock', false).limit(20),
+        // In stock = a quantity left. The filter used to name `is_out_of_stock`,
+        // a column no migration ever created, so PostgREST refused this read on
+        // every call and the recipes prompt always said "Pantry items: none
+        // tracked." — now that the read is checked, it has to be a real one.
+        eq(sb, 'pantry_items', familyId).gt('quantity', 0).limit(20),
       ]);
+      required([['family_recipes', recipes.error], ['pantry_items', pantry.error]]);
       return { family_recipes: recipes.data ?? [], pantry_items: pantry.data ?? [] };
     }
     case 'documents': {
-      const docs = await eq(sb, 'documents', familyId).order('created_at', { ascending: false }).limit(20);
-      return { documents: docs.data ?? [] };
+      const stored = await eq(sb, 'documents', familyId).order('created_at', { ascending: false }).limit(20);
+      required([['documents', stored.error]]);
+      return { documents: stored.data ?? [] };
     }
     case 'care': {
       const logs = await eq(sb, 'care_log', familyId).order('occurred_at', { ascending: false, nullsFirst: false }).limit(20);
+      required([['care_log', logs.error]]);
       return { care_log: logs.data ?? [] };
     }
     case 'contacts': {
-      const contacts = await eq(sb, 'family_contacts', familyId).order('name').limit(30);
-      return { family_contacts: contacts.data ?? [] };
+      // A failed read is not "No contacts saved." at HTTP 200, and the total is
+      // counted rather than taken from the length of a capped read: a family
+      // with hundreds of contacts was described as having twenty.
+      const [contacts, total] = await settleAll([
+        eq(sb, 'family_contacts', familyId).order('name').order('id').limit(30),
+        sb.from('family_contacts').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
+      ]);
+      required([['family_contacts', contacts.error], ['family_contacts', total.error]]);
+      if (typeof total.count !== 'number') throw new Error('family_contacts count was not returned');
+      return { family_contacts: contacts.data ?? [], contact_totals: [{ contacts: total.count }] };
     }
     case 'billing': {
       const [subs, expenses] = await Promise.all([
         eq(sb, 'subscriptions_tracked', familyId).limit(30),
         eq(sb, 'expense_splits', familyId).gte('spent_on', since(30).slice(0, 10)).order('spent_on', { ascending: false }).limit(40),
       ]);
+      // A failed read is not "No subscriptions." or "0 items" at HTTP 200.
+      required([['subscriptions_tracked', subs.error], ['expense_splits', expenses.error]]);
       return { subscriptions: subs.data ?? [], expenses: expenses.data ?? [] };
     }
     case 'goals': {
       const goals = await eq(sb, 'goals', familyId).eq('is_complete', false).order('created_at', { ascending: false }).limit(15);
+      required([['goals', goals.error]]);
       return { goals: goals.data ?? [] };
     }
     case 'pets': {
-      const pets = await eq(sb, 'pets', familyId).eq('is_active', true).limit(10);
-      return { pets: pets.data ?? [] };
+      // The prompt asks for upcoming care and vet visits, so it is handed the
+      // care records that answer it — for the pets still in the household.
+      const [pets, care] = await Promise.all([
+        eq(sb, 'pets', familyId).eq('is_active', true).limit(10),
+        eq(sb, 'pet_care_records', familyId).order('record_date', { ascending: false }).limit(60),
+      ]);
+      required([['pets', pets.error], ['pet_care_records', care.error]]);
+      const petIds = new Set((pets.data ?? []).map((p) => String(p.id)));
+      return { pets: pets.data ?? [], pet_care_records: (care.data ?? []).filter((c) => petIds.has(String(c.pet_id))) };
     }
     case 'renewals': {
       const renewals = await eq(sb, 'renewals', familyId).order('renewal_date', { ascending: true, nullsFirst: false }).limit(20);
@@ -469,7 +629,7 @@ async function fetchRows(
     }
     case 'school': {
       const [hw, grades] = await Promise.all([
-        eq(sb, 'homework_assignments', familyId).neq('status', 'done').order('due_at', { ascending: true, nullsFirst: false }).limit(20),
+        eq(sb, 'homework_assignments', familyId).in('status', ['assigned', 'in_progress']).order('due_at', { ascending: true, nullsFirst: false }).limit(20),
         eq(sb, 'grades', familyId).order('created_at', { ascending: false }).limit(15),
       ]);
       return { homework_assignments: hw.data ?? [], grades: grades.data ?? [] };
@@ -483,47 +643,124 @@ async function fetchRows(
     }
     case 'pantry': {
       const items = await eq(sb, 'pantry_items', familyId).limit(40);
+      required([['pantry_items', items.error]]);
       return { pantry_items: items.data ?? [] };
     }
     case 'announcements': {
       const posts = await eq(sb, 'family_announcements', familyId).order('created_at', { ascending: false }).limit(10);
+      required([['family_announcements', posts.error]]);
       return { family_announcements: posts.data ?? [] };
     }
     case 'medical': {
-      const [records, appointments] = await Promise.all([
-        eq(sb, 'health_visits', familyId).order('visit_date', { ascending: false, nullsFirst: false }).limit(15),
+      // A visit is a parent's or adult's to read, or the member's own, or one
+      // the asker recorded (the held 0506, lib/health/record-scope.ts) — the
+      // rows the Medical and Dental pages show this asker. Released, 0481 still
+      // hands a teen or child the household's, so the summary is narrowed here
+      // rather than left to RLS, before the limit.
+      const visits = eq(sb, 'health_visits', familyId);
+      const ownOrAuthored = [viewer.memberId ? `member_id.eq.${viewer.memberId}` : null, `created_by.eq.${viewer.userId}`]
+        .filter(Boolean).join(',');
+      const [records, appointments] = await settleAll([
+        (isManager(viewer.role) ? visits : visits.or(ownOrAuthored))
+          .order('visit_date', { ascending: false, nullsFirst: false }).limit(15),
         eq(sb, 'appointments', familyId).gte('starts_at', nowIso).order('starts_at').limit(10),
       ]);
+      required([['health_visits', records.error], ['appointments', appointments.error]]);
       return { health_visits: records.data ?? [], appointments: appointments.data ?? [] };
     }
     case 'insurance': {
-      const policies = await eq(sb, 'insurance_policies', familyId).order('renewal_date', { ascending: true, nullsFirst: false }).limit(15);
-      return { insurance_policies: policies.data ?? [] };
+      // The Insurance Hub's own table. `insurance_policies` is the medical-card
+      // table (0009): it has no renewal_date, so ordering by it failed every
+      // call, and the failure reached the model as "No policies tracked."
+      const policies = await eq(sb, 'family_insurance_policies', familyId).eq('is_active', true).order('renewal_date', { ascending: true, nullsFirst: false }).limit(15);
+      required([['family_insurance_policies', policies.error]]);
+      return { family_insurance_policies: policies.data ?? [] };
     }
     case 'rewards': {
-      const [asg, redemptions] = await Promise.all([
-        eq(sb, 'chore_assignments', familyId).limit(40),
-        eq(sb, 'reward_redemptions', familyId).order('created_at', { ascending: false }).limit(15),
+      // The ledger, whole: every APPROVED assignment and every redemption, the
+      // set 0439's guard and the rewards page's computeBalances sum. Forty
+      // unordered rows of any status, 20 of them summed, was a sample presented
+      // as "Total points earned". Past the ceiling readAll answers an error and
+      // the route says it could not load, rather than handing over a prefix.
+      const [asg, redemptions, pending] = await settleAll([
+        // Paged on the id (readAllById): an offset read repeats a row written
+        // between its pages, and these rows are summed.
+        readAllByIdAsQuery<{ id: string } & Record<string, unknown>>((after, limit) => {
+          let q = sb.from('chore_assignments')
+            .select('id, member_id, status, points_awarded').eq('family_id', familyId).eq('status', 'approved');
+          if (after) q = q.gt('id', after);
+          return q.order('id').limit(limit);
+        }, { max: 50_000 }),
+        readAllByIdAsQuery<{ id: string } & Record<string, unknown>>((after, limit) => {
+          let q = sb.from('reward_redemptions')
+            .select('id, member_id, cost_points, status, created_at').eq('family_id', familyId);
+          if (after) q = q.gt('id', after);
+          return q.order('id').limit(limit);
+        }, { max: 50_000 }),
+        sb.from('chore_assignments').select('id', { count: 'exact', head: true })
+          .eq('family_id', familyId).in('status', ['todo', 'in_progress', 'submitted']),
       ]);
-      return { chore_assignments: asg.data ?? [], reward_redemptions: redemptions.data ?? [] };
+      required([['chore_assignments', asg.error], ['reward_redemptions', redemptions.error], ['chore_assignments', pending.error]]);
+      return { chore_assignments: asg.data ?? [], reward_redemptions: redemptions.data ?? [], pending_chores: [{ count: pending.count ?? 0 }] };
     }
     case 'photos': {
-      const [photos, albums] = await Promise.all([
-        eq(sb, 'family_photos', familyId).order('created_at', { ascending: false }).limit(20),
-        eq(sb, 'family_albums', familyId).order('created_at', { ascending: false }).limit(10),
+      // The rows are the most recent few; the TOTALS are counted, not taken
+      // from the length of a capped read — "Photos: 20 total" was said of a
+      // family with thousands. Every read is checked (required()).
+      const [photos, albums, photoTotal, albumTotal] = await settleAll([
+        eq(sb, 'family_photos', familyId).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(20),
+        eq(sb, 'family_albums', familyId).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(10),
+        sb.from('family_photos').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
+        sb.from('family_albums').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
       ]);
-      return { family_photos: photos.data ?? [], family_albums: albums.data ?? [] };
+      required([['family_photos', photos.error], ['family_albums', albums.error], ['family_photos', photoTotal.error], ['family_albums', albumTotal.error]]);
+      return {
+        family_photos: photos.data ?? [], family_albums: albums.data ?? [],
+        photo_totals: [{ photos: photoTotal.count ?? 0, albums: albumTotal.count ?? 0 }],
+      };
     }
     case 'celebrations': {
-      const dates = await eq(sb, 'family_dates', familyId).order('date').limit(30);
-      return { family_dates: dates.data ?? [] };
+      // `event_date`, not `date`: the column 0048 created. Ordering by a column
+      // that does not exist failed every call, and the empty result read as
+      // "none found". The module also lists the members' own birthdays, so the
+      // prompt is given those too.
+      const [dates, people] = await Promise.all([
+        eq(sb, 'family_dates', familyId).order('event_date').limit(60),
+        sb.from('family_members').select('id, display_name, birthday').eq('family_id', familyId).eq('is_active', true).not('birthday', 'is', null).limit(50),
+      ]);
+      required([['family_dates', dates.error], ['family_members', people.error]]);
+      return { family_dates: dates.data ?? [], family_members: people.data ?? [] };
     }
     case 'signups': {
-      const opps = await eq(sb, 'opportunities', familyId).order('deadline', { ascending: true, nullsFirst: false }).limit(40);
-      return { opportunities: opps.data ?? [] };
+      // What the advisor reasons about: sign-ups still open (the tracker's own
+      // isOpen, lib/opportunities/deadlines.ts) whose deadline is today or
+      // later, soonest first, and how many there are. It read the 40 OLDEST
+      // rows of any status, so once a family had thirty past sign-ups the
+      // read was all history and "Deadlines within 14 days: 0" was said over
+      // one closing this week. A failed read is not "0 open" at HTTP 200.
+      const [opps, open] = await settleAll([
+        eq(sb, 'opportunities', familyId).in('status', OPEN_OPPORTUNITY_STATUSES)
+          .or(`deadline.is.null,deadline.gte.${viewer.todayKey}`)
+          .order('deadline', { ascending: true, nullsFirst: false }).order('id').limit(40),
+        sb.from('opportunities').select('id', { count: 'exact', head: true }).eq('family_id', familyId)
+          .in('status', OPEN_OPPORTUNITY_STATUSES).or(`deadline.is.null,deadline.gte.${viewer.todayKey}`),
+      ]);
+      required([['opportunities', opps.error], ['opportunities', open.error]]);
+      if (typeof open.count !== 'number') throw new Error('opportunities count was not returned');
+      return { opportunities: opps.data ?? [], opportunity_totals: [{ open: open.count }] };
     }
     case 'behavior': {
-      const logs = await eq(sb, 'behavior_logs', familyId).order('occurred_at', { ascending: false }).limit(30);
+      // The Behavior page's rule (the held 0510, lib/care/note-scope.ts): a
+      // parent, an adult or a caregiver reads every note; anyone else the
+      // notes they wrote. The page narrows a teen's or child's read to those
+      // and hides this button from them, and a direct POST still summarised
+      // every note in the family, siblings' included. Narrowed before the
+      // limit, as the page does, rather than left to RLS. A failed read is
+      // not "0 positive, 0 challenging" at HTTP 200.
+      const notes = eq(sb, 'behavior_logs', familyId);
+      const logs = await (readsEveryNote(viewer.role) ? notes : notes.eq('logged_by', viewer.userId))
+        .order('occurred_at', { ascending: false }).limit(30);
+      required([['behavior_logs', logs.error]]);
       return { behavior_logs: logs.data ?? [] };
     }
     case 'screen_time': {
@@ -531,42 +768,77 @@ async function fetchRows(
         eq(sb, 'screen_time_entries', familyId).order('entry_date', { ascending: false }).limit(20),
         eq(sb, 'screen_time_limits', familyId).limit(10),
       ]);
+      required([['screen_time_entries', entries.error], ['screen_time_limits', limits.error]]);
       return { screen_time_entries: entries.data ?? [], screen_time_limits: limits.data ?? [] };
     }
     case 'binder': {
       const items = await eq(sb, 'household_info', familyId).order('category').order('sort').limit(50);
+      required([['household_info', items.error]]);
       return { household_info: items.data ?? [] };
     }
     case 'memories': {
-      const [memories, trips] = await Promise.all([
-        eq(sb, 'trip_memories', familyId).order('memory_date', { ascending: false }).limit(20),
-        eq(sb, 'vacations', familyId).order('created_at', { ascending: false }).limit(10),
+      // As for photos: checked reads, and counted totals rather than the
+      // length of a capped read labelled as one.
+      const [memories, trips, memoryTotal, tripTotal] = await settleAll([
+        eq(sb, 'trip_memories', familyId).order('memory_date', { ascending: false }).order('id', { ascending: false }).limit(20),
+        eq(sb, 'vacations', familyId).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(10),
+        sb.from('trip_memories').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
+        sb.from('vacations').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
       ]);
-      return { trip_memories: memories.data ?? [], vacations: trips.data ?? [] };
+      required([['trip_memories', memories.error], ['vacations', trips.error], ['trip_memories', memoryTotal.error], ['vacations', tripTotal.error]]);
+      return {
+        trip_memories: memories.data ?? [], vacations: trips.data ?? [],
+        memory_totals: [{ memories: memoryTotal.count ?? 0, vacations: tripTotal.count ?? 0 }],
+      };
     }
     case 'timetable': {
       const classes = await eq(sb, 'school_classes', familyId).order('time_slot').limit(40);
+      required([['school_classes', classes.error]]);
       return { school_classes: classes.data ?? [] };
     }
     case 'tax': {
       const docs = await eq(sb, 'tax_documents', familyId).order('tax_year', { ascending: false }).order('created_at', { ascending: false }).limit(40);
+      required([['tax_documents', docs.error]]);
       return { tax_documents: docs.data ?? [] };
     }
     case 'utilities': {
       const bills = await eq(sb, 'utility_bills', familyId).order('period_month', { ascending: false }).limit(24);
+      required([['utility_bills', bills.error]]);
       return { utility_bills: bills.data ?? [] };
     }
     case 'rides': {
-      const rides = await eq(sb, 'rides', familyId).order('ride_date').order('pickup_time', { nullsFirst: false }).limit(30);
-      return { rides: rides.data ?? [] };
+      // From the family's today: oldest-first with no date bound, a family with
+      // thirty past rides was handed only past ones and told it had none ahead.
+      // And only rides still to happen ('planned' or 'confirmed', 0027's
+      // ride_status), every one of them (readAll): a cap taken before the
+      // cancelled and completed rows were dropped let thirty of those hide a
+      // planned ride, and the prompt's counts are only true if nothing is cut.
+      const rides = await readAll<Record<string, unknown>>((from, to) => sb.from('rides').select('*').eq('family_id', familyId)
+        .gte('ride_date', viewer.todayKey).in('status', ['planned', 'confirmed'])
+        .order('ride_date').order('pickup_time', { nullsFirst: false }).order('id').range(from, to));
+      required([['rides', rides.error]]);
+      return { rides: rides.rows };
     }
     case 'votes': {
-      const [polls, options, votes] = await Promise.all([
-        eq(sb, 'family_polls', familyId).order('created_at', { ascending: false }).limit(15),
-        eq(sb, 'family_poll_options', familyId).limit(60),
-        eq(sb, 'family_poll_votes', familyId).limit(60),
+      // The options and votes OF the polls listed. Read as the family's first
+      // sixty of each, in no order and for any poll, a family whose older polls
+      // held sixty votes was told its newest poll had none.
+      const polls = await eq(sb, 'family_polls', familyId).order('created_at', { ascending: false }).limit(15);
+      required([['family_polls', polls.error]]);
+      // Every row of those polls (readAll), so no cap can cut one short.
+      const pollIds = (polls.data ?? []).map((p) => p.id as string);
+      // settleAll: a read that never completes comes back as an error, which
+      // required() refuses, instead of taking the other read down with it.
+      const [options, votes] = await settleAll([
+        readAll<Record<string, unknown>>((from, to) => sb.from('family_poll_options').select('*').eq('family_id', familyId).in('poll_id', pollIds).order('id').range(from, to)),
+        readAll<Record<string, unknown>>((from, to) => sb.from('family_poll_votes').select('*').eq('family_id', familyId).in('poll_id', pollIds).order('id').range(from, to)),
       ]);
-      return { family_polls: polls.data ?? [], family_poll_options: options.data ?? [], family_poll_votes: votes.data ?? [] };
+      required([['family_poll_options', options.error], ['family_poll_votes', votes.error]]);
+      return {
+        family_polls: polls.data ?? [],
+        family_poll_options: 'rows' in options ? options.rows : [],
+        family_poll_votes: 'rows' in votes ? votes.rows : [],
+      };
     }
     default:
       return {};

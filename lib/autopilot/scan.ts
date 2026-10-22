@@ -39,19 +39,21 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
-import { buildSuggestions, confidenceTier, type FamilySnapshot } from '@/lib/autopilot/engine';
+import { buildSuggestions, confidenceTier, type FamilySnapshot, type SuggestionDraft } from '@/lib/autopilot/engine';
 import { computeMemberTraits, type MemberTraits, type MemberHistory } from '@/lib/autopilot/twin';
 import { isPolicySuggestionKey } from '@/lib/autopilot/policy-candidates';
 import { runPolicyScan } from '@/lib/autopilot/policy-scan';
 import { archiveStaleSuggestions } from '@/lib/autopilot/history';
 import { draftHasLapsed, reminderIsoFor } from '@/lib/autopilot/reminder-time';
-import { notify } from '@/lib/services/notifications';
+import { notify, type NotifyRecipients } from '@/lib/services/notifications';
+import { activeRoster, medicationReaderIds, type RosterMember } from '@/lib/autopilot/medication-readers';
+import { audienceMemberIds, reminderMemberFor, suggestionAudience, suggestionVisibleTo, type AudienceViewer } from '@/lib/autopilot/audience';
 import { sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedTimeMs } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { wroteNoRows } from '@/lib/supabase/errors';
-import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
+import { ensureDefaultGroceryListId, openGroceryListIds } from '@/lib/services/groceries';
 import type { LocaleCode } from '@/lib/i18n/locales';
 
 type DB = SupabaseClient<Database>;
@@ -131,6 +133,83 @@ async function getOrCreateGroceryListId(supabase: DB, familyId: string, userId: 
   return list.id;
 }
 
+/** A card this scan found under a draft's key, as the prior read selects it. */
+type PriorCard = { id: string; status: Database['public']['Tables']['autopilot_suggestions']['Row']['status']; kind: string | null; source_kind: string | null; member_id: string | null; resolved_by: string | null };
+
+/**
+ * Keep an insurance card's member in step with its policy (0486).
+ *
+ * An insurance card's `member_id` is who may read it besides the managers
+ * (lib/autopilot/audience.ts, and 0486 in RLS), copied from
+ * `family_insurance_policies.member_id` when the card is written. A card is
+ * written once per key and then left alone, so a policy reassigned to another
+ * member, or a card written before the scan stored the member at all that
+ * 0486's backfill did not reach, kept naming the old one: the newly named
+ * member could not read it, and their own scan drafted it, could not see the
+ * prior row, inserted, met 23505 and carried on, on every open; the previously
+ * named member kept reading it.
+ *
+ * Only `member_id` is written, by id and family, and confirmed: the status and
+ * every other column are the household's. On the nightly scan (no viewer, the
+ * service role) whenever the policy names someone else; on a member's own scan
+ * only when that member may read the card both before and after, i.e. a
+ * manager — 0486's update guard — and the card is unresolved or resolved by
+ * that member: 0327's resolver guard keeps `resolved_by` the resolver's, so a
+ * manager's write to a card somebody else resolved is refused, and is not
+ * asked for. So a scan never asks for a write RLS would refuse.
+ *
+ * The window that leaves: from the reassignment until the next nightly scan
+ * (or a manager's, for a card nobody else resolved), the newly named member
+ * still takes the 23505 path on their own scan and the previously named member
+ * still reads the card. And only a card whose draft a scan still builds is
+ * refreshed: insurance drafts are made for active policies renewing within
+ * the next 30 days, so a policy reassigned after its renewal day, or after it
+ * was deactivated, leaves its card naming the old member. A failed refresh is
+ * logged and the scan goes on.
+ *
+ * Two scans can overlap (the nightly run and a manager's, or two managers'),
+ * each with its own read of the policy. The write lands only while the card
+ * still names the member this scan read on it, so a scan that read the policy
+ * before it was reassigned again cannot put its older member back over a newer
+ * scan's: it writes nothing, and the next scan reconciles the card with the
+ * policy as it then stands (AUD-1031-REFRESH-CONSISTENCY).
+ *
+ * An accepted card is left as it is. Accepting one (resolveSuggestion,
+ * 'executed'; 'approved' on its way there) writes a family_reminders row
+ * stamped with the card's tag, which is minted from the card's columns,
+ * member_id among them (lib/services/autopilot suggestionSourceTag), and a
+ * repeating reminder's next occurrence carries that tag alone. Rewriting the
+ * member would leave the copies naming a tag no card mints, and they would
+ * fall to the managers alone. So an accepted card, and the reminders made from
+ * it, keep the member the card was accepted under — one accepted after this
+ * scan read it included: the write also names the status the scan read.
+ */
+async function refreshPolicyCardMember(
+  supabase: DB, familyId: string, prior: PriorCard, draft: SuggestionDraft, viewer: AudienceViewer | null, userId: string | null,
+): Promise<void> {
+  const memberId = draft.memberId ?? null;
+  if (suggestionAudience({ kind: draft.kind, source_kind: draft.sourceKind, member_id: memberId }) !== 'policy-readers') return;
+  const before = { kind: prior.kind, source_kind: prior.source_kind, member_id: prior.member_id ?? null };
+  if (suggestionAudience(before) !== 'policy-readers' || before.member_id === memberId) return;
+  if (viewer && !(suggestionVisibleTo(before, viewer) && suggestionVisibleTo({ ...before, member_id: memberId }, viewer))) return;
+  if (viewer && prior.resolved_by && prior.resolved_by !== userId) return;
+  if (prior.status === 'executed' || prior.status === 'approved') return;
+  try {
+    // Only while the card is still as this scan read it: the same member (an
+    // overlapping scan's newer one is not overwritten) and the same status (a
+    // card accepted since this scan's read is an accepted card, above).
+    const write = supabase.from('autopilot_suggestions')
+      .update({ member_id: memberId }).eq('id', prior.id).eq('family_id', familyId).eq('status', prior.status);
+    const observed = before.member_id === null ? write.is('member_id', null) : write.eq('member_id', before.member_id);
+    // No row written is a scan that lost the card to a newer scan or to an
+    // acceptance (above): not a failure, and nothing to undo.
+    const { error } = await observed.select('id');
+    if (error) console.error('[autopilot] insurance card member refresh failed', error);
+  } catch (error) {
+    console.error('[autopilot] insurance card member refresh failed', error);
+  }
+}
+
 /**
  * `tz` is the family's IANA zone — `ctx.active.family.timezone` on the
  * on-demand route, and `families.timezone` on the row the cron is already
@@ -153,6 +232,11 @@ export async function runAutopilotScan(
   locale: LocaleCode,
   t: Translate,
   now: Date = new Date(),
+  // The member whose own client runs this scan (app/api/autopilot/scan/route.ts),
+  // or null for the cron's service role, which writes every card. 0486 lets a
+  // member read only the cards lib/autopilot/audience.ts gives them, and the
+  // insert below reads its row back, so a member's scan writes only those.
+  viewer: AudienceViewer | null = null,
 ): Promise<AutopilotScanResult> {
   // Built once, lazily: the scope read costs a query, and most scans produce no
   // notification at all. Null means the family could not be read, and the
@@ -160,7 +244,12 @@ export async function runAutopilotScan(
   // quiet hours evaluated in the wrong zone hold a notice at six in the evening
   // and let one through at two in the morning.
   let notifyScope: ServiceScope | null = null;
+  let roster: Promise<RosterMember[] | null> | null = null;
   const { todayKey, in30Key, since8Key, since90Key, horizonEndKey, startIso, in3Iso, since90Iso } = scanWindow(tz, now);
+  // "Still need: X" is only asked about items on a list the family has not
+  // archived; a leftover on an archived list is off the shopping page.
+  const openLists = await openGroceryListIds(supabase, familyId);
+  if (!openLists.ok) throw new Error('Autopilot could not read the required family data');
   const [
     renewalsResult, apptsResult, choreRowsResult,
     membersResult, groceriesResult, apptRemindersResult,
@@ -171,7 +260,7 @@ export async function runAutopilotScan(
     supabase.from('appointments').select('id, title, starts_at, member_id').eq('family_id', familyId).gte('starts_at', startIso).lt('starts_at', in3Iso).limit(50),
     supabase.from('chore_assignments').select('id, due_at, member_id, status, chores(title)').eq('family_id', familyId).in('status', ['todo', 'in_progress']).lt('due_at', startIso).limit(100),
     supabase.from('family_members').select('id, display_name, birthday').eq('family_id', familyId).eq('is_active', true).not('birthday', 'is', null).limit(50),
-    supabase.from('grocery_items').select('id, name, created_at, is_checked').eq('family_id', familyId).eq('is_checked', false).limit(200),
+    supabase.from('grocery_items').select('id, name, created_at, is_checked').eq('family_id', familyId).in('list_id', openLists.ids).eq('is_checked', false).limit(200),
     supabase.from('reminders').select('related_id').eq('family_id', familyId).eq('related_type', 'appointment').eq('is_done', false).limit(200),
     supabase.from('calendar_events').select('id, title, starts_at, ends_at, assignee_id, all_day, location, feed_id, external_uid').eq('family_id', familyId).gte('starts_at', startIso).lt('starts_at', in3Iso).limit(100),
     supabase.from('subscriptions_tracked').select('id, name, cost_cents, cadence, next_charge, last_used, status').eq('family_id', familyId).in('status', ['active', 'trial']).limit(200),
@@ -182,7 +271,7 @@ export async function runAutopilotScan(
     supabase.from('family_digital_twin_profiles').select('id, member_id, metadata').eq('family_id', familyId).limit(50),
     // Meal Agent / Family Memory: 90d of dinner history + the next few days' plans.
     supabase.from('meal_plans').select('plan_date, meal_type, meals(name)').eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', since90Key).limit(500),
-    supabase.from('family_insurance_policies').select('id, policy_type, insurer, renewal_date').eq('family_id', familyId).eq('is_active', true).not('renewal_date', 'is', null).lte('renewal_date', in30Key).limit(100),
+    supabase.from('family_insurance_policies').select('id, policy_type, insurer, renewal_date, member_id').eq('family_id', familyId).eq('is_active', true).not('renewal_date', 'is', null).lte('renewal_date', in30Key).limit(100),
     // Family Memory: wish-list items → gift ideas for upcoming birthdays.
     // ALL of them, bought or not. The suggestion is about the member whose
     // birthday it is, it is notified to the whole family (that member too)
@@ -194,8 +283,9 @@ export async function runAutopilotScan(
     // EVERY live key, paged. Resolved rows keep their key for good, so a busy
     // family passes any fixed cap; a prior key missing from a capped page was
     // re-inserted, hit UNIQUE(family_id, dedupe_key), and failed the scan on
-    // every run after its side effect had already been written.
-    readAllAsQuery((from, to) => supabase.from('autopilot_suggestions').select('id, dedupe_key, status')
+    // every run after its side effect had already been written. Its kind,
+    // source and member say who reads it (refreshPolicyCardMember, below).
+    readAllAsQuery((from, to) => supabase.from('autopilot_suggestions').select('id, dedupe_key, status, kind, source_kind, member_id, resolved_by')
       .eq('family_id', familyId).not('dedupe_key', 'like', 'archived:%').order('id').range(from, to), { max: 50_000 }),
   ]);
 
@@ -277,7 +367,7 @@ export async function runAutopilotScan(
     medications: (meds ?? []).map((x) => ({ id: x.id, name: x.name, memberId: x.member_id, refillOn: x.refill_on as string, reminderDays: x.refill_reminder_days })),
     favoriteMeals,
     plannedDinnerDays,
-    insurance: (insurance ?? []).map((p) => ({ id: p.id, label: `${p.policy_type} insurance (${p.insurer})`, renewalOn: p.renewal_date as string })),
+    insurance: (insurance ?? []).map((p) => ({ id: p.id, label: `${p.policy_type} insurance (${p.insurer})`, renewalOn: p.renewal_date as string, memberId: p.member_id ?? null })),
   };
 
   // Digital Twin: learn per-member reliability from chore history, persist it to
@@ -343,7 +433,17 @@ export async function runAutopilotScan(
   let notified = 0;
   for (const d of drafts) {
     const prior = existingByKey.get(d.dedupeKey);
+    // A prior card's member is the one thing kept in step with its source, and
+    // only on an insurance card, where it says who may read it.
+    if (prior) await refreshPolicyCardMember(supabase, familyId, prior, d, viewer, userId);
     if (prior) continue; // respect prior state (resolved or already-open); avoid churn
+    // A card this member may not read is not theirs to write. Under 0486 the
+    // insert's read-back (`.select('id')`) would refuse it with 42501 and
+    // throw, failing the whole scan: a child opening Autopilot while a
+    // parent's policy renews. The nightly scan (service role) or a reader's
+    // own scan writes it. Skipped before any side effect; its key stays in
+    // `draftKeys`, so an open card for it is not archived as stale.
+    if (viewer && !suggestionVisibleTo({ kind: d.kind, source_kind: d.sourceKind, member_id: d.memberId }, viewer)) continue;
 
     const isAuto = confidenceTier(d.confidence) === 'auto';
     let status: 'open' | 'auto_executed' = 'open';
@@ -367,11 +467,24 @@ export async function runAutopilotScan(
       if (!at) continue;
       const relatedType = d.sourceKind === 'appointments' ? 'appointment'
         : d.sourceKind === 'calendar_events' ? 'event' : 'renewal';
+      // The member the reminder is FOR, which is not always the card's member:
+      // an insurance card names whose policy it is, not who renews it, and its
+      // reminder is told to the card's readers by the notifications generator
+      // (lib/autopilot/audience.ts reminderMemberFor).
+      //
+      // Written BEFORE its card, and kept so: the card's status says whether
+      // the reminder exists ('auto_executed' or 'open'), and a card saved
+      // first would claim a reminder that may never be written. So there is
+      // a moment — and, when the card fails to save and the clean-up below
+      // fails too, no end to it — in which this reminder links to a source no
+      // card names yet. Every reader treats such a link as the managers'
+      // alone (lib/autopilot/reminder-cards.ts), so it reaches no reader the
+      // card would refuse before the card is there to say who may.
       const { data: reminder, error: remErr } = await supabase.from('reminders').insert({
         family_id: familyId,
         title: (d.payload.title as string) ?? d.title,
         remind_at: at,
-        member_id: d.memberId,
+        member_id: reminderMemberFor({ kind: d.kind, source_kind: d.sourceKind, member_id: d.memberId }),
         related_type: relatedType,
         related_id: d.sourceId,
         created_by: userId,
@@ -411,7 +524,11 @@ export async function runAutopilotScan(
       status,
       action_type: d.actionType,
       action_label: d.actionLabel,
-      payload: d.payload as never,
+      // The card names the reminder written for it above (`reminder_id`), so a
+      // reader finds this occurrence's card by the reminder's own id and never
+      // by its source alone: an older card for the same policy, naming another
+      // member, is not this reminder's (lib/autopilot/reminder-cards.ts).
+      payload: (createdReminderId ? { ...d.payload, reminder_id: createdReminderId } : d.payload) as never,
       source_kind: d.sourceKind,
       source_id: d.sourceId,
       dedupe_key: d.dedupeKey,
@@ -466,10 +583,28 @@ export async function runAutopilotScan(
     if (d.urgency >= 2 || status === 'auto_executed') {
       const scope = notifyScope ?? (notifyScope = await systemScopeForFamily(supabase, familyId));
       if (scope) {
+        // A refill names the drug, so it goes only to the people the held 0511
+        // lets read that medication; the family hears nothing of it.
+        let privateTo: NotifyRecipients | null = null;
+        if (d.audience === 'medication-readers') {
+          const members = await (roster ?? (roster = activeRoster(supabase, familyId)));
+          privateTo = members ? medicationReaderIds(members, d.memberId) : 'managers';
+        }
+        // A subscription charge or a renewal is not a guest's (0481 refuses a
+        // guest both tables), and an insurance renewal is the managers' and the
+        // member the policy names (lib/autopilot/audience.ts). 'family' sent
+        // both to every member with a login, guests included.
+        const audience = suggestionAudience({ kind: d.kind, source_kind: d.sourceKind, member_id: d.memberId });
+        if (!privateTo && audience !== 'everyone') {
+          const members = await (roster ?? (roster = activeRoster(supabase, familyId)));
+          privateTo = members ? audienceMemberIds(audience, members, d.memberId) : 'managers';
+        }
         const sent = await notify(scope, {
-          recipients: 'family',
+          recipients: privateTo ?? 'family',
           type: 'system',
-          title: status === 'auto_executed' ? `Autopilot handled: ${d.title}` : (d.notificationTitle ?? d.title),
+          title: status === 'auto_executed'
+            ? `Autopilot handled: ${privateTo ? (d.notificationTitle ?? d.title) : d.title}`
+            : (d.notificationTitle ?? d.title),
           body: d.detail,
           relatedType: 'autopilot_suggestions',
           relatedId: inserted.id,

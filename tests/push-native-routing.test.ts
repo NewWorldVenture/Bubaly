@@ -4,7 +4,7 @@ import { pushConfigured, sendPushToUser } from '@/lib/server/push';
 
 const native = vi.hoisted(() => ({ send: vi.fn(), configured: vi.fn() }));
 vi.mock('@/lib/server/native-push', () => ({ sendNativePush: native.send, nativePushConfigured: native.configured }));
-type Device = { id: string; user_id: string; enabled: boolean; provider: string; token: string };
+type Device = { id: string; user_id: string; enabled: boolean; provider: string; token: string; last_seen_at?: string };
 function fixture(devices: Device[], pruneError = false) {
   const f = pushDispatchDb({ push_devices: devices, family_members: [], family_ai_settings: [], user_preferences: [] });
   if (pruneError) f.faults.add('push_devices:delete');
@@ -21,7 +21,12 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 it('sends Android and iOS registrations to their actual providers, scoped to the recipient', async () => {
-  const f = fixture([device('fcm'), device('apns'), device('fcm', 'other-family', 'u2')]);
+  // A recipient's devices are sent to newest first (lib/server/push.ts caps them by last_seen_at).
+  const f = fixture([
+    { ...device('fcm'), last_seen_at: '2026-10-02T00:00:00.000Z' },
+    { ...device('apns'), last_seen_at: '2026-10-01T00:00:00.000Z' },
+    device('fcm', 'other-family', 'u2'),
+  ]);
   expect(await sendPushToUser(f.db, 'u1', payload)).toEqual({ sent: 2, failed: 0, skipped: 0, pruned: 0, withheld: 0 });
   expect(native.send.mock.calls).toEqual([['fcm', 'fcm-fixture-token', payload], ['apns', 'apns-fixture-token', payload]]);
 });

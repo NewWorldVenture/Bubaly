@@ -360,7 +360,7 @@ describe('ages, renewals, trips and due dates count from the family\'s calendar 
     ['components/modules/family-module.tsx', 'memberAge(m.birthday, now)'],
     ['components/modules/billing-module.tsx', 'memberAge(m?.birthday ?? null, familyDay)'],
     ['components/medical/print-sheet.tsx', 'ageFrom(member.birthday, clock.calendarToday())'],
-    ['components/modules/insurance-module.tsx', 'insuranceSummary(policies.data, today)'],
+    ['components/modules/insurance-module.tsx', 'insuranceSummary(visiblePolicies, today)'],
   ])('%s', (file, call) => {
     const src = readFileSync(join(__dirname, '..', file), 'utf8');
     expect(src).toContain(call);
@@ -374,7 +374,7 @@ describe('ages, renewals, trips and due dates count from the family\'s calendar 
     ['components/modules/immunizations-module.tsx', ['daysUntilDue(s, familyToday)', 'dueStatus(s, familyToday)']],
     ['components/modules/health-visits-module.tsx', ['daysUntilFollowUp(v, familyToday)']],
     ['components/modules/pets-module.tsx', ['upcomingCare(records.data, familyToday)', 'petAgeLabel(pet.birthday, familyToday)', 'upcomingCare(petRecords, familyToday)', 'careUrgency(r.next_due, familyToday)']],
-    ['components/modules/insurance-module.tsx', ['upcomingRenewals(policies.data, today)', 'renewalUrgency(p.renewal_date, today)', 'renewalUrgency(policy.renewal_date, today)']],
+    ['components/modules/insurance-module.tsx', ['upcomingRenewals(visiblePolicies, today)', 'renewalUrgency(p.renewal_date, today)', 'renewalUrgency(policy.renewal_date, today)']],
     ['components/finance/bills-view.tsx', ['billDueStatus(b, familyToday)', '[visible, mode, familyToday]']],
     ['components/finance/budgets-view.tsx', ['budgetSpent(allTxns, b.category, b.period as Period, familyToday)']],
   ])('%s passes the family\'s day to its date-only helpers (#688 comment 5922119441 and the sweep after it)', (file, calls) => {

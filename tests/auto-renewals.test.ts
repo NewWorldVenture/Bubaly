@@ -4,22 +4,25 @@ import {
 } from '@/lib/auto/renewals';
 
 const isoInDays = (d: number) => new Date(Date.now() + d * 86400000).toISOString();
+// The family's day the statuses are counted from — here Greenwich's, the same
+// clock `isoInDays` above writes in.
+const TODAY = new Date().toISOString().slice(0, 10);
 
 describe('renewalStatus', () => {
   it('flags expired', () => {
-    const s = renewalStatus(isoInDays(-3));
+    const s = renewalStatus(isoInDays(-3), TODAY);
     expect(s.tone).toBe('danger');
     expect(s.expired).toBe(true);
   });
   it('warns within 30 days', () => {
-    expect(renewalStatus(isoInDays(15)).tone).toBe('warning');
+    expect(renewalStatus(isoInDays(15), TODAY).tone).toBe('warning');
   });
   it('is healthy when far out', () => {
-    expect(renewalStatus(isoInDays(200)).tone).toBe('success');
+    expect(renewalStatus(isoInDays(200), TODAY).tone).toBe('success');
   });
   it('handles missing date', () => {
-    expect(renewalStatus(null).tone).toBe('neutral');
-    expect(daysUntil(undefined)).toBeNull();
+    expect(renewalStatus(null, TODAY).tone).toBe('neutral');
+    expect(daysUntil(undefined, TODAY)).toBeNull();
   });
 });
 
@@ -44,7 +47,7 @@ describe('buildRenewals', () => {
       registrations: [{ id: 'r1', vehicle_id: 'v1', expires_on: isoInDays(10) }],
       inspections: [{ id: 'i1', vehicle_id: 'v1', expires_on: isoInDays(100), inspection_type: 'safety' }],
       policies: [{ id: 'p1', provider: 'GEICO', vehicle_id: 'v1', expires_on: isoInDays(30) }],
-      vehicleName,
+      vehicleName, todayKey: TODAY,
     });
     expect(items.map((i) => i.kind)).toEqual(['registration', 'insurance', 'license', 'inspection']);
     expect(items[0].subject).toBe('Car One');
@@ -53,7 +56,7 @@ describe('buildRenewals', () => {
   it('skips records without an expiry date', () => {
     const items = buildRenewals({
       licenses: [{ id: 'l1', holder_name: 'Pat', expires_on: null }],
-      registrations: [], inspections: [], policies: [], vehicleName,
+      registrations: [], inspections: [], policies: [], vehicleName, todayKey: TODAY,
     });
     expect(items).toHaveLength(0);
   });
@@ -62,7 +65,7 @@ describe('buildRenewals', () => {
     const items = buildRenewals({
       licenses: [], registrations: [{ id: 'r1', vehicle_id: 'v1', expires_on: isoInDays(5) }],
       inspections: [{ id: 'i1', vehicle_id: 'v1', expires_on: isoInDays(200), inspection_type: 'safety' }],
-      policies: [], vehicleName,
+      policies: [], vehicleName, todayKey: TODAY,
     });
     expect(dueSoonCount(items, 30)).toBe(1);
   });

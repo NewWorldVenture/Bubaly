@@ -74,7 +74,7 @@ function renderChecklist(body: string) {
     if (checked || unchecked) {
       const text = line.trim().replace(/^\[[ x]\]\s*/i, '');
       return (
-        <div key={i} className={cn('flex items-start gap-2 py-0.5 text-sm', checked && 'opacity-50')}>
+        <div key={i} className="flex items-start gap-2 py-0.5 text-sm">
           {checked
             ? <CheckSquare className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-success" />
             : <Square className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-muted" />}
@@ -157,7 +157,7 @@ export function NotesModule() {
         description={t('notesModule.sharedFamilyNotesChecklistsIdeas')}
         action={
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2">
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
               <Search className="h-3.5 w-3.5 text-muted" />
               <input value={search} onChange={(e) => setSearch(e.target.value)}
                 placeholder={t('notes.searchNotes')}
@@ -181,7 +181,7 @@ export function NotesModule() {
             className={cn('tab-item', activeCategory === cat.id ? 'tab-item-active' : 'tab-item-inactive')}>
             <cat.icon className="h-3.5 w-3.5" />
             {cat.label}
-            <span className="ml-1 text-xs opacity-70">
+            <span className="ml-1 text-xs font-normal">
               {cat.id === 'all' ? data.length : data.filter((n) => n.is_pinned).length}
             </span>
           </button>
@@ -292,7 +292,7 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
               </button>
               {checklist && <span className="text-xs text-success">{checkCount}/{totalCheck}</span>}
               <span suppressHydrationWarning className="hidden text-xs text-muted sm:block">{fmtRelative(note.updated_at)}</span>
-              <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
+              <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 coarse:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
                 <button aria-label={t(note.is_pinned ? 'a11y.unpin' : 'a11y.pin')} onClick={() => onTogglePin(note)} className="rounded p-1.5 text-muted hover:text-brand-text">
                   {note.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
                 </button>
@@ -348,7 +348,7 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
                   const unchecked = /^\[ \]/.test(line.trim());
                   if (!checked && !unchecked) return null;
                   return (
-                    <div key={i} className={cn('flex items-center gap-1.5 text-xs', checked && 'opacity-50')}>
+                    <div key={i} className="flex items-center gap-1.5 text-xs">
                       {checked
                         ? <CheckSquare className="h-3 w-3 text-success flex-shrink-0" />
                         : <Square className="h-3 w-3 text-muted flex-shrink-0" />}
@@ -369,11 +369,11 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
                 <Clock className="h-2.5 w-2.5" />
                 {fmtRelative(note.updated_at)}
               </div>
-              <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
-                <button aria-label={t(note.is_pinned ? 'a11y.unpin' : 'a11y.pin')} onClick={() => onTogglePin(note)} className="rounded p-1 text-muted hover:text-brand-text">
+              <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 coarse:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
+                <button aria-label={t(note.is_pinned ? 'a11y.unpin' : 'a11y.pin')} onClick={() => onTogglePin(note)} className="rounded p-1.5 text-muted hover:text-brand-text">
                   {note.is_pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
                 </button>
-                <button aria-label={t('a11y.delete')} onClick={async () => { if (await askConfirm({ title: t('notesModule.deleteThisNote'), body: t('confirm.cannotBeUndone') })) onDelete(note.id); }} className="rounded p-1 text-muted hover:text-danger">
+                <button aria-label={t('a11y.delete')} onClick={async () => { if (await askConfirm({ title: t('notesModule.deleteThisNote'), body: t('confirm.cannotBeUndone') })) onDelete(note.id); }} className="rounded p-1.5 text-muted hover:text-danger">
                   <Trash2 className="h-3 w-3" />
                 </button>
               </div>
@@ -407,6 +407,10 @@ function NoteModal({ note, onClose, onSaved }: {
   const [selectedColor, setSelectedColor] = useState((note as Record<string, unknown> | null)?.color as string ?? 'default');
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [bodyValue, setBodyValue] = useState(note?.body ?? '');
+  // What the note held when this editor OPENED — captured once, so a newer copy
+  // of the note arriving while the editor is open does not quietly become the
+  // version this save is allowed to replace.
+  const [base] = useState(() => (note ? { title: note.title ?? null, body: note.body ?? '' } : null));
   const [aiLoading, setAiLoading] = useState(false);
   const [insights, setInsights] = useState<NotesInsights | null>(null);
 
@@ -450,7 +454,7 @@ function NoteModal({ note, onClose, onSaved }: {
     if (!body && !title) return toastError(t('notesModule.noteMustHaveContent'));
     setLoading(true);
     try {
-      const res = await saveNoteAction(note?.id ?? null, { title, body: body ?? '' });
+      const res = await saveNoteAction(note?.id ?? null, { title, body: body ?? '', ...(base ? { base } : {}) });
       if (!res.ok) {
         if (active.current) toastError(res.error);
         return;

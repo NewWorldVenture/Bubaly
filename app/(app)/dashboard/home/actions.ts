@@ -8,6 +8,7 @@ import { createServer } from '@/lib/supabase/server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { refusalError, refusalForError } from '@/lib/actions/refusal';
 import { DEFAULT_CADENCES } from '@/lib/home/maintenance';
+import { alreadyOnOrAfter, isDayKey, onlyForward } from '@/lib/home/service-dates';
 
 async function ctx() {
   const c = await requireUserContext();
@@ -42,6 +43,26 @@ function revalidateAsset(assetId: string | null) {
   revalidatePath(`/dashboard/home/assets/${assetId}`);
 }
 
+/** A form's asset selection must still be readable in the active family. */
+async function requireLinkedAsset(
+  supabase: Awaited<ReturnType<typeof createServer>>,
+  familyId: string,
+  assetId: string,
+  readFailure: string,
+  notFound: string,
+) {
+  let asset: { id: string } | null;
+  try {
+    const { data, error } = await supabase.from('home_assets').select('id')
+      .eq('id', assetId).eq('family_id', familyId).maybeSingle();
+    if (error) throw error;
+    asset = data;
+  } catch (error) {
+    throw refusalError(describeActionError(error, readFailure), refusalForError(error));
+  }
+  if (!asset) throw refusalError(notFound, 'invalid');
+}
+
 // ── Warranties ──────────────────────────────────────────────────────────────
 export async function saveWarrantyAction(fd: FormData) {
   const tr = await getTranslations();
@@ -65,11 +86,13 @@ export async function saveWarrantyAction(fd: FormData) {
     notes: str(fd, 'notes'),
     updated_by: userId,
   };
+  if (row.asset_id) await requireLinkedAsset(supabase, familyId, row.asset_id, tr('actions.couldNotSaveThatWarranty'), tr('actions.assetNotFound'));
   // Only the UPDATE branch needs confirming: an insert either inserts or
   // errors, so it cannot match zero rows. Same split as `saveRow` in
-  // `dashboard/auto/actions.ts`. Audit C1-S9-47.
+  // `dashboard/auto/actions.ts`. Audit C1-S9-47. A deleted row (`deleted_at`)
+  // matches nothing, so an edit to it is refused rather than saved out of sight.
   const { data: saved, error } = id
-    ? await supabase.from('home_warranties').update(row).eq('id', id).eq('family_id', familyId).select('id')
+    ? await supabase.from('home_warranties').update(row).eq('id', id).eq('family_id', familyId).is('deleted_at', null).select('id')
     : await supabase.from('home_warranties').insert({ ...row, family_id: familyId, created_by: userId });
   if (error) throw refusalError(describeActionError(error, tr('actions.couldNotSaveThatWarranty')), refusalForError(error));
   if (id && wroteNoRows(saved)) throw new Error(tr('actions.couldNotSaveThatWarranty'));
@@ -110,7 +133,7 @@ export async function saveContractorAction(fd: FormData) {
   // errors, so it cannot match zero rows. Same split as `saveRow` in
   // `dashboard/auto/actions.ts`. Audit C1-S9-47.
   const { data: saved, error } = id
-    ? await supabase.from('home_contractors').update(row).eq('id', id).eq('family_id', familyId).select('id')
+    ? await supabase.from('home_contractors').update(row).eq('id', id).eq('family_id', familyId).is('deleted_at', null).select('id')
     : await supabase.from('home_contractors').insert({ ...row, family_id: familyId, created_by: userId });
   if (error) throw refusalError(describeActionError(error, tr('actions.couldNotSaveThatContractor')), refusalForError(error));
   if (id && wroteNoRows(saved)) throw new Error(tr('actions.couldNotSaveThatContractor'));
@@ -133,19 +156,24 @@ export async function saveServiceRecordAction(fd: FormData) {
   const tr = await getTranslations();
   const { familyId, userId, supabase, todayKey } = await ctx();
   const assetId = str(fd, 'asset_id');
-  const serviceDate = str(fd, 'service_date');
-  const { error } = await supabase.from('home_service_records').insert({
+  const typedDate = str(fd, 'service_date');
+  if (assetId) await requireLinkedAsset(supabase, familyId, assetId, tr('actions.couldNotSaveThatService'), tr('actions.assetNotFound'));
+  const { data: saved, error } = await supabase.from('home_service_records').insert({
     family_id: familyId,
     asset_id: assetId,
     title: str(fd, 'title') ?? 'Service',
-    service_date: serviceDate ?? todayKey,
+    service_date: typedDate ?? todayKey,
     provider: str(fd, 'provider'),
     cost: num(fd, 'cost'),
     description: str(fd, 'description'),
     next_due_on: str(fd, 'next_due_on'),
     created_by: userId,
-  });
+  }).select('service_date').single();
   if (error) throw refusalError(describeActionError(error, tr('actions.couldNotSaveThatService')), refusalForError(error));
+  // The date as the database stored it (YYYY-MM-DD, whatever form it was
+  // typed in), when one was typed: an empty field dates the record today and
+  // leaves the asset alone, as it always has.
+  const serviceDate = typedDate && isDayKey(saved?.service_date) ? saved.service_date : null;
   // Keep the asset's last-serviced date fresh for life/forecast math. Best-effort
   // (the record itself is already saved), but log a failure so a broken update is
   // observable instead of silently drifting the forecast math.
@@ -154,10 +182,15 @@ export async function saveServiceRecordAction(fd: FormData) {
     // odometer. An asset id matching no row in this family is the commonest way
     // this quietly does nothing, and only an ERROR was reaching the log that
     // exists to keep the forecast math from drifting unobserved. Audit C1-S9-60.
+    // FORWARD only (lib/home/service-dates): a visit logged after the fact is
+    // history, and moving the asset's date back to it made every recommended
+    // task built from it overdue. Zero rows is then ordinary — the asset was
+    // serviced later — so only a missing asset or an older date is logged.
     const { data: assetTouched, error: assetError } = await supabase.from('home_assets')
-      .update({ last_serviced_on: serviceDate }).eq('id', assetId).eq('family_id', familyId).select('id');
+      .update({ last_serviced_on: serviceDate }).eq('id', assetId).eq('family_id', familyId)
+      .or(onlyForward('last_serviced_on', serviceDate)).select('id');
     if (assetError || wroteNoRows(assetTouched)) {
-      console.error('[home] home_assets last_serviced_on update failed', {
+      if (assetError || !(await alreadyOnOrAfter(supabase, 'home_assets', 'last_serviced_on', familyId, assetId, serviceDate))) console.error('[home] home_assets last_serviced_on update failed', {
         familyId, assetId, error: assetError?.message ?? 'no rows updated',
       });
     }
@@ -172,10 +205,35 @@ export async function deleteServiceRecordAction(id: string) {
   const { familyId, userId, supabase } = await ctx();
   // A soft delete is an update, so it carries the zero-rows hazard — and the
   // caller has already told the family the record is gone. Audit C1-S9-47.
-  const { data: removed, error } = await supabase.from('home_service_records').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId).select('id');
+  const { data: removed, error } = await supabase.from('home_service_records').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId).select('id, asset_id, service_date');
   if (error) throw refusalError(describeActionError(error, tr('actions.couldNotDeleteThatService')), refusalForError(error));
   if (wroteNoRows(removed)) throw new Error(tr('actions.couldNotDeleteThatService'));
+  const gone = removed?.[0];
+  if (gone?.asset_id && isDayKey(gone.service_date)) await restoreLastServiced(supabase, familyId, gone.asset_id, gone.service_date);
   revalidatePath('/dashboard/home/service');
+  revalidateAsset(gone?.asset_id ?? null);
+}
+
+/**
+ * A deleted visit takes its date off the asset: when the asset's
+ * `last_serviced_on` is that visit's date, it falls back to the latest visit
+ * still on file, or to none. A date set by a later visit or by hand is not this
+ * visit's and is left alone (the `.eq` on the old date). Best-effort: the
+ * record is already deleted, so a failure is logged, not raised.
+ */
+async function restoreLastServiced(supabase: Awaited<ReturnType<typeof createServer>>, familyId: string, assetId: string, deletedDate: string) {
+  const { data: latest, error: latestError } = await supabase.from('home_service_records').select('service_date')
+    .eq('family_id', familyId).eq('asset_id', assetId).is('deleted_at', null)
+    .order('service_date', { ascending: false }).order('id').limit(1);
+  if (latestError) {
+    console.error('[home] last-serviced fallback read failed', { familyId, assetId, error: latestError.message });
+    return;
+  }
+  const fallback = latest?.[0]?.service_date ?? null;
+  if (fallback === deletedDate) return;
+  const { error: restoreError } = await supabase.from('home_assets').update({ last_serviced_on: fallback })
+    .eq('id', assetId).eq('family_id', familyId).eq('last_serviced_on', deletedDate).select('id');
+  if (restoreError) console.error('[home] last-serviced fallback write failed', { familyId, assetId, error: restoreError.message });
 }
 
 // ── Deterministic forecast → schedule recommended maintenance for an asset ────

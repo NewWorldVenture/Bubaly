@@ -246,9 +246,9 @@ export function RoutinesPanel({ events, weekStartMonday, timeZone, onApplied }: 
                     <p className="text-[10px] text-muted">{weekdayMaskLabel(t.weekday_mask)} · {its.length} step{its.length === 1 ? '' : 's'}</p>
                   </div>
                   <button onClick={() => setEditing({ template: t, items: its })} aria-label={tr('routines.editRoutine')}
-                    className="rounded p-1 text-muted opacity-0 transition hover:text-fg group-hover:opacity-100"><Pencil className="h-3.5 w-3.5" /></button>
+                    className="rounded p-1 text-muted opacity-100 sm:opacity-0 transition hover:text-fg sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100"><Pencil className="h-3.5 w-3.5" /></button>
                   <button onClick={() => deleteTemplate(t)} disabled={isPending(`del:${t.id}`)} aria-label={tr('routines.deleteRoutine')}
-                    className="rounded p-1 text-muted opacity-0 transition hover:text-danger group-hover:opacity-100">
+                    className="rounded p-1 text-muted opacity-100 sm:opacity-0 transition hover:text-danger sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100">
                     {isPending(`del:${t.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                   </button>
                 </div>
@@ -299,6 +299,9 @@ function RoutineEditor({ familyId, userId, members, template, initialItems, onCl
       : [{ title: '', category: 'general', start: '07:00', duration: 30, assignee_id: '' }],
   );
   const active = useRef(true);
+  // A template this editor created whose steps did not land. A retry finishes
+  // THAT routine; creating another one beside it left an empty duplicate.
+  const created = useRef<string | null>(null);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   function close() { active.current = false; onClose(); }
 
@@ -316,37 +319,70 @@ function RoutineEditor({ familyId, userId, members, template, initialItems, onCl
     setSaving(true);
     try {
       const sb = createClient();
-      let templateId = template?.id;
+      let templateId = template?.id ?? created.current ?? undefined;
+      // The steps this save replaces, by id. Read before the new ones are
+      // written, so the delete below can name exactly them.
+      let previous: string[] = [];
       if (templateId) {
         // The template update licenses replacing its steps, so it is confirmed
         // first: under RLS a refused row is no error and zero rows. Audit C1-S9-82.
         const { data: renamed, error } = await sb.from('routine_templates').update({ name: cleanName, icon, weekday_mask: mask }).eq('id', templateId).select('id');
         if (error) throw error;
         if (wroteNoRows(renamed)) { if (active.current) toastError(tr('errors.thatChangeWasNotSaved')); return; }
-        // Replace items wholesale (simple + correct for a small list). If the
-        // delete fails we must NOT insert or the template keeps the old steps
-        // alongside the new ones (duplicates). Zero rows is a legitimate answer
-        // here (a template whose steps were never written, e.g. a half-saved
-        // one), and the items share the template's policy, which the confirmed
-        // update above has just passed — so this delete is left unconfirmed on
-        // purpose. Audit C1-S9-82.
-        const { error: delErr } = await sb.from('routine_template_items').delete().eq('template_id', templateId);
-        if (delErr) throw delErr;
+        const { data: existing, error: readErr } = await sb.from('routine_template_items').select('id').eq('template_id', templateId).eq('family_id', familyId);
+        if (readErr) throw readErr;
+        previous = (existing ?? []).map((row) => row.id);
       } else {
         const { data, error } = await sb.from('routine_templates').insert({
           family_id: familyId, name: cleanName, icon, weekday_mask: mask, source: 'manual', created_by: userId,
         }).select('id').single();
         if (error || !data) throw error ?? new Error('Could not create');
         templateId = data.id;
+        created.current = data.id;
       }
-      const { error: e2 } = await sb.from('routine_template_items').insert(
+      // The NEW steps first, then the old ones by id. Deleting first meant a
+      // refused insert (a lost connection, an out-of-range minute) left the
+      // routine with no steps at all.
+      const { data: inserted, error: e2 } = await sb.from('routine_template_items').insert(
         steps.map((r, idx) => ({
           template_id: templateId!, family_id: familyId, title: r.title.trim(), category: r.category,
           start_minutes: timeValueToMinutes(r.start), duration_minutes: Number(r.duration) || 30,
           assignee_id: r.assignee_id || null, sort_order: idx,
         })),
-      );
+      ).select('id');
       if (e2) throw e2;
+      if ((inserted?.length ?? 0) !== steps.length) throw new Error('The routine steps were not saved');
+      created.current = null;
+      if (previous.length) {
+        const { data: removed, error: delErr } = await sb.from('routine_template_items').delete()
+          .in('id', previous).eq('family_id', familyId).select('id');
+        // A refused delete takes this save's steps back. Fewer old steps than
+        // were read means another save was in flight and replaced some of them
+        // in between: whether ITS steps still stand decides what happens to
+        // ours. Two saves can interleave so that each read the other's new
+        // steps as "old" and deleted them: then the routine holds only this
+        // save's steps, and taking them back too would leave it with none (the
+        // N19 interleaving). So the template is read again: when another save's
+        // steps survive beside ours, ours are taken back and the family is told,
+        // so that save stands; when nothing else remains, this save stands.
+        let withdraw = Boolean(delErr);
+        if (!delErr && (removed?.length ?? 0) !== previous.length) {
+          const ours = new Set((inserted ?? []).map((row) => row.id));
+          const reread = await sb.from('routine_template_items').select('id').eq('template_id', templateId).eq('family_id', familyId);
+          // Unknown is not "duplicate": with the table unread, taking our steps
+          // back could empty the routine, so they stay and the error is shown.
+          if (reread.error) throw reread.error;
+          withdraw = (reread.data ?? []).some((row) => !ours.has(row.id));
+        }
+        if (withdraw) {
+          const { data: undone } = await sb.from('routine_template_items').delete()
+            .in('id', (inserted ?? []).map((row) => row.id)).eq('family_id', familyId).select('id');
+          if ((undone?.length ?? 0) !== steps.length) console.error('[routines] replacement steps could not be withdrawn', { templateId });
+          if (delErr) throw delErr;
+          if (active.current) toastError(tr('routinesPanel.routineChangedWhileSaving'));
+          return;
+        }
+      }
       if (active.current) { active.current = false; onSaved(); }
       // The dispatched pipeline still finishes after close; refresh only confirmed complete saves.
       onCommitted();

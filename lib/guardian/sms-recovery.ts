@@ -121,14 +121,20 @@ async function nextCandidate(client: Client, cursor: Cursor, signal: AbortSignal
   return positionSchema.parse({ id: result.data[0].id, createdAt: result.data[0].created_at });
 }
 
-/** Recover only service-authored receipts, with bounded work and fair traversal across ticks. */
-export async function drainGuardianSmsReceipts(client: Client, options: { limit?: number; signal?: AbortSignal } = {}): Promise<GuardianSmsRecoveryCounts> {
+/**
+ * Recover only service-authored receipts, with bounded work and fair traversal
+ * across ticks. `deadline` (epoch ms) ends the run sooner than its own RUN_MS:
+ * the recovery cron shares one invocation between this drain and the
+ * escalation retry sweep, and gives each its part of it.
+ */
+export async function drainGuardianSmsReceipts(client: Client, options: { limit?: number; signal?: AbortSignal; deadline?: number } = {}): Promise<GuardianSmsRecoveryCounts> {
   if (options.limit !== undefined && (!Number.isInteger(options.limit) || options.limit < 1)) return unavailable();
+  if (options.deadline !== undefined && !Number.isFinite(options.deadline)) return unavailable();
   const limit = Math.min(20, options.limit ?? 8);
   const controller = new AbortController();
   const abort = () => controller.abort();
   options.signal?.addEventListener('abort', abort, { once: true });
-  const timer = setTimeout(abort, RUN_MS);
+  const timer = setTimeout(abort, Math.max(0, Math.min(RUN_MS, (options.deadline ?? Infinity) - Date.now())));
   const counts: GuardianSmsRecoveryCounts = { examined: 0, completed: 0, busy: 0, unavailable: 0 };
   try {
     if (options.signal?.aborted) abort();

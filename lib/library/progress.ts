@@ -14,6 +14,33 @@
  */
 export const LIBRARY_CACHE = 'bubaly-library-v1';
 
+/**
+ * What the offline library keeps and serves: audio its publisher names as
+ * audio, and nothing else.
+ *
+ * The cache is the browser's, not a person's: an adult's download is there for
+ * whoever signs in next, and the worker that serves it cannot tell who is
+ * asking. /library/media refuses a child or a teen anything not named audio —
+ * a video, or an `application/octet-stream` body a player sniffs into one — so
+ * the cache holds nothing that route would refuse anyone. Kept in step with
+ * `safeResponse(..., 'library')` in `public/sw.js`, which cannot import.
+ */
+export function isOfflineAudio(contentType: string | null | undefined): boolean {
+  return /^audio\/[a-z0-9.+-]+$/.test((contentType ?? '').split(';')[0].trim().toLowerCase());
+}
+
+/**
+ * How /library/media answers may be kept: by nobody.
+ *
+ * It used to say `private, max-age=3600`, so the browser's own HTTP cache kept
+ * each episode for an hour — under the URL alone, for whoever signed in next.
+ * A video an adult played was handed to a child on the same browser without
+ * reaching the route that refuses it to them. Downloads are a separate store
+ * (Cache Storage, LIBRARY_CACHE), which this does not touch; `public/sw.js`
+ * also asks the network past any copy an older answer left behind.
+ */
+export const LIBRARY_MEDIA_CACHE_CONTROL = 'private, no-store';
+
 /** How far playback must move before another write is worth making. */
 export const SAVE_EVERY_SECONDS = 15;
 

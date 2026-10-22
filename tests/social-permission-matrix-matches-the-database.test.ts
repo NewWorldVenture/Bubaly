@@ -56,3 +56,21 @@ describe('the database and the app agree on every social permission', () => {
     expect(body).toMatch(/select public\.is_family_member\(p_family_id\) and \(/);
   });
 });
+
+// The held 0513 adds a third copy: public.social_role_permissions, the matrix
+// as a set per role, which decides whether a removed member's grant is a raise
+// over their role's default. Its probe compares it with social_has_permission
+// on a live database; this holds it to the app's matrix too.
+describe('the held 0513 matrix agrees with the app', () => {
+  const sql = readFileSync('supabase/reserved/0513_a_removed_member_keeps_no_social_raise.sql', 'utf8');
+  const body = sql.slice(sql.indexOf('create or replace function public.social_role_permissions('), sql.indexOf('$fn$;'));
+
+  for (const role of Object.keys(ROLE_PERMISSIONS) as SocialRole[]) {
+    it(`${role}: the same permissions`, () => {
+      const branch = new RegExp(`when '${role}' then array\\[([\\s\\S]*?)\\]`).exec(body);
+      expect(branch, role).not.toBeNull();
+      const granted = [...(branch?.[1] ?? '').matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
+      expect(granted).toEqual([...ROLE_PERMISSIONS[role]].sort());
+    });
+  }
+});

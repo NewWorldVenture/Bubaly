@@ -419,6 +419,44 @@ test('HTML in the publisher cache is never served as downloaded media', async ({
   expect((await dispatch(page, EPISODE, { destination: 'audio' })).body).toBe('synthetic-network');
 });
 
+// AUD-1040-LIBRARY-BOUNDARIES 1. The library cache belongs to the browser, so an
+// adult's download is there for whoever signs in next, and this worker cannot
+// tell who is asking. /library/media refuses a child or a teen a video or an
+// unnamed byte stream; a cached one, filled before that rule or by an adult,
+// is never served from here — before or after a change of account, online or
+// off. Online the request reaches the route, which decides for the person asking.
+for (const type of ['video/mp4', 'application/octet-stream']) {
+  test(`a cached ${type} episode is never served, across a logout and a new identity`, async ({ page }) => {
+    await page.evaluate(async ({ LIBRARY, EPISODE, type }) => {
+      await (await caches.open(LIBRARY)).put(EPISODE, new Response('adult-cached-media', { headers: { 'content-type': type } }));
+    }, { LIBRARY, EPISODE, type });
+    expect(await page.evaluate(() => window.__swCache.seed('a'))).toBe(true);
+    expect(await page.evaluate(() => window.__swCache.logout())).toEqual({ status: 'signed-out', emptySession: true, emptyQueryCache: true });
+    expect(await page.evaluate(() => window.__swCache.seed('b'))).toBe(true);
+    expect(await page.evaluate(() => window.__swCache.lifecycle('activate'))).toBe(true);
+
+    for (const destination of ['audio', 'video', ''] as const) {
+      const online = await dispatch(page, EPISODE, { destination });
+      expect(online, destination).toMatchObject({ handled: true, body: 'synthetic-network' });
+    }
+    expect(await page.evaluate(() => window.__swCache.fetches.map(f => new URL(f.url).pathname))).toEqual([EPISODE, EPISODE, EPISODE]);
+    await page.evaluate(() => { window.__swCache.offline = true; });
+    expect(await dispatch(page, EPISODE, { destination: 'audio' })).toMatchObject({ body: null, rejected: true });
+  });
+}
+
+test('a cached audio episode still plays offline after a logout and a new identity', async ({ page }) => {
+  await page.evaluate(async ({ LIBRARY, EPISODE }) => {
+    await (await caches.open(LIBRARY)).put(EPISODE, new Response('adult-cached-audio', { headers: { 'content-type': 'audio/mpeg' } }));
+  }, { LIBRARY, EPISODE });
+  expect(await page.evaluate(() => window.__swCache.seed('a'))).toBe(true);
+  expect(await page.evaluate(() => window.__swCache.logout())).toEqual({ status: 'signed-out', emptySession: true, emptyQueryCache: true });
+  expect(await page.evaluate(() => window.__swCache.seed('b'))).toBe(true);
+  await page.evaluate(() => { window.__swCache.offline = true; });
+  expect((await dispatch(page, EPISODE, { destination: 'audio' })).body).toBe('adult-cached-audio');
+  expect(await page.evaluate(() => window.__swCache.fetches)).toEqual([]);
+});
+
 test('publisher navigation gets only the offline page, never downloaded bytes', async ({ page }) => {
   await seedCache(page, CURRENT, '/offline', 'public-offline-shell');
   await seedCache(page, LIBRARY, EPISODE, 'publisher-audio');

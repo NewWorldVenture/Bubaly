@@ -217,9 +217,11 @@ export async function POST(req: NextRequest) {
   }
   if (needsPlanning) {
     try {
+      // `from` is Twilio's signed sender: the one thing that can prove a
+      // family member wrote this (verifiedInboundSender).
       const outcome = await routeInboundToPlanner(admin, {
         familyId, channel: 'sms', messageId: filed.messageId, body,
-        intent: result.intent, providerRef: filed.providerRef,
+        intent: result.intent, providerRef: filed.providerRef, sender: from,
       });
       if (outcome.reason === 'no_scope' || outcome.reason === 'intake_failed') return new NextResponse('Planner temporarily unavailable', { status: 503 });
     } catch (error) {

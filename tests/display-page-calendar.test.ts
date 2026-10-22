@@ -17,6 +17,10 @@ vi.mock('next/navigation', () => ({ unstable_rethrow: () => {} }));
 vi.mock('@/components/display/auto-refresh', () => ({ AutoRefresh: () => null }));
 vi.mock('@/components/display/display-shell-client', () => ({ DisplayShellClient: () => null }));
 
+// Every tile's read reported, the meal, grocery and chore reads included (H19),
+// and the members (birthdays) and notes reads (U1): a failed read there is
+// "unavailable", never an empty kitchen.
+const ALL_LOADED = { events: 'ok', upcoming: 'ok', monthEvents: 'ok', reminders: 'ok', meals: 'ok', grocery: 'ok', chores: 'ok', members: 'ok', notes: 'ok' };
 const iso = (value: string) => new Date(value).toISOString();
 const event = (id: string, start: string, end: string | null, fields: Row = {}): Row => ({
   id, family_id: 'family-1', title: id, starts_at: iso(start), ends_at: end ? iso(end) : null,
@@ -105,7 +109,7 @@ describe('actual kitchen page family-calendar loading', () => {
     expect(data.calendar.eventDays).toEqual([11, 12]);
     expect(data.meals).toEqual([{ type: 'dinner', name: 'Family dinner' }]);
     expect(data.handled).toMatchObject({ status: 'ok', count: 2 });
-    expect(data.loadStatus).toEqual({ events: 'ok', upcoming: 'ok', monthEvents: 'ok', reminders: 'ok' });
+    expect(data.loadStatus).toEqual(ALL_LOADED);
   });
 
   it('shows this week\'s occurrence of a weekly series on today, next week\'s under upcoming, and marks every week of the month', async () => {
@@ -116,7 +120,7 @@ describe('actual kitchen page family-calendar loading', () => {
     expect(data.events.map(item => [item.id, item.starts_at])).toEqual([['practice', iso('2026-09-12T14:00:00Z')]]);
     expect(data.upcoming.map(item => item.starts_at)).toEqual([iso('2026-09-19T14:00:00Z')]);
     expect(data.calendar.eventDays).toEqual([5, 12, 19, 26]);
-    expect(data.loadStatus).toEqual({ events: 'ok', upcoming: 'ok', monthEvents: 'ok', reminders: 'ok' });
+    expect(data.loadStatus).toEqual(ALL_LOADED);
   });
 
   it('includes ongoing overnight events, excludes ended/day-end boundaries and uses actual ends for occupancy', async () => {
@@ -164,10 +168,10 @@ describe('actual kitchen page family-calendar loading', () => {
   it.each(['events', 'upcoming', 'monthEvents', 'reminders'])('keeps %s unavailable distinct from successful empty and recovered populated data', async kind => {
     const f = fixture();
     f.failed.add(kind);
-    expect((await f.read()).loadStatus).toEqual({ events: 'ok', upcoming: 'ok', monthEvents: 'ok', reminders: 'ok', [kind]: 'error' });
+    expect((await f.read()).loadStatus).toEqual({ ...ALL_LOADED, [kind]: 'error' });
     f.failed.clear();
     const empty = await f.read();
-    expect(empty.loadStatus).toEqual({ events: 'ok', upcoming: 'ok', monthEvents: 'ok', reminders: 'ok' });
+    expect(empty.loadStatus).toEqual(ALL_LOADED);
     expect(empty.events).toEqual([]); expect(empty.reminders).toEqual([]);
     f.db.seed('calendar_events', [event('today', '2026-09-12T03:00:00Z', '2026-09-12T04:00:00Z'), event('tomorrow', '2026-09-13T03:00:00Z', '2026-09-13T04:00:00Z')]);
     f.db.seed('family_reminders', [{ id: 'reminder', family_id: 'family-1', title: 'Reminder', remind_at: iso('2026-09-12T05:00:00Z'), status: 'active' }]);

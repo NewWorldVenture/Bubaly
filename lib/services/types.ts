@@ -42,6 +42,15 @@ export type ServiceScope = {
   /** `family_members.id` of the acting member; null for cron/system. */
   memberId: string | null;
   role: MemberRole | 'system';
+  /**
+   * Who the work is FOR, when that is not who holds `role`: an approved AI
+   * request runs with the approver's role for the member who asked
+   * (lib/services/approvals scopeForApprovedWork), and what may be shown or
+   * acted on for that asker — a reminder an Autopilot card made — is read for
+   * the asker, not for the approver (lib/services/reminders/shown.ts). Unset,
+   * that reader is `role` and `memberId`.
+   */
+  viewer?: { role: MemberRole | 'system'; memberId: string | null };
   actorKind: ActorKind;
   /** IANA timezone of the family, e.g. 'America/New_York'. Never the server's. */
   tz: string;
@@ -57,6 +66,12 @@ export type ServiceScope = {
   idempotencyKey?: string | null;
   /** Private executor-issued reserved-operation identity and existing ledger client, not caller input. */
   toolOperation?: { id: string; db: SupabaseClient<Database> };
+  /**
+   * Set by the run executor, from the request row, when the words being acted
+   * on are someone else's — an inbox message a member handed to Bubaly. Every
+   * write such a run makes waits for a parent or adult first.
+   */
+  untrustedRequest?: boolean;
 };
 
 export type ServiceResult<T> =

@@ -23,7 +23,9 @@ const files = () =>
     .split('\n')
     .filter(Boolean);
 
-const DELETES = /\.delete\(\)|delete[A-Z]\w*Action\(|\.remove\(\[/;
+// `removeHomeAsset(` deletes an asset and its files from one helper
+// (lib/home/remove-asset), so the handler that calls it is still a delete.
+const DELETES = /\.delete\(\)|delete[A-Z]\w*Action\(|\.remove\(\[|removeHomeAsset\(/;
 // Every shape the app uses to gate a destructive handler, including the raw
 // browser dialog it is being moved off.
 const ASKS = /askConfirm\(|confirm\(|setConfirm|ConfirmModal|<Modal|confirmingId|pendingDelete|askDelete/;

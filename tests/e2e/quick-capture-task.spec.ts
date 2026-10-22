@@ -13,7 +13,7 @@ const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/su
 const sources = Object.fromEntries([
   'components/app/quick-capture.tsx', 'components/capture/capture-shell.tsx', 'lib/capture/document-link.ts', 'components/app/app-context.tsx', 'components/ui/toast.tsx', 'lib/hooks/use-media-query.ts', 'lib/analytics/use-journey.ts',
   'lib/offline/cache.ts', 'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',
-  'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/realtime/own-channel.ts', 'lib/constants/roles.ts', 'lib/capture/save.ts', 'lib/capture/parse.ts', 'lib/capture/shortcut.ts',
+  'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/realtime/own-channel.ts', 'lib/constants/roles.ts', 'lib/capture/save.ts', 'lib/capture/parse.ts', 'lib/capture/shortcut.ts', 'lib/ai/prefill.ts',
   'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
   // The family clock (TIME-003): the shared formatter and the zone helpers it reads.
   'lib/time/zoned.ts', 'lib/time/local-day.ts', 'lib/time/wall-clock.ts',

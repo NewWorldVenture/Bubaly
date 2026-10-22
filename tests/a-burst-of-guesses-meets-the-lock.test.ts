@@ -167,7 +167,13 @@ describe('a concurrent burst gets no more guesses than a sequential one', () => 
     state.known = false;
     const results = (await Promise.all(wrongPins(25).map(pin => guess(pin)))).map(outcome);
     expect(tally(results)).toEqual({ 'actions.thatUsernameOrPinIsn': DEFAULT_POLICY.maxFails, LOCKED: 25 - DEFAULT_POLICY.maxFails });
-    expect(state.checked).toHaveLength(0);
+    // The same spend in WORK as well (audit N8): the provider sees exactly the
+    // allowance of password checks, as it does for a real username — response
+    // time used to say which usernames exist, because an unknown one saw none —
+    // and not one of them is the real derivation of a PIN that was typed, so the
+    // request is a round trip, never a guess that could succeed.
+    expect(state.checked).toHaveLength(DEFAULT_POLICY.maxFails);
+    for (const pin of wrongPins(25)) expect(state.checked).not.toContain(deriveChildPassword('synthetic-child-secret', 'emma', pin));
   });
 });
 

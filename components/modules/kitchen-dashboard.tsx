@@ -46,6 +46,10 @@ export type KitchenData = {
   leftovers: { id: string; name: string; sourceMeal: string | null; useBy: string | null; location: string }[];
   leftoverNudge: string | null;
   leftoversMissing: boolean;
+  /** The leftovers read failed (not a missing table): the card says so instead of "No leftovers logged". */
+  leftoversUnavailable?: boolean;
+  /** The week's nutrition read failed: the score is missing a part and is not offered for saving. */
+  nutritionUnavailable?: boolean;
   groceryOpen: number;
   recipeCount: number;
   foodScore: FoodScore;
@@ -88,7 +92,7 @@ export function KitchenDashboard({ data }: { data: KitchenData }) {
         <div className="lg:col-span-2 overflow-hidden rounded-3xl border border-brand/20 bg-gradient-to-br from-brand/10 via-brand/5 to-transparent p-6">
           <div className="flex items-start justify-between">
             <div>
-              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-brand-text/70">
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-brand-text">
                 <Flame className="h-3.5 w-3.5" /> {tr('kitchenDashboard.tonightAposSDinner')}
               </p>
               <p className="mt-2 text-3xl font-black tracking-tight">{data.tonight ?? 'Nothing planned yet'}</p>
@@ -117,7 +121,7 @@ export function KitchenDashboard({ data }: { data: KitchenData }) {
         </div>
 
         {/* Food score */}
-        <FoodScoreCard score={data.foodScore} />
+        <FoodScoreCard score={data.foodScore} incomplete={data.nutritionUnavailable === true} />
       </div>
 
       {/* Upcoming meals */}
@@ -178,7 +182,7 @@ export function KitchenDashboard({ data }: { data: KitchenData }) {
 
 // ─── Food Score Card ──────────────────────────────────────────────────────────
 
-function FoodScoreCard({ score }: { score: FoodScore }) {
+function FoodScoreCard({ score, incomplete = false }: { score: FoodScore; incomplete?: boolean }) {
   const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -248,7 +252,8 @@ function FoodScoreCard({ score }: { score: FoodScore }) {
         </ul>
       )}
 
-      <button onClick={save} disabled={saving}
+      {incomplete && <p className="mt-4 text-xs text-muted">{tr('kitchenDashboard.nutritionCouldNotBeLoaded')}</p>}
+      <button onClick={save} disabled={saving || incomplete}
         className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-2 text-xs font-semibold hover:bg-elevated transition disabled:opacity-60">
         {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} {tr('kitchenDashboard.saveTodayAposSScore')}
       </button>
@@ -295,6 +300,8 @@ function LeftoverSection({ data, onAdd }: { data: KitchenData; onAdd: () => void
         <p className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-muted">
           {tr('kitchenDashboard.leftoverTrackingTurnsOnOnceThe')}
         </p>
+      ) : data.leftoversUnavailable ? (
+        <p className="py-4 text-center text-sm text-muted">{tr('kitchenDashboard.leftoversCouldNotBeLoaded')}</p>
       ) : data.leftovers.length === 0 ? (
         <p className="py-4 text-center text-sm text-muted">{tr('kitchenDashboard.noLeftoversLoggedLogOneAfter')}</p>
       ) : (
@@ -398,7 +405,7 @@ function ChefModal({ onClose }: { onClose: () => void }) {
   const [request, setRequest] = useState('');
   const [loading, setLoading] = useState(false);
   const [reply, setReply] = useState<ChefReply | null>(null);
-  const [source, setSource] = useState<'ai' | 'fallback' | null>(null);
+  const [source, setSource] = useState<'ai' | 'fallback' | 'unavailable' | null>(null);
 
   async function ask(prompt?: string) {
     const q = (prompt ?? request).trim();
@@ -447,9 +454,16 @@ function ChefModal({ onClose }: { onClose: () => void }) {
 
         {reply && (
           <div className="space-y-4 border-t border-border pt-4">
+            {/* "Not configured" only when the server says so; a provider that
+                failed is a different fact with a different remedy. */}
             {source === 'fallback' && (
               <p className="rounded-lg border border-border bg-surface/40 px-3 py-2 text-[11px] text-muted">
                 {i18nT('kitchenDashboard.aiIsntConfiguredShowingAPlan')}
+              </p>
+            )}
+            {source === 'unavailable' && (
+              <p className="rounded-lg border border-border bg-surface/40 px-3 py-2 text-[11px] text-muted">
+                {i18nT('kitchenDashboard.aiChefUnavailableShowingAPlan')}
               </p>
             )}
             {reply.message && <p className="text-sm font-medium">{reply.message}</p>}

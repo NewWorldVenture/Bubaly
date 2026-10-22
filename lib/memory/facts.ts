@@ -1,6 +1,7 @@
 // Family Knowledge Base — pure, unit-tested logic for the persistent family
 // facts store. Categories, filtering, search, and pinned-first grouping live
 // here so the module stays declarative and the rules are tested without a DB.
+import { isManager } from '@/lib/constants/roles';
 
 export type FactCategory =
   | 'about' | 'preference' | 'medical' | 'contact' | 'sizes' | 'important' | 'account' | 'date' | 'other';
@@ -13,6 +14,54 @@ export const FACT_CATEGORY_LABELS: Record<FactCategory, string> = {
 export const FACT_CATEGORY_ORDER: FactCategory[] = [
   'important', 'medical', 'contact', 'sizes', 'preference', 'account', 'date', 'about', 'other',
 ];
+
+/**
+ * Categories the assistant must never write on its own. Medical facts belong
+ * in the health profile where a person enters them deliberately; account
+ * facts are credentials by another name. Both are readable through the
+ * modules that own them, never inferred from a chat.
+ */
+export const SENSITIVE_MEMORY_CATEGORIES: FactCategory[] = ['medical', 'account'];
+
+// Stems carry `\w*` and nouns their plural: the closing `\b` used to sit
+// straight after `diagnos`, `therap` and `pregnan`, so none of them ever
+// matched a real word ("diagnosis", "therapist", "pregnant"), and "passwords"
+// or "medications" slipped past as non-sensitive. The verb forms count too:
+// "Prescribed antibiotics on Monday" is a prescription (AI-001).
+const SENSITIVE_TERMS = /\b(ssn|social security|passports? (?:no|numbers?)|passwords?|passcodes?|pins?|bank\w*|routing|account numbers?|card numbers?|credit cards?|iban|allerg(?:y|ies|ic)|diagnos\w*|prescriptions?|prescrib\w*|medications?|therap\w*|hiv|pregnan\w*|salary|salaries)\b/i;
+
+/**
+ * True when a memory should not be written by the assistant: the category is
+ * sensitive, or the words are, whatever category was chosen. Exported so the
+ * tool and the service refuse on the same rule.
+ *
+ * It lives here, in a module with no server dependency, because it is ALSO the
+ * read rule: a fact it matches is a parent's or adult's to see. The Family
+ * Memory page reads `family_facts` in the browser, and RLS (0264) hides only
+ * the medical/account categories — no policy mirrors the term list (0385's
+ * header says why) — so the page has to apply this before it renders.
+ */
+export function isSensitiveMemory(input: {
+  category?: string | null; key: string; content: string;
+  notes?: string | null; evidence?: string | null;
+}): boolean {
+  if (input.category && (SENSITIVE_MEMORY_CATEGORIES as string[]).includes(input.category)) return true;
+  return SENSITIVE_TERMS.test(`${input.key} ${input.content} ${input.notes ?? ''} ${input.evidence ?? ''}`);
+}
+
+/**
+ * The facts a reader in `role` may see: everything for a parent, an adult or
+ * the system; for anyone else, everything the sensitive rule above does not
+ * match. Recall, search, the AI context and insights all answer with this
+ * rule, and so does the Family Memory page.
+ */
+export function factsVisibleTo<T extends { category: string; label: string; value: string; notes?: string | null; evidence?: string | null }>(
+  role: string | null | undefined,
+  rows: T[],
+): T[] {
+  if (role === 'system' || isManager(role)) return rows;
+  return rows.filter((f) => !isSensitiveMemory({ category: f.category, key: f.label, content: f.value, notes: f.notes, evidence: f.evidence }));
+}
 
 export type FactLike = {
   id: string;

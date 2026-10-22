@@ -102,6 +102,26 @@ export function expiringSoon<T extends PantryLike>(items: T[], withinDays: numbe
     .sort((a, b) => (daysUntil(a.expires_at, todayKey) ?? 0) - (daysUntil(b.expires_at, todayKey) ?? 0));
 }
 
+/**
+ * Items still good that expire within `withinDays` (today through day N),
+ * soonest first — what a cook can be told to USE.
+ *
+ * `expiringSoon` keeps expired items on purpose, for the lists that label them
+ * "Expired 3d ago". Handed to the chef, the planner or the assistant as "use
+ * these", the same list urged a dinner built on chicken that went off two
+ * weeks ago, and sorted it FIRST, so a backlog of uncleared rows pushed the
+ * food that really is about to turn out of the prompt.
+ */
+export function usableSoon<T extends PantryLike>(items: T[], withinDays: number, todayKey: string): T[] {
+  return expiringSoon(items, withinDays, todayKey).filter((i) => (daysUntil(i.expires_at, todayKey) ?? -1) >= 0);
+}
+
+/** Items whose best-by date has passed: "check or discard", never "use these". */
+export function pastBestBy<T extends PantryLike>(items: T[], todayKey: string): T[] {
+  return items.filter((i) => (daysUntil(i.expires_at, todayKey) ?? 0) < 0)
+    .sort((a, b) => (daysUntil(a.expires_at, todayKey) ?? 0) - (daysUntil(b.expires_at, todayKey) ?? 0));
+}
+
 /** Everything that's low on stock (for the restock / grocery-suggestion list). */
 export function lowStockItems<T extends PantryLike>(items: T[]): T[] {
   return items.filter(isLowStock);

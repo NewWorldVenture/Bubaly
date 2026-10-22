@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { isRealtimePublished } from '@/lib/realtime/published-tables';
 import type { Tables, DashboardView } from '@/lib/database.types';
@@ -74,8 +74,19 @@ export function AppProvider(props: AppProviderProps) {
 
 function AppProviderState({ value, initialMembers, rosterReadFailed, children }: AppProviderProps) {
   const [members, setMembers] = useState(initialMembers);
+  const rosterGeneration = useRef(0);
+  const rosterLive = useRef(true);
+
+  useEffect(() => {
+    rosterLive.current = true;
+    return () => {
+      rosterLive.current = false;
+      rosterGeneration.current += 1;
+    };
+  }, []);
 
   const refreshMembers = useCallback(async () => {
+    const generation = ++rosterGeneration.current;
     const supabase = createClient();
     // A refused refresh keeps the roster already on screen (`if (data)`), so
     // this is a stale list rather than a false empty one — but the error was
@@ -87,7 +98,7 @@ function AppProviderState({ value, initialMembers, rosterReadFailed, children }:
       .eq('is_active', true)
       .order('created_at');
     if (error) console.error('[app-context] member roster refresh failed; keeping the current roster', error);
-    if (data) setMembers(data);
+    if (data && rosterLive.current && generation === rosterGeneration.current) setMembers(data);
   }, [value.familyId]);
 
   // A roster that failed to load on the server is not an empty family. Left as

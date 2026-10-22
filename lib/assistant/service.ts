@@ -26,7 +26,8 @@ import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { compareOccurrences } from '@/lib/calendar/day';
 import { loadAISettingsFor } from '@/lib/services/ai-settings';
 import { wroteNoRows } from '@/lib/supabase/errors';
-import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
+import { categorizeGroceryItem, ensureDefaultGroceryListId } from '@/lib/services/groceries';
+import { normalizeName } from '@/lib/groceries/normalize-name';
 import { ensureTodoListId } from '@/lib/services/tasks';
 
 type Client = SupabaseClient<Database>;
@@ -266,9 +267,12 @@ async function readShoppingList(supabase: Client, familyId: string): Promise<Spo
   const ids = await liveListIds(supabase, familyId, 'grocery_lists');
   if (ids.length === 0) return { names: [], total: 0 };
 
-  const { data, error } = await supabase
+  // The count carries the rest: the rows are the first MAX_LIST_READ, and
+  // `count` is every unchecked item, so "and 30 more" is said of a list of 70
+  // rather than "40 things" of it.
+  const { data, error, count } = await supabase
     .from('grocery_items')
-    .select('name, quantity')
+    .select('name, quantity', { count: 'exact' })
     .eq('family_id', familyId)
     .in('list_id', ids)
     .eq('is_checked', false)
@@ -279,16 +283,21 @@ async function readShoppingList(supabase: Client, familyId: string): Promise<Spo
   // The quantity belongs in the sentence: "two pints of milk" is the useful
   // answer and "milk" is the one that sends somebody back to the shop.
   const names = rows.map((row) => (row.quantity ? `${row.quantity} ${row.name}` : row.name));
-  return { names, total: names.length };
+  return { names, total: listTotal(count, names.length) };
+}
+
+/** Every matching row, counted; never fewer than were read, and the rows when no count came back. */
+function listTotal(count: number | null, read: number): number {
+  return typeof count === 'number' && Number.isSafeInteger(count) && count >= read ? count : read;
 }
 
 /** The open to-do items, oldest first, so the oldest is the one that gets said. */
 async function readTaskList(supabase: Client, familyId: string): Promise<SpokenList> {
   const lists = await liveListIds(supabase, familyId, 'todo_lists');
   if (lists.length === 0) return { names: [], total: 0 };
-  const { data, error } = await supabase
+  const { data, error, count } = await supabase
     .from('todo_items')
-    .select('title')
+    .select('title', { count: 'exact' })
     .eq('family_id', familyId)
     .in('list_id', lists)
     .eq('is_done', false)
@@ -296,7 +305,7 @@ async function readTaskList(supabase: Client, familyId: string): Promise<SpokenL
     .limit(MAX_LIST_READ);
   if (error) throw error;
   const names = ((data ?? []) as unknown as { title: string }[]).map((row) => row.title);
-  return { names, total: names.length };
+  return { names, total: listTotal(count, names.length) };
 }
 
 /** Record what the speaker did. Never throws: an audit gap must not eat a reply. */
@@ -473,10 +482,36 @@ async function saveAssistantCapture(
       .filter((item) => item.name.trim().length > 0);
     if (items.length === 0) { await discardEmptyList(supabase, link, 'grocery_lists', list); return false; }
 
-    const { error } = await supabase.from('grocery_items').insert(items.map((item) => ({
-      family_id: link.family_id, list_id: listId,
-      name: boundText(item.name, 200), quantity: item.quantity, created_by: link.user_id,
-    })) as never);
+    // A spoken item already open on the list is skipped rather than written as
+    // a second line — a person repeating themselves to the speaker, or "add
+    // milk" with Milk still unbought — under the grocery service's own name
+    // rule (`normalizeName`), and each new line is filed by aisle the way the
+    // app files it (`categorizeGroceryItem`). The raw insert this replaces did
+    // neither, so the speaker undid the dedupe every other surface keeps.
+    const { data: open, error: openError } = await supabase.from('grocery_items').select('name')
+      .eq('family_id', link.family_id).eq('list_id', listId).eq('is_checked', false);
+    if (openError) {
+      console.error('[assistant] grocery list read failed', openError);
+      await discardEmptyList(supabase, link, 'grocery_lists', list);
+      return false;
+    }
+    const onList = new Set((open ?? []).map((row) => normalizeName(String(row.name ?? ''))));
+    const fresh = items.filter((item) => {
+      const key = normalizeName(item.name);
+      if (onList.has(key)) return false;
+      onList.add(key);
+      return true;
+    });
+    // Everything said is already on the list: nothing to write, and done.
+    if (fresh.length === 0) return true;
+
+    const { error } = await supabase.from('grocery_items').insert(fresh.map((item) => {
+      const name = boundText(item.name, 200);
+      return {
+        family_id: link.family_id, list_id: listId,
+        name, quantity: item.quantity, category: categorizeGroceryItem(name), created_by: link.user_id,
+      };
+    }) as never);
     if (error) {
       console.error('[assistant] grocery insert failed', error);
       await discardEmptyList(supabase, link, 'grocery_lists', list);

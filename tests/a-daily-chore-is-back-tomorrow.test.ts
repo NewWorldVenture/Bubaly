@@ -243,7 +243,7 @@ describe('respawnMissingChoreAssignments — the durable retry (audit 2026-10-04
     expect(src).toContain("import { respawnMissingChoreAssignments } from '@/lib/services/tasks';");
     expect(src).toContain('const scope = await systemScopeForFamily(supabase, f.id);');
     expect(src).toContain('await respawnMissingChoreAssignments(scope)');
-    expect(at(src, 'await generateFamilyNotifications(supabase, f.id)')).toBeLessThan(at(src, 'respawnMissingChoreAssignments(scope)'));
+    expect(at(src, 'await generateFamilyNotifications(supabase, f.id, report)')).toBeLessThan(at(src, 'respawnMissingChoreAssignments(scope)'));
     expect(src).toContain('const failed = generationFailures + respawnFailures + pushDispatchFailures');
     expect(src).toContain('{ ok, families: families?.length ?? 0, created, respawned, pushed, failed }');
   });

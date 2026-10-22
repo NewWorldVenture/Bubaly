@@ -101,7 +101,7 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
    * The browser sends only the changed fields; they are merged over the stored
    * input here so a value the form never showed cannot be dropped. The edited
    * plan becomes a new version and the run is kicked so it continues without
-   * waiting for the next cron tick.
+   * waiting for the next cron tick — unless it is paused, which it stays.
    */
   async function editStepAction(stepId: string, edits: Record<string, string | number | boolean>): Promise<RunActionResult<{ requeuedSteps: number }>> {
     'use server';
@@ -128,9 +128,17 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
       merged[key] = value;
     }
 
+    // An edit restarts execution, so it needs Ask Bubaly NOW, not when the
+    // page was rendered: a trial that ended, a downgrade or the feature
+    // switched Off since then must not be bypassed by a page left open. The
+    // same rule the resume and re-run controls apply (KICKING_CONTROLS).
+    const access = await assertAIAccess(actor, { db });
+    if (!access.ok) return { ok: false, error: access.error, code: access.code };
+
     const result = await editStepInput(scopeFromUserContext(actor, db), runId, stepId, merged);
     if (!result.ok) return { ok: false, error: result.error, code: result.code };
-    kickRun(runId);
+    // A paused run stays paused through an edit; Resume is what starts it.
+    if (result.data.state === 'ready') kickRun(runId);
     revalidatePath(runPagePath(runId));
     revalidatePath('/home');
     revalidatePath('/dashboard');

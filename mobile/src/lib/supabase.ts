@@ -7,7 +7,7 @@ import type { Db } from './db';
 import { config } from './config';
 import { createChunkedStore } from './chunked-storage';
 import { createSessionRefreshFetch } from '../../../shared/auth/refresh-fetch';
-import { createDeviceSignOut, sessionStorageKey } from './sign-out';
+import { createDeviceSignOut, createDeviceSignOutFetch, sessionStorageKey } from './sign-out';
 
 export type Supabase = Db;
 const supabaseUrl = config.supabaseUrl || 'https://placeholder.supabase.co';
@@ -26,7 +26,9 @@ export const supabase: Supabase = createClient<Database>(
   supabaseUrl,
   config.supabaseAnonKey || 'public-anon-key',
   {
-    global: { fetch: createSessionRefreshFetch(supabaseUrl) },
+    global: { fetch: createDeviceSignOutFetch(supabaseUrl,
+      token => secureSessionStore.assertSessionSignOutOwner(storageKey, token),
+      createSessionRefreshFetch(supabaseUrl)) },
     auth: {
       storage: secureSessionStore,
       storageKey,
@@ -38,6 +40,7 @@ export const supabase: Supabase = createClient<Database>(
 );
 
 export const signOutThisDevice = createDeviceSignOut({
+  beginSessionSignOut: () => secureSessionStore.beginSessionSignOut(storageKey),
   signOut: () => supabase.auth.signOut({ scope: 'local' }),
   subscribe: listener => {
     const { data } = supabase.auth.onAuthStateChange(event => listener(event));

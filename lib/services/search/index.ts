@@ -38,6 +38,8 @@
 // family_facts), not assumed.
 import 'server-only';
 import { isManager } from '@/lib/constants/roles';
+import { riskToDecision } from '@/lib/trust/engine';
+import { roleOf } from '@/lib/trust/server';
 import { rankHits, type SearchHit, type SearchKind } from '@/lib/search/rank';
 import { isSensitiveDocument } from '@/lib/documents/sensitivity';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -114,6 +116,24 @@ function snippetFrom(parts: Array<string | null | undefined>, max = 160): string
 export const MANAGER_ONLY_KINDS: readonly SearchKind[] = ['bill', 'warranty', 'renewal'];
 
 /**
+ * Trip sources. A role whose view of 'travel' the trust engine refuses (a
+ * guest, a child) does not search them, for the reason the assistant's
+ * `trips.getTrip` refuses them: `search.household` sits in the 'tasks' domain,
+ * so it used to hand a guest the title, destination and dates that tool
+ * withholds. Reported in `withheld`, like the money sources.
+ */
+export const TRAVEL_KINDS: readonly SearchKind[] = ['trip', 'vacation'];
+
+function canSearchTravel(scope: ServiceScope): boolean {
+  if (scope.role === 'system') return true;
+  return riskToDecision({
+    risk: 'low',
+    actor: { kind: 'member', id: scope.memberId ?? scope.userId ?? 'unknown', role: roleOf(scope.role) },
+    domain: 'travel', capability: 'view', explicitAllow: false,
+  }) === null;
+}
+
+/**
  * Parents and adults may search the money sources; a cron with no human behind
  * it may not, which is the same line `lib/services/documents` draws for
  * sensitive files.
@@ -152,6 +172,25 @@ async function readSource(
   }
 }
 
+/** What a caller can narrow beyond the service's own per-role rules. */
+export type SearchOptions = {
+  /**
+   * Kinds this caller must not be handed even though the service's own rules
+   * would search them. Their sources are not queried at all. `withheld` stays
+   * the service's own answer; the caller names what it narrowed. The assistant
+   * passes the kinds its own read rules keep from this member
+   * (lib/ai/tools/search.ts); the search page and the command bar pass nothing.
+   */
+  withhold?: readonly SearchKind[];
+};
+
+/** The one table each kind is read from (lib/search/rank.ts: one kind per source table). */
+const SOURCE_TABLE: Record<SearchKind, string> = {
+  document: 'documents', item: 'inventory_items', trip: 'trips', vacation: 'vacations',
+  bill: 'bills', warranty: 'home_warranties', renewal: 'renewals', decision: 'family_decisions',
+  event: 'calendar_events', note: 'notes', fact: 'family_facts',
+};
+
 /**
  * Search everything the caller is allowed to see, ranked, with evidence.
  *
@@ -163,6 +202,7 @@ export async function searchHousehold(
   scope: ServiceScope,
   query: string,
   limit: number = DEFAULT_LIMIT,
+  opts: SearchOptions = {},
 ): Promise<ServiceResult<HouseholdSearch>> {
   const q = sanitizeQuery(query ?? '');
   if (q.length < MIN_QUERY_CHARS) {
@@ -173,12 +213,13 @@ export async function searchHousehold(
   const db = scope.db;
   const family = scope.familyId;
   const money = canSearchMoney(scope);
+  const travel = canSearchTravel(scope);
   const sensitiveDocs = canSeeSensitiveDocuments(scope);
   // Match recallFacts: system memory work may read sensitive facts, while its
   // existing money and document search restrictions remain separate.
   const sensitiveMemory = scope.role === 'system' || isManager(scope.role);
 
-  const sources: Array<{ table: string; run: () => Promise<SourceOutcome> }> = [
+  const allSources: Array<{ table: string; run: () => Promise<SourceOutcome> }> = [
     {
       table: 'documents',
       run: () => readSource('documents', () => db
@@ -351,6 +392,7 @@ export async function searchHousehold(
         }))),
     },
   ];
+  const sources = travel ? allSources : allSources.filter((source) => source.table !== 'trips' && source.table !== 'vacations');
 
   if (money) {
     sources.push(
@@ -418,12 +460,20 @@ export async function searchHousehold(
     );
   }
 
+  // A kind the caller withholds is not searched at all: a read whose rows are
+  // then thrown away has still been made, and a filter after ranking would
+  // also cost the caller the hits it may see.
+  const withheldTables = new Set((opts.withhold ?? []).map((kind) => SOURCE_TABLE[kind]));
+  for (let i = sources.length - 1; i >= 0; i -= 1) {
+    if (withheldTables.has(sources[i].table)) sources.splice(i, 1);
+  }
+
   const outcomes = await Promise.all(sources.map((source) => source.run()));
   const partial = outcomes.map((outcome) => outcome.failure).filter((f): f is SearchSourceFailure => f !== null);
 
   // Every source failing is not an empty household — it is an outage, and the
   // caller must be able to render a retryable error rather than "no results".
-  if (partial.length === sources.length) {
+  if (sources.length > 0 && partial.length === sources.length) {
     return fail('Could not search your household right now.', { code: SERVICE_CODES.db, retryable: true });
   }
 
@@ -434,6 +484,6 @@ export async function searchHousehold(
     hits,
     partial,
     searched: sources.filter((source) => !partial.some((f) => f.table === source.table)).map((source) => source.table),
-    withheld: money ? [] : [...MANAGER_ONLY_KINDS],
+    withheld: [...(money ? [] : MANAGER_ONLY_KINDS), ...(travel ? [] : TRAVEL_KINDS)],
   });
 }

@@ -1,11 +1,14 @@
-// App protections from #674, independently runnable before migration 0465.
-// These four source/copy assertions are separated from its mixed SQL/UI test;
-// that original test and its SQL assertions stay with the migration.
+// App protections from #674, independently runnable before the migration that
+// narrows the read (now the held 0511). These four source/copy assertions are
+// separated from its mixed SQL/UI test. The owner's decision on 0511 adds a
+// caregiver to the readers of every medication (they may give it); doses stay
+// a manager's or the member's own (0481), a caregiver's included.
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import { createClient } from '@supabase/supabase-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isManager } from '@/lib/constants/roles';
+import { readsEveryMedication } from '@/lib/medications/readers';
 import { getMessages } from '@/lib/i18n/messages';
 import { LOCALES as SUPPORTED_LOCALES } from '@/lib/i18n/locales';
 import { at } from './helpers/source-order';
@@ -20,17 +23,20 @@ const KEYS = ['medicationsModule.yourOwnMedicinesOnly', 'medicationsModule.noMed
 describe('prescription app privacy before 0465', () => {
   it('explains the own-only list, hides irrelevant filters and preserves dose actions', () => {
     expect(MEDS).toContain('const canEdit = isManager(role);');
-    expect(MEDS).toMatch(/\{canEdit \? \(\s*<div className="flex flex-wrap gap-1\.5 mb-4[\s\S]*?WHOLE_FAMILY[\s\S]*?\) : \(\s*<p className="text-sm text-muted mb-4">\{t\('medicationsModule\.yourOwnMedicinesOnly'\)\}<\/p>/);
-    expect(MEDS).toContain("description={canEdit ? t('uiText.addAMedicationAndSetItsDosing') : t('medicationsModule.noMedicinesPrescribedToYou')}");
+    expect(MEDS).toContain('const readsEveryMedicine = readsEveryMedication(role);');
+    expect(MEDS).toMatch(/\{readsEveryMedicine \? \(\s*<div className="flex flex-wrap gap-1\.5 mb-4[\s\S]*?WHOLE_FAMILY[\s\S]*?\) : \(\s*<p className="text-sm text-muted mb-4">\{t\('medicationsModule\.yourOwnMedicinesOnly'\)\}<\/p>/);
+    expect(MEDS).toContain("description={canEdit ? t('uiText.addAMedicationAndSetItsDosing')");
+    expect(MEDS).toContain(": readsEveryMedicine ? t('medicationsModule.noMedicinesForTheHousehold') : t('medicationsModule.noMedicinesPrescribedToYou')}");
     expect(MEDS).toMatch(/async function logDose\(due: DueDose, status: DoseStatus\) \{\s*if \(!canMutate\(\)\) return;/);
     expect(MEDS).toMatch(/await mutate\(`dose:\$\{due\.scheduleId\}:\$\{due\.slotKey\}`, false,/);
   });
 
   it('requests own rows and includes that scope in both query identities', () => {
-    expect(MEDS).toContain('const ownMemberOnly = canEdit ? null : (selfMember?.id ?? NIL_UUID);');
+    expect(MEDS).toContain('const ownMemberOnly = readsEveryMedicine ? null : (selfMember?.id ?? NIL_UUID);');
+    expect(MEDS).toContain('const ownDosesOnly = canEdit ? null : (selfMember?.id ?? NIL_UUID);');
     expect(MEDS).toContain("const NIL_UUID = '00000000-0000-0000-0000-000000000000';");
     expect(MEDS).toMatch(/table: 'medications', familyId, deps: \[familyId, ownMemberOnly\],\s*fetcher: \(sb\) => \{\s*const q = sb\.from\('medications'\)\.select\('\*'\)\.eq\('family_id', familyId\);\s*return \(ownMemberOnly \? q\.eq\('member_id', ownMemberOnly\) : q\)/);
-    expect(MEDS).toMatch(/table: 'medication_doses', familyId, deps: \[familyId, dayKey, ownMemberOnly\],[\s\S]{0,200}?return ownMemberOnly \? q\.eq\('member_id', ownMemberOnly\) : q;/);
+    expect(MEDS).toMatch(/table: 'medication_doses', familyId, deps: \[familyId, dayKey, ownDosesOnly\],[\s\S]{0,200}?return ownDosesOnly \? q\.eq\('member_id', ownDosesOnly\) : q;/);
   });
 
   it('refuses someone else before health reads and restricts the coach picker', () => {
@@ -59,10 +65,12 @@ describe('prescription app privacy before 0465', () => {
 // read policy, so a missing member filter returns the synthetic sibling rows.
 const source = ts.createSourceFile('medications-module.tsx', MEDS, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const fetchers = new Map<string, string>();
-let ownMemberInitializer = 'undefined'; // Old-source counterfactual has no own-member scope.
+// The page's own scoping, read from its source. Old-source counterfactuals
+// have no own-member scope.
+const initializers: Record<string, string> = { readsEveryMedicine: 'undefined', ownMemberOnly: 'undefined', ownDosesOnly: 'undefined' };
 function visit(node: ts.Node) {
-  if (ts.isVariableDeclaration(node) && node.name.getText(source) === 'ownMemberOnly' && node.initializer) {
-    ownMemberInitializer = node.initializer.getText(source);
+  if (ts.isVariableDeclaration(node) && node.name.getText(source) in initializers && node.initializer) {
+    initializers[node.name.getText(source)] = node.initializer.getText(source);
   }
   if (ts.isCallExpression(node) && node.expression.getText(source) === 'useRealtimeQuery') {
     const options = node.arguments[0];
@@ -93,15 +101,20 @@ afterEach(() => vi.unstubAllGlobals());
 
 async function query(table: 'medications' | 'medication_doses', role: string, memberId: string | null = SELF) {
   vi.stubGlobal('fetch', () => { throw new Error('Unexpected real network request'); });
-  const ownMemberOnly = new Function('canEdit', 'selfMember', 'NIL_UUID', `return (${ownMemberInitializer});`)(
-    isManager(role), memberId ? { id: memberId } : null, NIL,
+  const selfMember = memberId ? { id: memberId } : null;
+  const readsEveryMedicine = new Function('readsEveryMedication', 'role', `return (${initializers.readsEveryMedicine});`)(readsEveryMedication, role);
+  const ownMemberOnly = new Function('readsEveryMedicine', 'selfMember', 'NIL_UUID', `return (${initializers.ownMemberOnly});`)(
+    readsEveryMedicine, selfMember, NIL,
+  );
+  const ownDosesOnly = new Function('canEdit', 'selfMember', 'NIL_UUID', `return (${initializers.ownDosesOnly});`)(
+    isManager(role), selfMember, NIL,
   );
   const text = fetchers.get(table);
   if (!text) throw new Error(`Missing actual fetcher for ${table}`);
   const compiled = ts.transpileModule(`const fetcher = ${text};`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
   }).outputText;
-  const fetcher = new Function('familyId', 'ownMemberOnly', 'windowStart', `${compiled}\nreturn fetcher;`)(FAMILY, ownMemberOnly, since);
+  const fetcher = new Function('familyId', 'ownMemberOnly', 'ownDosesOnly', 'windowStart', `${compiled}\nreturn fetcher;`)(FAMILY, ownMemberOnly, ownDosesOnly, since);
   const requests: URL[] = [];
   const client = createClient('https://fixture.invalid', 'synthetic-public-key', {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -128,14 +141,17 @@ async function query(table: 'medications' | 'medication_doses', role: string, me
   return { ids: result.data?.map(row => row.id), request: requests[0] };
 }
 
+// Who reads every row of each table (the held 0511 for medications; 0481 for doses).
+const READS_EVERY = { medications: ['parent', 'adult', 'caregiver'], medication_doses: ['parent', 'adult'] } as const;
+
 describe.each(['medications', 'medication_doses'] as const)('%s before restrictive read policies', table => {
-  it.each(['child', 'teen', 'caregiver', 'guest'])('a %s requests and receives only their own rows', async role => {
+  it.each(['child', 'teen', 'caregiver', 'guest'].filter((r) => !(READS_EVERY[table] as readonly string[]).includes(r)))('a %s requests and receives only their own rows', async role => {
     const result = await query(table, role);
     expect(result.request.searchParams.get('member_id')).toBe(`eq.${SELF}`);
     expect(result.ids).toEqual(['own-row']);
   });
 
-  it.each(['parent', 'adult'])('a %s retains the whole-family query', async role => {
+  it.each([...READS_EVERY[table]])('a %s retains the whole-family query', async role => {
     const result = await query(table, role);
     expect(result.request.searchParams.has('member_id')).toBe(false);
     expect(result.ids).toEqual(['own-row', 'sibling-row', 'unassigned-row']);

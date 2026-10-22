@@ -211,3 +211,23 @@ export function buildHealthReport(
     },
   };
 }
+
+/**
+ * The report as the PUBLIC, unauthenticated body carries it: status, time and
+ * one boolean per check.
+ *
+ * The full report — the NAMES of every unset feature secret, whether the
+ * service-role key is accepted, upstream probe error text, latency — described
+ * a deployment's configuration to anyone who asked, and a scanner could keep
+ * it. No secret VALUE was ever in it, but which subsystems are fail-closed and
+ * which credential is bad is more than a liveness answer needs. The detail now
+ * goes to the server log and to a monitor that presents HEALTH_MONITOR_SECRET
+ * (app/api/health/route.ts); `buildHealthReport` is unchanged for both. Audit N5.
+ */
+export type PublicHealthBody = { status: HealthStatus; timestamp: string; checks: Record<string, { ok: boolean }> };
+
+export function publicHealthBody(report: HealthReport): PublicHealthBody {
+  const checks: Record<string, { ok: boolean }> = {};
+  for (const [name, check] of Object.entries(report.checks)) checks[name] = { ok: check.ok };
+  return { status: report.status, timestamp: report.timestamp, checks };
+}

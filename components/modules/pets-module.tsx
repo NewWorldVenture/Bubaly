@@ -58,7 +58,7 @@ export function PetsModule() {
     fetcher: (s) => s.from('pets').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at'),
     deps: [familyId],
   });
-  const records = useRealtimeQuery<CareRecord>({
+  const allRecords = useRealtimeQuery<CareRecord>({
     table: 'pet_care_records', familyId,
     fetcher: (s) => s.from('pet_care_records').select('*').eq('family_id', familyId).order('record_date', { ascending: false }),
     deps: [familyId],
@@ -68,16 +68,27 @@ export function PetsModule() {
   const [selected, setSelected] = useState<Pet | null>(null);
   const [careForPet, setCareForPet] = useState<Pet | null>(null);
 
+  // Care records of the pets still in the household. Removing a pet only marks
+  // it inactive (its records stay, and the cascade never fires), so a removed
+  // pet's overdue booster kept counting in Care status and listed in Upcoming
+  // care with no name — after the confirm said its records were removed.
+  const activeRecordData = useMemo(() => {
+    const ids = new Set(pets.data.map((p) => p.id));
+    return allRecords.data.filter((r) => ids.has(r.pet_id));
+  }, [pets.data, allRecords.data]);
+  const records = { ...allRecords, data: activeRecordData };
+
   const summary = useMemo(
     () => careSummary(pets.data.length, records.data, familyToday),
     [pets.data.length, records.data, familyToday],
   );
   const upcoming = useMemo(() => upcomingCare(records.data, familyToday).slice(0, 6), [records.data, familyToday]);
 
-  // The AI care engine: deterministic recommendations across all pets.
+  // The AI care engine: deterministic recommendations across all pets — on the
+  // family's day, like Care status beside it, not the device's.
   const recommendations = useMemo(
-    () => pets.data.flatMap((p) => recommendedCare({ id: p.id, species: p.species }, records.data)),
-    [pets.data, records.data],
+    () => pets.data.flatMap((p) => recommendedCare({ id: p.id, species: p.species }, records.data, familyToday)),
+    [pets.data, records.data, familyToday],
   );
 
   async function removePet(id: string) {
@@ -92,9 +103,9 @@ export function PetsModule() {
 
   const petById = (id: string) => pets.data.find((p) => p.id === id);
 
-  const loading = pets.loading || records.loading;
-  const error = pets.error || records.error;
-  const refresh = () => { void pets.refresh(); void records.refresh(); };
+  const loading = pets.loading || allRecords.loading;
+  const error = pets.error || allRecords.error;
+  const refresh = () => { void pets.refresh(); void allRecords.refresh(); };
 
   if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={t('petsModule.couldNotLoadPetCare')} onRetry={refresh} />;
@@ -136,7 +147,7 @@ export function PetsModule() {
                       <Icon className="h-4 w-4 shrink-0" />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-fg">{pet?.name}: {r.title}</p>
-                        <p className="text-xs opacity-90">{r.reason}</p>
+                        <p className="text-xs">{r.reason}</p>
                       </div>
                       {r.urgency === 'overdue' && <AlertTriangle className="h-4 w-4 shrink-0" />}
                     </li>
@@ -415,7 +426,7 @@ function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
                         {r.next_due && <span className={cn('ml-1', u === 'overdue' ? 'text-rose-300' : u === 'due_soon' ? 'text-amber-300' : '')}>{t('pets.next')} {fmtDate(r.next_due)}</span>}
                       </p>
                     </div>
-                    <button onClick={() => deleteRecord(r.id)} aria-label={t('pets.deleteRecord')} className="shrink-0 p-1 text-muted/50 opacity-0 transition hover:text-rose-400 group-hover:opacity-100">
+                    <button onClick={() => deleteRecord(r.id)} aria-label={t('pets.deleteRecord')} className="shrink-0 p-1 text-muted opacity-100 sm:opacity-0 transition hover:text-rose-400 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </li>

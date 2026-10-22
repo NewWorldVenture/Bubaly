@@ -138,9 +138,16 @@ begin
   exception when insufficient_privilege then null;
   end;
 
-  -- Every member still READS the insurance policies — that is the product.
+  -- Every member still READS the insurance policies — that was the product
+  -- until the owner decided otherwise: under the held 0517 a policy is read by
+  -- a manager or the member it names, and this household policy names nobody.
   select count(*) into n from public.family_insurance_policies where family_id = fam;
-  if n < 1 then
+  if exists (select 1 from pg_policy where polrelid = 'public.family_insurance_policies'::regclass
+                and polname = 'A personal record is read by a manager or its member') then
+    if n <> 0 then
+      raise exception '0517: a child reads % household insurance polic(ies) that name nobody', n;
+    end if;
+  elsif n < 1 then
     raise exception '0416: a family member can no longer read the insurance policies';
   end if;
   reset role;

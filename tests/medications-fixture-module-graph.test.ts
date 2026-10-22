@@ -66,13 +66,17 @@ function resolvesRelative(source: string, specifier: string): boolean {
 const SELF_MAINTAINING = [
   'assistant-conversation-lifecycle.spec.ts',
   'auth-cache-partition.spec.ts', 'auth-initiation-order.spec.ts', 'auth-recovery-ui.spec.ts',
-  'browser-session-storage.spec.ts', 'callback-completion-ui.spec.ts', 'family-media-session-ownership.spec.ts',
+  'browser-session-storage.spec.ts', 'cache-session-explicit-reload.spec.ts', 'callback-completion-ui.spec.ts', 'family-media-session-ownership.spec.ts',
   'family-messages-state.spec.ts',
   'format-hydration.spec.ts', 'framework-hydration-replay.spec.ts',
   'inbox-message-ownership.spec.ts',
+  'join-invite-ownership.spec.ts',
   'kid-login-boundaries.spec.ts',
   'kid-login-readiness.spec.ts', 'language-picker-keyboard.spec.ts', 'login-readiness.spec.ts', 'logout-refresh-storage.spec.ts',
+  'messages-family-switch-sdk.spec.ts',
+  'mfa-enrollment-qr.spec.ts',
   'modal-focus-return.spec.ts', 'modal-hydration.spec.ts', 'oauth-initiation.spec.ts', 'password-login-boundaries.spec.ts', 'password-session-ownership.spec.ts',
+  'refresh-captured-session-ownership.spec.ts',
   'session-storage-reconcile.spec.ts', 'signup-boundaries.spec.ts', 'weekly-meal-planner.spec.ts',
 ];
 

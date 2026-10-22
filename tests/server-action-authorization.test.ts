@@ -21,7 +21,8 @@
 // in its return position was flagged that way. The parser knows the difference.
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join as nativeJoin, relative } from 'node:path';
+const join = (...parts: string[]): string => nativeJoin(...parts).replace(/\\/g, '/');
 import ts from 'typescript';
 
 const ROOT = process.cwd();
@@ -68,7 +69,7 @@ const GUARDS = new Set([
  */
 const PUBLIC_BY_DESIGN: Record<string, string> = {
   'app/reviews/new/actions.ts:submitReviewAction':
-    'public review form; writes status pending unless it clears the configured auto-approve threshold',
+    'public review form; a stranger\'s review is written pending, and only a signed-in member\'s can clear the configured auto-approve threshold',
   'app/s/[slug]/actions.ts:submitResponseAction':
     'public survey form; respondents may be anonymous, and the slug must resolve to an active survey',
   'app/gift/actions.ts:submitGiftPledgeAction':
@@ -90,7 +91,7 @@ function exportedActions(sf: ts.SourceFile, file: string): Action[] {
     if (!mods.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)) continue;
     if (!mods.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword)) continue;
     out.push({
-      file, rel: relative(ROOT, file), name: stmt.name.text,
+      file, rel: relative(ROOT, file).replace(/\\/g, '/'), name: stmt.name.text,
       line: sf.getLineAndCharacterOfPosition(stmt.getStart(sf)).line + 1,
       fn: stmt, sf,
     });

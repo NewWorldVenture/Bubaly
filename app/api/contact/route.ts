@@ -5,7 +5,7 @@ import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { sendEmail } from '@/lib/server/email';
 import { createServiceClient } from '@/lib/supabase/server';
-import { fireAutomationEvent } from '@/lib/marketing/automation-events';
+import { firePublicFormSubmitted } from '@/lib/marketing/public-form-automation';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
@@ -86,10 +86,11 @@ export async function POST(req: Request) {
   }
 
   // Fire any event-driven "form_submitted" automation workflows in real time.
-  // Best-effort: never block the contact response on marketing automation.
+  // Best-effort: never block the contact response on marketing automation. The
+  // address is unverified, so the mail is bounded per inbox and carries no text
+  // of the caller's (lib/marketing/public-form-automation.ts).
   try {
-    await fireAutomationEvent(supabase, {
-      trigger: 'form_submitted',
+    await firePublicFormSubmitted({
       email,
       name,
       subjectKey: eventSubjectKey('form_submitted', [ticketNumber]),

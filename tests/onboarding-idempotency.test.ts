@@ -22,7 +22,10 @@ describe('onboarding finalization idempotency', () => {
     const source = fullSource.slice(fullSource.indexOf('export async function finalizeOnboardingAction'));
     const migration = readFileSync('supabase/migrations/0210_onboarding_idempotency.sql', 'utf8');
 
-    expect(source).toContain("onboarding_key: onboardingItemKey(runKey, 'member'");
+    // Members and invites are keyed by the household, not the whole payload, so a
+    // retry whose calendar, PIN or other steps changed reconciles the same rows.
+    expect(source).toContain("onboarding_key: onboardingItemKey(householdKey, 'member'");
+    expect(source).toContain("onboarding_key: onboardingItemKey(householdKey, 'invite'");
     expect(source).toContain("onConflict: 'family_id,onboarding_key'");
     expect(source).toContain("onboarding_key: onboardingItemKey(runKey, 'calendar-event'");
     expect(source).toContain("onboardingItemKey(runKey, 'calendar-import'");

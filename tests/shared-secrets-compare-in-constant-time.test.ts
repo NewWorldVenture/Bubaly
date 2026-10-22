@@ -89,6 +89,8 @@ describe('no shared-secret call site compares with ===', () => {
     'app/api/guardian/escalate/route.ts',
     'app/api/contact-center/email/route.ts',
     'lib/claude-fleet/manager.ts',
+    // The detailed health report is gated on a monitor bearer (audit N5).
+    'app/api/health/route.ts',
   ];
 
   it('lists every file that checks a request against a shared secret', () => {

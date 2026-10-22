@@ -295,7 +295,7 @@ export function MigrateWizard() {
                 const row = plan.events[i];
                 const isSkipped = skipped('event', i, row?.duplicate ?? false);
                 return (
-                  <li key={`${e.title}-${e.startsAt}-${i}`} className={cn('flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-xs', isSkipped && 'opacity-50')}>
+                  <li key={`${e.title}-${e.startsAt}-${i}`} className={cn('flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-xs', isSkipped && 'text-muted')}>
                     <span className="min-w-0 flex-1 truncate font-medium">{e.title}</span>
                     <span className="hidden shrink-0 text-muted sm:inline">{fmtDate(e.startsAt, 'P')}</span>
                     {row?.duplicate && <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] text-amber-600">{tr('migrateWizard.reviewAlreadyHere')}</span>}
@@ -322,7 +322,7 @@ export function MigrateWizard() {
                 const row = plan.contacts[i];
                 const isSkipped = skipped('contact', i, row?.duplicate ?? false);
                 return (
-                  <li key={`${c.name}-${i}`} className={cn('flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-xs', isSkipped && 'opacity-50')}>
+                  <li key={`${c.name}-${i}`} className={cn('flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-xs', isSkipped && 'text-muted')}>
                     <span className="min-w-0 flex-1 truncate font-medium">{c.name}</span>
                     <span className="hidden min-w-0 shrink truncate text-muted sm:inline">{c.emails[0] ?? c.phones[0] ?? ''}</span>
                     {row?.duplicate && <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] text-amber-600">{tr('migrateWizard.reviewAlreadyHere')}</span>}
@@ -349,7 +349,7 @@ export function MigrateWizard() {
                 const row = plan.tasks[i];
                 const isSkipped = skipped('task', i, row?.duplicate ?? false);
                 return (
-                  <li key={`${t.name}-${i}`} className={cn('flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-xs', isSkipped && 'opacity-50')}>
+                  <li key={`${t.name}-${i}`} className={cn('flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-xs', isSkipped && 'text-muted')}>
                     <span className="min-w-0 flex-1 truncate font-medium">{t.name}</span>
                     {row?.duplicate && <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] text-amber-600">{tr('migrateWizard.reviewAlreadyHere')}</span>}
                     {memberSelect('task', i, row?.memberId ?? null)}
@@ -375,7 +375,7 @@ export function MigrateWizard() {
                 const row = plan.grocery[i];
                 const isSkipped = skipped('grocery', i, row?.duplicate ?? false);
                 return (
-                  <li key={`${g.name}-${i}`} className={cn('flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-xs', isSkipped && 'opacity-50')}>
+                  <li key={`${g.name}-${i}`} className={cn('flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-xs', isSkipped && 'text-muted')}>
                     <span className="min-w-0 flex-1 truncate font-medium">{g.name}</span>
                     {g.extra && <span className="hidden shrink-0 text-muted sm:inline">{g.extra}</span>}
                     {row?.duplicate && <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] text-amber-600">{tr('migrateWizard.reviewAlreadyHere')}</span>}
@@ -405,7 +405,7 @@ export function MigrateWizard() {
                 const row = plan.notes[i];
                 const isSkipped = skipped('note', i, row?.duplicate ?? false);
                 return (
-                  <li key={`${n.name}-${i}`} className={cn('flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-xs', isSkipped && 'opacity-50')}>
+                  <li key={`${n.name}-${i}`} className={cn('flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-xs', isSkipped && 'text-muted')}>
                     <span className="min-w-0 flex-1 truncate font-medium">{n.name}</span>
                     {row?.duplicate && <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] text-amber-600">{tr('migrateWizard.reviewAlreadyHere')}</span>}
                     <label className="flex shrink-0 items-center gap-1 text-[11px] text-muted">

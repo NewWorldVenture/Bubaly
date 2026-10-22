@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join as nativeJoin } from 'node:path';
+const join = (...parts: string[]): string => nativeJoin(...parts).replace(/\\/g, '/');
 import { describe, expect, it } from 'vitest';
 
 // `settleAll` exists so one failed read cannot reject a page's whole batch. It
@@ -19,7 +20,7 @@ import { describe, expect, it } from 'vitest';
 // job is finding them — and /dashboard/family-access said a family has no kid
 // logins and offered to create them, about an access-control record.
 //
-// This is a RATCHET for the rest. Eleven remain (three were closed on main: family activity and Guardian contacts and settings); most are display lists where
+// This is a RATCHET for the rest. Four remain (three were closed on main: family activity and Guardian contacts and settings; the idea board fails closed since U3); most are display lists where
 // an empty render is a display bug rather than a false claim, and each needs its
 // own translated error string, which is a translation task rather than a code
 // one. Listing them stops a fifteenth appearing while they are worked down.
@@ -29,9 +30,7 @@ const TRACKED = new Set([
   'app/(app)/dashboard/app-store/page.tsx',
   'app/(app)/dashboard/auto/licenses/page.tsx',
   'app/(app)/dashboard/auto/vehicles/page.tsx',
-  'app/(app)/dashboard/social-feed/page.tsx',
   'app/(app)/dashboard/social/content-studio/page.tsx',
-  'app/(app)/feedback/page.tsx',
 ]);
 
 // Any mention of an error is enough to clear the ratchet: this measures "did the

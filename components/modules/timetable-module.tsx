@@ -14,6 +14,7 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
+import { mayAskInsight } from '@/lib/ai/insights';
 import { cn } from '@/lib/utils/cn';
 import {
   buildWeekGrid, weekParity, WEEKDAYS, WEEKDAY_LABELS,
@@ -47,7 +48,10 @@ const blankForm = {
 export function TimetableModule() {
   const t = useTranslations();
   const askConfirm = useConfirm();
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, role } = useApp();
+  // The route refuses a guest the timetable summary (INSIGHT_READ_DOMAINS), so
+  // the button is not offered to one.
+  const canAskInsight = mayAskInsight('timetable', role);
   const { success, error: toastError } = useToast();
 
   // weekParity reads UTC fields, so it is handed the FAMILY's day as UTC
@@ -137,13 +141,13 @@ export function TimetableModule() {
       <PageHeader
         title={t('timetable.timetable')}
         description={t('timetableModule.aVisualMonFriClass')}
-        action={<div className="flex items-center gap-2"><AiInsight kind="timetable" iconOnly /><Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('timetable.addClass')}</Button></div>}
+        action={<div className="flex items-center gap-2">{canAskInsight && <AiInsight kind="timetable" iconOnly />}<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('timetable.addClass')}</Button></div>}
       />
 
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 mb-5">
         {/* Member filter */}
-        <Select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} aria-label={t('timetable.student')} className="h-9 w-auto">
+        <Select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} aria-label={t('timetable.student')} className="h-9 w-auto min-w-0 max-w-full">
           <option value="all">{t('timetable.allStudents')}</option>
           {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
         </Select>
@@ -156,7 +160,7 @@ export function TimetableModule() {
                 className={cn('rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
                   week === w ? 'bg-brand text-white' : 'text-muted hover:text-fg')}>
                 {WEEK_PATTERN_LABELS[w]}
-                {todayWeek === w && <span className="ml-1.5 text-xs opacity-80">(now)</span>}
+                {todayWeek === w && <span className="ml-1.5 text-xs font-normal">(now)</span>}
               </button>
             ))}
           </div>
@@ -182,14 +186,14 @@ export function TimetableModule() {
                       <div key={cl.id} className={cn('group rounded-xl border p-2.5', subjectColor(c.subject))}>
                         <div className="flex items-start justify-between gap-1">
                           <div className="font-semibold text-sm leading-tight">{c.subject}</div>
-                          <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition-opacity">
+                          <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 coarse:opacity-100 transition-opacity">
                             <button onClick={() => openEdit(c)} aria-label={t('timetable.edit')} className="p-1 rounded-md hover:bg-black/20"><Pencil className="h-3.5 w-3.5" /></button>
                             <button onClick={() => remove(c)} aria-label={t('timetable.remove')} className="p-1 rounded-md hover:bg-black/20"><Trash2 className="h-3.5 w-3.5" /></button>
                           </div>
                         </div>
-                        {c.time_slot && <div className="mt-1 flex items-center gap-1 text-xs opacity-90"><Clock className="h-3 w-3" />{c.time_slot}</div>}
-                        {c.room && <div className="mt-0.5 flex items-center gap-1 text-xs opacity-90"><MapPin className="h-3 w-3" />{c.room}</div>}
-                        <div className="mt-1.5 flex items-center gap-1 text-xs opacity-80">
+                        {c.time_slot && <div className="mt-1 flex items-center gap-1 text-xs"><Clock className="h-3 w-3" />{c.time_slot}</div>}
+                        {c.room && <div className="mt-0.5 flex items-center gap-1 text-xs"><MapPin className="h-3 w-3" />{c.room}</div>}
+                        <div className="mt-1.5 flex items-center gap-1 text-xs">
                           <Avatar name={memberName(c.member_id)} size={16} />
                           <span className="truncate">{memberName(c.member_id)}</span>
                         </div>

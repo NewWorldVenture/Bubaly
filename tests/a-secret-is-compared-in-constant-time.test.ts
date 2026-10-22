@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { secretEquals } from '@/lib/server/secret-equals';
@@ -115,8 +115,8 @@ describe('no secret is compared with ===', () => {
   });
 
   it('has no remaining byte-by-byte secret comparison', () => {
-    const files = execSync("git ls-files 'app/*.ts' 'lib/*.ts'", { encoding: 'utf8' })
-      .split('\n').filter(Boolean)
+    const files = execFileSync('git', ["ls-files","-z","app/*.ts","lib/*.ts"], { encoding: 'utf8' })
+    .split('\0').filter(Boolean).filter(Boolean)
       .filter((f) => f !== 'lib/server/secret-equals.ts');
     expect(files.length).toBeGreaterThan(200);
 
