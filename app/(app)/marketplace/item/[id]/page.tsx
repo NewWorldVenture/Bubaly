@@ -27,15 +27,9 @@ import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { getFormat } from '@/lib/utils/format-server';
-import { RESERVE_VIEW_COLUMNS, readWithReserveView } from '@/lib/marketplace/reserve-view';
+import { readListingDetail } from '@/lib/marketplace/circle-reads';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { AppNotFound } from '@/components/app/app-not-found';
-import type { Database } from '@/lib/database.types';
-
-type ListingRow = Pick<Database['public']['Tables']['marketplace_listings']['Row'],
-  'id' | 'member_id' | 'title' | 'description' | 'kind' | 'category' | 'condition' | 'price_cents' | 'rent_period'
-  | 'photo_url' | 'location' | 'status' | 'created_at' | 'sale_format' | 'auction_starts_at' | 'auction_ends_at'
-  | 'starting_bid_cents' | 'has_reserve' | 'reserve_met' | 'buy_now_cents' | 'current_bid_cents' | 'bid_count'
-  | 'highest_bidder_family_id'>;
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -66,12 +60,19 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
     dataWarnings.push(label);
   };
 
-  // Through readWithReserveView so the page renders whether or not 0452 has
-  // reached this database (lib/marketplace/reserve-view.ts).
-  const { data: listing, error: listingError } = await readWithReserveView<ListingRow>(
-    `id, member_id, title, description, kind, category, condition, price_cents, rent_period, photo_url, location, status, created_at, sale_format, auction_starts_at, auction_ends_at, starting_bid_cents, ${RESERVE_VIEW_COLUMNS}, buy_now_cents, current_bid_cents, bid_count, highest_bidder_family_id`,
-    (columns) => sb.from('marketplace_listings').select(columns).eq('id', id).eq('family_id', familyId).maybeSingle(),
-  );
+  // The viewer's own family's listing comes from the table. Another family's
+  // (one shared into a circle the viewer's family is in) comes from the circle
+  // view: since 0483 the table no longer returns it, and every cross-family
+  // link here (the auctions board, the offers inbox, the community feed) was a
+  // dead end. On either side of 0483 and 0452 (lib/marketplace/circle-reads.ts).
+  const detail = await readListingDetail(sb, id, familyId);
+  const { data: listing, error: listingError } = detail;
+  // Another family's listing is shopped, not managed: no seller member, no
+  // pickup spot, and none of this family's own reads about it.
+  const ownFamily = detail.ownFamily;
+  // A guest views the household (lib/constants/roles.ts); they do not reach
+  // out, report or ask on its behalf, and the actions refuse them too.
+  const canAct = ctx.active.role !== 'guest';
   if (listingError) {
     reportRead('Listing', listingError);
     return <ErrorState message={t('item.couldNotLoadThisListing')} />;
@@ -87,25 +88,46 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
 
   const kind = listing.kind as ListingKind;
   const KindIcon = KIND_ICON[kind] ?? ShoppingBag;
-  const isOwner = listing.member_id === selfId;
+  const isOwner = ownFamily && listing.member_id === selfId;
   const sellerId = listing.member_id ?? '';
   const price = priceLabel(kind, listing.price_cents, listing.rent_period as RentPeriod | null, locale.code, t);
 
   // Seller identity + a trust score computed from real activity.
   const { data: members, error: membersError } = await sb.from('family_members').select('id, display_name').eq('family_id', familyId);
   reportRead('Family members', membersError);
-  const sellerName = members?.find((m) => m.id === listing.member_id)?.display_name ?? 'A neighbor';
+  const sellerName = (ownFamily ? members?.find((m) => m.id === listing.member_id)?.display_name : listing.family_name) ?? 'A neighbor';
 
+  // The seller's standing, the offers and the store are this family's rows
+  // about its own member. Another family's listing has no seller member to key
+  // them on and this family's tables hold nothing about it, so none is read.
+  const seller = ownFamily && sellerId !== '';
+  const none = { data: null, error: null, count: null };
   const [sellerReviewsRes, listingReviewsRes, saveRes, offerRes, sellerListingsRes, sellerOrdersRes, storeRes] = await Promise.all([
-    settle(sb.from('marketplace_reviews').select('rating').eq('family_id', familyId).eq('reviewee_member', sellerId)),
-    settle(sb.from('marketplace_reviews').select('id, reviewer_member, rating, comment, created_at').eq('family_id', familyId).eq('listing_id', id).order('created_at', { ascending: false }).limit(10)),
+    // Every rating the seller received is averaged, so it is every row, paged
+    // on id: an unbounded read averaged a 1,000-row sample past db-max-rows.
+    seller
+      ? readAllByIdAsQuery<{ id: string; rating: number }>((after, limit) => {
+          let q = sb.from('marketplace_reviews').select('id, rating').eq('family_id', familyId).eq('reviewee_member', sellerId);
+          if (after) q = q.gt('id', after);
+          return q.order('id').limit(limit);
+        }, { max: 50_000 })
+      : Promise.resolve(none),
+    ownFamily
+      ? settle(sb.from('marketplace_reviews').select('id, reviewer_member, rating, comment, created_at').eq('family_id', familyId).eq('listing_id', id).order('created_at', { ascending: false }).limit(10))
+      : Promise.resolve(none),
     settle(sb.from('marketplace_saves').select('id').eq('listing_id', id).eq('member_id', selfId).maybeSingle()),
-    settle(sb.from('marketplace_offers').select('id, member_id, kind, amount_cents, message, created_at').eq('listing_id', id).eq('status', 'open').order('created_at', { ascending: true })),
-    settle(sb.from('marketplace_listings').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('member_id', sellerId)),
-    settle(sb.from('marketplace_orders').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('seller_member', sellerId).eq('status', 'completed')),
-    listing.member_id
-      ? settle(sb.from('marketplace_stores').select('id, name, emoji').eq('family_id', familyId).eq('member_id', listing.member_id).eq('is_active', true).maybeSingle())
-      : Promise.resolve({ data: null, error: null }),
+    ownFamily
+      ? settle(sb.from('marketplace_offers').select('id, member_id, kind, amount_cents, message, created_at').eq('listing_id', id).eq('status', 'open').order('created_at', { ascending: true }))
+      : Promise.resolve(none),
+    seller
+      ? settle(sb.from('marketplace_listings').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('member_id', sellerId))
+      : Promise.resolve(none),
+    seller
+      ? settle(sb.from('marketplace_orders').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('seller_member', sellerId).eq('status', 'completed'))
+      : Promise.resolve(none),
+    seller
+      ? settle(sb.from('marketplace_stores').select('id, name, emoji').eq('family_id', familyId).eq('member_id', sellerId).eq('is_active', true).maybeSingle())
+      : Promise.resolve(none),
   ]);
 
   reportRead('Seller reviews', sellerReviewsRes.error);
@@ -146,8 +168,9 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
   const sentLabel = kind === 'sell' || kind === 'rent' ? 'Interest sent' : 'Claim sent';
   const open = listing.status === 'available' || listing.status === 'pending';
 
-  // Price history + drop watch (fixed-price listings with a real price).
-  const tracksPrice = !isAuctionListing && listing.price_cents > 0;
+  // Price history + drop watch (fixed-price listings with a real price). The
+  // history is the listing family's own rows.
+  const tracksPrice = ownFamily && !isAuctionListing && listing.price_cents > 0;
   const { data: priceRows, error: priceHistoryError } = tracksPrice
     ? await sb.from('marketplace_price_history')
         .select('old_cents, new_cents, changed_at').eq('listing_id', id)
@@ -163,7 +186,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
   // Price coach: "is this a fair price?" from reachable category comps (sell only).
   let dealBadge: { text: string; tone: 'ok' | 'good' | 'muted' | 'warn' } | null = null;
   let compBand: string | null = null;
-  if (tracksPrice && kind === 'sell' && !isOwner) {
+  if (!isAuctionListing && listing.price_cents > 0 && kind === 'sell' && !isOwner) {
     const { data: compRows, error: compsError } = await sb
       .from('marketplace_listings')
       .select('category, condition, price_cents, kind')
@@ -333,35 +356,43 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                   </Link>
                 )}
               </div>
-              <div className="text-right">
-                <div className="inline-flex items-center gap-1 text-sm font-semibold text-fg">
-                  <ShieldCheck className="h-4 w-4 text-emerald-500" /> {trust.score}
+              {/* A score this family cannot compute (another family's seller) is not shown as a new seller's. */}
+              {seller && (
+                <div className="text-right">
+                  <div className="inline-flex items-center gap-1 text-sm font-semibold text-fg">
+                    <ShieldCheck className="h-4 w-4 text-emerald-500" /> {trust.score}
+                  </div>
+                  <div className="text-[11px] text-muted">{t(TRUST_BAND_LABEL_KEYS[trust.band])}</div>
                 </div>
-                <div className="text-[11px] text-muted">{t(TRUST_BAND_LABEL_KEYS[trust.band])}</div>
-              </div>
-            </div>
-            <div className="mt-2 flex items-center gap-3 text-xs text-muted">
-              {rs.count > 0 ? (
-                <span className="inline-flex items-center gap-1"><Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />{rs.avg.toFixed(1)} ({rs.count})</span>
-              ) : (
-                <span>{t('marketplaceItem.noReviewsYet')}</span>
               )}
-              {trust.factors[0] && <span className="truncate">· {trust.factors[0]}</span>}
             </div>
+            {seller && (
+              <div className="mt-2 flex items-center gap-3 text-xs text-muted">
+                {rs.count > 0 ? (
+                  <span className="inline-flex items-center gap-1"><Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />{rs.avg.toFixed(1)} ({rs.count})</span>
+                ) : (
+                  <span>{t('marketplaceItem.noReviewsYet')}</span>
+                )}
+                {trust.factors[0] && <span className="truncate">· {trust.factors[0]}</span>}
+              </div>
+            )}
           </div>
 
           {/* Actions */}
           <div className="mt-5 flex flex-wrap items-center gap-3">
             {isOwner ? (
               <span className="text-sm text-muted">{t('marketplaceItem.thisIsYourListing')}{openOffers > 0 ? ` · ${openOffers} open offer${openOffers === 1 ? '' : 's'}` : ''}.</span>
-            ) : open ? (
+            ) : open && ownFamily && !isAuctionListing && canAct ? (
+              // Interest is the in-family flow (0462 refuses an offer on another
+              // family's listing), and an auction takes bids, not interest: an
+              // offer flips the listing to 'pending', which freezes the auction.
               <InterestButton listingId={listing.id} label={claimLabel} sentLabel={sentLabel} alreadySent={alreadySent} />
             ) : (
               <span className="text-sm text-muted capitalize">{listing.status}</span>
             )}
             <SaveButton listingId={listing.id} saved={alreadySaved}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm text-muted hover:text-fg" />
-            {!isOwner && <ReportButton listingId={listing.id} />}
+            {!isOwner && canAct && <ReportButton listingId={listing.id} />}
           </div>
 
           {/* Owner: accept / decline the offers on this listing */}
@@ -406,7 +437,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
       )}
 
       {/* Q&A */}
-      <ListingQuestions listingId={listing.id} isOwner={isOwner} />
+      <ListingQuestions listingId={listing.id} isOwner={isOwner} canAsk={canAct} />
     </div>
   );
 }

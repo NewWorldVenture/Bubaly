@@ -79,14 +79,17 @@ export function MarketplaceModule({
   // Price chips are in the READER's notation — priceLabel requires their locale.
   const locale = useLocale();
   const askConfirm = useConfirm();
-  const { familyId, userId, members, selfMember } = useApp();
+  const { familyId, userId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
   const selfId = selfMember?.id ?? null;
+  // A guest views the board (lib/constants/roles.ts): posting, editing and
+  // reaching out about a listing act in the family's name, so they are not offered.
+  const canPost = role !== 'guest';
 
   const [kindFilter, setKindFilter] = useState<ListingKind | 'all'>(initialKind);
   const [catFilter, setCatFilter] = useState<ListingCategory | 'all'>(initialCategory);
   const [q, setQ] = useState(initialQuery);
-  const [modalOpen, setModalOpen] = useState(!!autoOpenPost);
+  const [modalOpen, setModalOpen] = useState(!!autoOpenPost && canPost);
   const [form, setForm] = useState(autoOpenPost ? { ...blank, kind: autoOpenPost } : blank);
   const [ownedPhotoPath, setOwnedPhotoPath] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -143,6 +146,7 @@ export function MarketplaceModule({
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (!canPost) return;
     if (!form.title.trim()) { toastError(t('marketplaceModule.giveYourListingATitle')); return; }
     setSaving(true);
     const sb = createClient();
@@ -214,7 +218,7 @@ export function MarketplaceModule({
   // A member expresses interest / claims → creates an open offer + flips the
   // listing to "pending" so others see it's being discussed.
   async function makeOffer(l: Listing) {
-    if (busyId || !canOffer(l as ListingLike, selfId, offers ?? [])) return;
+    if (busyId || !canPost || !canOffer(l as ListingLike, selfId, offers ?? [])) return;
     setBusyId(l.id);
     try {
       const sb = createClient();
@@ -251,13 +255,6 @@ export function MarketplaceModule({
     success(t('marketplaceModule.offerDeclined'));
   }
 
-  async function markCompleted(l: Listing) {
-    const sb = createClient();
-    const { error: err } = await sb.rpc('marketplace_set_listing_status', { p_listing: l.id, p_status: 'completed' });
-    if (err) { toastError(describeDbError(err)); return; }
-    success(t('marketplaceModule.markedComplete'));
-  }
-
   if (loading) return <SkeletonList count={5} />;
   const readError = error || offersError;
   if (readError) return <ErrorState message={typeof readError === 'string' ? readError : 'Failed to load the marketplace'} />;
@@ -277,7 +274,7 @@ export function MarketplaceModule({
                 <Database className="h-4 w-4" /> {t('marketplace.seedTestData')}
               </Link>
             )}
-            <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('marketplace.postAListing')}</Button>
+            {canPost && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('marketplace.postAListing')}</Button>}
           </div>
         }
       />
@@ -305,7 +302,7 @@ export function MarketplaceModule({
       {visible.length === 0 ? (
         <EmptyState icon={Store} title={t('marketplace.nothingOnTheBoardYet')}
           description={t('marketplaceModule.postTheFirstItemSell')}
-          action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('marketplace.postAListing')}</Button>} />
+          action={canPost ? <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('marketplace.postAListing')}</Button> : undefined} />
       ) : (
         <>
           <p className="mb-3 text-xs text-muted">{availableCount(listings as ListingLike[])} {t('marketplace.available')} {visible.length} shown</p>
@@ -317,7 +314,13 @@ export function MarketplaceModule({
               const price = priceLabel(kind, l.price_cents, l.rent_period as RentPeriod | null, locale.code, t);
               const offerN = openOfferCount(l.id);
               const alreadyOffered = myOpenOffers.has(l.id);
-              const offerable = canOffer(l as ListingLike, selfId, offers ?? []);
+              const offerable = canPost && canOffer(l as ListingLike, selfId, offers ?? []);
+              // A live auction holding bids is not withdrawn or removed from the
+              // board: withdrawing leaves every bid 'active' and nobody is told
+              // (marketplace_set_listing_status does not close the bids). It
+              // closes on its own at its end time.
+              const holdsBids = l.sale_format === 'auction' && (l.bid_count ?? 0) > 0
+                && (l.status === 'available' || l.status === 'pending');
               return (
                 <div key={l.id} className="flex flex-col overflow-hidden rounded-2xl border border-border bg-surface/50">
                   <Link href={`/marketplace/item/${l.id}`} className="group block" aria-label={t('itemAction.view', { name: l.title })}>
@@ -366,16 +369,19 @@ export function MarketplaceModule({
                             <Inbox className="h-3.5 w-3.5" /> {offerN} {offerN === 1 ? 'offer' : 'offers'}
                           </Button>
                         )}
-                        {l.status === 'claimed' && (
-                          <Button size="sm" variant="outline" onClick={() => markCompleted(l)} className="h-7 gap-1 text-xs">
-                            <Check className="h-3.5 w-3.5" /> {t('marketplace.markComplete')}
-                          </Button>
+                        {/* No "Mark complete" here: it completed the LISTING and left
+                            its confirmed order open forever (no review, a hand-off
+                            panel that never went away). The order is finished on
+                            the Orders page, by its seller. */}
+                        {canPost && (
+                          <button onClick={() => openEdit(l)} aria-label={t('marketplace.edit')} className="ml-auto rounded p-1 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
                         )}
-                        <button onClick={() => openEdit(l)} aria-label={t('marketplace.edit')} className="ml-auto rounded p-1 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-                        {l.status !== 'withdrawn' && (
-                          <button onClick={() => withdraw(l)} aria-label={t('marketplace.withdraw')} className="rounded p-1 text-muted hover:bg-elevated hover:text-amber-300"><X className="h-3.5 w-3.5" /></button>
+                        {l.status !== 'withdrawn' && !holdsBids && (
+                          <button onClick={() => withdraw(l)} aria-label={t('marketplace.withdraw')} className={cn('rounded p-1 text-muted hover:bg-elevated hover:text-amber-300', !canPost && 'ml-auto')}><X className="h-3.5 w-3.5" /></button>
                         )}
-                        <button onClick={() => remove(l)} aria-label={t('marketplace.remove')} className="rounded p-1 text-muted hover:bg-elevated hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                        {!holdsBids && (
+                          <button onClick={() => remove(l)} aria-label={t('marketplace.remove')} className="rounded p-1 text-muted hover:bg-elevated hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                        )}
                       </>
                     ) : alreadyOffered ? (
                       <span className="inline-flex items-center gap-1 text-xs text-emerald-300"><Check className="h-3.5 w-3.5" /> {kind === 'sell' || kind === 'rent' ? 'Interest sent' : 'Claim sent'}</span>

@@ -10,14 +10,16 @@ import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/input';
 import { cn } from '@/lib/utils/cn';
-import { mayTakeOrderStep } from '@/lib/marketplace/order-lifecycle';
+import { ORDER_TRANSITIONS, mayTakeOrderStep, type OrderStatus } from '@/lib/marketplace/order-lifecycle';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
-const NEXT_STEPS: Record<string, { status: string; label: string; tone: 'go' | 'stop' }[]> = {
-  requested: [{ status: 'confirmed', label: 'Confirm', tone: 'go' }, { status: 'cancelled', label: 'Cancel', tone: 'stop' }],
-  confirmed: [{ status: 'active', label: 'Start', tone: 'go' }, { status: 'cancelled', label: 'Cancel', tone: 'stop' }],
-  active: [{ status: 'returned', label: 'Mark returned', tone: 'go' }, { status: 'completed', label: 'Complete', tone: 'go' }],
-  returned: [{ status: 'completed', label: 'Complete', tone: 'go' }],
+/** How each step is offered; WHICH steps a status has is ORDER_TRANSITIONS, the action's own table. */
+const STEP: Record<Exclude<OrderStatus, 'requested'>, { label: string; tone: 'go' | 'stop' }> = {
+  confirmed: { label: 'Confirm', tone: 'go' },
+  active: { label: 'Start', tone: 'go' },
+  returned: { label: 'Mark returned', tone: 'go' },
+  completed: { label: 'Complete', tone: 'go' },
+  cancelled: { label: 'Cancel', tone: 'stop' },
 };
 
 export function OrderControls({ orderId, status, viewerRole }: { orderId: string; status: string; viewerRole: 'buyer' | 'seller' }) {
@@ -25,7 +27,9 @@ export function OrderControls({ orderId, status, viewerRole }: { orderId: string
   const { success, error: toastError } = useToast();
   // Returned and complete are the seller's steps; the action refuses them to
   // the buyer, so they are not offered.
-  const steps = (NEXT_STEPS[status] ?? []).filter((s) => mayTakeOrderStep(viewerRole, s.status));
+  const next = Object.hasOwn(ORDER_TRANSITIONS, status) ? ORDER_TRANSITIONS[status as OrderStatus] : [];
+  const steps = next.flatMap((to) => (to === 'requested' ? [] : [{ status: to, ...STEP[to] }]))
+    .filter((s) => mayTakeOrderStep(viewerRole, s.status));
   if (steps.length === 0) return null;
 
   const advance = (next: string, label: string) => {

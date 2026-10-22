@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { ErrorState } from '@/components/ui/states';
 import { whoseTurn, statusLine, type Party, type NegotiationStatus } from '@/lib/marketplace/negotiation';
 import { MARKETPLACE_CURRENCY } from '@/lib/marketplace/listings';
+import { readCircleListingsById } from '@/lib/marketplace/circle-reads';
 import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { getFormat } from '@/lib/utils/format-server';
@@ -72,7 +73,28 @@ export default async function NegotiationsInboxPage() {
       </div>
     );
   }
-  const listingMap = new Map((listings ?? []).map((l) => [l.id, l]));
+  // A thread this family's member opened as the BUYER is on another family's
+  // listing, which the table stopped returning when 0483 dropped the circle
+  // read: every such row fell to `if (!l) continue` below, and the buyer read
+  // "No offers going yet" while a counter waited on them. Those listings come
+  // from the circle view, which has no member_id, so the viewer is never
+  // their seller (lib/marketplace/circle-reads.ts).
+  const found = new Set((listings ?? []).map((l) => l.id));
+  const { data: shared, error: sharedError } = await readCircleListingsById<{ id: string; title: string; price_cents: number }>(
+    sb, listingIds.filter((id) => !found.has(id)), 'id, title, price_cents',
+  );
+  if (sharedError) {
+    return (
+      <div className="module-page">
+        <PageHeader title={tr('marketplaceNegotiations.offers')} description={tr('negotiations.everyMakeAnOfferNegotiation')} />
+        <ErrorState message={tr('negotiations.couldnTLoadYourOffers')} />
+      </div>
+    );
+  }
+  const listingMap = new Map<string, { id: string; title: string; member_id: string | null; price_cents: number }>([
+    ...(listings ?? []).map((l) => [l.id, l] as const),
+    ...(shared ?? []).map((l) => [l.id, { ...l, member_id: null }] as const),
+  ]);
   const { data: members } = await sb.from('family_members').select('id, display_name').eq('family_id', familyId);
   const nameOf = (id: string | null) => members?.find((m) => m.id === id)?.display_name ?? 'A neighbor';
 

@@ -17116,5 +17116,9 @@
   "displayGrid.notesUnavailable": "As notas não estão disponíveis.",
   "feedback.couldNotLoadTheBoard": "Não foi possível carregar o quadro de ideias neste momento. Tente novamente daqui a pouco.",
   "feedbackFeedbackBoard.yourVotesCouldNotBeRead": "Não foi possível ler os seus votos neste momento, por isso a votação está em pausa. Atualize para tentar novamente.",
-  "actions.tripRecommendationsInvalid": "Não foi possível guardar essas recomendações de viagem: não têm a forma esperada ou são demasiado grandes."
+  "actions.tripRecommendationsInvalid": "Não foi possível guardar essas recomendações de viagem: não têm a forma esperada ou são demasiado grandes.",
+  "handoff.theOtherPersonEntersTheCode": "O código de entrega está consigo: partilhe-o no encontro e a outra pessoa introdu-lo.",
+  "handoffPanel.pickedUpLoanStarted": "Recolhido — o empréstimo começou.",
+  "marketplace.reviewsAcrossHouseholdsAreNotOpenYet": "As avaliações entre dois agregados familiares ainda não estão disponíveis.",
+  "marketplace.anAuctionTakesBidsNotInterest": "Isto é um leilão: faça antes uma licitação."
 }

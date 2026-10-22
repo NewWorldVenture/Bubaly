@@ -17116,5 +17116,9 @@
   "displayGrid.notesUnavailable": "Le note non sono disponibili.",
   "feedback.couldNotLoadTheBoard": "La bacheca delle idee non può essere caricata in questo momento. Riprova tra poco.",
   "feedbackFeedbackBoard.yourVotesCouldNotBeRead": "I tuoi voti non possono essere letti in questo momento, quindi la votazione è in pausa. Aggiorna per riprovare.",
-  "actions.tripRecommendationsInvalid": "Questi consigli di viaggio non possono essere salvati: non hanno la forma prevista o sono troppo grandi."
+  "actions.tripRecommendationsInvalid": "Questi consigli di viaggio non possono essere salvati: non hanno la forma prevista o sono troppo grandi.",
+  "handoff.theOtherPersonEntersTheCode": "Il codice di consegna ce l’hai tu: condividilo all’incontro e l’altra persona lo inserisce.",
+  "handoffPanel.pickedUpLoanStarted": "Ritirato: il prestito è iniziato.",
+  "marketplace.reviewsAcrossHouseholdsAreNotOpenYet": "Le recensioni tra due famiglie non sono ancora disponibili.",
+  "marketplace.anAuctionTakesBidsNotInterest": "Questa è un’asta: fai invece un’offerta."
 }

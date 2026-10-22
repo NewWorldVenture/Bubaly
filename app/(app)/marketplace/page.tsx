@@ -241,7 +241,9 @@ export default async function MarketplaceHomePage() {
         </section>
 
         {/* ── Post in 60 seconds — the one-sentence AI listing composer ────── */}
-        <QuickPost />
+        {/* Not for a guest, who views the household: a post goes on the
+            family's board with a photo and a pickup spot in its name. */}
+        {ctx.active.role !== 'guest' && <QuickPost />}
 
         {/* ── What would you like to do? ───────────────────────────────────── */}
         <section className="rounded-2xl border border-border bg-surface/60 p-4">

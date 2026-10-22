@@ -12,7 +12,7 @@ import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { readFamilyOrders } from '@/lib/marketplace/schema-compat';
 import { cancelOrderPickup } from '@/lib/marketplace/pickup-server';
-import { SELLER_ONLY_ORDER_STEPS } from '@/lib/marketplace/order-lifecycle';
+import { ORDER_TRANSITIONS, SELLER_ONLY_ORDER_STEPS } from '@/lib/marketplace/order-lifecycle';
 
 type Failure = { ok: false; error: string };
 type Result = { ok: true } | Failure;
@@ -23,6 +23,14 @@ function actionFailure(operation: string, message: string, error: unknown): Fail
   console.error(`[marketplace-action] ${operation} failed`, error);
   return { ok: false, error: describeActionError(error, message) };
 }
+
+/**
+ * A guest views the household (lib/constants/roles.ts: "View the shared
+ * calendar, lists and plans"). Opening a storefront, reaching out about a
+ * listing and rating an exchange act in the family's name, so they are not a
+ * guest's; the screens do not offer them either.
+ */
+const isGuest = (role: string | null | undefined) => role === 'guest';
 
 /** Set a match's status: dismissed (hide) or actioned (they connected). */
 export async function setMatchStatusAction(id: string, status: 'dismissed' | 'actioned'): Promise<Result> {
@@ -115,6 +123,7 @@ export async function upsertStoreAction(input: { name: string; tagline?: string;
   const name = input.name?.trim();
   if (!name) return { ok: false, error: t('actions.giveYourStoreAName') };
   const ctx = await requireUserContext();
+  if (isGuest(ctx.active.role)) return { ok: false, error: t('actionRefusal.notAllowed') };
   const supabase = await createServer();
   const { error } = await supabase.from('marketplace_stores').upsert({
     family_id: ctx.active.familyId,
@@ -132,12 +141,10 @@ export async function upsertStoreAction(input: { name: string; tagline?: string;
   return { ok: true };
 }
 
-const ORDER_FLOW: Record<string, string[]> = {
-  requested: ['confirmed', 'cancelled'],
-  confirmed: ['active', 'cancelled'],
-  active: ['returned', 'completed'],
-  returned: ['completed'],
-};
+// The order state machine, in the database's own vocabulary (0151's check on
+// marketplace_orders.status). One table: the Orders page offers exactly these
+// steps (components/marketplace/order-controls.tsx).
+const ORDER_FLOW: Readonly<Record<string, readonly string[]>> = ORDER_TRANSITIONS;
 
 /** Advance an order along its lifecycle (requested→confirmed→active→…). */
 export async function setOrderStatusAction(orderId: string, status: string): Promise<Result> {
@@ -208,12 +215,13 @@ export async function leaveReviewAction(input: { orderId: string; rating: number
   const rating = Math.round(input.rating);
   if (!input.orderId || rating < 1 || rating > 5) return { ok: false, error: t('actions.pickARatingFrom1') };
   const ctx = await requireUserContext();
+  if (isGuest(ctx.active.role)) return { ok: false, error: t('actionRefusal.notAllowed') };
   const supabase = await createServer();
   const memberId = ctx.active.member.id;
 
   const { data: order, error: orderError } = await readFamilyOrders(ctx.active.familyId, (scope) => scope(supabase
     .from('marketplace_orders')
-    .select('id, listing_id, buyer_member, seller_member, status')
+    .select('id, family_id, listing_id, buyer_member, seller_member, status')
     .eq('id', input.orderId))
     .maybeSingle());
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
@@ -222,9 +230,17 @@ export async function leaveReviewAction(input: { orderId: string; rating: number
   const isBuyer = order.buyer_member === memberId;
   const isSeller = order.seller_member === memberId;
   if (!isBuyer && !isSeller) return { ok: false, error: t('actions.onlyTheTwoPartiesCan') };
+  // A review lives in the ORDER's family: marketplace_reviews_insert (0359)
+  // requires o.family_id = the review's family_id and the reviewer to be that
+  // family's member. An order won at auction, bought outright or agreed in a
+  // negotiation is the SELLER's family's, so the buyer from another household
+  // can file no review the database will take (they were told "Could not save
+  // the review" every time). Said so here, and the Orders page does not offer
+  // them the form; accepting their review is the owner's SQL.
+  if (order.family_id !== ctx.active.familyId) return { ok: false, error: t('marketplace.reviewsAcrossHouseholdsAreNotOpenYet') };
 
   const { error } = await supabase.from('marketplace_reviews').insert({
-    family_id: ctx.active.familyId,
+    family_id: order.family_id,
     order_id: order.id,
     listing_id: order.listing_id,
     reviewer_member: memberId,
@@ -255,18 +271,24 @@ export async function makeOfferAction(listingId: string): Promise<Result> {
   const t = await getTranslations();
   if (!listingId) return { ok: false, error: t('actions.invalidListing') };
   const ctx = await requireUserContext();
+  if (isGuest(ctx.active.role)) return { ok: false, error: t('actionRefusal.notAllowed') };
   const supabase = await createServer();
   const memberId = ctx.active.member.id;
 
   const { data: listing, error: listingError } = await supabase
     .from('marketplace_listings')
-    .select('id, kind, status, member_id')
+    .select('id, kind, status, member_id, sale_format')
     .eq('id', listingId)
     .eq('family_id', ctx.active.familyId)
     .maybeSingle();
   if (listingError) return actionFailure('load the listing', t('marketplace.couldNotLoadTheListing'), listingError);
   if (!listing) return { ok: false, error: t('actions.listingNotFound') };
   if (listing.member_id === memberId) return { ok: false, error: t('actions.thisIsYourOwnListing') };
+  // An auction takes bids, not interest. The offer's trigger (0154) flips an
+  // available listing to 'pending', which every bid, Buy-It-Now and the close
+  // then refuse: one "I'm interested" froze the auction, with no way back from
+  // the board, and accepting it sold the item at its price under live bids.
+  if (listing.sale_format === 'auction') return { ok: false, error: t('marketplace.anAuctionTakesBidsNotInterest') };
   if (listing.status !== 'available' && listing.status !== 'pending') {
     return { ok: false, error: t('actions.thisListingIsNoLonger') };
   }

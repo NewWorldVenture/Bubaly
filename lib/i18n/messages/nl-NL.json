@@ -17116,5 +17116,9 @@
   "displayGrid.notesUnavailable": "Notities zijn niet beschikbaar.",
   "feedback.couldNotLoadTheBoard": "Het ideeënbord kon nu niet worden geladen. Probeer het zo opnieuw.",
   "feedbackFeedbackBoard.yourVotesCouldNotBeRead": "Je stemmen konden nu niet worden gelezen, dus stemmen is gepauzeerd. Vernieuw om het opnieuw te proberen.",
-  "actions.tripRecommendationsInvalid": "Die reisaanbevelingen konden niet worden opgeslagen: ze hebben niet de verwachte vorm of zijn te groot."
+  "actions.tripRecommendationsInvalid": "Die reisaanbevelingen konden niet worden opgeslagen: ze hebben niet de verwachte vorm of zijn te groot.",
+  "handoff.theOtherPersonEntersTheCode": "Jij hebt de overdrachtscode: deel hem bij de ontmoeting, de ander voert hem in.",
+  "handoffPanel.pickedUpLoanStarted": "Opgehaald — de uitleen is begonnen.",
+  "marketplace.reviewsAcrossHouseholdsAreNotOpenYet": "Beoordelingen tussen twee huishoudens zijn nog niet mogelijk.",
+  "marketplace.anAuctionTakesBidsNotInterest": "Dit is een veiling: breng in plaats daarvan een bod uit."
 }
