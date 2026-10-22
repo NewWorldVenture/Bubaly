@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/input';
 import { cn } from '@/lib/utils/cn';
+import { mayTakeOrderStep } from '@/lib/marketplace/order-lifecycle';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 const NEXT_STEPS: Record<string, { status: string; label: string; tone: 'go' | 'stop' }[]> = {
@@ -19,10 +20,12 @@ const NEXT_STEPS: Record<string, { status: string; label: string; tone: 'go' | '
   returned: [{ status: 'completed', label: 'Complete', tone: 'go' }],
 };
 
-export function OrderControls({ orderId, status }: { orderId: string; status: string }) {
+export function OrderControls({ orderId, status, viewerRole }: { orderId: string; status: string; viewerRole: 'buyer' | 'seller' }) {
   const [pending, startTransition] = useTransition();
   const { success, error: toastError } = useToast();
-  const steps = NEXT_STEPS[status] ?? [];
+  // Returned and complete are the seller's steps; the action refuses them to
+  // the buyer, so they are not offered.
+  const steps = (NEXT_STEPS[status] ?? []).filter((s) => mayTakeOrderStep(viewerRole, s.status));
   if (steps.length === 0) return null;
 
   const advance = (next: string, label: string) => {

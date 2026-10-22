@@ -26,6 +26,8 @@ vi.mock('@/lib/supabase/auth', () => ({
 }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.createServer }));
 vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: async () => 2 }));
+// The page's feature gate admits this family; the gate has its own cases.
+vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: async () => null }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.enforceAIRateLimit }));
 vi.mock('@/lib/ai/provider', async (importOriginal) => ({
   describeAIError: (await importOriginal<typeof import('@/lib/ai/provider')>()).describeAIError,
@@ -68,10 +70,11 @@ vi.mock('@/lib/ai/observability', () => ({
 
 import { POST } from '@/app/api/ai/weekly-briefing/route';
 
-const fallback = {
+/** A whole briefing, as a model would write it. */
+const week = {
   weekRange: 'Sep 7 - Sep 13',
   headline: 'Here\u2019s your week, Alex.',
-  summary: ['Your weekly briefing is being processed \u2014 refresh in a moment.'],
+  summary: ['A busy Tuesday, a quiet weekend.'],
   recap: { choreCompletion: 0, wins: [], misses: [], note: 'Keep it up!' },
   dayByDay: [
     ['Monday', 'Sep 7'], ['Tuesday', 'Sep 8'], ['Wednesday', 'Sep 9'],
@@ -109,12 +112,25 @@ beforeEach(() => {
       Object.assign(query, {
         select: () => query,
         eq: () => query,
+        // The open-list read (openGroceryListIds) and its items. Without these
+        // the grocery read threw, which the route now reports instead of
+        // briefing an empty list (AUD-1022-L2).
+        is: () => query,
+        in: () => query,
         gte: () => query,
         lte: () => query,
         order: () => query,
         limit: () => query,
-        then: (resolve: (value: { data: unknown[]; error: null }) => unknown) =>
-          Promise.resolve({ data: [], error: null }).then(resolve),
+        // The calendar's occurrence reads and the reminders' paged read. An
+        // empty week must read as an empty week — counted, every page — now
+        // that a read that fails is reported rather than briefed as empty (N5).
+        or: () => query,
+        neq: () => query,
+        lt: () => query,
+        range: () => query,
+        abortSignal: () => query,
+        then: (resolve: (value: { data: unknown[]; error: null; count: number }) => unknown) =>
+          Promise.resolve({ data: [], error: null, count: 0 }).then(resolve),
       });
       return query;
     },
@@ -130,41 +146,36 @@ afterEach(() => {
 });
 
 describe('weekly briefing observed outcomes', () => {
+  // N14: none of these is a briefing. Malformed JSON used to become an invented
+  // "being processed" week (score 75, low stress) and an empty or refused
+  // reply a blank `{}` recorded as a success — both at 200, and both kept by
+  // the page for the rest of the day. Each is now a failed turn and a 502.
   it.each([
     { label: 'malformed JSON', text: '{bad}' },
     { label: 'malformed fenced JSON', text: '```json\n{"headline":}\n```' },
     { label: 'multiple JSON objects', text: '{"headline":"first"} {"headline":"second"}' },
     { label: 'nonstring completion text', text: {} },
-  ])('reports $label before settlement and preserves the successful fallback response', async ({ text }) => {
+    { label: 'empty JSON object', text: '{}' },
+    { label: 'empty text', text: '' },
+    { label: 'missing text', text: undefined },
+    { label: 'text without a JSON object', text: 'No JSON object' },
+    { label: 'an object with neither a headline nor a day', text: '{"summary":["x"],"dayByDay":[]}' },
+  ])('reports $label as a failed turn and answers 502, inventing nothing', async ({ text }) => {
     mocks.complete.mockResolvedValue({ text, model: 'mock-model' });
 
     const response = await POST(request());
 
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ briefing: fallback, generatedAt: expect.any(String), weekKey: '2026-09-07' });
+    expect(response.status).toBe(502);
+    const body = await response.json();
+    expect(body).toEqual({ error: 'Failed to generate weekly briefing' });
+    expect(JSON.stringify(body)).not.toContain('being processed');
     expect(mocks.failed).toHaveBeenCalledExactlyOnceWith(expect.any(Error));
     expect(mocks.trace).toEqual(['used', 'failed', 'settled:failed']);
     expect(mocks.settledValue).toBeNull();
   });
 
-  it.each([
-    { label: 'empty JSON object', text: '{}' },
-    { label: 'empty text', text: '' },
-    { label: 'missing text', text: undefined },
-    { label: 'text without a JSON object', text: 'No JSON object' },
-  ])('preserves the existing successful empty/default result for $label', async ({ text }) => {
-    mocks.complete.mockResolvedValue({ text, model: 'mock-model' });
-
-    const response = await POST(request());
-
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ briefing: {}, generatedAt: expect.any(String), weekKey: '2026-09-07' });
-    expect(mocks.failed).not.toHaveBeenCalled();
-    expect(mocks.trace).toEqual(['used', 'settled:completed']);
-  });
-
   it.each(['plain', 'fenced'])('keeps valid %s responses and empty collections successful', async (format) => {
-    const briefing = { ...fallback, headline: 'Example week.', summary: [], focusOfTheWeek: 'Example focus.' };
+    const briefing = { ...week, headline: 'Example week.', summary: [], focusOfTheWeek: 'Example focus.' };
     const text = JSON.stringify(briefing);
     const usage = { inputTokens: 20, outputTokens: 30 };
     mocks.complete.mockResolvedValue({ text: format === 'fenced' ? '```json\n' + text + '\n```' : text, model: 'mock-model', usage });

@@ -17,7 +17,13 @@ const CACHE = 'bubaly-v6';
    touched this file. It holds publisher audio fetched through /library/media,
    never authenticated HTML, so it is outside the M-023 invariant rather than an
    exception to it. Kept in step with LIBRARY_CACHE in lib/library/progress.ts,
-   which a worker cannot import. */
+   which a worker cannot import.
+   Audio only. A download stays for whoever signs in next on this browser, and
+   this worker cannot tell who is asking, while /library/media refuses a child
+   or a teen anything not named audio: a video, or an octet-stream body a
+   player sniffs into one. So a cached file of either kind is never served
+   from here (isOfflineAudio in lib/library/progress.ts); the request goes to
+   the route, which decides for the person asking. */
 const LIBRARY_CACHE = 'bubaly-library-v1';
 const KEEP = new Set([CACHE, LIBRARY_CACHE]);
 const APP_SHELL = ['/', '/offline'];
@@ -71,7 +77,7 @@ function safeResponse(response, request, kind, publicInstall = false) {
   if (!response || response.status !== 200 || response.redirected || response.type === 'opaque' || response.type === 'opaqueredirect') return false;
   if (response.url && response.url !== request.url) return false;
   const type = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-  if (kind === 'library') return /^(?:audio|video)\/[a-z0-9.+-]+$/.test(type) || type === 'application/octet-stream';
+  if (kind === 'library') return /^audio\/[a-z0-9.+-]+$/.test(type);
   if (!publicInstall && /(?:^|,)\s*(?:private|no-store)(?:\s*(?:=|,|$))/i.test(response.headers.get('cache-control') || '')) return false;
   if (kind === 'shell') return type === 'text/html';
   if (kind === 'image') return ['image/png', 'image/webp', 'image/avif'].includes(type);
@@ -129,8 +135,15 @@ self.addEventListener('fetch', (event) => {
   // Never cache Supabase auth or API calls.
   if (url.pathname.startsWith('/api') || url.pathname.startsWith('/auth')) return;
 
+  // A library item is asked of the network past the browser's HTTP cache. An
+  // older /library/media answer was kept there for an hour under the URL alone
+  // (private, max-age=3600), so it could reach the next reader on this browser
+  // without the route deciding for them. Newer answers are not kept at all
+  // (LIBRARY_MEDIA_CACHE_CONTROL); this covers the ones already there.
+  const pastHttpCache = LIBRARY_ITEM.test(url.pathname) ? { cache: 'no-store' } : undefined;
+
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).then(async response => {
+    event.respondWith(fetch(request, pastHttpCache).then(async response => {
       if (publicShell(url, request) && safeResponse(response, request, 'shell')) await savePublic(request, response.clone());
       return response;
     }).catch(async () => (publicShell(url, request) && await cachedResponse(CACHE, request, 'shell')) || offlinePage()));
@@ -141,7 +154,7 @@ self.addEventListener('fetch', (event) => {
   // publisher bytes available without using the library as a generic fallback.
   if (!url.search && !url.hash && LIBRARY_ITEM.test(url.pathname)
     && ['', 'audio', 'video'].includes(request.destination)) {
-    event.respondWith(cachedResponse(LIBRARY_CACHE, request, 'library').then(response => response || fetch(request)));
+    event.respondWith(cachedResponse(LIBRARY_CACHE, request, 'library').then(response => response || fetch(request, pastHttpCache)));
     return;
   }
 

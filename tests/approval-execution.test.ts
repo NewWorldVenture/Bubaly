@@ -131,6 +131,11 @@ function approvalRow(over: Partial<Row> = {}): Row {
   };
 }
 
+/** What evaluateTrust / the risk tier write, via the service role, for a row they file. */
+function bubalyFiledMarker(approvalId = 'appr-1'): Row {
+  return { id: `audit-${approvalId}`, family_id: 'fam-1', actor_kind: 'ai_agent', actor_id: 'bubaly', approval_id: approvalId, decision: 'require_approval' };
+}
+
 function runRow(over: Partial<Row> = {}): Row {
   return {
     id: 'run-1', family_id: 'fam-1', plan_id: 'plan-1', request_id: 'req-1', requested_by_member_id: 'member-1',
@@ -256,6 +261,8 @@ describe('decide — tool payloads', () => {
   it('executes a legacy alias payload through executeTool with the gate skipped and a stable idempotency key', async () => {
     const store = makeStore({
       approval_requests: [approvalRow({ payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } } })],
+      // The gate's own audit line for the row it filed (service-only, 0260).
+      trust_audit_logs: [bubalyFiledMarker()],
     });
     holder.service = store.db;
 
@@ -270,23 +277,43 @@ describe('decide — tool payloads', () => {
     expect(typeof call.opts.idempotencyKey).toBe('string');
 
     expect(store.tables.approval_requests[0]).toMatchObject({ status: 'approved', execution_result: 'Did create_calendar_event' });
-    expect(store.tables.trust_audit_logs.map((a) => a.decision)).toEqual(['approved', 'approved_execution']);
+    expect(store.tables.trust_audit_logs.map((a) => a.decision)).toEqual(['require_approval', 'approved', 'approved_execution']);
   });
 
-  it('re-evaluates the trust gate for a tool payload on a row a member filed themselves', async () => {
+  it('runs nothing for a tool payload on a row a member filed themselves', async () => {
     // A member can file their own approval row (0252 keeps that open, pinned to
-    // them); it must not become a way to run any tool with the gate skipped.
+    // them); it must not become a way to run any tool — with the gate skipped,
+    // or re-gated on the approver's client (tests/a-planted-approval-runs-nothing.test.ts).
     const store = makeStore({
       approval_requests: [approvalRow({
         requested_by_kind: 'member', requested_by_member_id: 'member-9', agent: null,
         payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool',
       })],
+      family_members: [{ id: 'member-9', family_id: 'fam-1', user_id: 'auth-user-9', role: 'teen', is_active: true }],
+    });
+    holder.service = store.db;
+    const res = await decide(scopeWith(store.db), 'appr-1', 'approved');
+    expect(res).toMatchObject({ ok: false, code: 'denied', retryable: false });
+    expect(executed.calls).toHaveLength(0);
+    expect(store.tables.approval_requests[0]).toMatchObject({ status: 'approved' });
+    expect(String(store.tables.approval_requests[0].execution_result)).toMatch(/^error: /);
+  });
+
+  it('replays, as filed, a row the server’s gate filed for that member', async () => {
+    const store = makeStore({
+      approval_requests: [approvalRow({
+        requested_by_kind: 'member', requested_by_member_id: 'member-9', agent: null,
+        payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool',
+      })],
+      family_members: [{ id: 'member-9', family_id: 'fam-1', user_id: 'auth-user-9', role: 'teen', is_active: true }],
+      // `evaluateTrust`'s own line for the row it filed for member-9 (service-only, 0260).
+      trust_audit_logs: [{ id: 'audit-filed', family_id: 'fam-1', actor_kind: 'member', actor_id: 'member-9', approval_id: 'appr-1', decision: 'require_approval' }],
     });
     holder.service = store.db;
     const res = await decide(scopeWith(store.db), 'appr-1', 'approved');
     expect(res).toMatchObject({ ok: true, data: { status: 'approved', executed: true } });
     expect(executed.calls).toHaveLength(1);
-    expect(executed.calls[0].opts.skipTrust).toBe(false);
+    expect(executed.calls[0]).toMatchObject({ args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' }, opts: { skipTrust: true } });
   });
 
   it('releases only the steps already pointing at a member-filed plan_steps row, never the ids it names', async () => {
@@ -329,12 +356,18 @@ describe('decide — tool payloads', () => {
 
   it('reports an execution failure honestly and stamps it, while the decision itself stands', async () => {
     executed.outcome = { status: 'error', error: 'Calendar is read-only right now.', retryable: true, toolCallId: null };
-    const store = makeStore({ approval_requests: [approvalRow({ payload: { name: 'create_calendar_event', args: { title: 'Soccer' } } })] });
+    const store = makeStore({
+      approval_requests: [approvalRow({ payload: { name: 'create_calendar_event', args: { title: 'Soccer' } } })],
+      trust_audit_logs: [bubalyFiledMarker()],
+    });
     holder.service = store.db;
 
     const res = await decide(scopeWith(store.db), 'appr-1', 'approved');
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toContain('Calendar is read-only');
+    // Not retryable, whatever the tool said: the row is decided, so a retry
+    // is refused as "already decided" and nothing re-executes it.
+    expect(res).toMatchObject({ ok: false, retryable: false });
     expect(store.tables.approval_requests[0]).toMatchObject({ status: 'approved', execution_result: 'error: Calendar is read-only right now.' });
   });
 });
@@ -342,10 +375,19 @@ describe('decide — tool payloads', () => {
 describe('decide — concierge_plan', () => {
   it('materialises the write-backs once and closes the legacy pending automation row', async () => {
     const store = makeStore({
-      approval_requests: [approvalRow({ payload: { plan_id: 'plan-9', kinds: ['calendar', 'reminder', 'task'] }, domain: 'scheduling', title: 'Execute plan: Zoo trip' })],
+      // What planAcceptedAction files: the plan as it was asked about rides along.
+      approval_requests: [approvalRow({
+        payload: {
+          plan_id: 'plan-9', kinds: ['calendar', 'reminder', 'task'],
+          plan: { title: 'Zoo trip', description: 'Take the kids', location: 'City Zoo', planned_for: '2026-09-12' },
+        },
+        domain: 'scheduling', title: 'Execute plan: Zoo trip',
+      })],
       concierge_plans: [{ id: 'plan-9', family_id: 'fam-1', title: 'Zoo trip', description: 'Take the kids', location: 'City Zoo', planned_for: '2026-09-12', budget_cents: 5000 }],
       concierge_plan_actions: [{ id: 'cpa-1', family_id: 'fam-1', plan_id: 'plan-9', action_kind: 'reminder' }],
       family_automation_runs: [{ id: 'legacy-run', family_id: 'fam-1', status: 'pending', metadata: { plan_id: 'plan-9', approval_id: 'appr-1' } }],
+      // The concierge gate's own filing line: what proves Bubaly filed this row.
+      trust_audit_logs: [bubalyFiledMarker()],
     });
     holder.service = store.db;
 
@@ -431,7 +473,10 @@ describe('decide — guards', () => {
   });
 
   it('collects votes on a two-parent approval and executes only on the deciding one', async () => {
-    const store = makeStore({ approval_requests: [approvalRow({ required_approvals: 2, payload: { name: 'add_todo', args: { task: 'Pack' } } })] });
+    const store = makeStore({
+      approval_requests: [approvalRow({ required_approvals: 2, payload: { name: 'add_todo', args: { task: 'Pack' } } })],
+      trust_audit_logs: [bubalyFiledMarker()],
+    });
     holder.service = store.db;
 
     const first = await decide(scopeWith(store.db), 'appr-1', 'approved');
@@ -449,7 +494,10 @@ describe('decide — guards', () => {
 describe('editAndApprove', () => {
   it('merges edits over the stored args, validates against the tool schema, stores edited_payload, executes the edited version', async () => {
     const store = makeStore({
-      approval_requests: [approvalRow({ payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool' })],
+      approval_requests: [approvalRow({ requested_by_member_id: 'member-9', payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool' })],
+      family_members: [{ id: 'member-9', family_id: 'fam-1', user_id: 'auth-user-9', role: 'teen', is_active: true }],
+      // Bubaly filed it for member-9: only a server-filed row runs a payload.
+      trust_audit_logs: [bubalyFiledMarker()],
     });
     holder.service = store.db;
 
@@ -461,12 +509,13 @@ describe('editAndApprove', () => {
     expect(row.edited_payload).toEqual({ title: 'Soccer practice', starts_at: '2026-09-06T13:00:00Z' });
     expect(row.decided_by).toBe('member-1');
     expect(executed.calls[0].args).toEqual({ title: 'Soccer practice', starts_at: '2026-09-06T13:00:00Z' });
-    expect(store.tables.trust_audit_logs.map((a) => a.decision)).toEqual(['modified', 'approved_execution']);
+    expect(store.tables.trust_audit_logs.map((a) => a.decision)).toEqual(['require_approval', 'modified', 'approved_execution']);
   });
 
   it('keeps a two-parent rule: an edit is one vote, nothing executes until the second parent approves', async () => {
     const store = makeStore({
       approval_requests: [approvalRow({ required_approvals: 2, payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool' })],
+      trust_audit_logs: [bubalyFiledMarker()],
     });
     holder.service = store.db;
 
@@ -513,5 +562,205 @@ describe('editAndApprove', () => {
     expect(store.tables.approval_requests[0].edited_payload).toEqual({ title: 'Soccer', starts_at: '2026-09-06T14:00:00Z' });
     expect(store.tables.ai_plan_steps[0].status).toBe('ready');
     expect(kicked.runs).toEqual(['run-1']);
+  });
+});
+
+describe('a pending row a manager rewrote is not trusted for what it says about itself', () => {
+  it('runs nothing for a row that claims requested_by_kind = ai without the server having filed it', async () => {
+    // An adult files a member row, PATCHes requested_by_kind to 'ai' (no
+    // column pin stops it), then has it approved. `skipTrust` read that
+    // column, so any registered tool ran with every family rule skipped.
+    // (Approving it ALONE is now refused outright — see "whose request it is
+    // comes from the server's ledger" below — so the approver here is another
+    // adult. It is a member's row the server never filed, so nothing runs.)
+    const store = makeStore({
+      approval_requests: [approvalRow({
+        requested_by_kind: 'ai', requested_by_member_id: 'member-2', agent: null,
+        payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool',
+      })],
+      family_members: [
+        { id: 'member-1', family_id: 'fam-1', user_id: 'auth-user-1', role: 'parent', is_active: true },
+        { id: 'member-2', family_id: 'fam-1', user_id: 'auth-user-2', role: 'adult', is_active: true },
+      ],
+    });
+    holder.service = store.db;
+    const res = await decide(scopeWith(store.db), 'appr-1', 'approved');
+    expect(res).toMatchObject({ ok: false, code: 'denied' });
+    expect(executed.calls).toHaveLength(0);
+  });
+
+  it('refuses a member approving the request they filed themselves', async () => {
+    const store = makeStore({
+      approval_requests: [approvalRow({
+        requested_by_kind: 'member', requested_by_member_id: 'member-1', agent: null,
+        payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool',
+      })],
+    });
+    holder.service = store.db;
+    expect(await decide(scopeWith(store.db), 'appr-1', 'approved')).toMatchObject({ ok: false, code: 'denied' });
+    expect(await editAndApprove(scopeWith(store.db), 'appr-1', { title: 'Soccer!' })).toMatchObject({ ok: false, code: 'denied' });
+    expect(store.tables.approval_requests[0].status).toBe('pending');
+    expect(executed.calls).toHaveLength(0);
+    // Withdrawing your own request is still yours to do.
+    expect(await decide(scopeWith(store.db), 'appr-1', 'rejected')).toMatchObject({ ok: true, data: { status: 'rejected' } });
+  });
+
+  it('never re-points or releases a step gated by a DIFFERENT approval, whatever plan_step_ids the row names', async () => {
+    // The attacker's row names the victim step (held by a pending two-parent
+    // approval) in plan_step_ids and claims to be Bubaly's. foldIntoRun used
+    // to set that step ready with approval_id = the attacker's row, and the
+    // executor then ran it on the strength of the attacker's single vote.
+    const store = makeStore({
+      approval_requests: [
+        approvalRow({
+          requested_by_kind: 'ai', payload: { kind: 'plan_steps', run_id: 'run-1', step_ids: ['victim'] }, payload_kind: 'plan_steps',
+          run_id: 'run-1', plan_step_ids: ['victim'], plan_step_id: 'victim',
+        }),
+        approvalRow({ id: 'appr-two-parent', approval_model: 'two_parent', required_approvals: 2 }),
+      ],
+      family_automation_runs: [runRow()],
+      ai_plan_steps: [stepRow({ id: 'victim', approval_id: 'appr-two-parent' })],
+      trust_audit_logs: [bubalyFiledMarker()],
+    });
+    holder.service = store.db;
+    await decide(scopeWith(store.db), 'appr-1', 'approved');
+    expect(store.tables.ai_plan_steps[0]).toMatchObject({ status: 'awaiting_approval', approval_id: 'appr-two-parent' });
+    expect(store.tables.family_automation_runs[0].state).toBe('awaiting_approval');
+    expect(kicked.runs).toEqual([]);
+  });
+
+  it('a decision whose run could not be resumed is not reported as retryable', async () => {
+    // The status flip commits first; a retry is refused as "already decided".
+    // Telling the parent to retry lost the work. The settled-run sweep resumes it.
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const store = makeStore({
+      approval_requests: [approvalRow({ payload: { kind: 'plan_steps', run_id: 'run-1', step_ids: ['step-1'] }, payload_kind: 'plan_steps', run_id: 'run-1', plan_step_ids: ['step-1'] })],
+      family_automation_runs: [runRow()],
+      ai_plan_steps: [stepRow()],
+    });
+    const fake = store.db as unknown as { from: (table: string) => Record<string, unknown> };
+    const original = fake.from;
+    fake.from = (table: string) => {
+      const b = original(table);
+      if (table === 'family_automation_runs') {
+        const update = b.update as (p: unknown) => unknown;
+        b.update = (p: unknown) => {
+          update(p);
+          b.then = (onFulfilled: (v: { data: null; error: { message: string } }) => void) => onFulfilled({ data: null, error: { message: 'timeout' } });
+          return b;
+        };
+      }
+      return b;
+    };
+    holder.service = store.db;
+    const res = await decide(scopeWith(store.db), 'appr-1', 'approved');
+    expect(res).toMatchObject({ ok: false, retryable: false });
+    if (!res.ok) expect(res.error).toContain('recorded');
+    expect(store.tables.approval_requests[0].status).toBe('approved');
+    errors.mockRestore();
+  });
+});
+
+describe('whose request it is comes from the server\'s ledger, not the row\'s own columns', () => {
+  // `requested_by_kind` is writable on a pending row. `isOwnMemberRequest` read
+  // it, so an adult who filed their own row flipped it to 'ai' and approved
+  // alone. The tool branch re-ran the gate, but the concierge_plan branch has
+  // none: an adult could materialise a plan by themselves.
+  const planRow = () => approvalRow({
+    requested_by_kind: 'ai', requested_by_member_id: 'member-1', agent: null,
+    payload: {
+      plan_id: 'plan-9', kinds: ['calendar'],
+      plan: { title: 'Zoo trip', description: null, location: null, planned_for: '2026-09-12' },
+    },
+    payload_kind: 'concierge_plan', domain: 'scheduling',
+  });
+  const planSeed = () => ({
+    concierge_plans: [{ id: 'plan-9', family_id: 'fam-1', title: 'Zoo trip', description: null, location: null, planned_for: '2026-09-12', budget_cents: null }],
+    concierge_plan_actions: [] as Row[],
+  });
+
+  it('refuses an adult approving a concierge_plan row they filed and relabelled as Bubaly\'s', async () => {
+    const store = makeStore({ approval_requests: [planRow()], ...planSeed() });
+    holder.service = store.db;
+    expect(await decide(scopeWith(store.db), 'appr-1', 'approved')).toMatchObject({ ok: false, code: 'denied' });
+    expect(await editAndApprove(scopeWith(store.db), 'appr-1', { calendar: true })).toMatchObject({ ok: false, code: 'denied' });
+    expect(store.tables.approval_requests[0].status).toBe('pending');
+    expect(store.tables.calendar_events ?? []).toHaveLength(0);
+  });
+
+  it('refuses the same for a relabelled tool row', async () => {
+    const store = makeStore({
+      approval_requests: [approvalRow({
+        requested_by_kind: 'ai', requested_by_member_id: 'member-1',
+        payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool',
+      })],
+    });
+    holder.service = store.db;
+    expect(await decide(scopeWith(store.db), 'appr-1', 'approved')).toMatchObject({ ok: false, code: 'denied' });
+    expect(executed.calls).toHaveLength(0);
+  });
+
+  it('still lets the person Bubaly asked for approve a row Bubaly really filed (not over-tightened)', async () => {
+    const store = makeStore({ approval_requests: [planRow()], ...planSeed(), trust_audit_logs: [bubalyFiledMarker()] });
+    holder.service = store.db;
+    expect(await decide(scopeWith(store.db), 'appr-1', 'approved')).toMatchObject({ ok: true, data: { status: 'approved', executed: true } });
+    expect(store.tables.calendar_events).toHaveLength(1);
+  });
+
+  it('still lets the asker approve their own run\'s step, which the executor files without an audit line', async () => {
+    const store = makeStore({
+      approval_requests: [approvalRow({ requested_by_member_id: 'member-1', payload: { kind: 'plan_steps', run_id: 'run-1', step_ids: ['step-1'] }, payload_kind: 'plan_steps', run_id: 'run-1', plan_step_ids: ['step-1'] })],
+      family_automation_runs: [runRow()],
+      ai_plan_steps: [stepRow()],
+    });
+    holder.service = store.db;
+    expect(await decide(scopeWith(store.db), 'appr-1', 'approved')).toMatchObject({ ok: true, data: { status: 'approved' } });
+  });
+});
+
+describe('a standalone tool approval whose run lookup failed is not promised to a sweep that never sees it', () => {
+  // `resumeSettledRuns` scans runs. A tool approval that belongs to no run was
+  // told "It will pick it up on its next check" when the step read timed out —
+  // and then nothing ever executed it.
+  function failingStepReads(store: ReturnType<typeof makeStore>, failures: number) {
+    const fake = store.db as unknown as { from: (table: string) => Record<string, unknown> };
+    const original = fake.from;
+    let left = failures;
+    fake.from = (table: string) => {
+      const b = original(table);
+      if (table === 'ai_plan_steps' && left > 0) {
+        left -= 1;
+        b.then = (onFulfilled: (v: { data: null; error: { message: string } }) => void) => onFulfilled({ data: null, error: { message: 'timeout' } });
+      }
+      return b;
+    };
+  }
+  const toolRow = () => approvalRow({ payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool' });
+
+  it('does the work once a second look shows no run is waiting on it', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const store = makeStore({ approval_requests: [toolRow()], trust_audit_logs: [bubalyFiledMarker()] });
+    failingStepReads(store, 1);
+    holder.service = store.db;
+    const res = await decide(scopeWith(store.db), 'appr-1', 'approved');
+    expect(res).toMatchObject({ ok: true, data: { status: 'approved', executed: true } });
+    expect(executed.calls).toHaveLength(1);
+    errors.mockRestore();
+  });
+
+  it('says plainly it did nothing, and does not promise a pick-up, when it still cannot tell', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const store = makeStore({ approval_requests: [toolRow()], trust_audit_logs: [bubalyFiledMarker()] });
+    failingStepReads(store, 2);
+    holder.service = store.db;
+    const res = await decide(scopeWith(store.db), 'appr-1', 'approved');
+    expect(res).toMatchObject({ ok: false, retryable: false });
+    if (!res.ok) {
+      expect(res.error).toContain('recorded');
+      expect(res.error).not.toContain('next check');
+      expect(res.error).toContain('ask Bubaly again');
+    }
+    expect(executed.calls).toHaveLength(0);
+    errors.mockRestore();
   });
 });

@@ -14,22 +14,68 @@
 // the same call for the same reason. The real boundary is not the dial anyway:
 // `lib/services/search` decides per role which sources are searched at all, so
 // a child's assistant cannot reach bills, warranties, renewals or a sensitive
-// document through this tool whatever the dial says.
+// document through this tool whatever the dial says, and a guest's or a
+// child's cannot reach the trips `trips.getTrip` refuses them.
 //
 // Every string that comes back is household text a person (or an inbound
 // email) wrote, so it goes through `sanitizeUntrusted` before it reaches a
 // prompt — §41's rule that data never arrives as instructions.
+//
+// WHY THE TOOL WITHHOLDS MORE THAN THE SERVICE: filing under `tasks` also
+// means the executor waves this read through for every role, so nothing else
+// stops it from answering what the assistant's own reads of the same records
+// refuse. `assistantWithheldKinds` applies those rules here: documents are for
+// the adults who manage the family (the documents slice is manager-only and
+// `documents.*` deny every other role), and a guest or a child — whom
+// `trips.getTrip` refuses — is not told where the family will be and when
+// (trips and vacations). The search page and ⌘K bar keep the service's own
+// rules.
 import 'server-only';
 import { z } from 'zod';
 import { sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
+import { canViewSlice, viewerFor } from '@/lib/ai/context/policy';
 import { searchHousehold, DEFAULT_LIMIT, MAX_LIMIT } from '@/lib/services/search';
-import { SEARCH_KINDS } from '@/lib/search/rank';
-import { ok } from '@/lib/services/types';
+import { SEARCH_KINDS, type SearchKind } from '@/lib/search/rank';
+import { ok, type ServiceScope } from '@/lib/services/types';
+import { riskToDecision } from '@/lib/trust/engine';
+import { roleOf } from '@/lib/trust/server';
 import { defineTool, plural, type ToolDefinition } from './types';
 
 /** Titles and snippets are trimmed hard: this is a locator, not a document reader. */
 const MAX_TITLE_CHARS = 160;
 const MAX_SNIPPET_CHARS = 200;
+
+/**
+ * The kinds the assistant does not search for this member, on top of the
+ * money kinds the service already withholds from a non-manager.
+ *
+ * - `document`: whatever the documents slice says — manager-only, the same
+ *   line `documents.listDocuments` holds at the gate for every restricted role.
+ * - `trip` and `vacation` for a guest, and for any role whose view of travel
+ *   the trust engine refuses (a child: travel is one of its private domains):
+ *   the answer `trips.getTrip` gives them at the gate.
+ */
+export function assistantWithheldKinds(scope: Pick<ServiceScope, 'role' | 'memberId'>): SearchKind[] {
+  const viewer = viewerFor(scope);
+  const kinds: SearchKind[] = [];
+  if (!canViewSlice('documents', viewer).allowed) kinds.push('document');
+  if (!canReadTravel(scope)) kinds.push('trip', 'vacation');
+  return kinds;
+}
+
+/** The trust engine's view rule for 'travel', the question the gate asks of `trips.getTrip`. */
+function canReadTravel(scope: Pick<ServiceScope, 'role' | 'memberId'>): boolean {
+  if (scope.role === 'system') return true;
+  const role = roleOf(scope.role);
+  // The household's travel is not a guest's to read, whatever the role
+  // matrix lists for a guest today.
+  if (role === 'guest') return false;
+  return riskToDecision({
+    risk: 'low',
+    actor: { kind: 'member', id: scope.memberId ?? 'unknown', role },
+    domain: 'travel', capability: 'view', explicitAllow: false,
+  }) === null;
+}
 
 const hit = z.object({
   kind: z.enum(SEARCH_KINDS),
@@ -48,7 +94,7 @@ export const searchTools: ToolDefinition[] = [
   defineTool({
     name: 'search.household',
     aliases: ['search_household', 'household_search', 'find_in_household'],
-    description: 'Search everything the household has recorded — documents, inventory items, trips, vacations, bills, warranties, renewals, decisions, calendar events, notes and remembered facts — and get back records with the table they came from, their date and a link. Read-only. Bills, warranties and renewals are searched only for parents and adults.',
+    description: 'Search everything the household has recorded — documents, inventory items, trips, vacations, bills, warranties, renewals, decisions, calendar events, notes and remembered facts — and get back records with the table they came from, their date and a link. Read-only. Documents, bills, warranties and renewals are searched only for parents and adults; trips and vacations are not searched for a guest or a child.',
     domain: 'tasks',
     capability: 'view',
     risk: 'low',
@@ -77,7 +123,8 @@ export const searchTools: ToolDefinition[] = [
       return `Found ${plural(output.hits.length, 'record')} for “${output.query}”, starting with ${first.title} in ${first.table}${tail}`;
     },
     execute: async (scope, input) => {
-      const res = await searchHousehold(scope, input.query, input.limit ?? DEFAULT_LIMIT);
+      const withhold = assistantWithheldKinds(scope);
+      const res = await searchHousehold(scope, input.query, input.limit ?? DEFAULT_LIMIT, { withhold });
       if (!res.ok) return res;
       return ok({
         query: sanitizeUntrusted(res.data.query, MAX_TITLE_CHARS),
@@ -91,7 +138,9 @@ export const searchTools: ToolDefinition[] = [
           href: row.href,
         })),
         unavailable: res.data.partial.map((failure) => failure.table),
-        withheld: [...res.data.withheld],
+        // The service names what its own rules withheld; this names what the
+        // assistant's did, so "not visible to this member" covers both.
+        withheld: [...new Set<string>([...res.data.withheld, ...withhold])],
       });
     },
   }),

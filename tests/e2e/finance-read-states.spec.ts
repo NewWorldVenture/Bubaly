@@ -12,6 +12,8 @@ const sources = Object.fromEntries([
   'components/finance/bill-payment-modal.tsx',
   'components/finance/bill-schedule-modal.tsx', 'lib/constants/roles.ts',
   'components/finance/payments-view.tsx', 'components/finance/savings-view.tsx',
+  // The held 0514's rule: who reads the household's transactions.
+  'lib/finance/household-money.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
   'components/ui/input.tsx', 'components/app/page-header.tsx', 'lib/finance/hub.ts',
   // bills-view's Mark paid and add form write what lib/finance/recurring.ts decides.
@@ -31,10 +33,17 @@ const sources = Object.fromEntries([
   // The family clock (TIME-003): the shared formatter and the zone helpers it reads.
   'components/i18n/use-format.ts', 'lib/time/zoned.ts', 'lib/utils/format.ts',
   'lib/supabase/errors.ts', 'lib/schedule/zoned.ts',
+  // budgets-view and savings-view settle their deletes through settleAction,
+  // so a rejected server-action call is reported and the list re-read.
+  'lib/ui/settle-action.ts',
   // budgets-view and savings-view route a refused money write through
   // reportRefusal, which sends an aal1 session to the step-up page (0382's
   // application half); it reads its path from lib/auth/mfa.
   'lib/auth/step-up-client.ts', 'lib/auth/mfa.ts', 'lib/auth/redirect.ts',
+  // budgets-view sums the year's transactions, so it reads them whole, paged
+  // on the id (readAllByIdAsQuery), over every budget period's whole window
+  // (hub.ts's periodWindow, from the zone-free budget-periods module).
+  'lib/supabase/read-all.ts', 'lib/finance/budget-periods.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.React },
 }).outputText]));

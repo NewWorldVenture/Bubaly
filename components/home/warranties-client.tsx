@@ -18,6 +18,7 @@ import { Field } from '@/components/home/field';
 import { EmptyState } from '@/components/ui/states';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { useFormat } from '@/components/i18n/use-format';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Warranty = Tables<'home_warranties'>;
 type Asset = Tables<'home_assets'>;
@@ -26,7 +27,8 @@ const TYPE_LABELS: Record<string, string> = {
   manufacturer: 'Manufacturer', extended: 'Extended', home_warranty: 'Home Warranty', service_plan: 'Service Plan',
 };
 
-export function WarrantiesClient({ warranties, assets }: { warranties: Warranty[]; assets: Asset[] }) {
+/** `ownOnly`: the viewer reads only the warranties they added (the held 0514). */
+export function WarrantiesClient({ warranties, assets, ownOnly = false }: { warranties: Warranty[]; assets: Asset[]; ownOnly?: boolean }) {
   const tr = useTranslations();
   const t = useTranslations();
   const { fmtMoney } = useFormat();
@@ -57,6 +59,7 @@ export function WarrantiesClient({ warranties, assets }: { warranties: Warranty[
         <div>
           <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{t('warrantiesClient.warranties')}</h1>
           <p className="text-sm text-muted">{t('warrantiesClient.everyWarrantyInOnePlaceCoverage')}</p>
+          {ownOnly && <p className="text-xs text-muted">{t('householdMoney.onlyWhatYouAdded')}</p>}
         </div>
         <Button onClick={openNew}><Plus className="h-4 w-4" /> {t('warrantiesClient.addWarranty')}</Button>
       </div>
@@ -93,7 +96,7 @@ export function WarrantiesClient({ warranties, assets }: { warranties: Warranty[
                 {/* One-tap claim row */}
                 <div className="mt-3 flex flex-wrap gap-2">
                   {w.claim_phone && <a href={`tel:${w.claim_phone}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-2.5 text-xs font-medium text-brand-fg"><Phone className="h-3.5 w-3.5" />{' '}{tr('warrantiesClient.callToClaim')}</a>}
-                  {w.claim_url && <a href={w.claim_url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium hover:bg-elevated"><ExternalLink className="h-3.5 w-3.5" />{' '}{tr('warrantiesClient.fileClaim')}</a>}
+                  {w.claim_url && <a href={safeWebLink(w.claim_url) ?? undefined} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium hover:bg-elevated"><ExternalLink className="h-3.5 w-3.5" />{' '}{tr('warrantiesClient.fileClaim')}</a>}
                   {w.claim_email && <a href={`mailto:${w.claim_email}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium hover:bg-elevated"><Mail className="h-3.5 w-3.5" />{' '}{tr('warrantiesClient.email')}</a>}
                   {w.document_id && <span className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs text-muted"><FileText className="h-3.5 w-3.5" />{' '}{tr('warrantiesClient.docAttached')}</span>}
                 </div>

@@ -152,6 +152,9 @@ describe('a sanitizer returns what it checked (SEC-014)', () => {
       'components/modules/handle-it-button.tsx|data.redirect': 'as command-bar',
       'components/native/native-bootstrap.tsx|target': 'safeInternalRedirect(parsed.pathname, ...)',
       'lib/auth/require-aal2.ts|decision.to': 'stepUpPath(), which applies isSafeReturnPath',
+      'lib/auth/guest-scope.ts|GUEST_LANDING': "the constant '/dashboard/grandparent-portal', a guest's landing page (held 0509's route gate)",
+      'app/(app)/admin/layout.tsx|SUPER_ADMIN_STEP_UP_PATH': "stepUpPath('/admin') — a constant path, in lib/auth/super-admin-assurance.ts",
+      'app/(app)/admin/onboarding/page.tsx|SUPER_ADMIN_STEP_UP_PATH': "stepUpPath('/admin') — a constant path, in lib/auth/super-admin-assurance.ts",
       'lib/services/onboarding-calendar/oauth.ts|url': 'the provider authorization URL — deliberately external',
       'lib/services/onboarding-calendar/oauth.ts|authUrl': 'the provider authorization URL — deliberately external',
     };
@@ -162,7 +165,7 @@ describe('a sanitizer returns what it checked (SEC-014)', () => {
         if (entry === 'node_modules' || entry === '.next' || entry.startsWith('.')) continue;
         const full = join(dir, entry);
         if (statSync(full).isDirectory()) walk(full);
-        else if (/\.tsx?$/.test(entry)) files.push(full);
+        else if (/\.tsx?$/.test(entry)) files.push(full.replaceAll('\\', '/'));
       }
     };
     for (const root of ['app', 'components', 'lib']) walk(root);

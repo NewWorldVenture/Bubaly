@@ -12,11 +12,16 @@ import { InviteEmail } from '@/lib/emails/invite';
 import { emailSchema } from '@/lib/validation';
 import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { stripeFromKey } from '@/lib/stripe';
-import type { MemberRole } from '@/lib/constants/roles';
+import { REMOVED_MEMBER_PATCH, isManager, type MemberRole } from '@/lib/constants/roles';
+import { REMOVED_CHILD_BAN_MARKER, isChildLoginAccount, memberHasAKidLogin, revokeRemovedChildLogin } from '@/lib/server/child-account';
 import type { PlanId } from '@/lib/constants/plans';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isValidTimezone } from '@/lib/time/zoned';
+import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
+import { forgetMemberLocation } from '@/lib/location/retention';
+import { closePendingInvitesFor } from '@/lib/server/member-invites';
+import { recordTrustChange } from '@/lib/trust/ledger';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -43,6 +48,10 @@ async function assertSuperAdmin(): Promise<Result> {
     return { ok: false, error: t('ai.accountContextIsTemporarilyUnavailable') };
   }
   if (!allowed) return { ok: false, error: t('actions.notAuthorized') };
+  // The email says WHO; it does not say the session proved its second factor.
+  // A password-only session of an admin with an authenticator is refused here
+  // exactly as it is on the family's money pages.
+  if (!(await superAdminAssurance()).ok) return { ok: false, error: t('actions.adminConsoleNeedsYourCode') };
   return { ok: true };
 }
 
@@ -78,20 +87,30 @@ export async function adminCreateUserAction(input: {
   });
   if (error || !data.user) return error ? actionFailure(error, t('actions.couldNotCreateUser')) : { ok: false, error: t('actions.couldNotCreateUser') };
 
-  if (input.familyId) {
-    const { error: memberError } = await supabase.from('family_members').insert({
-      family_id: input.familyId,
-      user_id: data.user.id,
-      role: input.role ?? 'adult',
-      display_name: parsedEmail.data.split('@')[0],
-    });
-    if (memberError) return actionFailure(memberError, t('actions.userCreatedButJoiningThe'));
-  }
-
+  // The account and its invite email exist from here on, whatever happens to
+  // the optional family join below, so the record of who created it is written
+  // now rather than after a step that can fail.
   await adminAuditLog({
     familyId: input.familyId ?? null, action: 'create', resource: 'users',
     resourceId: data.user.id, metadata: { email: parsedEmail.data },
   });
+
+  if (input.familyId) {
+    const role = input.role ?? 'adult';
+    const { error: memberError } = await supabase.from('family_members').insert({
+      family_id: input.familyId,
+      user_id: data.user.id,
+      role,
+      display_name: parsedEmail.data.split('@')[0],
+    });
+    if (memberError) {
+      await adminAuditLog({
+        familyId: input.familyId, action: 'join_failed', resource: 'family_members',
+        resourceId: data.user.id, metadata: { email: parsedEmail.data, role },
+      });
+      return actionFailure(memberError, t('actions.userCreatedButJoiningThe'));
+    }
+  }
   revalidatePath('/admin/users');
   return { ok: true };
 }
@@ -157,6 +176,14 @@ export async function adminCreateFamilyAction(input: {
   const timezone = (input.timezone || 'UTC').trim();
   if (!isValidTimezone(timezone)) return { ok: false, error: t('actions.unknownTimeZone') };
 
+  // The owner is seated as the family's parent, so a kid login (a 4-digit PIN
+  // its parent knows) is never one, as the household and admin editors refuse
+  // it a manager role (the held 0512). Fails closed: an unanswerable lookup
+  // counts as a kid login.
+  if (await isChildLoginAccount(supabase, { id: authOwner.id, email: authOwner.email, user_metadata: authOwner.user_metadata })) {
+    return { ok: false, error: t('familyModule.aKidLoginCannotBeAManager', { name: owner.full_name?.trim() || owner.email || wantedEmail }) };
+  }
+
   const { data: family, error } = await supabase.from('families').insert({
     name, timezone, created_by: owner.id,
   }).select('id').single();
@@ -218,19 +245,37 @@ export async function adminCreateFamilyAction(input: {
 }
 
 /** Removes a member from a family (reversible — they can be re-added or re-invited). */
-export async function adminRemoveMemberAction(memberId: string): Promise<Result> {
+export async function adminRemoveMemberAction(memberId: string): Promise<Result<{ warning?: string }>> {
   const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
 
   const supabase = createServiceClient();
   const { data: member, error } = await supabase.from('family_members')
-    .update({ is_active: false }).eq('id', memberId).select('family_id, display_name').single();
+    .update(REMOVED_MEMBER_PATCH).eq('id', memberId).select('id, family_id, display_name, user_id, email').single();
   if (error) return actionFailure(error, t('actions.couldNotRemoveThatMember'));
 
-  await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name } });
+  // A removed child's PIN login is switched off too; the removal stands if that fails.
+  const loginRevocation = await revokeRemovedChildLogin(supabase, member);
+  // Their last position and location history leave with them. The removal
+  // stands if this fails as well; the failure is logged, the audit row says
+  // whether the location was cleared, and the console is told — as it is told
+  // about a login that could not be signed out. (Nothing repairs it on a
+  // schedule: the retention sweep that would blank the live row of any member
+  // no longer active is held and runs nowhere, pending the owner's decision.)
+  const forgotten = await forgetMemberLocation(supabase, member.family_id, memberId);
+  if (!forgotten.ok) console.error('[admin-action] removed member location was not cleared', { memberId, failures: forgotten.failures });
+  // Every pending invite to them is revoked too, or a second one they hold
+  // brings them back (accept_invite reactivates the row). Stands if it fails.
+  const invitesRevoked = await closePendingInvitesFor(supabase, member.family_id, member, 'revoked');
+
+  await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name, login_revocation: loginRevocation, location_forgotten: forgotten.ok, invites_revoked: invitesRevoked } });
   revalidatePath('/admin/users');
-  return { ok: true };
+  const warning = loginRevocation === 'failed'
+    ? t('familyModule.removedButLoginStillActive')
+    : !forgotten.ok ? t('familyModule.removedButLocationStillVisible')
+      : !invitesRevoked ? t('familyModule.removedButInviteStillOpen') : null;
+  return warning ? { ok: true, data: { warning } } : { ok: true };
 }
 
 /** Updates a member's display name and role. */
@@ -243,10 +288,34 @@ export async function adminUpdateMemberAction(memberId: string, input: { display
   if (!displayName) return { ok: false, error: t('actions.nameIsRequired') };
 
   const supabase = createServiceClient();
+  // The household's editors refuse a manager role for a kid-PIN login
+  // (updateFamilyMemberAction); this one wrote any role with the service role,
+  // so it was the one path left to a manager account behind a 4-digit PIN.
+  // Read first, so the refusal and the ledger know who and what it was.
+  const { data: target, error: readError } = await supabase.from('family_members')
+    .select('id, family_id, user_id, role, display_name').eq('id', memberId).maybeSingle();
+  if (readError) return actionFailure(readError, t('actions.couldNotUpdateThatMember'));
+  if (!target) return { ok: false, error: t('actions.couldNotUpdateThatMember') };
+  const roleChanges = input.role !== target.role;
+  if (roleChanges && isManager(input.role) && await memberHasAKidLogin(supabase, target)) {
+    return { ok: false, error: t('familyModule.aKidLoginCannotBeAManager', { name: target.display_name }) };
+  }
+
   const { data: member, error } = await supabase.from('family_members')
-    .update({ display_name: displayName, role: input.role }).eq('id', memberId).select('family_id').single();
+    .update({ display_name: displayName, role: input.role }).eq('id', memberId).eq('family_id', target.family_id)
+    .select('family_id').single();
   if (error) return actionFailure(error, t('actions.couldNotUpdateThatMember'));
 
+  // A role is a permission: recorded in the family's trust ledger beside every
+  // other change to who may do what, as the household's own editors record it.
+  // No member made this change, so no member is named as its actor.
+  if (roleChanges) {
+    await recordTrustChange(supabase, {
+      familyId: member.family_id, actorMemberId: null, decision: 'role_changed',
+      reason: `Bubaly support changed ${target.display_name}'s role from ${target.role} to ${input.role}`,
+      context: { memberId, from: target.role, to: input.role, by: 'super_admin' },
+    });
+  }
   await adminAuditLog({ familyId: member.family_id, action: 'update', resource: 'family_members', resourceId: memberId, metadata: { display_name: displayName, role: input.role } });
   revalidatePath('/admin/users');
   return { ok: true };
@@ -353,7 +422,7 @@ export async function adminSetSuperAdminAction(input: { email: string; makeAdmin
 
   await adminAuditLog({
     familyId: null, action: input.makeAdmin ? 'grant' : 'revoke', resource: 'super_admins',
-    resourceId: email, metadata: { email },
+    resourceId: null, metadata: { email },
   });
   revalidatePath('/admin/users');
   return { ok: true };
@@ -388,15 +457,22 @@ export async function saveStripeSettingsAction(input: {
 
   // Secrets: a blank field means "keep the existing value" so the admin can
   // tweak the fee without re-pasting keys.
-  const { data: current } = await supabase.from('stripe_settings').select('secret_key, webhook_secret').eq('id', 'singleton').maybeSingle();
-  const keepOr = (next: string | null, prev: string | null | undefined) => clean(next) ?? prev ?? null;
+  // The read's error is READ: a refused read resolves with `data: null`, and
+  // "keep the existing value" applied to null wrote secret_key and
+  // webhook_secret as NULL, wiping the live Stripe configuration from a fee
+  // change. A blank secret is also simply left out of the write, so the stored
+  // value cannot be replaced with null at all (same defect as Audit C1-S9-76).
+  const { error: readError } = await supabase.from('stripe_settings').select('secret_key, webhook_secret').eq('id', 'singleton').maybeSingle();
+  if (readError) return actionFailure(readError, t('actions.couldNotSaveStripeSettings'));
+  const secretKey = clean(input.secretKey);
+  const webhookSecret = clean(input.webhookSecret);
 
   const { error } = await supabase.from('stripe_settings').upsert({
     id: 'singleton',
     enabled: input.enabled,
     publishable_key: clean(input.publishableKey),
-    secret_key: keepOr(input.secretKey, current?.secret_key),
-    webhook_secret: keepOr(input.webhookSecret, current?.webhook_secret),
+    ...(secretKey ? { secret_key: secretKey } : {}),
+    ...(webhookSecret ? { webhook_secret: webhookSecret } : {}),
     connect_account_id: clean(input.connectAccountId),
     service_fee_cents: feeCents,
     service_fee_price_id: clean(input.serviceFeePriceId),
@@ -405,7 +481,7 @@ export async function saveStripeSettingsAction(input: {
   if (error) return actionFailure(error, t('actions.couldNotSaveStripeSettings'));
 
   // Audit without leaking secret values.
-  await adminAuditLog({ familyId: null, action: 'update', resource: 'stripe_settings', resourceId: 'singleton', metadata: { enabled: input.enabled, service_fee_cents: feeCents, has_secret: Boolean(clean(input.secretKey)) } });
+  await adminAuditLog({ familyId: null, action: 'update', resource: 'stripe_settings', resourceId: null, metadata: { setting_key: 'singleton', enabled: input.enabled, service_fee_cents: feeCents, has_secret: Boolean(clean(input.secretKey)) } });
   revalidatePath('/admin/stripe');
   return { ok: true };
 }
@@ -540,8 +616,30 @@ export async function adminSetUserBanAction(userId: string, banned: boolean): Pr
   if (me?.id === userId) return { ok: false, error: t('actions.youCanTBanYour') };
 
   const supabase = createServiceClient();
+  // A super-admin is not banned from here. A ban of the built-in/env owner
+  // locked them out with no in-app way back (every unban needs an admin
+  // session), and one DB admin could lock out all the others. Access is
+  // removed first through adminSetSuperAdminAction, which carries the
+  // immutability and self-lockout rules. Only a BAN is refused: lifting one
+  // must stay possible.
+  if (banned) {
+    const { data: target, error: targetError } = await supabase.auth.admin.getUserById(userId);
+    if (targetError) return actionFailure(targetError, t('actions.couldNotUpdateThatUser'));
+    const targetEmail = target?.user?.email?.trim().toLowerCase() ?? null;
+    if (targetEmail) {
+      if (isSuperAdminEmail(targetEmail)) return { ok: false, error: t('actions.revokeSuperAdminBeforeBanning') };
+      const { data: grant, error: grantError } = await supabase
+        .from('super_admins').select('email').eq('email', targetEmail).maybeSingle();
+      if (grantError) return actionFailure(grantError, t('actions.couldNotUpdateThatUser'));
+      if (grant) return { ok: false, error: t('actions.revokeSuperAdminBeforeBanning') };
+    }
+  }
   // 'none' lifts a ban; a long duration is an effectively-indefinite ban (reversible).
-  const { error } = await supabase.auth.admin.updateUserById(userId, { ban_duration: banned ? '876000h' : 'none' });
+  // Clearing the removal marker makes this ban (or unban) the admin's: re-adding
+  // a removed child never lifts a ban that does not carry it.
+  const { error } = await supabase.auth.admin.updateUserById(userId, {
+    ban_duration: banned ? '876000h' : 'none', app_metadata: { [REMOVED_CHILD_BAN_MARKER]: false },
+  });
   if (error) return actionFailure(error, t('actions.couldNotUpdateThatUser'));
 
   await adminAuditLog({ familyId: null, action: banned ? 'ban' : 'unban', resource: 'users', resourceId: userId });
@@ -633,7 +731,7 @@ export async function adminToggleFeatureFlagAction(key: string, enabled: boolean
   if (error) return actionFailure(error, t('actions.couldNotUpdateThatFeature'));
   if (wroteNoRows(flagged)) return { ok: false, error: t('actions.couldNotUpdateThatFeature') };
 
-  await adminAuditLog({ familyId: null, action: 'update', resource: 'feature_flags', resourceId: key, metadata: { enabled } });
+  await adminAuditLog({ familyId: null, action: 'update', resource: 'feature_flags', resourceId: null, metadata: { key, enabled } });
   revalidatePath('/admin/wallet');
   return { ok: true };
 }

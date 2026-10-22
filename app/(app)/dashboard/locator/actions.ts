@@ -9,8 +9,14 @@ import { placeForPoint, classifyTransition, type PlaceLike } from '@/lib/locatio
 import { notify } from '@/lib/services/notifications';
 import { systemScopeForFamily } from '@/lib/services/scope';
 import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
+import { readsEveryonesHistory } from '@/lib/location/history-scope';
 
 export type LocationResult = { ok: boolean; error?: string; place?: string | null };
+
+/** What "not sharing" leaves on a member_locations row. */
+const CLEARED_POSITION = {
+  latitude: null, longitude: null, place_id: null, address: null, accuracy_m: null, battery: null,
+} as const;
 
 // Family geofences (`family_places`) drive arrival/departure safety alerts
 // ("arrived at School"). Their RLS is family-scoped (any member) and children
@@ -44,16 +50,41 @@ export async function updateMyLocation(input: {
   const supabase = await createServer();
   const point = { latitude: input.latitude, longitude: input.longitude };
 
-  const { data: places } = await supabase
-    .from('family_places').select('id, name, latitude, longitude, radius_m').eq('family_id', familyId);
-  const placeLikes: PlaceLike[] = (places ?? []).map((p) => ({
+  // Both reads decide whether an arrival/departure alert goes to the whole
+  // family. A failed one read as "no places" / "was nowhere", which turned a
+  // child sitting at home into an urgent "left Home" (and the next good read
+  // into a false "arrived"). Refuse instead: nothing is written or sent.
+  const { data: places, error: placesError } = await supabase
+    .from('family_places').select('id, name, latitude, longitude, radius_m, geofence_enabled').eq('family_id', familyId);
+  if (placesError) return { ok: false, error: describeActionError(placesError) };
+  // Only an ARMED geofence is one. A place whose switch a parent turned off
+  // stops matching at all: no place on the live row, no event, no alert.
+  const armed = (places ?? []).filter((p) => p.geofence_enabled === true);
+  const placeLikes: PlaceLike[] = armed.map((p) => ({
     id: p.id, name: p.name, latitude: p.latitude, longitude: p.longitude, radius_m: p.radius_m,
   }));
   const current = placeForPoint(placeLikes, point);
 
-  const { data: prev } = await supabase
-    .from('member_locations').select('place_id').eq('member_id', member.id).maybeSingle();
-  const prevPlaceId = prev?.place_id ?? null;
+  const { data: prev, error: prevError } = await supabase
+    .from('member_locations').select('place_id, is_sharing, latitude, longitude')
+    .eq('member_id', member.id).eq('family_id', familyId).maybeSingle();
+  if (prevError) return { ok: false, error: describeActionError(prevError) };
+  // A transition is a move between two REAL positions. A live row that was not
+  // sharing, or carries no position, says nothing about where the member was:
+  // Stop Sharing clears place_id (CLEARED_POSITION), so turning sharing back on
+  // at Home was classified null -> Home and logged an "arrived" — with an
+  // urgent push to the managers — for someone who never moved. The first fix
+  // after sharing resumes is a baseline: its place is written, nothing is
+  // announced. (A member with no live row at all is still announced on their
+  // first share, as before.)
+  const baseline = prev != null && (prev.is_sharing !== true || prev.latitude == null || prev.longitude == null);
+  // A previous place that is no longer armed is not one the member can "leave".
+  // And a place cleared off the row while its geofence was off (or created
+  // around the member since) is found again from the previous position: when
+  // a parent re-arms Home with the member inside it, they did not "arrive".
+  const prevPlaceId = !prev || baseline ? null
+    : armed.some((p) => p.id === prev.place_id) ? prev.place_id
+      : placeForPoint(placeLikes, { latitude: prev.latitude!, longitude: prev.longitude! })?.id ?? null;
 
   const nowIso = new Date().toISOString();
   const { error: upErr } = await supabase.from('member_locations').upsert({
@@ -64,9 +95,9 @@ export async function updateMyLocation(input: {
   }, { onConflict: 'member_id' });
   if (upErr) return { ok: false, error: describeActionError(upErr) };
 
-  const transition = classifyTransition(prevPlaceId, current?.id ?? null);
+  const transition = baseline ? 'none' : classifyTransition(prevPlaceId, current?.id ?? null);
   if (transition !== 'none') {
-    const oldName = (places ?? []).find((p) => p.id === prevPlaceId)?.name ?? null;
+    const oldName = armed.find((p) => p.id === prevPlaceId)?.name ?? null;
     const events: { event_type: 'arrived' | 'left'; place_id: string | null; place_name: string | null }[] = [];
     if (transition === 'arrived' || transition === 'moved') events.push({ event_type: 'arrived', place_id: current!.id, place_name: current!.name });
     if (transition === 'left' || transition === 'moved') events.push({ event_type: 'left', place_id: prevPlaceId, place_name: oldName });
@@ -74,17 +105,26 @@ export async function updateMyLocation(input: {
     if (events.length) {
       // Secondary to the location upsert (already persisted) — but a dropped
       // arrival/departure event silently loses the safety timeline, so log it.
+      //
+      // No coordinates. The timeline shows place, event and time, and nothing
+      // else reads them; stored, they were a permanent exact-position history
+      // that "Stop Sharing" did not clear and no member could delete.
       const { error: evErr } = await supabase.from('location_events').insert(events.map((e) => ({
         family_id: familyId, member_id: member.id, place_id: e.place_id, place_name: e.place_name,
-        event_type: e.event_type, latitude: input.latitude, longitude: input.longitude, occurred_at: nowIso,
+        event_type: e.event_type, occurred_at: nowIso,
       })));
       if (evErr) console.error('[locator] location_events insert failed', { familyId, memberId: member.id, error: evErr });
     }
 
-    // Place alerts → notify the rest of the family.
-    const { data: members } = await supabase
-      .from('family_members').select('id, user_id').eq('family_id', familyId).eq('is_active', true);
-    const recipients = (members ?? []).filter((m) => m.id !== member.id && m.user_id);
+    // Place alerts → the members who read everyone's location history: the
+    // managers and caregivers (lib/location/history-scope.ts, the owner's
+    // rule the locator page applies). It went to every member with a login,
+    // so a guest — whom 0481 refuses other members' positions and the family's
+    // places — or a child was pushed "Mom left Home" with the place's name.
+    const { data: members, error: membersError } = await supabase
+      .from('family_members').select('id, user_id, role').eq('family_id', familyId).eq('is_active', true);
+    if (membersError) console.error('[locator] place-alert recipient read failed', { familyId, error: membersError });
+    const recipients = (members ?? []).filter((m) => m.id !== member.id && m.user_id && readsEveryonesHistory(m.role));
     if (recipients.length) {
       const verb = transition === 'left' ? 'left' : 'arrived at';
       const placeName = transition === 'left' ? (oldName ?? 'a place') : current!.name;
@@ -121,7 +161,11 @@ export async function updateMyLocation(input: {
   return { ok: true, place: current?.name ?? null };
 }
 
-/** Toggles whether the caller shares their location. Disabling clears coordinates. */
+/**
+ * Toggles whether the caller shares their location. Disabling clears
+ * everything the live row says about where they are: coordinates, place,
+ * address, accuracy and battery.
+ */
 export async function setLocationSharing(enabled: boolean): Promise<LocationResult> {
   const t = await getTranslations();
   const c = await requireUserContext();
@@ -130,7 +174,7 @@ export async function setLocationSharing(enabled: boolean): Promise<LocationResu
   const supabase = await createServer();
   const { error } = await supabase.from('member_locations').upsert({
     family_id: c.active.familyId, member_id: member.id, is_sharing: enabled,
-    ...(enabled ? {} : { latitude: null, longitude: null, place_id: null }),
+    ...(enabled ? {} : { ...CLEARED_POSITION }),
   }, { onConflict: 'member_id' });
   if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath('/dashboard/locator');

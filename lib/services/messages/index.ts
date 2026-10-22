@@ -7,6 +7,11 @@
 // identifies them as the canonical Family Chat. Elevated executors also use
 // the atomic send RPC, which locks and revalidates the actor and audience.
 //
+// Missing 0475 objects return their database error. A legacy schema cannot
+// preserve the explicitly chosen empty Family Chat or atomically revalidate
+// membership and audiences, so it must not adopt groups, read old history,
+// or retry the failed RPC as a direct write.
+//
 // `family_announcements` (0046) carries both `author_id` (auth.users) and
 // `author_member_id` (family_members). The legacy toolbox filled only the
 // member id — and picked `ctx.members[0]`, i.e. whoever happened to be first
@@ -17,6 +22,7 @@
 // message: the person approved it and the family reads it as theirs. Only a
 // system actor with nobody behind it signs as Bubaly.
 import 'server-only';
+import { ROLE_ORDER } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
@@ -65,6 +71,29 @@ async function actingMember(scope: ServiceScope): Promise<ServiceResult<FamilyMe
   return member;
 }
 
+/** The conversation a send names must be this family's, open, and the actor's. */
+async function addressedConversation(scope: ServiceScope, actor: FamilyMember | null, conversationId: string): Promise<ServiceResult<null>> {
+  const { data, error } = await scope.db
+    .from('family_conversations')
+    .select('id,is_family_chat,is_archived,member_ids,participant_ids,created_by')
+    .eq('family_id', scope.familyId)
+    .eq('id', conversationId)
+    .maybeSingle();
+  if (error) {
+    console.error('[service:messages] conversation read failed', error);
+    return fail(describeDbError(error, 'Could not open that conversation.'), { code: SERVICE_CODES.db });
+  }
+  if (!data) return fail('That conversation could not be found.', { code: SERVICE_CODES.notFound });
+  if (data.is_archived) return fail('That conversation is archived.', { code: SERVICE_CODES.denied });
+  const participates = actor && (data.participant_ids.includes(actor.id)
+    || data.member_ids.includes(scope.userId!)
+    || (!data.participant_ids.length && !data.member_ids.length && data.created_by === scope.userId));
+  if (!data.is_family_chat && !participates) {
+    return fail('You are not a participant in that conversation.', { code: SERVICE_CODES.denied });
+  }
+  return ok(null);
+}
+
 export type SendMessageInput = {
   content: string;
   /** Defaults to the family group chat. */
@@ -78,29 +107,16 @@ export async function sendFamilyMessage(scope: ServiceScope, input: SendMessageI
   if (!content) return fail('A message needs some text.', { code: SERVICE_CODES.invalidInput });
   if (content.length > MAX_MESSAGE_CHARS) return fail('That message is too long for the family chat.', { code: SERVICE_CODES.invalidInput });
   const kind = input.kind && MESSAGE_KINDS.includes(input.kind) ? input.kind : 'text';
+  // The actor gate is not a 0475 object and stays on every schema: the
+  // previous build also sent for a scope without an active member (signing as
+  // Bubaly), which this hardening deliberately refuses, before or after 0475.
   const actor = await actingMember(scope);
   if (!actor.ok) return actor;
 
   let conversationId = input.conversationId ?? null;
   if (conversationId) {
-    const { data, error } = await scope.db
-      .from('family_conversations')
-      .select('id,is_family_chat,is_archived,member_ids,participant_ids,created_by')
-      .eq('family_id', scope.familyId)
-      .eq('id', conversationId)
-      .maybeSingle();
-    if (error) {
-      console.error('[service:messages] conversation read failed', error);
-      return fail(describeDbError(error, 'Could not open that conversation.'), { code: SERVICE_CODES.db });
-    }
-    if (!data) return fail('That conversation could not be found.', { code: SERVICE_CODES.notFound });
-    if (data.is_archived) return fail('That conversation is archived.', { code: SERVICE_CODES.denied });
-    const participates = actor.data && (data.participant_ids.includes(actor.data.id)
-      || data.member_ids.includes(scope.userId!)
-      || (!data.participant_ids.length && !data.member_ids.length && data.created_by === scope.userId));
-    if (!data.is_family_chat && !participates) {
-      return fail('You are not a participant in that conversation.', { code: SERVICE_CODES.denied });
-    }
+    const addressed = await addressedConversation(scope, actor.data, conversationId);
+    if (!addressed.ok) return addressed;
   } else {
     const chat = await openFamilyConversation(scope);
     if (!chat.ok) return chat;
@@ -181,6 +197,28 @@ export async function createAnnouncement(scope: ServiceScope, input: CreateAnnou
   if (title.length > 200) return fail('Keep the headline under 200 characters and put the rest in the body.', { code: SERVICE_CODES.invalidInput });
   const body = input.body?.trim() || null;
   if (body && body.length > MAX_MESSAGE_CHARS) return fail('That announcement is too long.', { code: SERVICE_CODES.invalidInput });
+
+  // Executor scopes may be cached while membership or authority changes.
+  // Recheck the exact actor before both posting and returning keyed history;
+  // a service client bypasses RLS. This read does not lock the later write.
+  const ownerlessSystem = scope.actorKind === 'system' && scope.role === 'system'
+    && scope.userId === null && scope.memberId === null;
+  if (!ownerlessSystem) {
+    if (!scope.userId || !scope.memberId) {
+      return fail('A signed-in family member is required to post an announcement.', { code: SERVICE_CODES.denied });
+    }
+    const { data: actor, error } = await scope.db.from('family_members')
+      .select('id,family_id,user_id,is_active,role')
+      .eq('id', scope.memberId).eq('family_id', scope.familyId).maybeSingle();
+    if (error) return fail(describeDbError(error, 'Could not verify your family membership.'), { code: SERVICE_CODES.db });
+    if (!actor || actor.id !== scope.memberId || actor.family_id !== scope.familyId
+      || actor.user_id !== scope.userId || actor.is_active !== true) {
+      return fail('Your family membership is no longer active.', { code: SERVICE_CODES.denied });
+    }
+    if (!ROLE_ORDER.includes(actor.role) || actor.role !== scope.role) {
+      return fail('Your family role changed. Start a new request to post an announcement.', { code: SERVICE_CODES.denied });
+    }
+  }
 
   return withIdempotency<Announcement>(
     scope,

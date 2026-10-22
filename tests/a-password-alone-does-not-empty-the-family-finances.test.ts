@@ -65,7 +65,7 @@ vi.mock('@/lib/supabase/auth', () => ({
   }),
 }));
 vi.mock('@/lib/supabase/server', () => ({
-  createServer: async () => ({ auth: { mfa: { getAuthenticatorAssuranceLevel: mocks.getAal } } }),
+  createServer: async () => ({ auth: { getSession: async () => ({ data: { session: { access_token: 'synthetic-assurance-token' } }, error: null }), mfa: { getAuthenticatorAssuranceLevel: mocks.getAal } } }),
   // /dashboard/billing reads the (non-secret) Stripe service-fee config.
   createServiceClient: () => ({
     from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) }),

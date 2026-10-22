@@ -5,6 +5,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingRelationError } from '@/lib/supabase/errors';
 import { CommunityModule } from '@/components/marketplace/community-module';
+import { readSharedListings } from '@/lib/marketplace/circle-reads';
 import type { CircleLite, CircleMemberLite, ShareLite, SharedListingLite } from '@/lib/marketplace/community';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -50,17 +51,13 @@ export default async function CommunityPage() {
     members = m ?? [];
     shares = s ?? [];
 
-    // The shared listings themselves — the 0173 circle-read policy grants
-    // SELECT across family boundaries for exactly these ids.
-    const ids = [...new Set(shares.map((x) => x.listing_id))];
-    if (ids.length) {
-      const { data: l, error: lErr } = await supabase
-        .from('marketplace_listings')
-        .select('id, title, kind, category, condition, price_cents, rent_period, status, family_id')
-        .in('id', ids);
-      reportRead('Shared listings', lErr);
-      shared = (l ?? []) as SharedListingLite[];
-    }
+    // The shared listings themselves: the family's own from the table, other
+    // families' through the circle view, or, on a database without the view,
+    // the one table read the 0173 circle-read policy answered across family
+    // boundaries (lib/marketplace/circle-reads.ts).
+    const { data: l, error: lErr } = await readSharedListings(supabase, familyId, shares);
+    reportRead('Shared listings', lErr);
+    shared = l ?? [];
   } catch (error) {
     if (isMissingRelationError(error)) migrated = false;
     else {

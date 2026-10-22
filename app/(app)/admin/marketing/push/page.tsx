@@ -9,8 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { fmtDate } from '@/lib/utils/format';
 import type { Tables } from '@/lib/database.types';
 import { pushConfigured } from '@/lib/server/push';
-import { summarizePush, canSendPush, canDeletePush, needsPushReview, pushDeliveryCounts, pushDeliveryPhase } from '@/lib/marketing/push';
-import { createPushCampaignAction, sendPushCampaignAction, deletePushCampaignAction } from './actions';
+import { summarizePush, canSendPush, canDeletePush, needsPushReview, pushDeliveryCounts, pushDeliveryPhase, staleSendingResolution } from '@/lib/marketing/push';
+import { createPushCampaignAction, sendPushCampaignAction, deletePushCampaignAction, resolveStalePushCampaignAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
 import { SubmitButton } from '@/components/ui/submit-button';
 
@@ -97,6 +97,7 @@ export default async function PushPage() {
                 <p className="mt-1 text-xs text-muted">
                   {c.status === 'sending' ? t('marketingPush.unconfirmed')
                     : phase === 'preflight_failed' ? t('marketingPush.notStarted')
+                    : phase === 'reviewed' ? t('marketingPush.outcomeUnknown')
                     : c.status !== 'draft' ? counts
                       ? t('marketingPush.outcomes', counts)
                       : t('marketingPush.legacyCounts', { accepted: c.sent, failed: c.failed, skipped: c.skipped })
@@ -109,6 +110,11 @@ export default async function PushPage() {
                   <form action={sendPushCampaignAction.bind(null, c.id)}>
                     <SubmitButton className="inline-flex items-center gap-1 font-semibold text-brand-text hover:underline">
                       <Send className="h-3.5 w-3.5" />{' '}{t('push.send')}</SubmitButton>
+                  </form>
+                )}
+                {staleSendingResolution(c.status, c.metadata, c.updated_at) && (
+                  <form action={resolveStalePushCampaignAction.bind(null, c.id)}>
+                    <SubmitButton className="text-xs font-semibold text-brand-text hover:underline">{t('marketingPush.resolveStale')}</SubmitButton>
                   </form>
                 )}
                 {canDeletePush(c.status, c.metadata) && <form action={deletePushCampaignAction.bind(null, c.id)}>

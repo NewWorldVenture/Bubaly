@@ -10,6 +10,7 @@ import { paperworkKindFields, triagePaperwork } from '@/lib/paperwork/triage';
 import { isPaperworkExtractionPartial } from '@/lib/paperwork/extraction';
 import { enrichPaperworkEntities } from '@/lib/services/paperwork';
 import type { ServiceScope } from '@/lib/services/types';
+import { dayKeyInTz } from '@/lib/services/scope';
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 export async function linkedDocumentSource(scope: ServiceScope, messageId: string) {
@@ -38,6 +39,8 @@ type Options = { fetch?: typeof fetchPublicDocument; extract?: typeof extractDoc
 export async function captureDocumentLink(scope: ServiceScope, input: DocumentLinkInput, options: Options = {}): Promise<DocumentLinkResult> {
   const originalUrl = canonicalDocumentUrl(input.url);
   if (!scope.familyId || !scope.userId || scope.actorKind !== 'member' || !UUID.test(input.captureId) || !originalUrl) return { ok: false, reason: 'invalid_url', retryable: false };
+  // Guests are view-only: no paperwork rows, and no server fetch of a URL they chose.
+  if (scope.role === 'guest') return { ok: false, reason: 'access_denied', retryable: false };
   let saved = false;
   try {
     const source = input.messageId !== undefined ? await linkedDocumentSource(scope, input.messageId) : null;
@@ -76,7 +79,8 @@ export async function captureDocumentLink(scope: ServiceScope, input: DocumentLi
     if (!text.trim() && !extracted.truncated) return { ok: false, reason: 'empty_document', retryable: false };
     const access = await options.beforeWrite?.();
     if (access && !access.ok) return access;
-    const triage = triagePaperwork(text, scope.now ?? new Date());
+    // A yearless due date and its urgency are read on the family's day.
+    const triage = triagePaperwork(text, dayKeyInTz(scope.now ?? new Date(), scope.tz));
     const fields = paperworkKindFields(triage.kind);
     const inserted = await scope.db.from('paperwork_items').insert({
       id, family_id: scope.familyId, created_by: scope.userId, kind: fields.kind, title: triage.title,

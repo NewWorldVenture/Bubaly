@@ -17,8 +17,8 @@ export const ROLE_DESCRIPTIONS: Record<MemberRole, string> = {
   adult: 'Manage shared household data and approve chores.',
   teen: 'Manage their own tasks, activities, and calendar.',
   child: 'Complete assigned chores and view their items.',
-  caregiver: 'View only the areas assigned to them.',
-  guest: 'View limited shared events only.',
+  caregiver: "Help with shared household and care information where access is granted. Access varies by area. Can't manage members or billing.",
+  guest: "View the shared calendar, lists and plans. Access to other information depends on the area's permissions.",
 };
 
 /**
@@ -61,3 +61,58 @@ export const ROLE_ORDER: MemberRole[] = ['parent', 'adult', 'teen', 'child', 'ca
 
 // Roles that can be assigned when inviting (guests/children are typically managed locally).
 export const INVITABLE_ROLES: MemberRole[] = ['adult', 'teen', 'caregiver', 'guest'];
+
+/**
+ * The roles an actor may give a member row from the roster editor.
+ *
+ * `parent` is the admin tier (`is_family_admin`: billing, closing the family,
+ * assistant keys); `adult` manages but is not an admin. Offering every role to
+ * every manager let an adult promote themselves to parent, or demote the
+ * parents who founded the family. So only a parent may grant `parent`, and a
+ * non-admin cannot change the role of a row that already IS a parent (the only
+ * option offered is the one it has). This is UI gating; the database policy is
+ * the real boundary.
+ */
+export function assignableMemberRoles(actorRole?: string | null, currentRole?: string | null): MemberRole[] {
+  if (isAdmin(actorRole)) return [...ROLE_ORDER];
+  if (currentRole === 'parent') return ['parent'];
+  return ROLE_ORDER.filter((r) => r !== 'parent');
+}
+
+/**
+ * The roles a member who signs in with a kid PIN may be given from the editor
+ * (the held 0512, the owner's decision): never parent or adult, because a PIN
+ * must not guard a manager's account. A row that already has one keeps it on
+ * offer, so editing its name sends the role it has, which the database allows.
+ */
+export function rolesForAKidLogin(options: readonly MemberRole[], currentRole?: string | null): MemberRole[] {
+  return options.filter((r) => !isManager(r) || r === currentRole);
+}
+
+/**
+ * The patch every "remove member" path writes. Removal is a soft delete, and
+ * `accept_invite` (0136) reactivates an existing (family_id, user_id) row with
+ * `on conflict ... set is_active = true` WITHOUT writing the invite's role. So
+ * a removed parent re-invited as a caregiver came back as a parent — and so
+ * did anyone holding a second invite issued before their removal. Dropping the
+ * row to the lowest role on removal means reactivation can only ever restore
+ * the least privilege; the matching SQL fix belongs in accept_invite.
+ */
+export const REMOVED_MEMBER_PATCH = { is_active: false, role: 'guest' } as const satisfies { is_active: boolean; role: MemberRole };
+
+/** Whether `actorRole` may remove (deactivate) a member whose role is `targetRole`: a parent only by a parent. */
+export function canRemoveMember(actorRole?: string | null, targetRole?: string | null): boolean {
+  if (!isManager(actorRole)) return false;
+  return targetRole !== 'parent' || isAdmin(actorRole);
+}
+
+/**
+ * Whether `actorRole` may send an invite carrying `inviteRole`: only a manager
+ * invites, only a parent may invite a `parent`, and anything else must be one
+ * of INVITABLE_ROLES.
+ */
+export function canInviteWithRole(actorRole?: string | null, inviteRole?: string | null): boolean {
+  if (!isManager(actorRole) || !inviteRole) return false;
+  if (inviteRole === 'parent') return isAdmin(actorRole);
+  return (INVITABLE_ROLES as string[]).includes(inviteRole);
+}

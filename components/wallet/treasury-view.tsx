@@ -64,7 +64,7 @@ export function TreasuryView({
       <div className="mb-6 overflow-hidden rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 via-brand/5 to-transparent p-6">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-brand-text/70">{tr('treasury.totalFamilyBalance')}</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-brand-text">{tr('treasury.totalFamilyBalance')}</p>
             <p className="mt-1 text-4xl font-black tracking-tight">{formatCents(familyTotal)}</p>
             <p className="mt-1 text-sm text-muted">{wallets.length} wallet{wallets.length !== 1 ? 's' : ''} · {totalActiveGoals} {tr('treasury.activeGoal')}{totalActiveGoals !== 1 ? 's' : ''}</p>
           </div>

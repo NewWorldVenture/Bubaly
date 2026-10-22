@@ -9,6 +9,7 @@ import { SCAM_TYPE_LABEL_KEYS } from '@/lib/guardian/scam';
 import { formatPhone } from '@/lib/guardian/phone';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { useFormat } from '@/components/i18n/use-format';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Communication = {
   id: string;
@@ -100,7 +101,7 @@ export function CallHistory({ communications }: { communications: Communication[
             className="h-10 w-full rounded-xl border border-border bg-bg pl-9 pr-3 text-sm"
           />
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           {(['all', 'calls', 'sms', 'scams', 'blocked'] as const).map((f) => (
             <button
               key={f}
@@ -208,7 +209,7 @@ export function CallHistory({ communications }: { communications: Communication[
                       )}
                       {comm.call_recording_url && (
                         <a
-                          href={comm.call_recording_url}
+                          href={safeWebLink(comm.call_recording_url) ?? undefined}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-2 rounded-lg bg-brand/10 px-3 py-2 text-xs font-medium text-brand-text hover:bg-brand/20 transition w-fit"

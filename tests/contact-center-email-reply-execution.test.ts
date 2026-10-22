@@ -2,6 +2,8 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
+import { rateLimitHit } from './helpers/rate-limit-rpc';
+import { familyScopedEmailRef } from '@/lib/contact-center/server';
 
 const mocks = vi.hoisted(() => ({
   admin: vi.fn(), sendEmail: vi.fn(), concierge: vi.fn(), translate: vi.fn(),
@@ -20,6 +22,9 @@ vi.mock('@/lib/guardian/twilio', () => ({
 
 const FAMILY = '11111111-1111-4111-8111-111111111111';
 const SENDER = 'Teacher <teacher@school.example>';
+// The reply goes to the ONE mailbox parsed out of From, never to the header as
+// written (audit N2, N6: the raw header was the sender's choice of recipient).
+const SENDER_MAILBOX = 'teacher@school.example';
 const REPLY = 'Thank you & see <notes>.';
 const LOCALIZED = 'Guardado & pendiente <revisar>.';
 let db: ReturnType<typeof createInMemorySupabase>;
@@ -40,12 +45,20 @@ beforeEach(() => {
   vi.resetModules(); vi.resetAllMocks();
   vi.stubEnv('NODE_ENV', 'production');
   vi.stubEnv('CONTACT_CENTER_INBOUND_SECRET', 'synthetic-inbound-secret');
+  // The per-sender budget keys hold an address, which the durable limiter
+  // digests under a server secret and refuses to store without one in
+  // production (audit N1; the-rate-limit-table-is-not-a-visitor-log).
+  vi.stubEnv('INTERNAL_SECRET', 'synthetic-internal-secret');
   vi.stubEnv('EMAIL_FROM', 'Bubaly <notifications@bubaly.com>');
   vi.stubGlobal('fetch', vi.fn(() => { throw new Error('Unexpected external request'); }));
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   db = createInMemorySupabase({
     uniques: { notifications: [['id']], ai_tool_calls: [['id'], ['family_id', 'idempotency_key']], family_inbox_messages: [['channel', 'provider_ref']] },
     defaults: { family_inbox_messages: { ai_handled: false, direction: 'inbound', status: 'new' } },
+    // The concierge and the auto-reply are budgeted through the durable limiter
+    // (audit N1); a database that lacks the function reads as "unavailable" and
+    // withholds both.
+    rpc: { rate_limit_hit: rateLimitHit },
   });
   db.seed('families', [{ id: FAMILY, name: 'Ours', timezone: 'UTC' }]);
   // The route gates inbound email on FAMILY_EMAIL_MIN_PLAN_LEVEL (Family+), and
@@ -75,7 +88,7 @@ describe('Contact Center email auto-reply acceptance', () => {
     expect((await deliver()).status).toBe(200);
     expect(mocks.sendEmail).toHaveBeenCalledOnce();
     expect(inbound()).toHaveLength(1);
-    expect(inbound()[0]).toMatchObject({ family_id: FAMILY, body: 'A simple note.', provider_ref: 'reply-fixture' });
+    expect(inbound()[0]).toMatchObject({ family_id: FAMILY, body: 'A simple note.', provider_ref: familyScopedEmailRef(FAMILY, 'reply-fixture') });
     expect(outbound()).toEqual([]);
   });
 
@@ -91,12 +104,12 @@ describe('Contact Center email auto-reply acceptance', () => {
     expect((await deliver()).status).toBe(200);
     expect(mocks.sendEmail).toHaveBeenCalledOnce();
     expect(mocks.sendEmail.mock.calls[0][0]).toMatchObject({
-      to: SENDER, replyTo: 'ours@bubaly.com', subject: 'Re: Hello',
+      to: SENDER_MAILBOX, replyTo: 'ours@bubaly.com', subject: 'Re: Hello',
       html: '<p>Thank you &amp; see &lt;notes>.</p><p style="color:#888;font-size:12px">— Ours via ours@bubaly.com</p>',
     });
     expect(mocks.sendEmail.mock.calls[0][0].from).toMatch(/^"?Ours"? <ours@bubaly\.com>$/);
     expect(outbound()).toHaveLength(1);
-    expect(outbound()[0]).toMatchObject({ family_id: FAMILY, channel: 'email', to_addr: SENDER, body: REPLY, ai_handled: true, status: 'read' });
+    expect(outbound()[0]).toMatchObject({ family_id: FAMILY, channel: 'email', to_addr: SENDER_MAILBOX, body: REPLY, ai_handled: true, status: 'read' });
     expect(inbound()).toHaveLength(1);
   });
 
@@ -127,8 +140,9 @@ describe('Contact Center email auto-reply acceptance', () => {
     });
     expect(outbound()).toHaveLength(1);
     expect(outbound()[0].body).toBe(LOCALIZED);
-    expect(db.table('ai_tool_calls')).toHaveLength(1);
-    expect(db.table('ai_tool_calls')[0]).toMatchObject({ state: 'succeeded', outputs: { phase: 'in_app_only' } });
+    const urgent = db.table('ai_tool_calls').filter(row => row.tool_name === 'contact_center.urgent_delivery');
+    expect(urgent).toHaveLength(1);
+    expect(urgent[0]).toMatchObject({ state: 'succeeded', outputs: { phase: 'in_app_only' } });
     expect(db.table('notifications')).toHaveLength(1);
   });
 });

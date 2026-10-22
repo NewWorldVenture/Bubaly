@@ -12,10 +12,13 @@ import { Avatar } from '@/components/ui/avatar';
 import { getFormat } from '@/lib/utils/format-server';
 import { cn } from '@/lib/utils/cn';
 import { loadOperatingIndex } from '@/lib/operating-index/server';
+import { readsHouseholdMoney } from '@/lib/finance/household-money';
 import { ChangeRecap } from '@/components/operating-index/change-recap';
 import { OutcomesStrip } from '@/components/outcomes/outcomes-strip';
 import { countFromResult, countMatchingResult } from '@/lib/outcomes/discovery';
 import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -26,8 +29,17 @@ export async function generateMetadata(): Promise<Metadata> {
 export const dynamic = 'force-dynamic';
 
 const HOUR = 3600_000;
+/** The soonest occurrences the week's conflict check reads, as /dashboard/conflicts does. */
+const MAX_EVENTS = 500;
 
 type Issue = { icon: typeof AlertTriangle; text: string; href: string; severity: 'high' | 'medium' };
+
+// Whole class names, so Tailwind generates them.
+const SCORE_TONE = {
+  good: { text: 'text-success', stroke: 'stroke-success' },
+  fair: { text: 'text-warning', stroke: 'stroke-warning' },
+  poor: { text: 'text-danger', stroke: 'stroke-danger' },
+} as const;
 
 // Family+ feature — the AI Family Command Center. Every figure is computed from
 // real family data; nothing is fabricated.
@@ -49,10 +61,19 @@ export default async function CommandCenterPage() {
   const weekEnd = new Date(zonedDayBoundsMs(weekDays[7], tz).start);
   const in30 = new Date(now.getTime() + 30 * 86_400_000);
 
+  // Series-aware, and overlapping the week, as /dashboard/conflicts reads
+  // (N3). Raw rows by `starts_at` missed every occurrence of a series created
+  // before this week — a one-off booked over a weekly practice was never a
+  // clash — and stopped at the 1,000-row cap without a word. A window that
+  // cannot be built rejects, which settleAll turns into a failed read the
+  // banner names.
+  const readWeek = async () => readCalendarOccurrences(
+    supabase, familyId, instantCalendarBounds(now.toISOString(), new Date(weekEnd.getTime() - 1).toISOString(), tz), tz,
+    { columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'location', 'assignee_id'], overlap: true, limit: MAX_EVENTS },
+  );
   const [membersResult, eventsResult, openChoresResult, mealPlansResult, expiringDocsResult] = await settleAll([
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId).eq('is_active', true),
-    supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, location, assignee_id', { count: 'exact' })
-      .eq('family_id', familyId).gte('starts_at', now.toISOString()).lte('starts_at', weekEnd.toISOString()).order('starts_at'),
+    readWeek(),
     supabase.from('chore_assignments').select('id, due_at, status, member_id', { count: 'exact' })
       .eq('family_id', familyId).in('status', ['todo', 'in_progress']),
     supabase.from('meal_plans').select('plan_date, meal_type', { count: 'exact' }).eq('family_id', familyId)
@@ -93,9 +114,10 @@ export default async function CommandCenterPage() {
 
   // Evening "what changed" recap — the same FOI diff shown on the Operating
   // Index, brought into the Command Center (pillar #5). Degrades to null-safe.
+  // Today's row is kept only from a parent's or an adult's visit (SnapshotReach).
   let change;
   try {
-    ({ change } = await loadOperatingIndex(supabase, familyId, tz, now));
+    ({ change } = await loadOperatingIndex(supabase, familyId, tz, readsHouseholdMoney(ctx.active.role) ? 'household' : 'member', now));
   } catch (error) {
     // The recap is ONE section of this page. ChangeRecap requires a real
     // ChangeSummary, so rather than inventing an empty one that would render as
@@ -105,7 +127,14 @@ export default async function CommandCenterPage() {
   }
 
   // ── Schedule conflict detection (overlapping timed events) ──
+  // `count` is every occurrence in the week: past MAX_EVENTS not every event
+  // was checked, so no clash found is not an all-clear, and the page says so.
+  // Nor is a calendar it could not read at all.
+  const eventsCapped = !eventsResult.error && (eventsResult.count ?? 0) > (events ?? []).length;
+  const notAllChecked = eventsResult.error ? t('conflicts.couldNotCheckForClashes')
+    : eventsCapped ? t('commandCenter.onlyTheFirstEventsWereChecked', { count: MAX_EVENTS }) : null;
   const timed = (events ?? []).filter((e) => !e.all_day);
+  const occurrence = (e: { id: string; starts_at: string }) => `${e.id}@${e.starts_at}`;
   const conflicts: { a: typeof timed[number]; b: typeof timed[number] }[] = [];
   for (let i = 0; i < timed.length; i++) {
     const aStart = new Date(timed[i].starts_at).getTime();
@@ -143,7 +172,11 @@ export default async function CommandCenterPage() {
     Math.min(unassignedEvents.length * 2, 14);
   const score = Math.max(0, 100 - penalties);
   const scoreLabel = score >= 85 ? 'On track' : score >= 60 ? 'Needs attention' : 'Action required';
-  const scoreColor = score >= 85 ? '#22c55e' : score >= 60 ? '#fbbf24' : '#f87171';
+  // The theme's status roles, not Tailwind's 400/500 hex: those were picked
+  // against the dark theme and read 1.6 to 2.7:1 on the light theme's card
+  // (A11Y-001). The tokens hold 4.5:1 on every ground in both themes
+  // (tests/brand-contrast-contract.test.ts).
+  const scoreTone = score >= 85 ? SCORE_TONE.good : score >= 60 ? SCORE_TONE.fair : SCORE_TONE.poor;
 
   const issues: Issue[] = [];
   for (const c of conflicts) issues.push({ icon: CalendarClock, severity: 'high', href: '/dashboard/conflicts', text: t('commandCenter.scheduleConflict', { a: c.a.title, b: c.b.title, time: fmtTime(c.a.starts_at) }) });
@@ -173,8 +206,8 @@ export default async function CommandCenterPage() {
           <div className="flex items-center gap-5">
             <div className="relative h-32 w-32 shrink-0">
               <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
-                <circle cx="60" cy="60" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="12" />
-                <circle cx="60" cy="60" r={r} fill="none" stroke={scoreColor} strokeWidth="12" strokeLinecap="round"
+                <circle cx="60" cy="60" r={r} fill="none" className="stroke-fg/10" strokeWidth="12" />
+                <circle cx="60" cy="60" r={r} fill="none" className={scoreTone.stroke} strokeWidth="12" strokeLinecap="round"
                   strokeDasharray={`${(score / 100) * circ} ${circ}`} />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -183,8 +216,8 @@ export default async function CommandCenterPage() {
               </div>
             </div>
             <div>
-              <p className="text-lg font-bold" style={{ color: scoreColor }}>{scoreLabel}</p>
-              <p className="mt-1 text-sm text-muted">{issues.length === 0 ? 'Everything looks handled for the week.' : `${issues.length} ${issues.length === 1 ? 'item needs' : 'items need'} your attention.`}</p>
+              <p className={cn('text-lg font-bold', scoreTone.text)}>{scoreLabel}</p>
+              <p className="mt-1 text-sm text-muted">{issues.length === 0 ? (notAllChecked ?? 'Everything looks handled for the week.') : `${issues.length} ${issues.length === 1 ? 'item needs' : 'items need'} your attention.`}</p>
             </div>
           </div>
         </div>
@@ -192,12 +225,13 @@ export default async function CommandCenterPage() {
         {/* Needs attention */}
         <div className="rounded-2xl border border-border bg-surface/40 p-6 lg:col-span-2">
           <h2 className="mb-4 flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4 text-amber-400" /> {t('dashboardCommandCenter.needsAttention')}</h2>
-          {issues.length === 0 ? (
+          {notAllChecked && <p role="status" className="mb-3 text-sm text-muted">{notAllChecked}</p>}
+          {issues.length === 0 ? (notAllChecked ? null : (
             <div className="flex flex-col items-center py-8 text-center">
               <CheckCircle2 className="h-10 w-10 text-emerald-400/70" />
               <p className="mt-2 text-sm text-muted">{t('dashboardCommandCenter.noConflictsOrGapsDetectedThis')}</p>
             </div>
-          ) : (
+          )) : (
             <ul className="space-y-2">
               {issues.slice(0, 8).map((it, i) => (
                 <li key={i}>
@@ -224,9 +258,12 @@ export default async function CommandCenterPage() {
           <ul className="divide-y divide-border/50">
             {(events ?? []).slice(0, 12).map((e) => {
               const who = e.assignee_id ? memberById.get(e.assignee_id) : undefined;
-              const inConflict = conflicts.some((c) => c.a.id === e.id || c.b.id === e.id);
+              // An expanded series gives every occurrence the series row's id,
+              // so a row is named by its id and its start: only the occurrence
+              // that clashes is badged, and the keys stay unique.
+              const inConflict = conflicts.some((c) => occurrence(c.a) === occurrence(e) || occurrence(c.b) === occurrence(e));
               return (
-                <li key={e.id} className="flex items-center gap-3 py-2.5">
+                <li key={occurrence(e)} className="flex items-center gap-3 py-2.5">
                   <span className="w-32 shrink-0 text-xs text-muted">{fmtDate(e.starts_at)} · {e.all_day ? 'All day' : fmtTime(e.starts_at)}</span>
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{e.title}</span>
                   {inConflict && <span className="shrink-0 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-400">{t('commandCenter.conflict')}</span>}

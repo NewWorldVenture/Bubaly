@@ -8,6 +8,7 @@ import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { describeReadError } from '@/lib/supabase/settle';
+import { isWithheldFromGuest } from '@/lib/auth/guest-scope';
 import {
   summarizeUtilities, deterministicSavingsFindings, utilityLabel, usd,
   type BillLike,
@@ -29,6 +30,12 @@ export async function POST() {
   let ctx;
   try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: t('utilitySavings.unauthorized') }, { status: 401 }); }
 
+  // A guest is sent away from the utilities page (lib/auth/guest-scope.ts);
+  // this answer is the same bills, totalled, so it answers to the same rule.
+  if (ctx.active.role === 'guest' && isWithheldFromGuest('/dashboard/utilities')) {
+    return NextResponse.json({ error: t('insights.thatSummaryIsForThe') }, { status: 403 });
+  }
+
   const supabase = await createServer();
   // The page in front of this is feature-gated; this endpoint was not, and it
   // calls a model. Same resolver, so the two cannot disagree.
@@ -45,12 +52,17 @@ export async function POST() {
   // closed rather than answering, so this is the mild end of the class, but the
   // sentence is still a claim about their data that the route cannot support.
   // Audit C1-S9-37.
-  const { data: rows, error: billsError } = await supabase
+  //
+  // The NEWEST 400, put back in date order. Ascending with the limit kept the
+  // oldest 400, so a family past it had a bill from years ago reported as each
+  // utility's "latest", with month-over-month changes from that time.
+  const { data: newestFirst, error: billsError } = await supabase
     .from('utility_bills')
     .select('kind, period_month, amount_cents')
     .eq('family_id', ctx.active.familyId)
-    .order('period_month', { ascending: true })
+    .order('period_month', { ascending: false })
     .limit(400);
+  const rows = newestFirst ? [...newestFirst].reverse() : newestFirst;
 
   if (billsError) {
     console.error('[ai/home/utility-savings] bill read failed', {

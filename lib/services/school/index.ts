@@ -15,6 +15,7 @@ import type { HomeworkStatus, Tables } from '@/lib/database.types';
 import { readCountedRows } from '@/lib/calendar/occurrences';
 import { classOccursInWeek, slotStartMinutes, weekParity } from '@/lib/school/timetable';
 import { describeDbError } from '@/lib/supabase/errors';
+import { civilDayBounds, familyInstant, parseCivilReading } from '@/lib/time/civil';
 import { dayKeyInTz, scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
@@ -39,10 +40,48 @@ function isoOrNull(value: string | null | undefined): string | null {
   return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
 }
 
+/**
+ * One edge of a read window as an instant.
+ *
+ * The planner's prompt defines times as "ISO 8601 in the family's time zone"
+ * and every school/sports template feeds these reads `localTime(dayKey, h, m)`
+ * — a zone-less `2026-10-12T00:00:00`. `Date.parse` resolved that on the HOST's
+ * clock (UTC on Vercel), so a Los Angeles family's school day ran from 5pm the
+ * evening before to 5pm, a 5:30pm practice was missed and the previous
+ * evening's reported, and a date-only `from`/`to` of one day was a zero-width
+ * window at UTC midnight. A zone-less value is read on the FAMILY's clock by
+ * the one rule `lib/time/civil.ts` states (the calendar's, RFC 5545): a
+ * fraction is still a reading, an impossible date is refused, and a bare date
+ * is that family day from its first instant to its last — the first instant
+ * being 01:00 on a day whose midnight the clocks skip (America/Santiago), where
+ * the old offset arithmetic opened the window at 23:00 the evening before. A
+ * value with an offset or `Z` is kept as written; nothing reaches the host's
+ * clock.
+ */
+function windowInstant(value: string | null | undefined, tz: string, edge: 'start' | 'end'): string | null {
+  if (!value) return null;
+  const reading = parseCivilReading(value);
+  if (reading && !reading.hasTime) {
+    const bounds = civilDayBounds(reading.year, reading.month, reading.day, tz);
+    if (!bounds) return null;
+    return new Date(edge === 'start' ? bounds.start.getTime() : bounds.end.getTime() - 1).toISOString();
+  }
+  const at = familyInstant(value, tz);
+  return at ? at.toISOString() : null;
+}
+
+type ResolvedWindow = {
+  from: string;
+  /** Inclusive millisecond endpoint, retained for timed windows and existing callers. */
+  to: string;
+  /** Bare-date ends use the next civil-day boundary, exclusive, for precise database reads. */
+  toExclusive?: string;
+};
+
 /** A window defaulting to the coming week; an inverted window is refused rather than returned empty. */
-export function resolveWindow(scope: ServiceScope, input?: { from?: string | null; to?: string | null }): ServiceResult<{ from: string; to: string }> {
-  const explicitFrom = isoOrNull(input?.from);
-  const explicitTo = isoOrNull(input?.to);
+export function resolveWindow(scope: ServiceScope, input?: { from?: string | null; to?: string | null }): ServiceResult<ResolvedWindow> {
+  const explicitFrom = windowInstant(input?.from, scope.tz, 'start');
+  const explicitTo = windowInstant(input?.to, scope.tz, 'end');
   if (input?.from && !explicitFrom) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
   if (input?.to && !explicitTo) return fail('That end time could not be understood.', { code: SERVICE_CODES.invalidInput });
   const fromDate = explicitFrom ? new Date(explicitFrom) : scopeNow(scope);
@@ -50,7 +89,13 @@ export function resolveWindow(scope: ServiceScope, input?: { from?: string | nul
   const toDate = explicitTo ? new Date(explicitTo) : new Date(fromDate.getTime() + WEEK_MS);
   if (!Number.isFinite(toDate.getTime())) return fail('That end time is outside the supported date range.', { code: SERVICE_CODES.invalidInput });
   if (toDate < fromDate) return fail('The end of that window is before its start.', { code: SERVICE_CODES.invalidInput });
-  return ok({ from: fromDate.toISOString(), to: toDate.toISOString() });
+  // A PostgreSQL timestamp can fall in the final 999 microseconds after our
+  // Date's last millisecond. A whole civil day ends at the next boundary,
+  // exclusive; only an explicitly timed end keeps the inclusive predicate.
+  const wholeDayEnd = explicitTo && parseCivilReading(input?.to ?? '')?.hasTime === false;
+  return ok({ from: fromDate.toISOString(), to: toDate.toISOString(),
+    ...(wholeDayEnd ? { toExclusive: new Date(toDate.getTime() + 1).toISOString() } : {}),
+  });
 }
 
 export type SchoolWindowInput = { from?: string | null; to?: string | null; memberId?: string | null; limit?: number };
@@ -65,9 +110,11 @@ export async function listEventsBetween(scope: ServiceScope, input: SchoolWindow
     .from('school_events')
     .select('*', { count: 'exact' })
     .eq('family_id', scope.familyId)
-    .gte('starts_at', window.data.from)
-    .lte('starts_at', window.data.to)
-    .order('starts_at', { ascending: true }).order('id');
+    .gte('starts_at', window.data.from);
+    read = window.data.toExclusive
+      ? read.lt('starts_at', window.data.toExclusive)
+      : read.lte('starts_at', window.data.to);
+    read = read.order('starts_at', { ascending: true }).order('id');
     if (input.memberId) read = read.eq('member_id', input.memberId);
     return read;
   };
@@ -101,9 +148,11 @@ export async function listHomeworkDue(scope: ServiceScope, input: HomeworkDueInp
     .select('*', { count: 'exact' })
     .eq('family_id', scope.familyId)
     .not('due_at', 'is', null)
-    .gte('due_at', window.data.from)
-    .lte('due_at', window.data.to)
-    .order('due_at', { ascending: true }).order('id');
+    .gte('due_at', window.data.from);
+    read = window.data.toExclusive
+      ? read.lt('due_at', window.data.toExclusive)
+      : read.lte('due_at', window.data.to);
+    read = read.order('due_at', { ascending: true }).order('id');
     if (!input.includeDone) read = read.in('status', OPEN_STATUSES);
     if (input.memberId) read = read.eq('member_id', input.memberId);
     return read;

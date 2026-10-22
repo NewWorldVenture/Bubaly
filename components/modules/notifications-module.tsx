@@ -11,7 +11,9 @@ import { partitionByPriority } from '@/lib/notifications/priority';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { settle } from '@/lib/supabase/settle';
-import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
+import { wroteNoRows } from '@/lib/supabase/errors';
+import { isManager } from '@/lib/constants/roles';
+import { dismissNotificationAction } from '@/app/(app)/dashboard/notifications/actions';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -30,11 +32,16 @@ type Notification = Tables<'notifications'>;
 
 export function NotificationsModule() {
   const t = useTranslations();
-  const { familyId, userId } = useApp();
+  const { familyId, userId, role } = useApp();
   const { success, error: toastError } = useToast();
   const [markingAll, setMarkingAll] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // The rows a mark-read may touch. A legacy family-wide row (user_id NULL)
+  // carries ONE is_read for the whole family, so a child or guest marking it
+  // read cleared it from every parent's bell; only a manager — who may also
+  // remove it — still marks those. Everyone marks their own.
+  const readableRows = isManager(role) ? `user_id.eq.${userId},user_id.is.null` : `user_id.eq.${userId}`;
 
   async function scan() {
     setScanning(true);
@@ -42,7 +49,10 @@ export function NotificationsModule() {
       const res = await fetch('/api/notifications/generate', { method: 'POST' });
       const json = await res.json();
       if (!res.ok) { toastError(json.error ?? 'Could not scan.'); return; }
-      success(json.created > 0
+      // Some sources could not be checked: "all caught up" would be a claim
+      // about reads that never happened.
+      if (json.incomplete) toastError(t('notificationsModule.someUpdatesCouldNotBeChecked'));
+      else success(json.created > 0
         ? `Added ${json.created} new notification${json.created === 1 ? '' : 's'}.`
         : "You're all caught up — nothing new.");
       void refresh();
@@ -75,8 +85,14 @@ export function NotificationsModule() {
     // was marked read. Logged rather than toasted, deliberately: an unrecorded
     // read receipt is not worth interrupting someone over. The readback is what
     // makes the log true.
+    //
+    // Bounded to this member's own rows (and, for a manager, the legacy
+    // family-wide ones — see readableRows): notif_update also lets a manager
+    // write OTHER members' rows, and their read state is theirs. Family
+    // notices are one row per member, so reading yours clears nobody else's.
     const { data: rows, error } = await settle(supabase.from('notifications')
-      .update({ is_read: true }).eq('id', id).eq('family_id', familyId).select('id'));
+      .update({ is_read: true }).eq('id', id).eq('family_id', familyId)
+      .or(readableRows).select('id'));
     if (error) console.error('[notifications] mark-read failed', { message: error.message });
     else if (wroteNoRows(rows)) console.error('[notifications] mark-read changed no row', { id });
     void refresh();
@@ -88,24 +104,29 @@ export function NotificationsModule() {
     // Zero rows here is NORMAL — nothing was unread — so this checks the error
     // only, and is left unconfirmed on purpose. `notifications` is "own row OR
     // manager", not manager-only. Audit C1-S9-82.
+    //
+    // Only this member's rows (see readableRows): without the recipient bound,
+    // a parent's "mark all read" cleared every member's personal notices too,
+    // because RLS lets a manager update any row in the family — and a child's
+    // cleared every shared family-wide one for the parents.
     const { error } = await settle(supabase.from('notifications').update({ is_read: true })
-      .eq('family_id', familyId).eq('is_read', false));
+      .eq('family_id', familyId).eq('is_read', false)
+      .or(readableRows));
     if (error) console.error('[notifications] mark-all-read failed', { message: error.message });
     setMarkingAll(false);
     void refresh();
   }
 
   async function remove(id: string) {
-    const supabase = createClient();
-    // Family-wide rows (no user_id) are listed to every member but deletable
-    // only by a manager (own row OR can_manage_family). A refused delete is
-    // not an error — it matches nothing — so without the row check the bin
-    // did nothing, said nothing, and the row came back on refresh. The
-    // `family_id` predicate bounds the write to one household
-    // (tests/a-filtered-delete-is-not-a-deletion).
-    const { data: rows, error } = await supabase.from('notifications').delete().eq('id', id).eq('family_id', familyId).select('id');
-    if (error) return toastError(describeDbError(error));
-    if (wroteNoRows(rows)) toastError(t('errors.thatChangeWasNotSaved'));
+    // A dismissal, not a DELETE. The generator's dedupe is the notifications
+    // table itself, so a deleted row was "new" again on the next scan and was
+    // re-created, pushed and emailed — daily, for as long as its item stayed
+    // in its window (a renewal for up to 90 days). The server action keeps the
+    // row for the dedupe and hides it from every surface. Family-wide rows are
+    // still a manager's to dismiss, as they were to delete.
+    const res = await dismissNotificationAction({ id }).catch(() => null);
+    if (!res) toastError(t('errors.thatChangeWasNotSaved'));
+    else if (!res.ok) toastError(res.error);
     void refresh();
   }
 

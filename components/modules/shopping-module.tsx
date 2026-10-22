@@ -248,7 +248,7 @@ export function ShoppingModule() {
                 {isActive && (
                   <button type="button" onClick={() => setEditingList(list)}
                     aria-label={t('shopping.editList')}
-                    className="mr-3 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 rounded p-1 hover:bg-black/10">
+                    className="mr-3 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 rounded p-1.5 hover:bg-black/10">
                     <Pencil className="h-3 w-3" />
                   </button>
                 )}
@@ -276,7 +276,7 @@ export function ShoppingModule() {
                 <span className="text-2xl">{(activeList as Record<string, unknown>).list_icon as string ?? '🛒'}</span>
                 <h2 className="text-xl font-bold">{activeList.name}</h2>
               </div>
-              <div className="ml-auto flex items-center gap-2">
+              <div className="ml-auto flex flex-wrap items-center gap-2">
                 <AiInsight kind="shopping" />
                 {checkedCount > 0 && (
                   <Button variant="outline" size="sm" onClick={() => setBoughtOpen(true)}>
@@ -288,7 +288,7 @@ export function ShoppingModule() {
                     <Check className="h-3.5 w-3.5 text-success" /> {t('shopping.clear')} {checkedCount} done
                   </Button>
                 )}
-                <div className="flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-1.5">
+                <div className="flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-1.5 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
                   <Search className="h-3.5 w-3.5 text-muted" />
                   <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => setSearch(e.target.value)} placeholder="Search…"
                     className="w-28 bg-transparent text-sm placeholder:text-muted outline-none" />
@@ -338,7 +338,7 @@ export function ShoppingModule() {
                       </button>
                     ))}
                   </div>
-                  <div className="ml-auto flex items-center gap-2">
+                  <div className="ml-auto flex flex-wrap items-center gap-2">
                     <Button variant="ghost" size="sm" onClick={copyList} disabled={isPending('copy-list')}>
                       <Copy className="h-3.5 w-3.5" /> {t('shoppingModule.copyList')}
                     </Button>
@@ -384,8 +384,7 @@ export function ShoppingModule() {
                         <div className="divide-y divide-border/40">
                           {catItems.map((item) => (
                             <div key={item.id}
-                              className={cn('group flex items-center gap-3 px-4 py-2.5 hover:bg-elevated/20 transition',
-                                item.is_checked && 'opacity-60')}>
+                              className="group flex items-center gap-3 px-4 py-2.5 hover:bg-elevated/20 transition">
                               <button onClick={() => toggleItem(item)} disabled={isPending(`toggle:${item.id}`)} aria-label={item.is_checked ? t('uiText.uncheckItem') : t('uiText.checkItem')}
                                 className={cn('flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border-2 transition disabled:opacity-60',
                                   item.is_checked ? 'border-success bg-success' : 'border-border hover:border-success/50')}>
@@ -410,7 +409,7 @@ export function ShoppingModule() {
                                 </a>
                               )}
                               <button onClick={() => deleteItem(item.id)} disabled={isPending(`delete:${item.id}`)} aria-label={t('shopping.deleteItem')}
-                                className="rounded p-1 text-muted opacity-0 transition group-hover:opacity-100 hover:text-danger disabled:opacity-50">
+                                className="rounded p-1 text-muted opacity-100 sm:opacity-0 transition sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 hover:text-danger disabled:opacity-50">
                                 {isPending(`delete:${item.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                               </button>
                             </div>
@@ -426,12 +425,12 @@ export function ShoppingModule() {
             {/* Quick add */}
             <form onSubmit={addItem} className="flex items-center gap-2">
               <select aria-label={t('fieldName.category')} value={addingCategory} onChange={(e) => setAddingCategory(e.target.value)}
-                className="rounded-xl border border-border bg-surface/60 px-2 py-2 text-xs text-muted focus:outline-none">
+                className="rounded-xl border border-border bg-surface/60 px-2 py-2 text-xs text-muted focus-ring">
                 {CATEGORIES.map((c) => <option key={c} value={c}>{groceryCategoryLabel(t, c)}</option>)}
               </select>
               <input value={addingText} onChange={(e) => setAddingText(e.target.value)}
                 placeholder={t('shopping.addItem')}
-                className="flex-1 rounded-xl border border-dashed border-border bg-transparent px-4 py-2 text-sm placeholder:text-muted focus:border-brand/50 focus:outline-none transition" />
+                className="min-w-0 flex-1 rounded-xl border border-dashed border-border bg-transparent px-4 py-2 text-sm placeholder:text-muted focus:border-brand focus:outline-none transition" />
               {addingText && <Button type="submit" size="sm" disabled={isPending('add-item')}>Add</Button>}
             </form>
           </>
@@ -663,22 +662,39 @@ function BoughtModal({ listId, items, onClose, onRefresh, onDone }: {
         merchant: merchant.trim() || null,
       });
       if (!result.ok) { toastError(result.error); return; }
+      // Every line's outcome is said, whatever happened to the lines beside
+      // it. A trip is settled line by line, so one result can hold all four:
+      // lines counted, lines left to count by hand, lines that failed, lines
+      // put away that would not clear. AUD-1041-PUTAWAY-RESULTS.
+      if (result.pantryFailed.length > 0) {
+        toastError(t('shoppingModule.couldNotPutTheseIn', {
+          names: result.pantryFailed.map((f) => f.name).join(', '),
+        }));
+      }
+      // Put away but still ticked — the one case where a second tap WOULD
+      // double it, so the family is told rather than left to find out.
+      if (result.clearFailed.length > 0) {
+        toastError(t('shoppingModule.theseAreInYourPantry', {
+          names: result.clearFailed.map((f) => f.name).join(', '),
+        }));
+      }
+      // Bought and off the list, but counted in another unit in the pantry:
+      // the family is told which, rather than shown a sum of kilograms and cups.
+      // Said even when another line failed: the line is already un-ticked (and
+      // normally off the list), so the retry never reaches it and this is the
+      // only time it is named.
+      if (result.unitMismatch.length > 0) {
+        toastError(t('shoppingModule.countTheseInThePantry', {
+          names: result.unitMismatch.map((m) => `${m.name} (${m.bought} → ${m.stocked})`).join(', '),
+        }));
+      }
+      const stocked = t('shoppingModule.putItemsInYourPantry', { count: result.pantryUpdated.length });
       // A line is put away and taken off the list together, so what is left
       // checked is exactly what did not land: tapping again retries those and
-      // cannot add the ones that did a second time. The modal stays open.
+      // cannot add the ones that did a second time. The modal stays open, and
+      // keeps the amount: no purchase is recorded until the shop completes.
       if (result.pantryFailed.length > 0 || result.clearFailed.length > 0) {
-        if (result.pantryFailed.length > 0) {
-          toastError(t('shoppingModule.couldNotPutTheseIn', {
-            names: result.pantryFailed.map((f) => f.name).join(', '),
-          }));
-        }
-        // Put away but still ticked — the one case where a second tap WOULD
-        // double it, so the family is told rather than left to find out.
-        if (result.clearFailed.length > 0) {
-          toastError(t('shoppingModule.theseAreInYourPantry', {
-            names: result.clearFailed.map((f) => f.name).join(', '),
-          }));
-        }
+        if (result.pantryUpdated.length > 0) success(stocked);
         // What DID land is already off the list, so the list on screen — and
         // this modal's own "what you bought" — must be re-read before the
         // family taps again, or they would be ticking rows that no longer
@@ -686,7 +702,6 @@ function BoughtModal({ listId, items, onClose, onRefresh, onDone }: {
         onRefresh();
         return;
       }
-      const stocked = t('shoppingModule.putItemsInYourPantry', { count: result.pantryUpdated.length });
       if (result.purchaseError) toastError(`${stocked} ${t('shoppingModule.thePurchaseWasNotRecorded', { reason: result.purchaseError })}`);
       else if (result.purchaseRecorded) success(`${stocked} ${t('shoppingModule.purchaseRecordedOnTheHousehold')}`);
       else success(stocked);

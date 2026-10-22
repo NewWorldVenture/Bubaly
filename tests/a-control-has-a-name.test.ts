@@ -84,6 +84,12 @@ describe('the scanner sees what the lint rule does not', () => {
     expect(scan(`<input type="hidden" name="id" />`).inputs).toBe(0);
   });
 
+  it('an icon-only <summary> is an unnamed control too', () => {
+    expect(scan(`<details><summary className="list-none"><AlarmClock className="h-4 w-4" /></summary></details>`).buttons).toBe(1);
+    expect(scan(`<details><summary aria-label={tr('reminders.snoozeReminder')}><AlarmClock /></summary></details>`).buttons).toBe(0);
+    expect(scan(`<details><summary>{tr('x')}</summary></details>`).buttons).toBe(0);
+  });
+
   it('an icon-only button is unnamed, however the icon is chosen', () => {
     expect(scan(`<button onClick={on}><Trash2 /></button>`).buttons).toBe(1);
     expect(scan(`<button onClick={on}>{on ? <Pin /> : <PinOff />}</button>`).buttons).toBe(1);

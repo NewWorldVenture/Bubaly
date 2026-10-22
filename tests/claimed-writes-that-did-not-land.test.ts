@@ -70,6 +70,9 @@ function pushClient(outcome: DeleteOutcome) {
         select: () => { mode = 'select'; return b; },
         delete: () => { mode = 'delete'; return b; },
         in: () => b,
+        // The device read is newest-first and capped per account (lib/server/push.ts).
+        order: () => b,
+        limit: () => b,
         eq: (col: string, v: unknown) => { if (mode === 'delete' && col === 'id') deletes.push(String(v)); return b; },
         then: (resolve: (v: unknown) => void) =>
           resolve(mode === 'delete' ? { data: null, ...outcome } : { data: rows(), error: null }),

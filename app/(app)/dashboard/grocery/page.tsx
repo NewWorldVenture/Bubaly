@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
+import { requireFeature } from '@/lib/supabase/auth';
 import { ShoppingModule } from '@/components/modules/shopping-module';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -8,6 +9,8 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function GroceryPage() {
+  // Same tier the sidebar shows for Groceries (see the recipes page).
+  await requireFeature('/dashboard/grocery');
   const t = await getTranslations();
   // The lists module has no page title of its own (its headings are the list
   // sidebar and the open list); the route's h1 lives here, for screen readers.

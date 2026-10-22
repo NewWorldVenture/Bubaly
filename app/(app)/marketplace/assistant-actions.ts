@@ -20,6 +20,7 @@ import { isAIConfigured, resolveProvider, type AIMessage } from '@/lib/ai/provid
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { assertAIAllowance } from '@/lib/server/ai-access';
 
 export type MarketAssistantResult = {
   ok: true;
@@ -80,7 +81,11 @@ export async function askMarketAssistantAction(
   // Tier 2 (LLM) — best-effort on top of the same snapshot; the deterministic
   // links still ride along so the UI always has somewhere to go.
   try {
-    if (await isAIConfigured()) {
+    // The model tier files an `ai_requests` row, so the Free plan's monthly AI
+    // allowance applies to it as to every other helper. Past the allowance (or
+    // when it cannot be checked) the shopper still gets the grounded answer
+    // below, which calls no model and counts toward nothing.
+    if (await isAIConfigured() && (await assertAIAllowance(ctx, { db: sb })).ok) {
       // Two ways this ends at `source: 'engine'` — the provider threw, or it
       // answered with nothing usable — and the shopper sees the same
       // deterministic reply either way, which is also what "no API key" looks

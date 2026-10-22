@@ -33,8 +33,9 @@ import { isManager } from '@/lib/constants/roles';
 import { createServer } from '@/lib/supabase/server';
 import {
   completeChoreAssignment, createChore, deleteChoreAssignment, setChoreProgress,
-  respawnChoreAssignment,
+  rejectChoreAssignment, respawnChoreAssignment,
 } from '@/lib/services/tasks';
+import { releaseUnreferencedProof } from '@/lib/chores/proof-cleanup';
 import { ALREADY_SAVED, makeKey } from '@/lib/services/idempotency';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { isSubmissionId } from '@/lib/utils/submission-id';
@@ -64,6 +65,18 @@ export type ChoreActionResult =
  */
 export type ChoreStatusResult =
   | { ok: true; id: string; status: string }
+  | { ok: false; error: string };
+
+/**
+ * A delete reports whether the chore will be BACK on the child's board.
+ *
+ * A repeating chore other children share stays active for them, and the
+ * push-scan sweep puts it back for this child too (lib/services/tasks
+ * `deleteOutcome`). Saying "Chore removed" about it was a promise the next run
+ * broke; `comesBack` lets the board say what will happen instead.
+ */
+export type ChoreDeleteResult =
+  | { ok: true; id: string; comesBack: boolean }
   | { ok: false; error: string };
 
 /**
@@ -148,7 +161,12 @@ export async function setChoreStatusAction(
   }
 }
 
-export async function deleteChoreAssignmentAction(assignmentId: string): Promise<ChoreActionResult> {
+/**
+ * Send a submitted chore back for a redo — the Approvals tab's Redo button.
+ * A manager's decision, like approving it; `rejectChoreAssignment` holds the
+ * same rule for any other caller.
+ */
+export async function rejectChoreAssignmentAction(assignmentId: string): Promise<ChoreStatusResult> {
   const t = await getTranslations();
   if (!assignmentId) return { ok: false, error: t('actions.thatChoreCouldNotBe') };
   const { ctx, scope } = await choreScope();
@@ -156,11 +174,56 @@ export async function deleteChoreAssignmentAction(assignmentId: string): Promise
   if (refused) return { ok: false, error: refused };
 
   try {
-    const result = await deleteChoreAssignment(scope, assignmentId);
+    const result = await rejectChoreAssignment(scope, assignmentId);
     if (!result.ok) return { ok: false, error: result.error };
 
     revalidatePath(PATH);
-    return { ok: true, id: result.data.id };
+    return { ok: true, id: result.data.id, status: result.data.status };
+  } catch (err) {
+    console.error('[chore-action] reject failed', err);
+    return { ok: false, error: describeActionError(err, t('actions.couldNotUpdateThatChore')) };
+  }
+}
+
+export async function deleteChoreAssignmentAction(assignmentId: string): Promise<ChoreDeleteResult> {
+  const t = await getTranslations();
+  if (!assignmentId) return { ok: false, error: t('actions.thatChoreCouldNotBe') };
+  const { ctx, scope } = await choreScope();
+  const refused = await refuseUnlessManager(ctx.active.role);
+  if (refused) return { ok: false, error: refused };
+
+  try {
+    // The child's proof photos and videos go with the row in the database
+    // (00430: chore_submissions cascade on the assignment) and with nothing in
+    // Storage: the objects stayed in the private bucket, referenced by nothing
+    // and never removed. Read their paths while the submissions still exist,
+    // and release them once the delete is confirmed. A read that fails stops
+    // the delete — an unreadable list is one this could not clean up after.
+    const { data: proof, error: proofError } = await scope.db
+      .from('chore_submissions')
+      .select('media_paths')
+      .eq('family_id', ctx.active.familyId)
+      .eq('assignment_id', assignmentId);
+    if (proofError) {
+      console.error('[chore-action] proof read before delete failed', proofError);
+      return { ok: false, error: describeActionError(proofError, t('actions.couldNotRemoveThatChore')) };
+    }
+
+    const result = await deleteChoreAssignment(scope, assignmentId);
+    if (!result.ok) return { ok: false, error: result.error };
+
+    // Only what no remaining submission references is removed, under the
+    // proof claims (lib/chores/proof-cleanup); anything kept is an orphan,
+    // which is logged rather than raised — the chore is gone either way.
+    const paths = [...new Set((proof ?? []).flatMap((row) => row.media_paths ?? []))];
+    if (paths.length) {
+      const removed = await releaseUnreferencedProof(scope.db, ctx.active.familyId, paths);
+      const kept = paths.filter((path) => !removed.includes(path));
+      if (kept.length) console.warn('[chore-action] proof kept after a chore was deleted', { assignmentId, kept: kept.length });
+    }
+
+    revalidatePath(PATH);
+    return { ok: true, id: result.data.id, comesBack: result.data.comesBack };
   } catch (err) {
     console.error('[chore-action] delete failed', err);
     return { ok: false, error: describeActionError(err, t('actions.couldNotRemoveThatChore')) };

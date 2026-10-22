@@ -232,6 +232,9 @@ declare
   st       text;
   msg      text;
   failures text[] := '{}';
+  -- 0311's reference_shares_family(), read from the catalog for leg B.
+  ref_guard     regprocedure := to_regprocedure('public.reference_shares_family()');
+  ref_guard_42501_only boolean;
 begin
   -- The seed and this block must agree about which family the control lives in,
   -- and the kid must be the adult the note above promises — checked as the
@@ -299,11 +302,32 @@ begin
       -- raises class 23 itself (0306's shape guard does, on invest_orders).
       -- tgtype bits: 1 ROW, 2 BEFORE, 4 INSERT. Not a finding about the guard
       -- — a change of mechanism the leg has to be re-pointed for.
+      --
+      -- Re-pointed for exactly one binding: 0311's reference_shares_family()
+      -- wired by the held 0497 onto child_wallets.member_id -> family_members.
+      -- That one cannot be the class-23 shape. Its source raises only with
+      -- errcode 42501 and carries no class-23 errcode (read from the catalog
+      -- below). And it lets a null reference through before any check, which
+      -- 1b's `(family_id)` insert always leaves null. That null behaviour is
+      -- validated by this leg itself, not assumed: had the trigger refused the
+      -- null member_id, the insert would have raised 42501 before the NOT NULL
+      -- constraint, and the class-23 rule above would already have failed it.
+      -- Any other BEFORE INSERT trigger, or this helper on any other table,
+      -- column or parent, still trips this.
+      select coalesce(bool_and(p.prosrc ~ 'errcode = ''42501''' and p.prosrc !~ 'errcode = ''23'), false)
+        into ref_guard_42501_only
+        from pg_proc p where p.oid = ref_guard;
       select count(*) into n
       from pg_trigger tg
       where tg.tgrelid = to_regclass('public.' || t)
         and not tg.tgisinternal
-        and (tg.tgtype & 2) = 2 and (tg.tgtype & 4) = 4;
+        and (tg.tgtype & 2) = 2 and (tg.tgtype & 4) = 4
+        and not (ref_guard is not null
+                 and tg.tgfoid = ref_guard
+                 and ref_guard_42501_only
+                 and tg.tgrelid = 'public.child_wallets'::regclass
+                 and t = 'child_wallets'
+                 and encode(tg.tgargs, 'escape') = 'member_id\000family_members\000');
       if n <> 0 then
         failures := array_append(failures, format(
           'MECHANISM CHANGED (not a control failure): %s now carries %s BEFORE INSERT trigger(s); leg B cannot tell a class-23 raise from that trigger apart from the row''s own NOT NULL, so 1b''s refusal on %s is unattributed until this leg is re-pointed at the trigger',
@@ -653,6 +677,19 @@ begin
   raise notice 'A-08: injected 2 stray permissive write policies on wallet_transactions';
 end $$;
 
+-- 0275 also re-creates `<t>_select` (any family member) on its ten tables. A
+-- held migration that replaced one of those reads (0514's household money)
+-- must find its read where it left it, and so must every probe after this one:
+-- the reads standing now are recorded, and any read the re-run adds is removed
+-- at the foot of this probe. On the released schema the re-run adds none (it
+-- drops and re-creates the same `<t>_select`), so nothing is removed.
+create temp table wallet_probe_reads_before on commit preserve rows as
+  select c.relname::text as t, p.polname::text as pol
+    from pg_policy p join pg_class c on c.oid = p.polrelid join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and p.polcmd = 'r'
+     and c.relname = any (array['family_wallets','child_wallets','wallet_buckets','wallet_transactions','wallet_rules',
+                                'financial_accounts','transactions','budgets','bills','savings_goals']);
+
 \ir ../../supabase/migrations/0275_money_permissive_write_sweep.sql
 
 do $$
@@ -765,3 +802,24 @@ delete from public.family_members where id = 'a8c00000-0000-4000-8000-0000000000
 delete from auth.users where id = :'KID';
 
 select 'A-08 wallet write-RLS probe (0217 mint-lock + 0224 audit append-only + 0254 drift resilience + 0275 stray sweep): ALL INVARIANTS PASSED' as result;
+
+-- The reads the 0275 re-run above added, and only those, go again (see there).
+do $$
+declare
+  r record;
+  removed int := 0;
+begin
+  for r in
+    select c.relname::text as t, p.polname::text as pol
+      from pg_policy p join pg_class c on c.oid = p.polrelid join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public' and p.polcmd = 'r'
+       and c.relname = any (array['family_wallets','child_wallets','wallet_buckets','wallet_transactions','wallet_rules',
+                                  'financial_accounts','transactions','budgets','bills','savings_goals'])
+       and (c.relname::text, p.polname::text) not in (select b.t, b.pol from wallet_probe_reads_before b)
+  loop
+    execute format('drop policy %I on public.%I', r.pol, r.t);
+    removed := removed + 1;
+  end loop;
+  raise notice 'the 0275 re-run''s reads are put back as they were (% removed)', removed;
+end $$;
+drop table wallet_probe_reads_before;

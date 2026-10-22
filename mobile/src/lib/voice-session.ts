@@ -23,6 +23,14 @@ export type VoiceSessionDependencies = {
   error: (error: unknown) => void;
 };
 type Operation = { generation: number; context: VoiceContext; abort: AbortController };
+/**
+ * The longest a phone recording runs before it stops and is sent as it
+ * stands — the web recorder's cap (VOICE_RECORDING_MAX_MS in lib/ai/voice.ts).
+ * The phone records AAC at about 16 KB/s, and /api/ai/voice/transcribe takes
+ * 2 MB: a recording left running past about two minutes was uploaded in full
+ * and then refused with a 413, losing everything that was said.
+ */
+export const VOICE_RECORDING_MAX_MS = 60_000;
 const identity = (context: VoiceContext | null) => context ? [context.userId, context.familyId, context.memberId, context.role, context.conversationId].join(':') : '';
 
 /** Owns one phone turn. Native work is serialized even after invalidation:
@@ -37,7 +45,9 @@ export class VoiceSession {
   private prepared = false;
   private audioClaimed = false;
   private nativeOwner: number | null = null;
+  private limit: ReturnType<typeof setTimeout> | null = null;
   constructor(private readonly deps: VoiceSessionDependencies) {}
+  private clearLimit() { if (this.limit !== null) { clearTimeout(this.limit); this.limit = null; } }
   get phase() { return this.state; }
   private setPhase(phase: VoicePhase) { this.state = phase; this.deps.phase(phase); }
   private current(op: Operation) { return this.active && op.generation === this.generation && identity(this.deps.context()) === identity(op.context); }
@@ -82,6 +92,7 @@ export class VoiceSession {
   }
   invalidate() {
     const owner = this.operation?.generation;
+    this.clearLimit();
     this.generation++; this.operation?.abort.abort(); this.operation = null;
     this.setPhase('idle');
     if (owner !== undefined) void this.native(() => this.release(owner)).catch(() => undefined);
@@ -106,11 +117,14 @@ export class VoiceSession {
         this.deps.record();
       });
       this.check(op); this.setPhase('recording');
+      // A spoken request, not an open microphone: stop and send at the cap.
+      this.limit = setTimeout(() => { this.limit = null; if (this.operation === op) void this.stopAndSend(); }, VOICE_RECORDING_MAX_MS);
     } catch (error) { await this.failed(op, error); }
   }
   async stopAndSend() {
     const op = this.operation;
     if (this.state !== 'recording' || !op || !this.current(op)) return;
+    this.clearLimit();
     this.setPhase('stopping');
     try {
       const uri = await this.native(async () => {

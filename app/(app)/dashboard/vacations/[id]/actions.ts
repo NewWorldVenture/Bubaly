@@ -11,10 +11,11 @@
 // still owns and the UI says exactly that.
 
 import { revalidatePath } from 'next/cache';
+import { isManager } from '@/lib/constants/roles';
 import { getTranslations } from '@/lib/i18n/server';
 import { notify } from '@/lib/services/notifications';
 import { scopeFromUserContext } from '@/lib/services/scope';
-import { reportTripDisruption, type DisruptionRequest, type ReportedDisruption } from '@/lib/services/trips';
+import { markDisruptionNotified, reportTripDisruption, type DisruptionRequest, type ReportedDisruption } from '@/lib/services/trips';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
@@ -75,9 +76,17 @@ export type DisruptionActionResult =
       noChange: boolean;
       shifted: ReportedDisruption['plan']['shiftedItems'];
       toRebook: ReportedDisruption['plan']['toRebook'];
-      /** True only when notification rows were actually written. */
+      /** True only when notification rows were actually written by THIS submit. */
       notified: boolean;
       recorded: boolean;
+      /**
+       * This exact report was already on the itinerary: nothing moved this
+       * time (`shifted` is empty) and `summary` is what was recorded then. The
+       * receipt says so, rather than listing a move that never happened.
+       */
+      alreadyApplied: boolean;
+      /** The family was told when this was first reported, so nobody was paged again. */
+      previouslyNotified: boolean;
     }
   | { ok: false; error: string };
 
@@ -93,6 +102,13 @@ export async function reportDisruptionAction(input: DisruptionActionInput): Prom
   }
 
   const ctx = await requireUserContext();
+  // Re-flowing the shared itinerary and paging the whole family about it is a
+  // manager's act — `notify` writes for the family with the service role, so
+  // the role has to be checked HERE, before any write, not left to RLS. Same
+  // rule as the confirmation import and the school desk.
+  if (!isManager(ctx.active.role)) {
+    return { ok: false, error: t('vacationDisruption.parentsOnly') };
+  }
   const supabase = await createServer();
   const scope = scopeFromUserContext(ctx, supabase);
 
@@ -100,23 +116,46 @@ export async function reportDisruptionAction(input: DisruptionActionInput): Prom
   const res = await reportTripDisruption(scope, input.vacationId, request);
   if (!res.ok) return { ok: false, error: res.error };
 
-  const { plan, applied, booking } = res.data;
+  const { plan, applied, booking, alreadyApplied, familyNotified } = res.data;
 
-  // The family hears about it only when something actually changed. A
-  // "nothing moved" report is not news.
+  // The family hears about a disruption ONCE. A "nothing moved" report is not
+  // news. Delivery is tracked apart from the itinerary change: the note's
+  // marker says the re-flow happened, its "notified" stamp says the family was
+  // told. They used to be one fact, so a notice that failed (or a request cut
+  // off after the note was written) was skipped by every retry as "already
+  // applied", and the urgent travel update never went out. Now a retry of a
+  // report whose notice did not land sends it — and moves nothing again.
+  //
+  // `relatedId` names THIS disruption (its note), and `once` drops any
+  // recipient who already has a copy, read or not: a notice that was written
+  // but whose stamp was not (the request died in between) is not sent twice.
+  // Two submits racing through here at the same instant can still both pass
+  // notify's read-then-insert guard; that needs a unique index (SQL).
   let notified = false;
-  if (!plan.noop) {
+  // Every recipient already held THIS disruption's notice: an earlier submit
+  // wrote it and never stamped the note (its stamp failed, or it died in
+  // between). The family WAS told — by that submit — so the receipt says so
+  // rather than "No notification was sent", whether or not this submit's own
+  // stamp lands. The note read before this submit cannot know it.
+  let toldEarlier = false;
+  if (!plan.noop && applied.noteItemId && !familyNotified) {
     const sent = await notify(scope, {
       recipients: 'family',
       type: 'system',
       title: `Travel update: ${booking.label}`,
       body: plan.summary,
       relatedType: 'vacations',
-      relatedId: input.vacationId,
+      relatedId: `${input.vacationId}:disruption:${applied.noteItemId}`,
       urgent: true,
+      once: true,
     });
     if (!sent.ok) console.error('[vacations] disruption notify failed', sent.error);
-    notified = sent.ok && sent.data.created > 0;
+    else {
+      notified = sent.data.created > 0;
+      toldEarlier = sent.data.created === 0 && sent.data.duplicates > 0;
+      const stamped = await markDisruptionNotified(scope, input.vacationId, applied.noteItemId);
+      if (!stamped.ok) console.error('[vacations] disruption notified stamp failed', stamped.error);
+    }
   }
 
   revalidatePath(`/dashboard/vacations/${input.vacationId}/travel`);
@@ -131,5 +170,7 @@ export async function reportDisruptionAction(input: DisruptionActionInput): Prom
     notified,
     // Honest: the note row is what makes this a record rather than a claim.
     recorded: applied.noteItemId !== null,
+    alreadyApplied,
+    previouslyNotified: alreadyApplied && (familyNotified || toldEarlier),
   };
 }

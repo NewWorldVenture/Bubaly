@@ -12,7 +12,8 @@ import { iconForType, groupByUser, digestTimeZone } from '@/lib/notifications/di
 import * as React from 'react';
 import { listAllAuthUsers } from './list-all-auth-users';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
-import { readAllInChunks, readInChunks } from '@/lib/supabase/chunked-in';
+import { isChildLoginEmail } from '@/lib/onboarding/child-login';
+import { readAllInChunks, readInChunks, writeInChunks } from '@/lib/supabase/chunked-in';
 
 type DB = SupabaseClient<Database>;
 export type NotificationEmailResult = { sent: number; failed: number; skipped: number };
@@ -36,7 +37,10 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
   const nowIso = new Date().toISOString();
   const { data: pending, error: pendingError } = await supabase
     .from('notifications')
-    .select('id, family_id, user_id, type, title, body')
+    // OPEN families only (families.closed_at): a closed account is not emailed.
+    // In the query, before the limit, so a closed family's queue cannot fill it.
+    .select('id, family_id, user_id, type, title, body, family:families!inner(closed_at)')
+    .is('family.closed_at', null)
     .is('sent_at', null)
     // Chat notices are in-app only; do not turn every message into an email.
     .or('related_type.is.null,related_type.neq.family_message')
@@ -162,7 +166,12 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
     const meta = userMeta.get(userId);
 
     // No email on file, or the member opted out → resolve without sending.
-    if (emailOff.has(userId) || !meta?.email) {
+    // A kid login's synthetic address (child.<username>@kids.bubaly.app) is
+    // not an email on file either: nothing is ever delivered there, and the
+    // domain is not Bubaly's to receive it, so a child's chores, events and
+    // their locations were being mailed to whoever holds it. Settled the same
+    // way, so they are not retried.
+    if (emailOff.has(userId) || !meta?.email || isChildLoginEmail(meta.email)) {
       skipped += 1;
       resolvedIds.push(...ids);
       continue;
@@ -196,7 +205,14 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
     // Rows deliberately not checked. Every caller passes the service role, so a
     // row that does not match was deleted — and a deleted notification is not
     // emailed again anyway. Audit C1-S9-68.
-    const { error: resolveError } = await supabase.from('notifications').update({ sent_at: nowIso }).in('id', resolvedIds);
+    //
+    // Chunked like every read above: the ids travel in the URL, and a batch of
+    // up to 500 is a ~20 KB request line. One refused stamp AFTER the digests
+    // went out left every row pending, so the next run re-sent the same oldest
+    // batch and never reached a newer notification. A failed chunk leaves only
+    // its own rows pending.
+    const { error: resolveError } = await writeInChunks(resolvedIds, (chunk) =>
+      supabase.from('notifications').update({ sent_at: nowIso }).in('id', chunk));
     if (resolveError) {
       console.error('[notification-email] notification resolve update failed', resolveError);
       failed++;

@@ -59,6 +59,12 @@ declare
   -- them too (its KNOWN_UNFIXED records the call sites that measurement
   -- revealed).
   recorded text[] := array[
+    -- 0478 (goals) and 0479 (family_reminders, todo_items), 2026-10-10
+    'family_reminders', 'goals', 'todo_items',
+    -- rls sweep 2026-10-10 (0481)
+    'dashboard_layout_events', 'dining_out', 'expense_split_shares', 'family_announcements', 'family_dates',
+    'family_food_scores', 'family_poll_options', 'meal_nutrition', 'meal_vote_options', 'meal_votes',
+    'medication_doses', 'trip_memories', 'wishlist_items',
     'ai_conversations', 'ai_messages', 'allowance_rules', 'announcement_reads',
     'approval_requests', 'assistant_links', 'autopilot_suggestions',
     'babysitter_payments', 'babysitter_profiles', 'behavior_logs', 'billing_customers',
@@ -154,6 +160,15 @@ begin
   end if;
   if 'reminder_lists' = any(measured) or 'trip_plans' = any(measured) then
     raise exception 'A plain family-membership policy is being read as a restriction — check the helper spelling.';
+  end if;
+
+  -- The held 0504 makes child_logins server-written: no client role holds a
+  -- write on it, so there is no member's write left to filter. Where it is
+  -- installed the table leaves the list; under 0297 it stays on it.
+  if not has_table_privilege('authenticated', 'public.child_logins', 'delete')
+     and not has_table_privilege('authenticated', 'public.child_logins', 'update')
+     and not has_table_privilege('authenticated', 'public.child_logins', 'insert') then
+    recorded := array_remove(recorded, 'child_logins');
   end if;
 
   select array_agg(t order by t) into added

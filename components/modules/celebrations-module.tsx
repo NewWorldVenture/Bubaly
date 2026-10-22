@@ -21,7 +21,7 @@ import {
 } from '@/lib/celebrations/dates';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyCalendarToday, useFormat } from '@/components/i18n/use-format';
 
 type FamilyDate = Tables<'family_dates'>;
 
@@ -60,7 +60,10 @@ export function CelebrationsModule() {
     return [...fromMembers, ...fromDates];
   }, [members, dates, memberById]);
 
-  const upcoming = useMemo(() => upcomingCelebrations(items, 120), [items]);
+  // Counted from the FAMILY's day, as Home, Moments and the grandparent portal
+  // count the same dates — not from whatever day this device is on.
+  const familyToday = useFamilyCalendarToday();
+  const upcoming = useMemo(() => upcomingCelebrations(items, 120, familyToday), [items, familyToday]);
 
   const [showAdd, setShowAdd] = useState(false);
   const [title, setTitle] = useState('');
@@ -86,7 +89,7 @@ export function CelebrationsModule() {
     if (!(await askConfirm({ title: t('confirm.deleteNamed', { name: c.title }), body: t('confirm.cannotBeUndone') }))) return;
     const supabase = createClient();
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
-    const { data: removed2, error } = await supabase.from('family_dates').delete().eq('id', c.id.replace(/^d-/, '')).select('id');
+    const { data: removed2, error } = await supabase.from('family_dates').delete().eq('id', c.id.replace(/^d-/, '')).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed2)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('celebrationsModule.removed'));
   }
 

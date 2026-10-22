@@ -12,6 +12,7 @@
 // because `TRUST_DOMAINS` has no sports domain and the reads exist to serve
 // the same school-week planning.
 import 'server-only';
+import { compareExactInstants } from '@/lib/calendar/exact-instant';
 import { expandEventsInZone } from '@/lib/calendar/recurrence';
 import { readCountedRows } from '@/lib/calendar/occurrences';
 import type { Tables } from '@/lib/database.types';
@@ -73,14 +74,19 @@ export async function listPracticesBetween(scope: ServiceScope, input: Practices
   const window = resolveWindow(scope, input);
   if (!window.ok) return window;
   const fromMs = Date.parse(window.data.from);
-  const toMs = Date.parse(window.data.to);
+  const endExclusiveMs = window.data.toExclusive
+    ? Date.parse(window.data.toExclusive)
+    : Date.parse(window.data.to) + 1;
 
   // Two reads: the one-off rows inside the window, and every recurring row
   // that started before the window ends (a weekly practice entered last
   // season still repeats into it).
   const query = (series: boolean) => {
     let read = scope.db.from('sports_events').select('*', { count: 'exact' })
-      .eq('family_id', scope.familyId).lte('starts_at', window.data.to);
+      .eq('family_id', scope.familyId);
+    read = window.data.toExclusive
+      ? read.lt('starts_at', window.data.toExclusive)
+      : read.lte('starts_at', window.data.to);
     read = series
       ? read.neq('recurrence', 'none').or(`recurrence_until.is.null,recurrence_until.gt.${window.data.from}`)
       : read.eq('recurrence', 'none').gte('starts_at', window.data.from);
@@ -100,16 +106,20 @@ export async function listPracticesBetween(scope: ServiceScope, input: Practices
     return fail(describeDbError(singles.error ?? series.error, 'Could not load sports events.'), { code: SERVICE_CODES.db });
   }
 
-  // `expandEvents` treats the window end as exclusive; the reads above are
-  // inclusive, so a millisecond is added to keep an event exactly at `to`.
-  let expanded: SportsEventRow[];
+  // Expansion already takes an exclusive end. Whole days use that boundary
+  // directly; a timed end gets one millisecond to retain its inclusive meaning.
   try {
-    expanded = expandEventsInZone(series.data ?? [], new Date(fromMs), new Date(toMs + 1), scope.tz, false, { requireComplete: true });
+    const expanded = expandEventsInZone(series.data ?? [], new Date(fromMs), new Date(endExclusiveMs), scope.tz, false, { requireComplete: true });
+    // The expansion's Date endpoint includes the rest of the last millisecond.
+    // Match the singles' exact <= predicate before merging or taking the limit.
+    const inWindow = window.data.toExclusive
+      ? expanded
+      : expanded.filter(event => compareExactInstants(event.starts_at, window.data.to) <= 0);
+    const rows = [...(singles.data ?? []), ...inWindow]
+      .sort((a, b) => compareExactInstants(a.starts_at, b.starts_at) || a.id.localeCompare(b.id))
+      .slice(0, limit);
+    return ok(rows);
   } catch (cause) {
     return fail(describeDbError(cause, 'Could not read the whole sports schedule.'), { code: SERVICE_CODES.db });
   }
-  const rows = [...(singles.data ?? []), ...expanded]
-    .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at) || a.id.localeCompare(b.id))
-    .slice(0, limit);
-  return ok(rows);
 }

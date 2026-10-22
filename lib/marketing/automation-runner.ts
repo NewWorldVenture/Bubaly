@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { runSteps, type Step } from '@/lib/marketing/automation-steps';
+import { emailsSent, failedAttempt, recordedActionsJson, retryOf, stepsRecorded, runSteps, type Step } from '@/lib/marketing/automation-steps';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 import { getMarketingCustomersWithError, type MarketingCustomer } from '@/lib/marketing/customers';
 import { wroteNoRows } from '@/lib/supabase/errors';
@@ -64,7 +64,9 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
 
   const customerResult = await getMarketingCustomersWithError(supabase);
   if (customerResult.error) throw new Error('Could not load marketing customers for automation.');
-  const customers = customerResult.customers;
+  // A family that closed its account (families.closed_at) is not emailed by a
+  // scheduled automation — "we miss your family" to an account they closed.
+  const customers = customerResult.customers.filter((c) => !c.closedAt);
 
   for (const flow of flows) {
     if (!SCHEDULED_TRIGGERS.includes(flow.trigger as ScheduledTrigger)) continue;
@@ -90,16 +92,16 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
     // batches of a hundred, so the answer cannot reach the cap and the map is
     // complete for every subject it is consulted about.
     const { data: prior, error: priorError } = await readInChunks<
-      { id: string; subject_key: string | null; status: string }, { message: string }
+      { id: string; subject_key: string | null; status: string; metadata: unknown }, { message: string }
     >(
       subjects.map((c) => c.familyId),
       (chunk) => supabase.from('marketing_automation_runs')
-        .select('id, subject_key, status').eq('workflow_id', flow.id).in('subject_key', chunk),
+        .select('id, subject_key, status, metadata').eq('workflow_id', flow.id).in('subject_key', chunk),
     );
     if (priorError) throw new Error('Could not load automation run history.');
     const priorBySubject = new Map(prior.filter((r) => r.subject_key).map((r) => [r.subject_key as string, r]));
 
-    const steps = Array.isArray(flow.steps) ? (flow.steps as unknown as Step[]) : [];
+    const workflowSteps = Array.isArray(flow.steps) ? (flow.steps as unknown as Step[]) : [];
     let ran = 0;
     const fallback = DEFAULT_COPY[flow.trigger] ?? { subject: 'A note from Bubaly', body: '' };
     for (const c of subjects) {
@@ -107,12 +109,22 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
       if (existing?.status === 'completed' || existing?.status === 'running') continue;
 
       let runId: string;
+      // What the failed attempt already did, so its retry does not repeat a send.
+      let steps = workflowSteps;
+      let previous: string[] = [];
       if (existing?.status === 'failed') {
-        const { data: claimed, error: claimError } = await supabase.from('marketing_automation_runs')
-          .update({ status: 'running' }).eq('id', existing.id).eq('status', 'failed').select('id').maybeSingle();
+        // Claimed only while its receipts are the ones read above: another
+        // pass may have claimed it, delivered an email and recorded that in
+        // between (recordedActionsJson).
+        const receipts = recordedActionsJson(existing.metadata);
+        const claim = supabase.from('marketing_automation_runs').update({ status: 'running' }).eq('id', existing.id);
+        const asRead = receipts === null ? claim.is('metadata->actions', null) : claim.eq('metadata->actions', receipts);
+        const fenced = stepsRecorded(existing.metadata) ? asRead : asRead.is('metadata->steps', null);
+        const { data: claimed, error: claimError } = await fenced.eq('status', 'failed').select('id').maybeSingle();
         if (claimError) throw new Error('Could not claim the failed automation run.');
         if (!claimed) continue;
         runId = claimed.id;
+        ({ steps, previous } = retryOf(existing.metadata, workflowSteps));
       } else {
         const { data: reserved, error: reserveError } = await supabase.from('marketing_automation_runs').insert({
           workflow_id: flow.id, status: 'running', subject_key: c.familyId,
@@ -128,12 +140,14 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
 
       let actions: string[];
       try {
-        actions = await runSteps(steps, { email: c.ownerEmail, name: c.name }, fallback);
+        actions = await runSteps(steps, { email: c.ownerEmail, name: c.name }, fallback, supabase, undefined, previous);
       } catch (error) {
         console.error('[marketing automation] scheduled steps failed', error);
-        actions = ['automation:failed'];
+        // Keep what the earlier attempt delivered: a bare failure here would
+        // erase it, and the retry would send it again.
+        actions = failedAttempt(steps, previous);
       }
-      summary.emails += actions.filter((a) => a === 'send_email').length;
+      summary.emails += emailsSent(actions, previous);
       const failed = actions.some((action) => action.includes(':failed') || action.includes(':skipped') || action.includes(':unsupported'));
       // Status-guarded, so zero rows means the run was moved on (a reaper marked
       // it failed) while its steps ran. The steps DID run — the emails went — so
@@ -142,7 +156,8 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
       // there is no longer a row this path owns to correct. Audit C1-S9-67.
       const { data: recorded, error: runError } = await supabase.from('marketing_automation_runs').update({
         status: failed ? 'failed' : 'completed',
-        metadata: { trigger: flow.trigger, actions } as unknown as Database['public']['Tables']['marketing_automation_runs']['Insert']['metadata'],
+        // The steps beside their results, so a retry matches each result to the step that produced it (retryOf).
+        metadata: { trigger: flow.trigger, actions, steps } as unknown as Database['public']['Tables']['marketing_automation_runs']['Insert']['metadata'],
       }).eq('id', runId).eq('status', 'running').select('id');
       if (runError) throw new Error('Could not record the automation run.');
       if (wroteNoRows(recorded)) {

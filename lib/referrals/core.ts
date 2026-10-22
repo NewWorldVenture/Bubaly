@@ -259,6 +259,73 @@ export function withReferralEmailSent(metadata: unknown, now: Date = new Date())
   return { ...base, email_sent_at: sent };
 }
 
+/**
+ * What to do with a send that is ALREADY written, judged from a read taken
+ * after the write. The limit is checked from the family's rows as they are,
+ * every request's send included, so two requests that both read nine before
+ * either wrote cannot both be the tenth.
+ */
+export type ReferralEmailAdmission =
+  /** At most `limit` sends in the window, this one included: the email may go. */
+  | { verdict: 'admit'; used: number; remaining: number }
+  /** Over the limit, but this send ranks within it: a send ranked past the limit is withdrawing, so look again. */
+  | { verdict: 'wait'; used: number; retryAfterSec: number }
+  /** Over the limit and this send ranks past it: withdraw it. */
+  | { verdict: 'back_off'; used: number; retryAfterSec: number }
+  /** This request's send is no longer on its row. */
+  | { verdict: 'missing' };
+
+type RankedSend = { t: number; rowId: string; index: number };
+
+/** One total order every request computes alike: send time, then row id, then position on the row. */
+function compareRankedSends(a: RankedSend, b: RankedSend): number {
+  if (a.t !== b.t) return a.t - b.t;
+  if (a.rowId !== b.rowId) return a.rowId < b.rowId ? -1 : 1;
+  return a.index - b.index;
+}
+
+/**
+ * Admission of the send stamped `own.sentAt` on row `own.rowId`.
+ *
+ * Admitted only while the window holds at most `limit` sends. An admitted
+ * send is never withdrawn, so the last of any `limit + 1` writes would read
+ * them all and refuse: the limit holds with no lock and no clock agreement.
+ * The rank only says which of the requests over the limit gives way. A
+ * request whose clock is behind can rank early yet write late; then it waits
+ * for a withdrawal that never comes and refuses, which under-sends rather
+ * than over-sends. Sends dated after `own.sentAt` count too: a request whose
+ * clock runs ahead is still spending the same budget.
+ */
+export function decideReferralEmailAdmission(
+  rows: ReadonlyArray<{ id: string; metadata: unknown }>,
+  own: { rowId: string; sentAt: Date },
+  policy: ReferralEmailPolicy = REFERRAL_EMAIL_POLICY,
+): ReferralEmailAdmission {
+  const nowMs = own.sentAt.getTime();
+  const floor = nowMs - policy.windowMs;
+  const stamp = own.sentAt.toISOString();
+  const sends: RankedSend[] = [];
+  let mine: RankedSend | null = null;
+  for (const row of rows) {
+    const times = referralEmailSendTimes(row.metadata);
+    for (let index = 0; index < times.length; index++) {
+      const t = Date.parse(times[index]);
+      if (Number.isNaN(t) || t <= floor) continue;
+      const send = { t, rowId: row.id, index };
+      sends.push(send);
+      if (row.id === own.rowId && times[index] === stamp) mine = send;
+    }
+  }
+  if (!mine) return { verdict: 'missing' };
+  const used = sends.length;
+  if (used <= policy.limit) return { verdict: 'admit', used, remaining: policy.limit - used };
+  const self = mine;
+  const ahead = sends.filter((s) => compareRankedSends(s, self) < 0).length;
+  const oldestOther = Math.min(...sends.filter((s) => s !== self).map((s) => s.t));
+  const retryAfterSec = Math.max(1, Math.ceil((oldestOther + policy.windowMs - nowMs) / 1000));
+  return { verdict: ahead < policy.limit ? 'wait' : 'back_off', used, retryAfterSec };
+}
+
 // ── Reward fulfilment ─────────────────────────────────────────────────────────
 // A referral is 'rewarded' only after Stripe has confirmed BOTH credits. The
 // balance-transaction ids are kept in `referrals.metadata.reward` so a webhook
@@ -272,6 +339,15 @@ export type ReferralRewardRecord = {
   /** Set when a side had nothing to credit (a zero reward in the config). */
   referrer_skipped?: string | null;
   referred_skipped?: string | null;
+  /**
+   * The Stripe customer a side's credit was last attempted on, written BEFORE
+   * the attempt. The family's customer can change between attempts (two
+   * checkouts racing, or the event's customer standing in before
+   * billing_customers is written), and a retry has to look for the credit where
+   * it may already have been made. Present only once an attempt has been made.
+   */
+  referrer_customer?: string | null;
+  referred_customer?: string | null;
 };
 
 export function rewardRecordFrom(metadata: unknown): ReferralRewardRecord {
@@ -280,7 +356,10 @@ export function rewardRecordFrom(metadata: unknown): ReferralRewardRecord {
   if (!raw || typeof raw !== 'object') return {};
   const r = raw as Record<string, unknown>;
   const s = (v: unknown) => (typeof v === 'string' && v ? v : null);
-  return { referrer_txn: s(r.referrer_txn), referred_txn: s(r.referred_txn), referrer_skipped: s(r.referrer_skipped), referred_skipped: s(r.referred_skipped) };
+  const record: ReferralRewardRecord = { referrer_txn: s(r.referrer_txn), referred_txn: s(r.referred_txn), referrer_skipped: s(r.referrer_skipped), referred_skipped: s(r.referred_skipped) };
+  if (s(r.referrer_customer)) record.referrer_customer = s(r.referrer_customer);
+  if (s(r.referred_customer)) record.referred_customer = s(r.referred_customer);
+  return record;
 }
 
 /** Is this side settled — credited (a Stripe id on file) or deliberately skipped? */

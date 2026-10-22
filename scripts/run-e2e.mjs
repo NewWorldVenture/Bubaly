@@ -1,20 +1,10 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { e2eServerEnv } from './e2e-server-env.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const port = process.env.PLAYWRIGHT_PORT ?? '3107';
-const env = {
-  ...process.env,
-  PLAYWRIGHT_PORT: port,
-  PLAYWRIGHT_EXTERNAL_SERVER: '1',
-  NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL ?? `http://localhost:${port}`,
-  NEXT_PUBLIC_SUPABASE_URL:
-    process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://example.supabase.co',
-  NEXT_PUBLIC_SUPABASE_ANON_KEY:
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'dummy-anon-key',
-  SUPABASE_SERVICE_ROLE_KEY:
-    process.env.SUPABASE_SERVICE_ROLE_KEY ?? 'dummy-service-role-key',
-};
+const env = e2eServerEnv(process.env, port);
 
 function run(modulePath, args) {
   const result = spawnSync(process.execPath, [modulePath, ...args], {

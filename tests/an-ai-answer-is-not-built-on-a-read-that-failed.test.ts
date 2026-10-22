@@ -1,4 +1,11 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const file = dir + '/' + entry.name;
+    return entry.isDirectory() ? sourceFiles(file) : entry.isFile() ? [file] : [];
+  });
+}
+
 import { describe, expect, it } from 'vitest';
 import { at, bodyOf } from './helpers/source-order';
 
@@ -45,9 +52,14 @@ describe('the savings route does not answer "On track" from a failed read (C1-S9
     // `.limit(N)` is not a bound — PostgREST caps at db-max-rows regardless —
     // so an understated over-budget figure would still be stated as fact.
     const read = bodyOf(savings, 'const [txnsResult', ']);');
-    expect(read).toContain('readAllAsQuery');
+    // Paged on the id with a real ceiling (M11-RATCHET: a year of spending is
+    // many pages, and offsets shift when a row is written between two). The one
+    // `.limit()` left is the page size the id-paged reader asks for.
+    expect(read).toContain('readAllByIdAsQuery');
     expect(read).toContain('{ max: 20_000 }');
-    expect(read).not.toMatch(/from\('transactions'\)[\s\S]{0,200}?\.limit\(/);
+    expect(read).toContain("if (after) query = query.gt('id', after);");
+    expect(read).toContain("return query.order('id').limit(limit);");
+    expect(read.replace("return query.order('id').limit(limit);", '')).not.toMatch(/\.limit\(/);
   });
 });
 
@@ -418,8 +430,11 @@ describe('a gift link is not declared dead because a read failed (C1-S9-40)', ()
 
 describe('an AI answer is not generated for a family with no members (C1-S9-40)', () => {
   it('the roster read matches the convention its own neighbour sets', () => {
-    // `fetchRows`, ten lines below, already 500s when it cannot load. This read
-    // dropped its error and fed an empty member list into the same prompt.
+    // `fetchRows`, ten lines below, 500s when a read it checks with
+    // `required()` fails — every household module kind and purchase_advisor
+    // since the H16 fix; before it, only purchase_advisor checked, so this
+    // comment's old "already 500s" was not true of the household kinds. This
+    // read dropped its error and fed an empty member list into the same prompt.
     expect(aiInsights).toContain('error: membersError');
     expect(bodyOf(aiInsights, 'if (membersError)', '{ status: 500 }')).toContain('console.error');
     expect(at(aiInsights, 'if (membersError)')).toBeLessThan(at(aiInsights, 'rows = await fetchRows('));
@@ -620,8 +635,7 @@ describe('every auth.getUser() in the API denies on a null user (C1-S9-42)', () 
 });
 
 function globSyncRoutes(): string[] {
-  const { execSync } = require('node:child_process') as typeof import('node:child_process');
-  return execSync('find app/api -name route.ts', { encoding: 'utf8' }).trim().split('\n');
+  return sourceFiles('app/api').filter(file => file.endsWith('/route.ts'));
 }
 
 /**
@@ -643,10 +657,14 @@ describe('a trusted caller is not screened because a read failed (C1-S9-43)', ()
   });
 
   it('the no-phone-on-file fall-through is preserved', () => {
-    // A member with no number is a different situation from a failed read, and
-    // screening is the right answer for it. Logging must not become a 503 here
-    // either — that would drop a live call to report a routing preference.
-    expect(voice).toContain('// Member has no phone configured — fall through to AI screening');
+    // A member with no number is a different situation from a failed read: the
+    // call falls through rather than failing. For an immediate-ring call that
+    // fall-through ends at the route's default thank-you and hang-up, not at
+    // screening (the comment used to claim screening; owner review 6092527821
+    // had it corrected). Logging must not become a 503 here either — that
+    // would drop a live call to report a routing preference.
+    expect(voice).toContain('// No phone in this family (none configured, or the profile names someone');
+    expect(voice).toContain('// of the modes below and ends at the default thank-you and hang-up.');
     expect(bodyOf(voice, 'if (memberError)', '\n    }')).not.toContain('status: 503');
   });
 });

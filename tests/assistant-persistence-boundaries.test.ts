@@ -21,6 +21,7 @@ function fakeDb(resolveResult: (table: string, operation: Operation, count: numb
     from(table: string) {
       let operation: Operation = 'select';
       let payload: unknown;
+      let range: [number, number] | null = null;
       const chain: Record<string, unknown> & {
         then: (resolve: (value: unknown) => void, reject: (reason: unknown) => void) => Promise<unknown>;
       } = {} as never;
@@ -29,7 +30,9 @@ function fakeDb(resolveResult: (table: string, operation: Operation, count: numb
         const count = (counts.get(countKey) ?? 0) + 1;
         counts.set(countKey, count);
         calls.push({ table, operation, payload });
-        return resolveResult(table, operation, count);
+        const result = resolveResult(table, operation, count);
+        // A ranged read is answered with those rows, as PostgREST answers it.
+        return range && Array.isArray(result.data) ? { ...result, data: result.data.slice(range[0], range[1] + 1) } : result;
       };
       const passthrough = () => chain;
       Object.assign(chain, {
@@ -43,6 +46,7 @@ function fakeDb(resolveResult: (table: string, operation: Operation, count: numb
         lte: passthrough,
         order: passthrough,
         limit: passthrough,
+        range(from: number, to: number) { range = [from, to]; return chain; },
         maybeSingle: () => Promise.resolve(finish()),
         single: () => Promise.resolve(finish()),
         insert(value: unknown) { operation = 'insert'; payload = value; return chain; },
@@ -65,7 +69,7 @@ const ctx: AssistantCtx = {
   userId: 'user-1',
   // Deliberately NOT 'member-1': the roster's first entry is Emma, and the
   // point of this field is that the acting person is not whoever sorts first.
-  memberId: 'member-self',
+  role: 'parent', memberId: 'member-self',
   members: [{ id: 'member-1', display_name: 'Emma' }],
   tz: 'America/New_York',
 };

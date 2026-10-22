@@ -281,3 +281,36 @@ describe('the main Autopilot scan and the policy pass share one table', () => {
     expect(db.table('reminders')).toEqual([]);
   });
 });
+
+describe('a policy refresh never rewrites a suggestion resolved after the scan read it', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('matches zero rows when a manager accepted the card between the read and the refresh', async () => {
+    const db = createInMemorySupabase({ uniques: { autopilot_suggestions: [['family_id', 'dedupe_key']] } });
+    seedStreak(db, 'family-1', 3);
+    await runPolicyScan(db as never, 'family-1', 'user-1', { now: NOW });
+    const [row] = policyRows(db);
+    const before = { detail: row.detail, confidence: row.confidence, payload: structuredClone(row.payload), expires_at: row.expires_at };
+    // The streak grows, so the next scan wants to refresh the open card.
+    db.seed('approval_requests', [approvalRow('family-1', { id: 'approval-late', decided_at: '2026-09-05T10:00:00Z' })]);
+
+    const original = db.from.bind(db);
+    vi.spyOn(db, 'from').mockImplementation((table: string) => {
+      const query = original(table);
+      if (table === 'autopilot_suggestions') {
+        const update = query.update.bind(query);
+        query.update = (patch) => {
+          // A manager accepts it after the scan's read, before its write lands.
+          Object.assign(row, { status: 'executed', resolved_by: 'manager-user', updated_at: '2026-09-07T12:00:01Z' });
+          return update(patch);
+        };
+      }
+      return query;
+    });
+
+    const result = await runPolicyScan(db as never, 'family-1', 'user-1', { now: NOW });
+
+    expect(result.refreshed).toBe(0);
+    expect(row).toMatchObject({ status: 'executed', ...before });
+  });
+});

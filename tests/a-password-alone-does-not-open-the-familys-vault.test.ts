@@ -103,6 +103,12 @@ vi.mock('@/lib/ai/safety/untrusted', () => ({ fenceUntrustedBlock: (_kind: strin
 // The draft path carries the AI rate-limit budget (C3-S4-01, merged from main);
 // this suite is about the step-up gate, so the budget always has room.
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
+// The Free plan's AI allowance has its own cases in
+// tests/the-free-plans-ai-allowance-holds-on-every-helper.test.ts; it admits here.
+vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
+  assertAIAllowance: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+}));
 
 const actions = await import('@/app/(app)/dashboard/paperwork/actions');
 
@@ -152,7 +158,7 @@ beforeEach(() => {
     },
   });
   db.seed('paperwork_items', [structuredClone(SLIP)]);
-  Object.assign(db, { auth: { mfa: { getAuthenticatorAssuranceLevel: h.getAal } } });
+  Object.assign(db, { auth: { getSession: async () => ({ data: { session: { access_token: 'synthetic-assurance-token' } }, error: null }), mfa: { getAuthenticatorAssuranceLevel: h.getAal } } });
   h.db = db;
 });
 
@@ -190,6 +196,13 @@ describe('once the code is entered', () => {
 
     expect(await actions.setPaperworkStatusAction({ itemId: 'paper-1', status: 'archived' })).toEqual({ ok: true });
     expect(db.table('paperwork_items').find((r) => r.id === 'paper-1')?.status).toBe('archived');
+  });
+
+  it('a guest is refused filing paperwork, in words, and nothing is written', async () => {
+    h.role = 'guest';
+    expect(await actions.addPaperworkAction(fd({ text: 'Permission slip: sign and return by Friday.', sender: 'School' })))
+      .toEqual({ ok: false, error: 'Your account can’t make that change.' });
+    expect(db.table('paperwork_items')).toEqual([SLIP]);
   });
 
   it('and "Add to calendar" puts the trip on the calendar and stamps the slip', async () => {
@@ -418,7 +431,7 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
     if (entry === 'node_modules' || entry === '.next' || entry.startsWith('.')) continue;
     const p = join(dir, entry);
     if (statSync(p).isDirectory()) sourceFiles(p, out);
-    else if (['.ts', '.tsx'].includes(extname(p))) out.push(p);
+    else if (['.ts', '.tsx'].includes(extname(p))) out.push(p.replaceAll('\\', '/'));
   }
   return out;
 }

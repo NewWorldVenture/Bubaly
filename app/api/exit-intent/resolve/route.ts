@@ -27,7 +27,12 @@ export async function POST(req: NextRequest) {
     campaign: str(body.campaign) ?? null,
     path: str(body.path) ?? null,
     country: str(body.country) ?? null,
-    returning: body.returning === true,
+    // Absent is UNKNOWN, not "new visitor". ExitIntent sends `returning` only
+    // with personalisation consent; reading its absence as `false` chose
+    // "New visitors only" offers by visit history for exactly the visitors who
+    // had declined that. Unknown matches neither audience
+    // (resolveExitIntent in lib/marketing/exit-intent.ts).
+    returning: typeof body.returning === 'boolean' ? body.returning : undefined,
     segments: Array.isArray(body.segments) ? body.segments.map(String) : [],
     sessions: typeof body.sessions === 'number' ? body.sessions : undefined,
   };

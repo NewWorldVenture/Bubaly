@@ -17,6 +17,13 @@ const state = vi.hoisted(() => ({
   audits: 0,
 }));
 
+// The admin gates also ask lib/auth/super-admin-assurance whether the session
+// proved its authenticator; this file is not about step-up, so it says yes.
+vi.mock('@/lib/auth/super-admin-assurance', () => ({
+  superAdminAssurance: async () => ({ ok: true }),
+  decideSuperAdminAssurance: () => ({ ok: true }),
+  SUPER_ADMIN_STEP_UP_PATH: '/auth/step-up?next=%2Fadmin',
+}));
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/email', () => ({ APP_URL: 'https://www.bubaly.com', sendReactEmail: async () => state.result }));
@@ -25,7 +32,7 @@ vi.mock('@/lib/emails/invite', () => ({ InviteEmail: () => null }));
 vi.mock('@/lib/supabase/auth', () => ({
   requireUserContext: async () => ({
     user: { id: 'u1', email: 'parent@example.test' },
-    active: { familyId: 'f1', member: { display_name: 'Pat' }, family: { name: 'Fixture' } },
+    active: { familyId: 'f1', role: 'parent', member: { display_name: 'Pat' }, family: { name: 'Fixture' } },
   }),
   getUser: async () => ({ id: 'admin-1', email: 'admin@example.test' }),
   isSuperAdmin: async () => true,
@@ -33,7 +40,7 @@ vi.mock('@/lib/supabase/auth', () => ({
 vi.mock('@/lib/referrals/server', () => ({
   applyReferralCode: async () => ({ ok: true }),
   getOrCreateReferralCode: async () => 'CODE1234',
-  getReferralConfig: async () => ({ enabled: true, rewardLabel: 'a free month' }),
+  getReferralConfigResult: async () => ({ config: { enabled: true, rewardLabel: 'a free month' }, error: null }),
   recordReferralEmailInvite: async () => ({ ok: true, rowId: 'row-1', created: true }),
   rollbackReferralEmailInvite: async () => { state.rollbacks++; },
 }));

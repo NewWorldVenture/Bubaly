@@ -34,9 +34,10 @@ import { CommandBar } from './command-bar';
 import { RoleDensity } from './role-density';
 import { setActiveFamilyAction } from '@/app/(app)/actions';
 import { navLabel } from '@/lib/i18n/nav-label';
+import { stageAssistantHandoff } from '@/lib/ai/prefill';
 
-/** Desktop top-bar search. Submitting hands the query to the AI Assistant via
- *  its existing `?q=` deep-link (the assistant auto-sends and strips the param),
+/** Desktop top-bar search. Submitting hands the query to the AI Assistant as an
+ *  in-app hand-off (lib/ai/prefill.ts), which the assistant sends on arrival,
  *  so "Ask anything…" is a real entry point, not decoration. */
 function HeaderSearch() {
   const t = useTranslations();
@@ -48,7 +49,7 @@ function HeaderSearch() {
     const query = q.trim();
     if (!query) return;
     setQ('');
-    router.push(`/dashboard/assistant?q=${encodeURIComponent(query)}`);
+    router.push(stageAssistantHandoff(query));
   }
 
   return (
@@ -305,7 +306,7 @@ function SidebarNav({ onLocked }: { onLocked: (item: NavItem) => void }) {
       {/* AI Assistant — pinned at the very top */}
       <AiAssistantNavButton />
       {APP_NAV_GROUPS.map((group) => {
-        const resolved = resolveItems(group.items, featureTiers, planLevel, isSuperAdmin, manager);
+        const resolved = resolveItems(group.items, featureTiers, planLevel, isSuperAdmin, manager, role === 'guest');
         const isSuggested = group.title === 'Suggested';
         // Drop a group whose every feature is Off (the Suggested group always
         // keeps the two dashboard links, so it never disappears).
@@ -354,7 +355,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // AI-first marketplace), replacing the global nav BODY — the Bubaly logo + top
   // header stay, so there's ONE rail, not two.
   const onMarketplace = pathname === '/marketplace' || pathname.startsWith('/marketplace/');
-  const mobileTabs = resolveItems(MOBILE_TABS, featureTiers, planLevel, isSuperAdmin, isManager(role));
+  const mobileTabs = resolveItems(MOBILE_TABS, featureTiers, planLevel, isSuperAdmin, isManager(role), role === 'guest');
   const upgradeLevel: 1 | 2 = upgradeFor
     ? (featureTiers[upgradeFor.href] === 'plus' ? 2 : 1)
     : 1;

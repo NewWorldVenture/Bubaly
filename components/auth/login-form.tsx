@@ -1,7 +1,6 @@
 'use client';
 
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input, Field } from '@/components/ui/input';
@@ -184,7 +183,7 @@ export function LoginForm() {
         <Button type="submit" loading={loading} className="w-full">{t('login.signIn')}</Button>
         </fieldset>
       </form>
-      <Link href="/login?reset=1" onClick={retireForNavigation} className="mt-3 block text-sm font-medium text-brand-text hover:underline">{t('authRecovery.forgotPassword')}</Link>
+      <a href="/login?reset=1" onClick={retireForNavigation} className="mt-3 block text-sm font-medium text-brand-text hover:underline">{t('authRecovery.forgotPassword')}</a>
       </>
       )}
 
@@ -192,11 +191,11 @@ export function LoginForm() {
 
       <p className="mt-5 text-center text-sm text-muted">
         {t('login.newHere')}{' '}
-        <Link href={authScreenHref('/signup', selection)} onClick={retireForNavigation} className="font-medium text-brand-text hover:underline">{t('login.createAnAccount')}</Link>
+        <a href={authScreenHref('/signup', selection)} onClick={retireForNavigation} className="font-medium text-brand-text hover:underline">{t('login.createAnAccount')}</a>
       </p>
       <p className="mt-2 text-center text-sm text-muted">
         {t('login.kidLoggingIn')}{' '}
-        <Link href="/kid-login" onClick={retireForNavigation} className="font-medium text-brand-text hover:underline">{t('login.useYourUsernameAmpPin')}</Link>
+        <a href="/kid-login" onClick={retireForNavigation} className="font-medium text-brand-text hover:underline">{t('login.useYourUsernameAmpPin')}</a>
       </p>
     </div>
   );

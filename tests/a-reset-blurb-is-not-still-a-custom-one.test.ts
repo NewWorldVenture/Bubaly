@@ -81,6 +81,13 @@ const state = vi.hoisted(() => ({
 // The hook-slot harness: `useState` keeps its value across renders the way a
 // mounted component does, and an initializer handed to an already-initialized
 // slot is ignored — the same reason fresh server props do not reset this screen.
+// The admin gates also ask lib/auth/super-admin-assurance whether the session
+// proved its authenticator; this file is not about step-up, so it says yes.
+vi.mock('@/lib/auth/super-admin-assurance', () => ({
+  superAdminAssurance: async () => ({ ok: true }),
+  decideSuperAdminAssurance: () => ({ ok: true }),
+  SUPER_ADMIN_STEP_UP_PATH: '/auth/step-up?next=%2Fadmin',
+}));
 vi.mock('react', async (original) => ({
   ...(await original<typeof import('react')>()),
   useState: (initial: unknown) => {

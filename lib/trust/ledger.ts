@@ -16,18 +16,18 @@ export { serverWriter as ledgerWriter } from '@/lib/supabase/service-writer';
  * for decisions taken under them — `trust_audit_logs_decision_check` has named
  * them since the table shipped, and until C1-S8-04 nothing wrote a single one.
  * The ledger recorded every decision the permission system made and nothing at
- * all about who changed the permission system. This type carries the four that
- * can be written.
+ * all about who changed the permission system. This type carries all five.
  *
- * `role_changed` is absent on purpose: family roles are edited by a direct
- * browser write in `components/modules/family-module.tsx` with no server action
- * in the path, and this table is service-role-only, so there is nowhere for
- * that row to be written from. Recorded in the audit rather than papered over.
+ * `role_changed` was absent while family roles were edited by a direct browser
+ * write with no server action in the path. Both roster editors now go through
+ * updateFamilyMemberAction (app/(app)/family/member-actions.ts), which records
+ * it.
  */
 export type TrustChange =
   | 'policy_changed'
   | 'grant_changed'
   | 'delegation_changed'
+  | 'role_changed'
   | 'emergency_ended';
 
 type LedgerDb = { from: (table: string) => { insert: (row: Record<string, unknown>) => Promise<{ error: unknown }> } };

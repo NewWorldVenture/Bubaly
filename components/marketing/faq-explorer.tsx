@@ -265,7 +265,7 @@ export function FaqExplorer({ topics, popular }: { topics: FaqTopic[]; popular: 
             autoComplete="off"
             spellCheck={false}
             aria-describedby="faq-search-status"
-            className="h-14 w-full rounded-2xl border border-white/15 bg-white/[0.045] pl-14 pr-14 text-base text-white shadow-[0_18px_50px_rgba(76,52,180,0.18)] outline-none backdrop-blur transition placeholder:text-muted focus:border-violet-400/60 focus:ring-4 focus:ring-violet-500/20 sm:h-16 sm:text-lg [&::-webkit-search-cancel-button]:hidden"
+            className="h-14 w-full rounded-2xl border border-white/15 bg-white/[0.045] pl-14 pr-14 text-base text-white shadow-[0_18px_50px_rgba(76,52,180,0.18)] outline-none backdrop-blur transition placeholder:text-muted focus:border-brand focus:ring-4 focus:ring-violet-500/20 sm:h-16 sm:text-lg [&::-webkit-search-cancel-button]:hidden"
           />
           {query ? (
             <button

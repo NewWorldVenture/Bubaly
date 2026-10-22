@@ -14,13 +14,20 @@ const sources = Object.fromEntries([
   'components/finance/bill-schedule-modal.tsx', 'components/finance/bill-payment-modal.tsx',
   'components/ui/modal.tsx', 'components/ui/input.tsx', 'components/ui/button.tsx',
   'components/ui/badge.tsx', 'components/ui/states.tsx', 'components/ui/states-client.tsx',
-  'components/ui/toast.tsx', 'components/app/page-header.tsx', 'lib/a11y/use-dialog-behavior.ts',
-  'lib/finance/hub.ts', 'lib/finance/bills.ts', 'lib/finance/bill-schedule.ts', 'lib/finance/recurring.ts',
+  'components/ui/toast.tsx', 'lib/hooks/use-media-query.ts', 'components/app/page-header.tsx', 'lib/a11y/use-dialog-behavior.ts',
+  'lib/finance/hub.ts', 'lib/finance/budget-periods.ts', 'lib/finance/bills.ts', 'lib/finance/bill-schedule.ts', 'lib/finance/recurring.ts',
   'lib/finance/category-label.ts', 'lib/calendar/occurrences.ts', 'lib/calendar/recurrence.ts',
   'lib/calendar/source-capability.ts', 'lib/calendar/exact-instant.ts', 'lib/onboarding/ics-time.ts', 'lib/calendar/day.ts', 'lib/briefing/calendar-window.ts',
   'lib/time/zoned.ts', 'lib/time/local-day.ts', 'lib/time/wall-clock.ts', 'lib/i18n/locales.ts',
   'lib/supabase/errors.ts', 'lib/schedule/zoned.ts', 'lib/auth/step-up-client.ts', 'lib/auth/mfa.ts',
+  // billing-module settles its delete through settleAction, so a rejected
+  // server-action call is reported and the list re-read, not lost.
+  'lib/ui/settle-action.ts',
   'lib/auth/redirect.ts', 'lib/constants/roles.ts', 'lib/constants/plans.ts', 'lib/constants/feature-catalog.ts',
+  // The held 0514's rule: who reads the household's accounts and spending.
+  'lib/finance/household-money.ts',
+  // billing-module reads the transactions its figures are summed from whole.
+  'lib/supabase/read-all.ts',
   'lib/billing/plans.ts', 'lib/billing/review-selection.ts', 'lib/wallet/ledger.ts',
   'lib/utils/calendar-date.ts', 'lib/utils/birthday.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
@@ -59,7 +66,7 @@ function server(mode: Mode, role = 'parent') {
     '@/lib/supabase/server': { createServer: async () => client },
     '@/lib/services/finances': {},
   };
-  const allowed = new Set(['app/(app)/dashboard/billing/actions.ts', 'lib/services/scope.ts', 'lib/time/zoned.ts', 'lib/constants/roles.ts', 'lib/finance/bills.ts', 'lib/finance/bill-schedule.ts', 'lib/finance/recurring.ts', 'lib/calendar/occurrences.ts', 'lib/calendar/recurrence.ts', 'lib/calendar/day.ts', 'lib/calendar/source-capability.ts', 'lib/calendar/exact-instant.ts', 'lib/onboarding/ics-time.ts', 'lib/briefing/calendar-window.ts', 'lib/supabase/errors.ts']);
+  const allowed = new Set(['app/(app)/dashboard/billing/actions.ts', 'lib/services/scope.ts', 'lib/time/zoned.ts', 'lib/time/civil.ts', 'lib/constants/roles.ts', 'lib/finance/bills.ts', 'lib/finance/bill-schedule.ts', 'lib/finance/recurring.ts', 'lib/calendar/occurrences.ts', 'lib/calendar/recurrence.ts', 'lib/calendar/day.ts', 'lib/calendar/source-capability.ts', 'lib/calendar/exact-instant.ts', 'lib/onboarding/ics-time.ts', 'lib/briefing/calendar-window.ts', 'lib/supabase/errors.ts']);
   const modules: Record<string, { exports: Record<string, unknown> }> = {};
   function load(file: string): Record<string, unknown> {
     if (!allowed.has(file)) throw new Error(`Unexpected server schedule module ${file}`);
@@ -104,7 +111,7 @@ async function fixture(page: Page, view: 'bills' | 'billing' = 'bills', mode: Mo
       'next/navigation':{useSearchParams:()=>new URLSearchParams()},'next/link':{__esModule:true,default:({children,...props})=>React.createElement('a',props,children)},
       'date-fns':{parseISO:value=>new Date(value)},
       '@/components/app/app-context':{useApp:()=>{React.useSyncExternalStore(callback=>{listeners.add(callback);return()=>listeners.delete(callback)},()=>p.owner+':'+p.familyId+':'+p.role);return{familyId:p.familyId,userId:p.owner,role:p.role,members:[],family:{timezone:'UTC'}};}},
-      '@/components/i18n/locale-provider':{useTranslations:()=>tr,useLocale:()=>({code:'en-US'}),useFamilyTimeZone:()=> 'UTC'},
+      '@/components/i18n/locale-provider':{useTranslations:()=>tr,usePlural:()=>(key,count,params)=>tr(key+(count===1?'.one':'.other'),{...params,count}),useLocale:()=>({code:'en-US'}),useFamilyTimeZone:()=> 'UTC'},
       '@/components/i18n/use-format':{useFamilyCalendarToday:()=>new Date(2026,2,1,12),useFamilyClock:()=>({todayKey:()=> '2026-03-01'}),useFormat:()=>({fmtDate:value=>value})},
       '@/components/ui/avatar':{Avatar:inert},'@/components/ai/ai-insight':{AiInsight:inert},
       '@/components/billing/family-value-comparison':{FamilyValueComparison:inert},'@/components/billing/family-delivered-value':{FamilyDeliveredValue:inert},'@/components/billing/selected-plan-review':{SelectedPlanReview:inert},
@@ -122,7 +129,10 @@ async function fixture(page: Page, view: 'bills' | 'billing' = 'bills', mode: Mo
   })();` });
   await page.waitForTimeout(50);
   expect(errors, 'The real view must mount without missing fixture modules').toEqual([]);
-  await expect(page.getByText('Synthetic unpaid rent', { exact: true }).first()).toBeVisible();
+  // The held 0514: anyone but a parent or adult is shown the billing module's
+  // plan alone, which says whose the household's money is.
+  if (view === 'billing' && role !== 'parent' && role !== 'adult') await expect(page.getByText(messages['householdMoney.keptByParentsBody'], { exact: true })).toBeVisible();
+  else await expect(page.getByText('Synthetic unpaid rent', { exact: true }).first()).toBeVisible();
   return { actual, errors };
 }
 const dialog = (page: Page) => page.getByRole('dialog', { name: 'Edit schedule' });
@@ -169,10 +179,15 @@ for (const role of ['teen', 'child', 'caregiver', 'guest']) test(`${role} cannot
   await expect(page.getByRole('button', { name: 'Edit schedule' })).toHaveCount(0); expect(proof.actual.writes).toEqual([]); expect(proof.errors).toEqual([]);
 });
 
-for (const view of ['bills', 'billing'] as const) test(`${view} child reads bills but has no manager write controls`, async ({ page }) => {
+for (const view of ['bills', 'billing'] as const) test(`${view} child ${view === 'bills' ? 'reads bills' : 'sees the plan alone'} but has no manager write controls`, async ({ page }) => {
   const proof = await fixture(page, view, 'healthy', 'child');
-  if (view === 'billing') await page.getByRole('button', { name: messages['billingModule.tab.bills'], exact: true }).click();
-  await expect(page.getByText('Synthetic unpaid rent', { exact: true }).first()).toBeVisible();
+  if (view === 'billing') {
+    // The held 0514: the household's accounts and spending are a parent's or
+    // adult's. A child reaches this module only from the plan gate and is
+    // shown the plan alone; the bills stay theirs to read on the Bills page.
+    await expect(page.getByRole('button', { name: messages['billingModule.tab.bills'], exact: true })).toHaveCount(0);
+    await expect(page.getByText('Synthetic unpaid rent', { exact: true })).toHaveCount(0);
+  } else await expect(page.getByText('Synthetic unpaid rent', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: messages['billing.addBill'], exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: messages['bills.addBill'], exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Mark paid|Auto Pay|Delete/i })).toHaveCount(0);

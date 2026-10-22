@@ -24,9 +24,11 @@ import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Input, Field, Select } from '@/components/ui/input';
 import { cn } from '@/lib/utils/cn';
-import { INVITABLE_ROLES } from '@/lib/constants/roles';
+import { INVITABLE_ROLES, canInviteWithRole } from '@/lib/constants/roles';
+import { useApp } from '@/components/app/app-context';
 import type { MemberRole } from '@/lib/constants/roles';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { isChildLoginEmail } from '@/lib/onboarding/child-login';
 
 // TODO(M23 RLS migration): a caregiver preset that also pre-authorises a
 // time-limited delegation needs somewhere to park that intent until the invite
@@ -86,6 +88,7 @@ export function InviteForm({ familyId, userId, onSent, onCancel }: {
 }) {
   const t = useTranslations();
   const { error: toastError } = useToast();
+  const { role: actorRole } = useApp();
   const [loading, setLoading] = useState(false);
   // The ROLE is the only state: it is what gets written. A preset is just a
   // name for one, so the highlighted tile and the note below can never disagree
@@ -99,6 +102,12 @@ export function InviteForm({ familyId, userId, onSent, onCancel }: {
     const form = new FormData(e.currentTarget);
     const email = String(form.get('email') ?? '').trim().toLowerCase();
     if (!email) return toastError(t('settingsModule.emailIsRequired'));
+    // A kid login is made from its family's Kid Logins page, never invited:
+    // its synthetic address receives nothing, and the join link would be
+    // mailed to a domain that is not Bubaly's.
+    if (isChildLoginEmail(email)) return toastError(t('inviteForm.aKidLoginCannotBeInvited'));
+    // An invite may not outrank the person sending it (no `parent` from an adult).
+    if (!canInviteWithRole(actorRole, role)) return toastError(t('settingsModule.failed'));
     setLoading(true);
     const supabase = createClient();
     const { data: invite, error } = await supabase.from('invites').insert({

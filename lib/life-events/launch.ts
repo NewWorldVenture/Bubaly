@@ -32,6 +32,7 @@ import { createTodo, deleteTodo } from '@/lib/services/tasks';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { buildPlanItems, getTemplate, addDays, type MaterializedItem } from './templates';
+import { dayKeyIn } from '@/lib/time/zoned';
 
 /** Categories that are somebody's job today — these become to-dos. */
 const TODO_CATEGORIES = new Set(['buy', 'plan', 'notify']);
@@ -144,10 +145,10 @@ export type LaunchLifeEventResult = {
 
 const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
-/** The anchor date for a launch: the caller's, when it is a real day key, else the template's lead time from today. */
-export function resolveAnchor(templateLeadDays: number, eventDate: string | null | undefined, now: Date): string {
+/** The anchor date for a launch: the caller's, when it is a real day key, else the template's lead time from the family's today (`tz`). */
+export function resolveAnchor(templateLeadDays: number, eventDate: string | null | undefined, now: Date, tz = 'UTC'): string {
   if (typeof eventDate === 'string' && DAY_KEY.test(eventDate)) return eventDate;
-  return addDays(now.toISOString().slice(0, 10), templateLeadDays);
+  return addDays(dayKeyIn(now, tz), templateLeadDays);
 }
 
 /** The items that become to-dos: the doing categories, soonest first, capped. */
@@ -175,8 +176,12 @@ export async function launchLifeEvent(
   if (!template) return fail('That life event is not one Bubaly knows.', { code: SERVICE_CODES.invalidInput });
 
   const now = scope.now ?? new Date();
-  const todayKey = now.toISOString().slice(0, 10);
-  const anchor = resolveAnchor(template.defaultLeadDays, input.eventDate, now);
+  // The FAMILY's day. `due_on` is a family day and createReminder reads
+  // 09:00 on it in the family's zone, so Greenwich's day made a Tokyo morning
+  // launch remind about yesterday's item (overdue on arrival) and a Los Angeles
+  // evening launch skip today's.
+  const todayKey = dayKeyIn(now, scope.tz || 'UTC');
+  const anchor = resolveAnchor(template.defaultLeadDays, input.eventDate, now, scope.tz || 'UTC');
 
   // Every write pushes its undo; the first failure runs them newest-first.
   const undo: { what: string; run: () => Promise<ServiceResult<unknown>> }[] = [];

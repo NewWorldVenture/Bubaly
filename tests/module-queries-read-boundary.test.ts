@@ -40,7 +40,7 @@ describe('module record queries fail closed on read error', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     createServer.mockResolvedValue(queryClient({ data: null, error: { message: 'relation home_warranties does not exist' } }));
     const { getWarranties } = await import('@/lib/home/queries');
-    await expect(getWarranties('fam-1')).rejects.toThrow(/Could not load your home records/);
+    await expect(getWarranties('fam-1', { role: 'parent', userId: 'u-1' })).rejects.toThrow(/Could not load your home records/);
   });
 
   it('home getAssets returns rows on success', async () => {

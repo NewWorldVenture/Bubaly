@@ -103,11 +103,43 @@ source allocations are not evidence that production applied any migration.
 |---|---|---|
 | 0475 | `0475_messaging_conversation_privacy_and_delivery.sql` | Original recorded audience unions; separate empty Family Chat; actor locks, idempotent send and participant operations. |
 | 0476 | `0476_messaging_notifications_preferences.sql` | Typed notification keys, private mute preferences and participant delivery. |
+| 0477 | `0477_an_assistant_key_is_minted_and_revoked_only_by_the_server.sql` | 2026-10-10 audit. Client INSERT/UPDATE on `assistant_links` revoked; keys are minted and revoked by server actions. |
+| 0478 | `0478_a_family_goal_is_shaped_by_the_household_and_removed_by_its_managers.sql` | 2026-10-10 audit. `goals`: guests and caregivers read only; delete is a manager's. |
+| 0479 | `0479_a_reminder_or_a_to_do_is_deleted_by_a_manager_or_its_author.sql` | 2026-10-10 audit. `family_reminders` / `todo_items` DELETE is a manager's or the author's. |
+| 0480 | `0480_an_approval_says_who_filed_it_and_only_the_server_can_say_otherwise.sql` | 2026-10-10 audit. Filer, linkage, domain and dedupe key of an approval request are pinned after insert; a member's own row carries no dedupe key; the concierge write-back ledger is not a member's to erase. |
+| 0481 | `0481_the_rls_sweep_narrows_the_household_tables_to_their_roles.sql` | 2026-10-10 RLS sweep over ~27 household tables (guest writes, member-only rows, manager decisions). Probe `rls-sweep-check.sql`. kid_progress, calendar_feeds and reward_redemptions deferred to the held 0496, 0498 and 0500: their negative-control workflows need the released schema to still show each defect, so 0481 leaves those three tables as main has them. |
+| 0482 | `0482_who_may_make_unmake_and_invite_a_parent.sql` | 2026-10-10 audit. Only a parent makes, unmakes or invites a parent; a family that has a parent keeps one; invite terms are the server's; a removed member's sync links are disabled; a child login founds no household. accept_invite is not changed: a returning member's role is deferred to the held 0495 (invite-rejoin-role-runtime.yml is its negative control); the inviter-still-active re-check follows 0495. |
+| 0483 | `0483_a_live_hold_counts_and_an_order_names_both_families.sql` | 2026-10-10 audit. Live card holds count against the spend; `marketplace_orders.buyer_family_id`; party-only hand-offs; proxy-bid and reserve fixes; manager-only cross-family actions; circle remove/block/rotate and the `marketplace_circle_listings` view. Ship with the app half (audit/economy-fix), which works on both schemas. |
+| 0484 | `0484_a_trip_links_a_document_once_and_a_guest_does_not_file_paperwork.sql` | 2026-10-10 audit. Unique `vacation_documents (vacation_id, document_id)`, built only when no pair is linked twice: the preflight `vacation_documents_duplicates_refuse()` refuses with 23505 (count and a sample of the pairs) and deletes nothing, so the owner dedupes by hand and re-runs; `paperwork_items` joins 0464's guest guard. Probe `a-trip-links-a-document-once-check.sql`. |
+| 0485 | `0485_a_device_is_found_by_its_key.sql` | 2026-10-10 audit. Index on `push_devices (device_key)` for the sign-in takeover read. |
+| 0486 | `0486_an_autopilot_card_is_read_by_its_audience.sql` | 2026-10-12 family-life audit (#1031), the next free number. **Not applied**; the owner applies it in the normal manual release. One RESTRICTIVE `FOR SELECT TO authenticated` policy on `autopilot_suggestions`, `lib/autopilot/audience.ts`'s rule over existing helpers: an insurance card (`source_kind` `family_insurance_policies` or `kind` `insurance`) is read by `can_manage_family` or `is_self_member(member_id)`, the member the policy names; a finance card, or one copied from `subscriptions_tracked` or `renewals`, by anyone whose `family_role` is not guest (0481's test on those two tables); any other card by the family, as under 0085. **The same rule on writes (RV486-2):** Postgres applies a SELECT policy to an UPDATE only when the statement names a column (WHERE, RETURNING or a SET expression), so a column-free `update … set member_id = '<own id>'` (no WHERE, `where true`, `returning 1`, PostgREST's unfiltered PATCH with return=minimal) let an unnamed teen or a guest name themselves on a card they could not read and then read it; a PATCH with any filter was already held. A second RESTRICTIVE `FOR UPDATE TO authenticated` policy, `autopilot_suggestions_audience_update_guard`, applies the same CASE as USING (a non-reader cannot touch a card) and WITH CHECK (the card left behind is still one its writer may read: a named child cannot move her card to a sibling or to nobody; a manager may reassign it), and a BEFORE UPDATE trigger, `autopilot_suggestions_keep_their_audience` (`autopilot_suggestion_keeps_its_audience()`, security invoker, not client-executable, bypassed by RLS-bypassing roles as 0480's), pins the columns that decide who reads a card, `kind`, `source_kind` and `family_id`, for every client, so a reader cannot widen a card (the teen turning the subscription charge into an 'other' card for the guest) or narrow one, and (RV486-2-FAMILY) a member of two families cannot move a card into the other one, where that family's readers read it and its own family loses it (Ava, a child here and in her co-parent's household, moving her insurance card there by id; Sam, a teen in both, moving the subscription charge by a filtered PATCH; a guest here who runs her own household moving an ordinary card into it: each passed 0085's WITH CHECK, the update guard on both rows and 0327 before the pin covered `family_id`); no app path writes any of the three. **Backfill, before the policies:** an insurance card written before the scan stored the policy's member (`member_id` null) gets `family_insurance_policies.member_id` where `source_id = id` and `family_id` match and the policy names someone; idempotent (only null members), and the only trigger it fires is 0085's `set_updated_at` (resolveSuggestion's concurrency token moves once). Its self-check asserts no such card is left. Without it the member a policy names could not read their own card under the read rule and their own scan met 23505 on every open. 0085's membership policy, INSERT and DELETE, and 0327's guards unchanged. Ships with the scan half: a member's own on-demand scan (`app/api/autopilot/scan`, the caller's client) now skips a card it may not read back, which would otherwise be refused 42501 and fail the scan; and it refreshes a prior insurance card's `member_id` when its policy now names someone else (or the card still names nobody), on the nightly scan and on a manager's own scan only, by id and family and confirmed, nothing else touched (`tests/an-insurance-card-follows-its-policy-to-the-member-it-now-names.test.ts`). Remaining window: from a reassignment until the next nightly scan (or a manager's, for a card nobody else resolved: 0327 keeps `resolved_by` the resolver's, so a manager's scan leaves another member's resolved card to the nightly run) the newly named member cannot read the card (their own scan takes the 23505 path) and the previously named one still can; and a card is refreshed only while its draft is still built (an active policy renewing within 30 days), so a policy reassigned after its renewal day or after deactivation leaves its card naming the old member. The refresh writes only while the card still names the member the scan read (an overlapping scan cannot restore an older member), and never rewrites an accepted card (`executed`/`approved`), whose reminders' tags are minted from its `member_id`: the card and its reminders keep the member it was accepted under. **Release dependency (met in the same change):** the reminders a card makes (`reminders`, `family_reminders`) still read family-wide, and `lib/autopilot/reminder-cards.ts` hides them by reading the card; under 0486 a reader the card is not for cannot find it. The lookup now reads every `create_reminder` card its reader may read (an everyone card's too, so a refill's reminder is still found) and answers a reminder that looks like a card's whose card it does not find as the managers' alone, so a guest is not shown "Renew Passport" and a teen the policy does not name is not shown its renewal under either schema (`tests/a-cards-reminder-stays-with-its-readers-when-the-card-is-not-theirs-to-read.test.ts`). Ship that app change before or with 0486, never after. The reminder rows themselves still need a read rule of their own. The insurance source itself (`family_insurance_policies`, 0416) stays family-wide until the held 0517. Probe `an-autopilot-card-is-read-by-its-audience-check.sql`. |
 | 0488 held | `0488_a_month_end_bill_keeps_its_day.sql` | Nullable original bill anchors; older-schema writes refuse losing a chosen anchor. |
 | 0490 held | `0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim.sql` | Atomic fenced feed writes; missing RPC refuses writes. |
 | 0492 held | `0492_approval_requests_private_read.sql` | Requester/manager approval reads; production policies unverified. |
 | 0493 held | `0493_ai_copy_private_read_and_quota.sql` | Private AI copies and count-only usage; missing receipt refuses capped-Free requests. |
 | 0494 held | `0494_sync_atomic_pull.sql` | Service-only admission and atomic item/map creation; missing RPC preserves cursor and refuses writes. |
+| 0495 held | `0495_a_member_invited_back_gets_what_the_invite_grants.sql` | A returning member gets the invite's role; an active member's role is unchanged; a kid login cannot accept another family's invite. Reserved for #981 above every preserved allocation (confirmed in #981 comment 6089092821). |
+| 0496 confirmed, held | `0496_a_childs_xp_is_awarded_by_a_parent.sql` | Only a manager or the service role can award a child XP or rewrite streaks through 0341's functions. Requested for #981 on #771 (comment 6089394563); confirmed as a held source and probe reservation in #981 comment 6092383149, which is not an installation approval. |
+| 0497 confirmed, held | `0497_a_childs_wallet_and_guardian_number_stay_in_one_family.sql` | 0311's same-family guard on Guardian profiles, gift links, pay handles, child wallets and medication schedules. Requested for #981 on #771 (comment 6092501825); confirmed as a source-only reservation in #981 comment 6092625435, which is not an installation approval. |
+| 0498 confirmed, held | `0498_a_guest_cannot_feed_the_calendar_or_rewrite_a_grocery_list.sql` | 0464's guest guard on `calendar_feeds` and `grocery_lists`. Requested for #981 on #771 (comment 6094699645); confirmed as a held source and probe reservation in #981 comment 6094770726, which is not an installation or production approval. |
+| 0499 confirmed, held | `0499_a_stored_file_answers_to_its_own_familys_rows.sql` | The `documents` bucket's upload, update and delete policies follow the row of the object's own family that names the file: insurance card images (managers), a household document's bytes (not a guest), a sensitive document's path (managers); another family's rows no longer count, and the family is read with the policies' own uuid cast. Requested for #981 on #771 (comment 6094859264); confirmed as a held source and probe reservation in #981 comment 6094986591, which is not an installation approval. |
+| 0500 confirmed, held | `0500_a_reward_request_is_the_rewards_own_snapshot.sql` | 0308's ticket guard completed: a reward request names a reward and a member of its own family at that reward's price and title, and keeps them and its family and member (the foreign key's set-null on a deleted reward excepted); 0428's token-economy guard also checks the title. Requested for #981 on #771 (comment 6094977772, economy scope 6095050742); confirmed as a held source and probe reservation in #981 comment 6095082508, which is not an installation or financial approval. |
+| 0501 confirmed, held | `0501_one_member_one_vote_in_two_households.sql` | 0311's same-family guard on `member_id` of `family_poll_votes`, `meal_vote_ballots`, `watchlist_votes` and `event_rsvps`: a member of two families votes once in each. Requested for #981 on #771 (comment 6095180270); confirmed as a held source and probe reservation for these four bindings in #981 comment 6095247473, which is not an installation approval. |
+| 0502 confirmed, held | `0502_a_chore_with_assignments_is_a_managers_to_remove.sql` | A signed-in caller who does not manage the chore's family deletes it only while it has no assignments, and does not move it to another family at all, so its cascade cannot remove assignments 0374 reserves to a manager. Requested for #981 on #771 (comment 6097049650); confirmed as a held source and probe reservation in #981 comment 6097190516, which is not an installation or production policy approval. |
+| 0503 proposed, held | `0503_a_trip_item_stays_with_its_trips_family.sql` | A signed-in caller changes a trip item's family only if they manage both the family it leaves and the family it joins, and an item names only its own family's trip (0311's binding), so a member of two families cannot move the first family's packing items out. Requested on #771 (comments 6097696125 and 6097700163); not yet confirmed. |
+| 0504 proposed, held | `0504_a_kid_login_mapping_is_the_servers_to_write.sql` | `child_logins` is written only by the server: 0297's manager write policy is dropped and client INSERT/UPDATE/DELETE revoked; the members' read is kept. Decided by the account holder on the lead in #771 comment 6092615411; requested on #771 (comment 6100826185), not yet confirmed. |
+| 0505 proposed, held | `0505_a_listing_others_hold_records_of_is_withdrawn_not_erased.sql` | A signed-in caller's delete of a marketplace listing that has any order, offer, question, bid, negotiation or round, handoff or report is refused; such a listing is withdrawn instead, and nothing other families hold is erased by the cascade. Decided by the account holder on the lead in #771 comment 6097101249; requested on #771 (comment 6100826185), not yet confirmed. |
+| 0506 proposed, held | `0506_a_health_record_is_read_by_a_manager_or_its_own_member.sql` | A row of `symptom_logs`, `health_metrics`, `health_goals`, `health_visits`, `immunizations`, `sleep_logs`, `sleep_checkins` or `nutrition_logs` is read by a manager of its family, the member it is about, or its author, all inside `is_family_member(family_id)`; every other member no longer reads it. Writes unchanged. Decided by the account holder on the lead in #771 comment 6092825901; requested on #771 (comment 6100826185), not yet confirmed. |
+| 0507 proposed, held | `0507_a_kid_login_does_not_start_a_household.sql` | 0482's `is_child_login_account()` also reads the kid-login mark the server writes (`app_metadata.bubaly_kid_login`), as 0495's `accept_invite` does, so a kid login whose address moved off the synthetic domain cannot start a household through `families_insert`. Found by Support (#771 comment 6100987720); requested on #771 (comment 6101311405), not yet confirmed. |
+| 0508 proposed, held | `0508_tax_documents_are_a_managers.sql` | `tax_documents` is read and written only by a parent or adult of the family (four `can_manage_family` policies replacing 0481's, whose teen/child self-read goes; 0391's step-up guards kept), and a restrictive `storage.objects` policy withholds the documents bucket's tax files (the family's `tax/` folder, or a file a `tax_documents` row of that family names) from anyone who does not manage the family or has not cleared the rows' step-up. Decided by the account holder on PROD-002; requested on #771 (comment 6101674181), not yet confirmed. |
+| 0509 proposed, held | `0509_a_guest_does_not_read_the_households_most_sensitive_areas.sql` | A guest of a family reads none of its rows, but the ones about themselves, in 59 tables: locations (6), money and cards (34), medical and insurance (10), Guardian and the household inbox (9). One RESTRICTIVE read policy per table over `is_family_guest(family_id)`; every other role, the service role and session-less readers unchanged. Decided by the account holder on ROLE-SCOPE-001; requested on #771 (comment 6101674181, scope 6101807525), not yet confirmed. |
+| 0510 proposed, held | `0510_a_note_about_a_member_is_read_by_managers_its_author_and_caregivers.sql` | A row of `behavior_logs` or `care_log` is read by a manager of its family, its author (`logged_by`, `created_by`) or a caregiver, all inside `is_family_member(family_id)`; a teen or a child no longer reads the notes others wrote, including the ones about them. Writes unchanged. Decided by the account holder; requested on #771 (comment 6103909775), not yet confirmed. |
+| 0511 proposed, held | `0511_a_medication_is_read_by_managers_its_member_and_caregivers.sql` | A row of `medications` is read by a manager of its family, the member it is for, or a caregiver, inside `is_family_member(family_id)` (one saved with no member, the form's default, by a manager or a caregiver); a `medication_schedules` row exactly when its medication is. Writes and `medication_doses` unchanged. The autopilot refill names the drug only to those readers. Decided by the account holder (0434's filed read; takes over the closed #674's candidate); requested on #771 (comment 6104294318), not yet confirmed. |
+| 0512 proposed, held | `0512_a_kid_login_is_never_a_parent_or_adult.sql` | A member whose account is a kid login (the synthetic kid address or the server's `bubaly_kid_login` mark; not a mapping alone, for 0495's reason) is refused a parent or adult role when the role or the login changes, and a kid-login mapping is refused for a parent or adult member or an account that is one in any family (42501, every caller). Nothing stored is changed. Decided by the account holder ("refuse until the PIN login is gone"); requested on #771 (comment 6104294318), not yet confirmed. |
+| 0513 proposed, held | `0513_a_removed_member_keeps_no_social_raise.sql` | When a member is removed (`is_active` to false) or their row deleted, their `social_access_permissions` grant in that family is deleted if its social role carries any permission their role's default lacks; a restriction stays. Adds `social_role_permissions(social_role)`, the matrix as a set. Decided by the account holder ("drop raises, keep limits"); requested on #771 (comment 6104294318), not yet confirmed. |
+| 0514 proposed, held | `0514_household_money_is_a_parents_or_adults.sql` | A row of `financial_accounts`, `family_wallets`, `stripe_connected_accounts`, `stripe_financial_accounts`, `billing_customers`, `checkout_sessions` or `babysitter_payments` is read by a manager of its family; a `transactions` row also by the member it is tagged to; a `home_warranties`, `auto_insurance_policies`, `vehicle_registrations` or `paperwork_items` row also by whoever added it; all inside `is_family_member(family_id)`. Writes unchanged. Decided by the account holder (the audit's open sensitive-table finding, household-money group, with the transactions and added-by follow-ups); requested on #771 (comment 6109587749, transactions in 6110569862), not yet confirmed. |
+| 0516 proposed, held | `0516_location_history_is_read_by_managers_the_member_and_caregivers.sql` | A row of `location_events`, `safety_check_ins` or `driving_trips` is read by a manager of its family, the member it is about, or a caregiver, inside `is_family_member(family_id)`. Live location keeps its own rule; writes unchanged. Decided by the account holder (the audit's open sensitive-table finding, location group); requested on #771 (comment 6109587749), not yet confirmed. |
+| 0517 proposed, held | `0517_a_personal_record_is_read_by_managers_and_its_member.sql` | A row of `insurance_policies`, `family_insurance_policies`, `vacation_documents` or `voice_commands` is read by a manager of its family or the member it is about, inside `is_family_member(family_id)`; `vacation_medical_information` and `health_providers` also by a caregiver. The two travel tables' FOR ALL policies are split so their member-wide writes stay exactly as they were. Decided by the account holder (the audit's open sensitive-table finding, personal-records group); requested on #771 (comment 6109587749), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4183,6 +4215,17 @@ not reassigned to whichever branch lands first. The preserved map:
 Still unresolved: #958's `0477` and the two `0491` candidates. Closing those PRs
 did not release the numbers.
 
+**Owner decision, 2026-10-10:** the SQL halves of the 2026-10-10 audit are
+assembled as `0477`–`0485`, consecutively from the next free number (see the
+allocation table above). The holders the preserved map lists for `0477`–`0487`
+take the next free number when they land; `0486` and `0487` are free. `0488`,
+`0490` and `0492`–`0494` stay held in `supabase/reserved/`.
+
+**2026-10-12:** the next landing took the next free number, `0486`
+(`an_autopilot_card_is_read_by_its_audience`, #1031's follow-up; see the
+allocation table above). `0487` is now the next free number. The preserved map,
+the holders it names and every file held in `supabase/reserved/` are unchanged.
+
 A migration whose reserved number is above the next free one cannot be released
 yet, for two reasons:
 - the guard refuses a skipped generation;
@@ -4227,6 +4270,1821 @@ Retiring a hole does not delete anything. These migration files remain on their 
 The colliding pairs are 0475 (meal-plan slot writes, messaging privacy), 0476 (meal-plan delegated actors, messaging notifications), 0477 (AI request admission, family-memory text) and 0491. Two published candidates hold 0491, neither allocation confirmed: #964 at 6e250a00b928970982855fc1e856ea6d5ceba09d (card hold and top-up deadlock, closed unmerged) and draft #969 at 854a990bd24906976231024eeb6c5943ae977da7 (recurring bill anchor). #969 also covers the month-end bill and calendar items below.
 
 Historical evidence, superseded: a landing map proposed in the Claude session on 2026-10-04 would have renumbered the month-end bill, calendar feed and messaging migrations to 0475, 0476, 0477 and 0478 (from 0488, 0490 and 0475/0476). The owner did not adopt it; the decision above preserves the original reservations. Under it, messaging lands as `0475`/`0476`, and the bill anchor (`0488`) and feed claim (`0490`) are held in `supabase/reserved/` until their turn.
+
+## `0495` (reserved, held) — a member invited back came back with their old role
+
+`supabase/reserved/0495_a_member_invited_back_gets_what_the_invite_grants.sql` —
+**held**: reserved as `0495` for #981 (confirmed in its comment 6089092821), above the owner's preserved allocations
+(`0477`–`0491`) and the held `0492`–`0494`. It stays outside
+`supabase/migrations/` until every number below it has landed, so neither the
+replay nor `db push` applies it. Its probe is held with it in
+`docs/audit/reserved/`.
+
+**Severity: high (authorization). Deploy order: any.** Removing a member sets
+`is_active = false` and keeps the row's role. `accept_invite` (0136) then
+reactivates that row with `on conflict ... do update set is_active = true` and
+never reads the invite's role. So a parent who was removed and later invited
+back as a **guest** came back as a **parent**, with every manager power and the
+parent-only ones. A removed child invited back as an adult stayed a child.
+Measured on a replay of every runnable migration: the removed parent's
+`can_manage_family` answered yes.
+
+0495 gives a caller who was not an active member (no row, or an inactive one)
+exactly the invite's role. An active member's role does not move, so accepting
+a parent invite addressed to oneself cannot promote anyone. Everything else in
+0136 is unchanged.
+
+**Second rule, same function: a kid login does not join another family
+(child safety).** A kid login's address is synthetic and deterministic from
+its username (`child.<username>@kids.bubaly.app`), and any household's parent
+or adult may write an invite to any address. So a child who opened a
+stranger's join link while signed in was enrolled in that household, where its
+adults could message them and the child's own parents could not see it
+(reproduced on the same replay). 0495 reads kid identity from the account
+itself, in `auth.users`, which only the server writes: its address is on that
+domain, or its `app_metadata` carries `bubaly_kid_login: true`, which
+`createChildLoginAction` now sets on every kid login it creates. Only the service
+role can write `app_metadata`, so the mark survives a later change of address.
+
+It does **not** read kid identity from `child_logins` or from membership. A
+household's parent can write a `child_logins` row (0297's policy is
+`can_manage_family(family_id)` and nothing more) naming any user, including an
+ordinary-email caregiver or guest of their own household, active or not. Owner
+reviews 6089395851 and 6092383149 showed that trusting either would let a
+household stop that adult from ever accepting another household's invitation.
+The replay reproduced it against the earlier predicates. `user_metadata` is not
+used, because its owner can edit it.
+
+The same provenance now guards the PIN reset in code (`resetChildPinAction`,
+owner review 6092410939). Before any credential is touched, the target
+account's address must be exactly `syntheticChildEmail(username)`, read from
+the auth server. Otherwise a parent's mapping of a caregiver's or guest's own
+account let the reset replace that person's real password.
+
+The join page refuses an account on the synthetic domain before calling the
+function, which protects most children while 0495 is held. It is not
+protection against a direct RPC call. If the owner wants a kid login in two
+households (co-parenting), that should be a parent-to-parent action, not a
+child's click.
+
+Remaining limit, recorded rather than smoothed over: a kid login created
+before the `app_metadata` mark, whose address was later moved off the synthetic
+domain, is not recognised. Its PIN sign-in, which uses the synthetic address,
+no longer works either. Making `child_logins` server-written is a separate
+proposed policy change (#981 comment 6092615411), not part of this rule.
+
+**Proof:** `.github/workflows/invite-rejoin-role-runtime.yml` replays every
+runnable migration. It then requires the held probe
+`docs/audit/reserved/a-member-invited-back-gets-the-invited-role-check.sql` to
+fail on the defect, applies 0495 twice, and requires the probe to pass. The
+passing run covers:
+- the kid cases: synthetic with and without a mapping, and an ordinary address
+  with the server's mark;
+- six adults who must still accept: five mapped by a household's parent,
+  including an active caregiver and an inactive guest of that household, and
+  one whose own `user_metadata` says child.
+
+Mutation controls: without the address clause, or without the mark clause,
+that clause's kid gets in. Trusting `child_logins` instead refuses the mapped
+caregiver. With 0495
+applied, all 182 other boundary probes still pass.
+
+**Not changed:** SEC-026 (the owner's decision on who may make a parent),
+and explicit `social_access_permissions` rows, which also outlive a removal
+and may be elevations or restrictions. Those rows are recorded as a lead.
+
+**After approved release:** remove a test parent, invite them back
+as a guest, accept as them, and confirm they cannot open family settings. Then
+invite a test kid login's address from another test family and confirm the
+kid's acceptance is refused. Confirm a test adult who is not anyone's kid login
+can still accept an invitation.
+
+## `0496` (confirmed, held) — a child could award themselves XP
+
+`supabase/reserved/0496_a_childs_xp_is_awarded_by_a_parent.sql` —
+**held**: `0496`, the first number above `0495`, for #981. It was requested on
+#771 in comment 6089394563 and confirmed as a held source and probe reservation
+in #981 comment 6092383149, which is not an installation approval. It stays
+outside `supabase/migrations/` until every number below it has landed. Its
+probe is held with it in `docs/audit/reserved/`.
+
+**Severity: medium (integrity of the chore game; no money moves). Deploy
+order: any.** 0354 made `kid_progress` writes manager-only, because "a child
+could simply write their own level 50 and every badge"; a child's direct
+`UPDATE` now changes nothing. But 0341 had moved every award into two
+`SECURITY DEFINER` functions, which RLS does not reach, and their caller check
+was still 00430's `is_family_member`. Measured on a replay of every runnable
+migration, as a child's session: `kid_progress_apply_completion(family, own
+member, 999999, today)` answered `ok: true`, level 141, and
+`kid_progress_revert_completion` let the same child set their own current and
+longest streak (to 365 in the probe's fixture). A teen, a caregiver and a guest
+of the family could do the same. Badges are awarded from those levels and
+streaks on the next real approval.
+
+0496 changes only that predicate in both functions, to 0354's
+`can_manage_family`, beside the existing service-role branch. Their only caller
+is `lib/chores/server.ts`, reached from `finalizeApproval`: with the service
+client on auto-approval and with a manager's session in
+`approveSubmissionAction`, after `isManager`. So no legitimate award changes.
+
+**Proof:** `.github/workflows/kid-progress-award-runtime.yml` replays every
+runnable migration, requires the held probe
+`docs/audit/reserved/a-childs-xp-is-awarded-by-a-parent-check.sql` to fail on
+the defect, applies 0496 twice, and requires the probe to pass. The probe's
+controls: a parent's award and the service path's still land, another family's
+child is still refused, and under 0341's predicate the child's self-award lands.
+
+**After approved release:** as a test child, call
+`kid_progress_apply_completion` for your own member and confirm `forbidden`;
+then approve a test chore as a parent and confirm the XP lands.
+
+## `0497` (confirmed, held) — a family's row could name another family's child
+
+`supabase/reserved/0497_a_childs_wallet_and_guardian_number_stay_in_one_family.sql` —
+**held**: `0497`, the first number above `0496`, for #981. It was requested on
+#771 in comment 6092501825 and confirmed as a source-only reservation in #981
+comment 6092625435, which is not an installation approval. Its probe is held
+with it in `docs/audit/reserved/`.
+
+**Severity: medium (privacy and child contact). Deploy order: any.** 0311
+named the class: each family-scoped write policy checks only the row's own
+`family_id`, so a family may write its id beside another family's member or
+wallet. Most such references are inert, because the code that acts on them
+also keys by the caller's family. A replay counts 447 single-column foreign
+keys between family-scoped tables, 6 of them guarded. The notification roster,
+the wallet balance sums and the card hold were checked and are double-keyed.
+These five are not, and a service-role consumer acts on the foreign id by
+itself:
+
+| Reference | Consumer acting on it |
+|---|---|
+| `guardian_member_profiles.member_id` | The Guardian voice and screening callbacks dial that member's phone and greet with their name. |
+| `gift_links.child_wallet_id` | The public gift page and its AI name that wallet's child. |
+| `pay_handles.child_wallet_id` | It resolves to a gift link, so the same page. |
+| `child_wallets.member_id` | `issueCardAction` sends that member's name to Stripe as the cardholder. |
+| `medication_schedules.medication_id` | The morning brief (notifications cron, service role) embeds `medications(name, …)` through it. The delivered notification does not carry the name (only the count headline and decision titles), but it counts the other family's dose: "2 due today" for 1. The name sits in the brief's internal digest. A session read hides it; the service-role embed does not. |
+
+As family A's parent under RLS, every one of the five writes landed on the
+replay. For the schedule, A's parent read 0 of B's medications, yet the
+service-role embed returned B's medication name into the brief's internal
+digest. The emitted notification carries only its effect on the count, as
+`tests/a-foreign-medication-reaches-only-the-briefs-internals.test.ts` pins
+(owner review 6092976873). The Guardian and gift consumers are already fixed in code in #981.
+0497 makes the database refuse the row, using 0311's existing helper and no
+new function. In-app writers use only the family's own members and wallets,
+and the helper exempts the service role and session-less writers (migrations,
+seeds, backfills). Rows written before it are left alone.
+
+**Proof:** `.github/workflows/family-reference-wave-two-runtime.yml` replays
+every runnable migration. It requires the held probe
+`docs/audit/reserved/a-childs-wallet-and-guardian-number-stay-in-one-family-check.sql`
+to fail with each of the five foreign writes landing, applies 0497 twice, and
+requires the probe to pass. The passing run shows:
+- the five foreign writes, and an update moving a gift link onto another
+  family's wallet, are refused;
+- the family's own five still land, and a session-less write is still exempt;
+- all five triggers run the helper;
+- negative control: with the gift link trigger disabled, the foreign link lands.
+
+`docs/audit/wallet-write-rls-check.sql` is re-pointed so it reads past this one
+helper on `child_wallets`; any other `BEFORE INSERT` trigger still trips it.
+That is a no-op on the released schema. With 0497 (and 0496) applied, all 183
+boundary probes pass.
+
+**After approved release:** as a test parent, try to save a Guardian profile
+for another test family's member through PostgREST and confirm 42501; then
+save one for your own member and confirm it lands.
+
+## `0498` (confirmed, held) — a guest could still feed the calendar and rewrite grocery lists
+
+`supabase/reserved/0498_a_guest_cannot_feed_the_calendar_or_rewrite_a_grocery_list.sql` —
+**held**: `0498`, the first number above `0497`, for #981. It was requested on
+#771 in comment 6094699645 and confirmed as a held source and probe reservation
+in #981 comment 6094770726. That confirmation is not an installation or
+production approval. Its probe is held with it in `docs/audit/reserved/`.
+
+**Severity: low to medium. Deploy order: any.** 0464 (ROLE-M03) refuses a
+guest's writes on the eight resources `/family/permissions` names. Two tables
+sit just outside that list:
+- **`calendar_feeds`:** its only policy is `ALL` for `is_family_member`, so a
+  guest subscribed the family to any ICS URL. On the replay that landed 1 row,
+  while the same guest's direct event insert was refused. The in-app sync runs
+  on the guest's session and is refused at `calendar_events`. The nightly
+  `app/api/cron/calendar-feeds` sync uses the service client, which 0464
+  exempts, so it can import that feed's events into the family calendar. It
+  can do so only once the held 0490's `calendar_feed_apply_sync` exists. On
+  this candidate, without it, the importer refuses every event write. It also
+  needs the fetch and parse to succeed and the importer's own requirements to
+  be met. The SQL proof covers the feed and list rows, not that import chain.
+- **`grocery_lists`:** the parent of the guarded `grocery_items`. A guest
+  created, renamed and deleted lists (1 row each). Deleting a list that has
+  items already failed, through the cascade.
+
+0498 wires 0464's own trigger function onto both tables. There is no new
+function, and 0464's eight tables do not change. Every other role writes both
+tables as before, and the service role and session-less writers stay exempt.
+Only the tables are guarded; the calendar lane's importer, feed actions and the
+held 0490 are untouched, and 0490's probe passes with and without 0498.
+
+**Residual, recorded:** feeds a guest already added are not removed by 0498 and
+stay eligible for a later service-role sync. Cleaning them up, and any importer
+follow-on, belongs to the calendar importer's owner. No production cleanup is
+done or proposed here.
+
+**Proof:** `.github/workflows/guest-household-runtime.yml` replays every
+runnable migration. It requires the held probe
+`docs/audit/reserved/a-guest-cannot-feed-the-calendar-or-rewrite-a-grocery-list-check.sql`
+to fail with the guest's writes landing, applies 0498 twice, and requires the
+probe to pass. The passing run shows:
+- the guest's insert, rename and delete on both tables are each refused with
+  0464's own sentence (42501), and nothing changes;
+- the guest still reads both tables;
+- a parent and a child still insert, update and delete both;
+- negative control: with the `grocery_lists` guard disabled, the guest's list
+  lands.
+
+Leaving `grocery_lists` unwired in the source fails exactly its five lines.
+
+**After approved release:** as a test guest, try to add a calendar feed and to
+rename a grocery list through PostgREST and confirm 42501; then do both as a
+test child and confirm they land.
+
+## `0499` (confirmed, held) — a stored file did not answer to the row that names it
+
+`supabase/reserved/0499_a_stored_file_answers_to_its_own_familys_rows.sql` —
+**held**: `0499`, the first number above `0498`, for #981. It was requested on
+#771 in comment 6094859264 and confirmed as a held source and probe reservation
+in #981 comment 6094986591, which is not an installation approval. Its probe is
+held with it in `docs/audit/reserved/`.
+
+**Severity: medium (integrity of health and household records; a narrow
+cross-family lock-out). Deploy order: any.** The `documents` bucket's four
+policies (0007 upload; 0303 read, update, delete) ask only whether the caller
+belongs to the folder's family and whether a sensitive `documents` row of any
+family restricts the object. storage-api runs upload-with-upsert, update, move
+and remove as SQL under the caller's RLS, so these policies are the whole rule.
+Measured on a replay of every runnable migration, one row each, rolled back:
+- **Insurance card images.** `medical-records-module` uploads them to
+  `{family}/insurance/…` and saves the path on `insurance_policies`, whose
+  writes are managers' only. A child, teen, caregiver and guest each replaced,
+  moved and removed both images.
+- **A household document's bytes.** 0464 refuses a guest at the `documents`
+  row; the guest replaced, moved and removed the file behind it.
+- **A sensitive document's path.** 0007's upload policy never checked
+  sensitivity, so where a sensitive document's file was missing, a teen, child,
+  caregiver or guest uploaded bytes at its path, which the parent's vault would
+  then open.
+- **Across families.** A parent of family A inserted, in A, a sensitive
+  `documents` row whose `storage_path` names a file of family B. Nothing ties
+  the path to the row's family, and 0303's lookup counts any family's row, so
+  B's own parent and child then read 0 of their file. It needs the exact path,
+  so it is narrow.
+
+0499 changes functions and policies only, with no table, trigger or data
+change:
+1. `document_object_is_restricted` counts only rows of the object's own family.
+   That family is read by a new helper, `document_object_family(name)`, exactly
+   as the policies read it: the first folder cast to uuid. Braces, no hyphens
+   and upper case all resolve to the same family, and a first folder that is
+   not a uuid resolves to null, which both row helpers refuse (fail closed).
+   It is a plain SQL function that checks the shape with a pattern accepting
+   exactly what the cast accepts before casting, so a storage listing pays no
+   subtransaction per object (an exception block would).
+   The review of the first cut (6094986591) found it compared the path's text
+   instead, so a sensitive document stored under `{family id}` became
+   readable and writable by every non-manager; the probe now stores real
+   objects under each spelling.
+2. A new SECURITY DEFINER helper, `document_object_write_is_refused(name)`,
+   bound the same way, is true when an `insurance_policies` row of that family
+   names the object and the caller cannot manage the family, or a `documents`
+   row of that family names it and the caller is its guest.
+3. The upload, update and delete policies gain that clause in every half that
+   governs a write; the upload policy also gains 0303's
+   `not document_object_is_restricted(name)`. They keep their names, PERMISSIVE
+   and `to authenticated`, so the bucket keeps exactly four policies. The read
+   policy is unchanged.
+
+**Not changed:** tax-vault and trip-memory files keep their rows' rule, any
+member (PROD-002 / ROLE-SCOPE-001, the owner's decision). O-03's step-up for
+stored files (D1, D3) stays the owner's. Every other bucket, family-media
+included, is untouched. **Recorded lead:** the run executor's
+`documents.readDocument` and the super admin's sign and delete use the service
+role on a row-supplied `storage_path` without checking that it lies in the
+row's family; that is the AI-runs and admin owners' call.
+
+A refused update, move or remove is a filter (0 rows), as 0303's already is:
+storage-api answers a refused remove with an empty list, which
+`lib/storage/confirm-removal.ts` reads as "not removed". A refused upload or
+move onto a guarded path gets storage-api's row-level security error.
+
+**Proof:** `.github/workflows/stored-file-rows-runtime.yml` replays every
+runnable migration. It requires the held probe
+`docs/audit/reserved/a-stored-file-answers-to-its-own-familys-rows-check.sql`
+to fail on the released schema with those writes landing, applies 0499 twice,
+and requires the probe to pass. It then re-runs the bucket's released probes
+(`document-bytes-boundary`, `document-vault-boundary`,
+`document-category-classifier`, `bucket-visibility-is-declared`) over the
+re-created policies. The passing run shows, for six roles and an outsider on
+six files (read, replace, move away, move onto, remove, upload):
+- only a parent or adult replaces, moves, removes or re-uploads an insurance
+  card image, and every role still reads it;
+- everyone but the guest writes a household document's bytes;
+- tax files are unchanged for every role;
+- only a manager reads, writes or uploads at a sensitive document's path;
+- another family's planted rows neither hide the file nor block its family,
+  including for a member who is a guest of that other family;
+- the same holds for a sensitive document, an insurance card image and a
+  household document stored under braces, no-hyphen and upper-case spellings
+  of the family id, and a first folder that is not a uuid fails closed (a
+  read finds no row or is refused by the policies' own uuid cast, 22P02,
+  exactly; an upload is refused by that cast or a policy; any other error
+  fails the probe);
+- four mutation controls (the delete policy without the clause, the update
+  policy's USING half without it, and each function without its own-family
+  binding) each turn a refusal back into a landing.
+
+Source mutations checked locally, each turning the probe red with the
+matching line: removing the guest clause, the insurance clause, the upload
+policy's sensitivity check, or the clause from the update USING, update CHECK
+or delete policy; removing either function's own-family binding (each of the
+three); comparing the family as text (the first cut); and letting a malformed
+first folder resolve to a family or count as unrestricted. 184 of 184 released
+probes pass with and without 0499.
+
+**After approved release:** as a test child, try to replace and to remove a
+test insurance card image through the Storage API and confirm both are
+refused; then do both as a test parent and confirm they land. As a test guest,
+try to remove the file behind an ordinary test document and confirm it stays.
+
+## `0500` (confirmed, held) — a child could forge the reward request a parent approves
+
+`supabase/reserved/0500_a_reward_request_is_the_rewards_own_snapshot.sql` —
+**held**: `0500`, the first number above `0499`, for #981. It was requested on
+#771 in comment 6094977772, with the economy scope added in 6095050742, and
+confirmed as a held source and probe reservation in #981 comment 6095082508,
+which is not an installation, live financial or production policy approval. Its
+probe is held with it in `docs/audit/reserved/`.
+
+**Severity: medium (the parent approves a request whose title and price the
+child wrote). Deploy order: any.** 0308 made a redemption carry the shelf's
+price, and its header says that refuses a child's "5000-point reward for 1
+point". Its guard looked the reward up by `reward_id` alone, returned early
+when `reward_id` was null and on an UPDATE that left `cost_points` alone, and
+never read `reward_title`, which is what `rewards-module` shows the parent.
+Measured as an active child, with "New bike" at 5000 and "Sticker" at 1:
+- a ticket naming no reward, titled "New bike", at 1 point: landed;
+- a ticket naming another family's 1-point reward: landed;
+- the family's own sticker titled "New bike": landed;
+- a real bike request re-priced to 1 point by clearing `reward_id`: 1 row;
+- a real sticker request retitled "New bike": 1 row.
+
+Each reaches the parent's queue as "Kid wants New bike · 1 pts", the same as a
+real request, and one approval spends 1 point on it.
+
+0500 replaces the body of 0308's `reward_redemption_cost_guard`, with the same
+name and trigger, still SECURITY DEFINER. For a signed-in caller:
+- **INSERT:** `reward_id` must name a reward of the ticket's family;
+  `cost_points` must be its price (0308's sentence) and `reward_title` its
+  title.
+- **INSERT:** `member_id` is a member of the ticket's family. The insert
+  policy's `is_self_member` is not bound to a family.
+- **UPDATE:** `family_id` and `member_id` never change, and those three stay.
+  The review of the first cut (6095082508) found that a member of two families
+  could move their own requested ticket, with its snapshot, into the other
+  family under their member there, because the own-request policies allow both
+  sides; the probe now runs that as a person who is a child in one family and
+  a parent in the other. The foreign key's `ON DELETE SET NULL` after the
+  reward is deleted is the one change allowed, with family and member
+  unchanged, so the ticket keeps the title and price it was made with (0028).
+  Decisions, withdrawals and notes are untouched.
+
+**The token economy has the same title hole.** 0428's
+`economy_redemption_request_guard` binds a non-manager's request to a reward of
+the family, at its cost and in its currency, and refuses later updates, but
+never reads `economy_redemptions.title`, which `/economy` shows the parent.
+Measured: the 1-token sticker titled "New bike" landed. 0500 replaces that
+function's body with the same body plus a title check (42501). The function,
+trigger, SECURITY INVOKER and exemptions are unchanged.
+
+The service role and session-less writers (seeds) stay exempt. Each table's
+only writer, `requestRedemptionAction` (rewards and economy), already writes
+exactly this, so nothing legitimate changes. A parent renaming or re-pricing a reward in the
+instant between that action's read and its insert now gets a refusal; 0308
+already refused the re-pricing half of that race.
+
+**Released probe changed with it:** `docs/audit/reward-redemption-decision-check.sql`
+wrote every ticket with `reward_id` null so 0308's guard would stay silent. It
+now names a real reward of each family at that reward's title and price, which
+keeps the guard silent on both schemas. It passes with and without 0500.
+
+**Proof:** `.github/workflows/reward-snapshot-runtime.yml` replays every
+runnable migration. It requires the held probe
+`docs/audit/reserved/a-reward-request-is-the-rewards-own-snapshot-check.sql`
+to fail on the released schema with the forged requests landing, applies 0500
+twice, and requires the probe to pass. It then re-runs the released probes that
+write redemptions. The passing run shows:
+- the real requests land;
+- each forgery is refused with 0500's sentences (23514), or with 0308's for
+  the re-priced bike;
+- the child's own pending requests cannot be cleared, re-priced, retitled or
+  re-pointed;
+- a withdrawal and a parent's approval still land, and deleting a reward
+  leaves its ticket as made;
+- the service role and a session-less writer are exempt;
+- in the token economy, the real request lands and the sticker under the
+  bike's title is refused;
+- a member of two families can neither move a request across, onto their
+  other member, nor file one against their other family's member;
+- seven mutation controls each let a forgery back in.
+
+Six source mutations were checked locally: removing the family clause, the
+title check, the update refusal, the delete allowance or the economy title
+check, or restoring 0308's null early return. Each turns the probe red with the matching line. 184 of 184
+released probes pass with and without 0500.
+
+**After approved release:** as a test child, try to insert a redemption with
+no `reward_id` through PostgREST and confirm 23514; then request a real reward
+through the app and confirm it lands.
+
+## `0501` (confirmed, held) — a member of two families could vote twice
+
+`supabase/reserved/0501_one_member_one_vote_in_two_households.sql` —
+**held**: `0501`, the first number above `0500`, for #981. It was requested on
+#771 in comment 6095180270 and confirmed as a held source and probe
+reservation for these four bindings in #981 comment 6095247473, which is not an
+installation or production change approval. Unrelated poll, option, event and
+title references, rows already written and the sixteen tables below stay
+outside it. Its probe is held with it in `docs/audit/reserved/`.
+
+**Severity: low to medium (the integrity of a family's polls, dinner votes,
+watchlist and RSVP counts). Deploy order: any.** Twenty-three tables let a
+member write as themselves with `is_family_member(family_id) and
+is_self_member(member_id)`. `is_self_member` asks whether the member row is the
+caller's in any family, so a person active in two families can file a row in
+one under their member id from the other (the pattern the owner's review of
+0500, 6095082508, named). Where it counts: these four tables are unique per
+(option, member), and every tally reads its own family's rows. Measured as a
+child of two households, in one of them:
+- a second vote for the same poll option: landed (2 votes from one child);
+- a second dinner ballot, a second watchlist vote and a second RSVP: landed.
+
+0501 wires 0311's own `reference_shares_family('member_id', 'family_members')`
+onto the four tables, exactly as 0497 wires it, after validating each table and
+its parent. There is no new function. The service role and session-less
+writers stay exempt, and the in-app writers use the active family's own
+member, so a member of two families still votes once in each.
+
+**Not changed, recorded:** 16 more tables use the same unbound
+`is_self_member` where the second member id only files the person's own data
+under their other membership and nothing is counted twice:
+`announcement_reads`, `chore_disputes`, `chore_submissions` (a payout follows
+`chore_assignments`, which 0311 binds), `driver_licenses`, `family_facts`,
+`health_goals`, `health_metrics`, `journal_entries`, `location_events`,
+`marketplace_reports`, `member_locations`, `nutrition_logs`,
+`safety_check_ins`, `sleep_checkins`, `sleep_logs` and `symptom_logs`. Each is
+one more line of 0501's loop if the owner wants it.
+
+**Proof:** `.github/workflows/one-member-one-vote-runtime.yml` replays every
+runnable migration. It requires the held probe
+`docs/audit/reserved/one-member-one-vote-in-two-households-check.sql` to fail
+on the released schema with the second votes landing, applies 0501 twice, and
+requires the probe to pass. It then re-runs the released `vote-owner`,
+`poll-single-choice`, `meal-ballot-is-per-option` and `cross-family-reference`
+probes. The passing run shows, for each table, as the child of two
+households:
+- their vote in one household as their member there lands;
+- the same vote again under their other member, re-pointing their vote at
+  that member, and moving their vote into the other household are each
+  refused with the guard's own sentence for that table's column
+  (`<table>.member_id points at a row in another family`, 42501, matched
+  exactly), and the household holds one;
+- they still vote in the other household's own poll as their member there
+  (1 row);
+- the service role (carrying a user id, so only the guard's service-role
+  branch can exempt it) and, separately, a session-less writer with a null
+  `auth.uid()` each store the refused row (1 row each); removing either
+  exemption fails exactly its own control;
+- negative control: with the poll-vote guard disabled, the second vote lands
+  as one row.
+
+The counted controls and the exact sentence were added at the owner's request
+(6095247473) as probe strengthening, not a new failure of the bindings.
+
+Dropping any one table's trigger turns the probe red on that table. 184 of
+184 released probes pass with 0501.
+
+**After approved release:** as a test user who is a member of two test
+families, try to vote in one family's poll under their member id from the
+other family and confirm 42501; then vote as their own member there and
+confirm it lands.
+
+## `0514` (proposed, held) — every member read the household's money
+
+`supabase/reserved/0514_household_money_is_a_parents_or_adults.sql`
+— **held**: requested on #771 in comment 6109587749 (transactions added in
+6110569862). Not yet confirmed.
+
+**Severity: medium (a child read the household's bank balances, every
+purchase, the Stripe account rows and the babysitter payouts). Deploy order:
+any; the screens ship first.** Twelve tables of the household's money and
+money papers read with `is_family_member(family_id)` (`billing_customers`
+also with a manager's read beside it). Measured on a replay through 0485, in
+Coin House: the teen, the child, the caregiver and the guest each read the
+household's row of every managers table, 6 transactions not tagged to them,
+and 5 records added by someone else in each added-by table.
+
+**Database.** One permissive read per table, "Household money is read by a
+parent or adult", inside `is_family_member(family_id)`:
+- `financial_accounts`, `family_wallets`, `stripe_connected_accounts`,
+  `stripe_financial_accounts`, `billing_customers`, `checkout_sessions`,
+  `babysitter_payments`: `can_manage_family(family_id)`;
+- `transactions`: `can_manage_family(family_id) or is_self_member(member_id)`
+  (untagged spending is the managers');
+- `home_warranties`, `auto_insurance_policies`, `vehicle_registrations`,
+  `paperwork_items`: `can_manage_family(family_id) or created_by = auth.uid()`.
+
+No table carried a FOR ALL policy, and every write policy is left as it was
+(the migration refuses to finish if a table's count of write policies
+changes). Postgres applies a table's read to an UPDATE or DELETE that names a
+row, so a member changes or removes an added-by record only when it is theirs.
+The held 0509's guest guards and the paperwork step-up guards are kept.
+
+**App, shipping with the source** (`lib/finance/household-money.ts`, the same
+rule):
+- the Family CFO page, the billing page's finances views and the home page's
+  Family Finances card are a parent's or adult's, and tell anyone else whose
+  they are; the plan view the upgrade gate sends a child to shows the plan
+  alone, without asking for the household's accounts or spending;
+- the payments, budgets and wallet views read a non-manager's own
+  transactions, narrowed before their limits, and say so; the wallet hub does
+  not ask for the accounts;
+- the paperwork inbox, warranties, vehicle registrations and auto insurance
+  read what a non-manager added, narrowed in the query, and say so;
+- whether the family wallet is on is read by the server
+  (`lib/wallet/family-wallet-status.ts`), so a child's wallet pages do not
+  call an active wallet inactive;
+- copy in seven locales.
+
+**Released probes made rule-aware** (each passes with and without 0514):
+- `money-write-boundary-check.sql` expects the teen to read no account under
+  0514, its write wiring loop still holding every write to `can_manage_family`;
+- `wallet-side-table-write-check.sql` expects a child to read no babysitter
+  payment under 0514;
+- `paperwork-stamp-concurrency-check.sql` has the child stamp a slip of their
+  own, and the parent's stamp nothing, under 0514;
+- `a-password-alone-does-not-open-the-familys-vault-check.sql` has the
+  enrolled child change their own paperwork, so 5b stays about the step-up
+  role clause;
+- `wallet-write-rls-check.sql` re-runs 0275, which re-creates the family-wide
+  reads on its ten tables; it now records the reads before and removes any the
+  re-run added, so every probe after it sees the schema it was given.
+
+The held 0509 probe counts the eight guest-guarded tables as already closed to
+a guest under 0514.
+
+**Proof:** `.github/workflows/household-money-runtime.yml` requires the held
+probe `docs/audit/reserved/household-money-is-a-parents-or-adults-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0514 twice and requires it to pass, then re-runs the fourteen released
+probes over these tables and the held probe once more. The passing run shows:
+- the teen, the child, the caregiver and the guest read no row of a managers
+  table, only the transaction tagged to them and only the records they added
+  (a guest not an auto policy where the held 0509 is installed);
+- the parent and the adult read every row; the teen reads the household they
+  manage;
+- the removed adult and a stranger read nothing;
+- the service role, with and without a user id, reads every row;
+- the child's own paperwork item, the teen's own warranty and a parent's
+  transaction come back from `insert … returning` (`OK 1`); the child changes
+  their own paperwork item (`OK 1`) and not the parent's (`OK 0`);
+- **wiring:** the exact predicate for each rule, the added-by tables'
+  member-wide writes and the money tables' manager ones;
+- **N1** (the family-wide read put back): the child reads the household's row
+  in all twelve;
+- **M1** (a caregiver clause on `transactions`): the caregiver reads the ward's
+  transaction.
+
+**After approved release:** sign a test teen in and confirm the Family CFO and
+billing pages say whose the money is, the payments view lists only their own
+purchases, and the paperwork inbox only what they filed.
+
+## `0517` (proposed, held) — every member read every member's personal records
+
+`supabase/reserved/0517_a_personal_record_is_read_by_managers_and_its_member.sql`
+— **held**: requested on #771 in comment 6109587749. Not yet confirmed.
+
+**Severity: medium (a child read a parent's policy numbers and passport
+details, and the household's verbatim voice commands). Deploy order: any; the
+screens ship first.** Six tables of records about one member read with
+`is_family_member(family_id)`. Measured on a replay through 0485, in Paper
+House (one row per table about each member, and one about nobody): the teen,
+the child and the guest each read **6 rows that are not theirs in each
+table**; the caregiver read 6 in each of the four personal tables.
+
+**Database.** One permissive read per table, "A personal record is read by a
+manager or its member":
+- `insurance_policies`, `family_insurance_policies`, `vacation_documents`,
+  `voice_commands`: `is_family_member(family_id) and (can_manage_family(family_id) or is_self_member(member_id))`;
+- `vacation_medical_information`, `health_providers`: the same `or
+  family_role(family_id) = 'caregiver'`, as the owner decided for medical
+  detail.
+
+A row about nobody is a manager's (and, for the medical two, a caregiver's).
+`vacation_documents` and `vacation_medical_information` each had one FOR ALL
+policy; its write half is re-created per command with that policy's own
+expressions before the read is narrowed, so writes are exactly as they were.
+The held 0509's guest guards are kept.
+
+**App, shipping with the source** (`lib/records/personal-scope.ts`, the same
+rule):
+- the insurance hub, the medical and dental records pages, the trip documents
+  and travel medical sections, the trip emergency summary and the voice
+  history show each viewer the rows the rule gives them, and the insurance
+  summaries are of what is shown;
+- a viewer who reads only their own is told so, and the trip forms offer them
+  only themselves as the record's member, so what they file stays readable to
+  them;
+- copy in seven locales.
+
+**Released probes made rule-aware:**
+- `journal-and-policy-boundary-check.sql` expects a household policy that
+  names nobody to be a manager's under 0517;
+- `health-write-gate-check.sql` and
+  `a-child-cannot-lift-the-publish-lock-or-link-a-document-they-cannot-read-check.sql`
+  make their fixture rows the teen's and the child's own, so their controls
+  stay about the write rule.
+
+All three pass with and without 0517. The held 0509 probe counts the four
+guest-guarded tables as already closed to a guest under 0517.
+
+**Proof:** `.github/workflows/personal-records-runtime.yml` requires the held
+probe
+`docs/audit/reserved/a-personal-record-is-read-by-managers-and-its-member-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0517 twice and requires it to pass. The passing run shows:
+- the teen, the child and the guest read their own row and no other, in all
+  six;
+- the caregiver reads their own only in the four personal tables, and every
+  row in the two medical ones;
+- the parent and the adult read every row; the teen reads the household they
+  manage;
+- the removed caregiver and a stranger read nothing;
+- the service role, with and without a user id, reads every row;
+- the child's own travel document, travel medical detail and voice command come
+  back from `insert … returning`, and the child updates and deletes their own
+  travel document (`OK 1` each);
+- **wiring:** the exact predicates, and the travel tables' member-wide writes;
+- **N1** (the family-wide read put back): the child reads the ward's row in
+  all six;
+- **M1** (a caregiver clause on `voice_commands`): the caregiver reads the
+  ward's command.
+
+**After approved release:** sign a test teen in and confirm the insurance hub,
+the medical records page and a trip's documents show only what names them.
+
+## `0516` (proposed, held) — every member read every member's location history
+
+`supabase/reserved/0516_location_history_is_read_by_managers_the_member_and_caregivers.sql`
+— **held**: requested on #771 in comment 6109587749 (numbers `0514`–`0517`
+for the four groups of the audit's open sensitive-table finding). Not yet
+confirmed.
+
+**Severity: medium (a child read a sibling's or parent's arrivals,
+coordinates and driving record). Deploy order: any; the screens ship first.**
+`location_events`, `safety_check_ins` and `driving_trips` read with
+`is_family_member(family_id)`. Measured on a replay of every runnable
+migration through 0485, in Trail House (one row per table about each member):
+the teen, the child and the guest each read **5 or 6 rows about other members
+in each table**.
+
+**Database.** One permissive read per table, "History is read by a manager, the
+member or a caregiver":
+`is_family_member(family_id) and (can_manage_family(family_id) or is_self_member(member_id) or family_role(family_id) = 'caregiver')`.
+A row about nobody is a manager's or a caregiver's. The restrictive guards
+(0509's guest guard, the no-client update and delete guards) are kept; writes
+are unchanged. Live location (`member_locations`) keeps its own sharing rule.
+
+**App, shipping with the source** (`lib/location/history-scope.ts`, the same
+rule): the locator's history and arrival alerts, the check-in feed and the
+driving log show each viewer the rows the rule gives them. A viewer who reads
+only their own is told so, in seven locales.
+
+**Released probes made rule-aware:**
+- `a-location-says-who-was-actually-there-check.sql` expects a child to read
+  every member's history before 0516, and only their own after.
+- `locator-write-boundary-check.sql` checks the refused delete against the
+  stored row, read as the owner.
+
+Both pass with and without 0516. The held 0509 probe counts the three tables as
+already closed to a guest under 0516.
+
+**Proof:** `.github/workflows/location-history-runtime.yml` requires the held
+probe
+`docs/audit/reserved/location-history-is-read-by-managers-the-member-and-caregivers-check.sql`
+to fail on the released schema (the teen's, the child's and the guest's reads
+and the wiring), with no control failing, then applies 0516 twice and requires
+it to pass. The passing run shows, in each table:
+- the teen, the child and the guest read their own row and no other;
+- the parent, the adult and the caregiver read every row, and the teen reads
+  the household they manage;
+- the removed caregiver and a stranger read nothing;
+- the service role, with and without a user id, reads every row;
+- the child's own arrival and check-in and the teen's own trip come back from
+  `insert … returning` (`OK 1`);
+- **N1** (the family-wide read put back): the child reads the ward's row;
+- **M1** (the outer `is_family_member` taken off): the removed caregiver does.
+
+**After approved release:** sign a test child in and confirm the locator's
+history, the check-ins and the driving log show only their own.
+
+## `0513` (proposed, held) — a member invited back got their old social raise
+
+`supabase/reserved/0513_a_removed_member_keeps_no_social_raise.sql` —
+**held**: proposed as `0513`, the first number above `0512`. The account holder
+decided "drop raises, keep limits", recorded and requested on #771 in comment
+6104294318. Not yet confirmed.
+
+**Severity: low (nothing is granted while the member is away; the old role
+comes back with them). Deploy order: any.** `social_access_permissions` rows
+are keyed by `(family_id, user_id)` and `social_role_for` prefers them over
+the role's default. Removal left them in place. Measured on a replay through
+0485: a teen made `admin` of the family's social accounts, removed by the
+parent and reactivated as a teen, resolved to **admin** again.
+
+**Database.**
+- `social_role_permissions(social_role)`: the permission matrix as a set per
+  role. It mirrors `social_has_permission` (0348) and `lib/social/roles.ts`.
+- `a_removed_member_keeps_no_social_raise`: an AFTER UPDATE OF `is_active` OR
+  DELETE trigger on `family_members` (SECURITY DEFINER, pinned search_path,
+  executable by no client role). On a row going from active to inactive, or
+  deleted, it deletes that user's grant in that family when the grant's
+  permissions are not a subset of the role default's. The defaults are parent
+  `admin`, adult `marketing_manager`, teen `content_creator`, and everyone
+  else `read_only`.
+- A grant within the default (a restriction, which 0344 keeps a member from
+  lifting) stays. One that adds and removes (an `analyst` teen) counts as a
+  raise.
+
+A self-check requires every role's set to be non-empty and
+`social_role_for` to still fall back to those defaults.
+
+**No app change.** The member editor's removal already writes
+`REMOVED_MEMBER_PATCH`; the trigger does the rest.
+`tests/social-permission-matrix-matches-the-database.test.ts` now also holds
+`social_role_permissions` to the app's matrix, role by role.
+
+**Proof:** `.github/workflows/social-raise-runtime.yml` requires the held
+probe `docs/audit/reserved/a-removed-member-keeps-no-social-raise-check.sql`
+to fail on the released schema on the defect (every raise survives removal;
+the returning teen is `admin`), with no control failing. It applies 0513 twice,
+requires the probe to pass, and re-runs eight released probes over social
+access and member removal. The passing run shows:
+- **Cleared.** The parent's removal clears the `admin` teen's, the `approver`
+  child's and the `analyst` teen's grants. The server's delete of a row
+  clears that member's `social_manager` grant.
+- **Kept.** The `read_only` restriction and an adult's grant at their
+  default.
+- **Invited back.** The `admin` teen resolves to `content_creator`; the
+  restricted teen is still `read_only`.
+- **Untouched.** An active member's grant survives a rename and a role
+  change. The removed teen's grant in their other household stays.
+- **Wiring.** The trigger is enabled, pinned and closed to clients.
+  `social_role_permissions` agrees with `social_has_permission` for every
+  role and permission, checked as a member holding each role in turn.
+- **Negative control.** N1 (the trigger dropped): the grant survives removal.
+- **Mutation control.** M1 (a rule clearing only `owner` and `admin`): the
+  `approver` child's grant survives, so the probe catches a rule narrower than
+  "any permission the default lacks".
+
+**After approved release:** in a test household, give a test teen an explicit
+`admin` social role, remove and re-invite them, and confirm they come back as
+a content creator.
+
+## `0512` (proposed, held) — a kid PIN could end up guarding a manager
+
+`supabase/reserved/0512_a_kid_login_is_never_a_parent_or_adult.sql` —
+**held**: proposed as `0512`, the first number above `0511`. The account holder
+decided "refuse until the PIN login is gone", recorded and requested on #771 in
+comment 6104294318. Not yet confirmed.
+
+**Severity: medium (a 4-digit PIN in front of an account that reaches the
+household's money, vault and members). Deploy order: any; the editor and the
+removal action ship first.** #981 stops the app creating a PIN login for a
+parent or adult. The other order was open. Measured on a replay through 0485,
+as the household's parent through PostgREST's role: promoting a child who has a
+PIN login to adult returned **UPDATE 1**, and the child's session then passed
+`can_manage_family`.
+
+**Database.** Two guards, one per table, both SECURITY DEFINER with a pinned
+search_path and executable by no client role:
+- `a_kid_login_is_never_a_manager` (BEFORE INSERT OR UPDATE OF `role`,
+  `user_id` on `family_members`) refuses `parent` or `adult` for a member
+  whose account is a kid login, as the account itself says: the synthetic kid
+  domain (the only address the PIN sign-in reaches), or the
+  `bubaly_kid_login` app_metadata mark only the server writes, as 0495 reads
+  it. Not a `child_logins` row, for 0495's reason: a household's parent can
+  write one onto any account (0297), and trusting it would let one household
+  keep another's adult from ever being an adult. It fires only on insert or
+  when the role or the login changes, so a row already stored that way can
+  still be renamed.
+- `a_manager_is_never_a_kid_login` (BEFORE INSERT OR UPDATE OF `member_id`,
+  `user_id` on `child_logins`) refuses a mapping for a parent or adult member,
+  or for an account that is a parent or adult in any family.
+
+Both refuse with 42501 and a sentence saying what to do, for every caller,
+the service role included. A kid login is an account, so the rule holds in
+every family.
+
+**App change, shipping with the source:**
+- **Member editor.** For a member with a kid login, adult and parent are not
+  offered (`rolesForAKidLogin`), and a hint says to remove the kid login in
+  Kid Logins first.
+- **Kid Logins.** "Remove login" (`removeChildLoginAction`) deletes the
+  mapping, the member's link and the PIN account, through the create action's
+  confirmed rollback. Before touching anything it checks what a PIN reset
+  checks: the mapping and the member row agree, and the account is this kid
+  login's synthetic address.
+- Copy in the seven base locales.
+- `tests/a-kid-login-is-never-a-parent-or-adult.test.ts` drives the removal
+  through its refusals and its success.
+
+**Released probe adjusted:** `sensitive-role-boundary-check.sql`'s negative
+control files its kid login as a parent of a second household, which 0512
+refuses. Where 0512 is installed, that one row is written with triggers held
+off, as an older release could have left it. The probe passes with and
+without 0512.
+
+**Proof:** `.github/workflows/kid-login-manager-runtime.yml` requires the held
+probe `docs/audit/reserved/a-kid-login-is-never-a-parent-or-adult-check.sql`
+to fail on the released schema on the defect (every promotion and mapping
+lands, no guards), with no control failing. It applies 0512 twice, requires
+the probe to pass, and re-runs eight released probes over member roles and
+kid logins. The passing run shows:
+- **Refused (42501).** The parent's promotion of the PIN kid to adult and to
+  parent. The promotion of a kid known only by the mark, and of one known only
+  by the address. The service role's promotion. A mapping onto the parent, and
+  one for an account that is a parent of another household.
+- **Allowed (OK 1).** Promoting a teen with their own email (with a kid-login
+  mapping written onto that ordinary account) and a ward with no login. Making the PIN kid a teen and renaming them. Renaming an adult
+  already stored with a kid login. Mapping a kid login onto a child. After the
+  server removes the login, the parent's promotion.
+- **Wiring.** Both guards enabled, pinned, and not executable by anon or
+  authenticated.
+- **Negative control.** N1 (the `family_members` trigger dropped): the
+  promotion lands.
+- **Mutation control.** M1 (the mark test removed): the kid known only by the
+  mark is promoted.
+
+**After approved release:** in a test household, open a child with a PIN login
+in the member editor and confirm adult and parent are not offered; remove the
+login in Kid Logins and confirm the promotion then saves.
+
+## `0511` (proposed, held) — every member read every prescription
+
+`supabase/reserved/0511_a_medication_is_read_by_managers_its_member_and_caregivers.sql`
+— **held**: proposed as `0511`, the first number above `0510`. The account
+holder decided the read 0434 filed ("READS ARE UNCHANGED … Filed for an owner
+decision"), recorded and requested on #771 in comment 6104294318. It takes
+over the closed #674's candidate (`a_child_reads_only_their_own_prescriptions`,
+F-G09), whose finding on rows with no member the owner then confirmed. Not yet
+confirmed.
+
+**Severity: medium (a child read a parent's antidepressant, its dosage and
+refill date; a refill reminder named it to the whole family). Deploy order:
+any; the page and autopilot changes ship first and are correct either side.**
+`medications_select` and `medication_schedules_select` are
+`is_family_member(family_id)`. Measured on a replay of every runnable
+migration through 0485, in Pill House (five medications, each with a
+schedule: the parent's saved with no member, the parent's own, the ward's,
+the teen's and the child's): the teen and the child each read **4
+medications and 4 schedules that are not theirs**, the parent's with no member
+among them, and the guest 5 and 5.
+
+**The decision:**
+- a parent or adult, a caregiver (who may give it) and the member a
+  medication is for read it;
+- one saved with no member is read by a parent, an adult or a caregiver. The
+  form defaults "For" to "Whole family", so a parent's own prescription is
+  often stored that way (#674 found a parent's sertraline filed so);
+- a schedule is read exactly when its medication is.
+
+0511 replaces each table's permissive read with one:
+
+```sql
+-- medications
+is_family_member(family_id)
+and (can_manage_family(family_id) or is_self_member(member_id)
+     or family_role(family_id) = 'caregiver')
+-- medication_schedules
+is_family_member(family_id)
+and exists (select 1 from medications m
+             where m.id = medication_id and m.family_id = family_id)
+```
+
+The schedule's subquery runs under the caller's RLS on `medications`, so one
+rule decides both. Writes (0434: managers only) and `medication_doses` (0481:
+a manager or the member) are unchanged; the held 0509's guest guard is kept.
+A self-check requires exactly the one permissive read per table.
+
+**App change, shipping with the source:**
+- `lib/medications/readers.ts`: `readsEveryMedication(role)` and
+  `medicationReaderIds(...)`, the same rule.
+- **Autopilot refill.** The card and the reminder it creates are read by the
+  whole household, so they say "a prescription". The notification goes to the
+  medication's readers by member id and names the drug. If the members cannot
+  be read, it goes to the managers, never the family.
+- **Medicines page.** A caregiver reads the household's medicines and
+  schedules, with the member filter, as a manager does. Doses, their buttons
+  and the adherence ring stay built from the viewer's own (0481). Anyone else
+  sees the medicines prescribed to them, as before.
+- Copy in the seven base locales.
+- `tests/a-medication-is-read-by-managers-its-member-and-caregivers.test.ts`
+  runs the scan against an in-memory database and holds the page to the rule.
+
+**Released probe made rule-aware:** `prescription-write-boundary-check.sql`
+gives the child a medication of their own. It expects the child to read both
+medications before 0511 and only their own after; the child's dose is ticked
+on their own. It passes with and without 0511. The held 0509 probe counts
+`medications` and `medication_schedules` as already closed to a guest under
+0511.
+
+**Proof:** `.github/workflows/medication-reads-runtime.yml` requires the held
+probe
+`docs/audit/reserved/a-medication-is-read-by-managers-its-member-and-caregivers-check.sql`
+to fail on the released schema (the teen's, the child's and the guest's reads
+and the wiring), with no control failing. It applies 0511 twice, requires the
+probe to pass, and re-runs the eight released probes over the two tables. The
+passing run shows, on both tables:
+- **The teen and the child.** Each reads only their own medication and its
+  schedule (counted).
+- **The guest.** Reads none.
+- **Everyone who reads every one.** The parent, the adult and the caregiver
+  read all five and their schedules. The teen reads the household they
+  manage.
+- **Gone or outside.** The removed caregiver and a stranger read nothing.
+- **Server.** The service role, with and without a user id, reads every row.
+- **Writes.** The parent's new medication and schedule come back from
+  `insert … returning`, and the child ticks their own dose (`OK 1` each).
+- **Wiring.** One permissive read per table with the exact predicates; no
+  restrictive read but a guest's.
+- **Negative controls.** N1 (the medication read put back): the child reads
+  the parent's prescription with no member and its schedule. N2 (the schedule
+  read put back): the schedule alone.
+- **Mutation control.** M1 (the outer `is_family_member` taken off): the
+  removed caregiver reads the ward's medication.
+
+**After approved release:** sign a test child in and confirm `/dashboard/medications`
+and a direct `medications` read return only their own; sign a test caregiver
+in and confirm the household's medicines show. Let a test refill fall due and
+confirm the family's Autopilot card says "a prescription" and only the readers
+are notified by name.
+
+## `0510` (proposed, held) — every member read every note about every other
+
+`supabase/reserved/0510_a_note_about_a_member_is_read_by_managers_its_author_and_caregivers.sql`
+— **held**: proposed as `0510`, the first number above `0509`. The account
+holder decided who reads a behaviour or care note as "managers, author,
+caregivers", recorded and requested on #771 in comment 6103909775. Not yet
+confirmed. It answers the question 0506's header left open and 0481's FIX 2
+deferred.
+
+**Severity: medium (a sibling read "Concern: focus, -1" about a brother, and a
+child the notes a parent wrote about them). Deploy order: any; the screen
+change ships first and shows the same notes before and after.**
+`behavior_logs_select` and `care_log_read` are `is_family_member(family_id)`,
+so a teen or a child reads every behaviour note and every care note in the
+household. `lib/ai/context/policy.ts` already lists both as sensitive.
+Measured on a replay of every runnable migration through 0485, in Note House
+(one note about the ward and one about each other member, by the parent, plus
+each member's own and the caregivers'): the teen and the child each read
+**8 notes they did not write in each table**, the parent's note about them
+among them.
+
+For each table, 0510 replaces every permissive read with one,
+"A note is read by a manager, its author or a caregiver":
+
+```sql
+is_family_member(family_id)
+and (can_manage_family(family_id) or <author> = auth.uid()
+     or family_role(family_id) = 'caregiver')
+```
+
+The author is `behavior_logs.logged_by` and `care_log.created_by`, the user ids
+each table's attribution guard pins to the writer. The outer
+`is_family_member` keeps it to active members (`family_role` does not read
+`is_active`). The restrictive reads already there (0481's
+`care_log_not_a_guests_read`, the held 0509's guest guard) are kept. Writes
+are unchanged: 0481's insert guard still keeps a non-manager logging only
+about themselves. A self-check requires exactly the one permissive read.
+
+**App change, shipping with the source:**
+- `lib/care/note-scope.ts`: `readsEveryNote(role)` (a parent, an adult, a
+  caregiver) and `notesInScope(...)`, the same rule.
+- **Care log.** Shows each reader the notes the rule gives them. A reader of
+  only their own notes sees a line saying so and no summary cards: a "last
+  contact" or average built from part of the log would read as the whole.
+- **Behaviour.** Logging is a manager's, so a teen or a child would find an
+  empty page. They are told the notes are kept by the parents and caregivers.
+- Copy in the seven base locales.
+- `tests/a-note-about-a-member-is-read-by-managers-its-author-and-caregivers.test.ts`
+  ties the screens and the migration to the rule.
+
+**Released probes made rule-aware:**
+- `member-scope-crossing-check.sql`'s attribution pin credits 0510's policy
+  on `behavior_logs` by name and exact predicate, as it does 0506's on
+  `symptom_logs`.
+- `a-care-entry-names-who-logged-it-check.sql` reads the stored attribution as
+  the table owner, and expects a child to read their own notes and, under
+  0510, not the parent's.
+
+Both pass with and without 0510. The held 0509 probe counts `behavior_logs`
+among the tables already closed to a guest where 0510 is installed, so it
+passes on 0509 alone and on the stack.
+
+**Proof:** `.github/workflows/member-notes-runtime.yml` requires the held probe
+`docs/audit/reserved/a-note-about-a-member-is-read-by-managers-its-author-and-caregivers-check.sql`
+to fail on the released schema (the teen's and the child's reads, the guest's
+behaviour notes, and the wiring), with no control failing. It applies 0510
+twice, requires the probe to pass, and re-runs the nine released probes over
+the two tables. The passing run shows, in both tables:
+- **The teen and the child.** Read no note they did not write, not even the
+  parent's note about them (counted), and each reads the note they wrote.
+- **The guest.** Reads no note.
+- **Everyone who reads every note.** The parent, the adult and the caregiver
+  read every note. The teen reads the note in the household they manage.
+- **Gone or outside.** The removed caregiver reads nothing, not even the note
+  they wrote; a stranger reads nothing.
+- **Server.** The service role, with and without a user id, reads every note.
+- **Writes.** The screens' inserts and edits come back to their writer: the
+  child's own care note, the caregiver's care note for the ward, the child's
+  edit of their own, and the parent's and the child's behaviour notes
+  (`OK 1` each).
+- **Wiring.** One permissive read per table with the exact predicate; no
+  restrictive read but a guest's.
+- **Negative control.** N1 (the family-wide read put back): the child reads
+  the ward's note in both.
+- **Mutation control.** M1 (the outer `is_family_member` taken off): the
+  removed caregiver reads the note they wrote in both.
+
+**After approved release:** sign a test teen in, open `/dashboard/care`, and
+confirm only the notes they logged are listed; open `/dashboard/behavior` and
+confirm the notice. Confirm a test caregiver still sees the whole care log.
+
+## `0509` (proposed, held) — a guest read the household's most sensitive areas
+
+`supabase/reserved/0509_a_guest_does_not_read_the_households_most_sensitive_areas.sql`
+— **held**: proposed as `0509`, the first number above `0508`. The account
+holder decided ROLE-SCOPE-001 as "narrow guests; fix the copy", recorded and
+requested on #771 in comment 6101674181. The exact scope was posted before any
+SQL in 6101807525; that post said 57 tables, and the sections it lists add up
+to 59. Not yet confirmed.
+
+**Severity: medium (a neighbour or grandparent invited as Guest read the
+children's whereabouts and the family's finances). Deploy order: any; the route
+gate and copy ship first.** `/family/permissions` and the FAQ described a guest
+as seeing "limited shared events only", and B15 measured a real guest reading
+the whole household. Measured on a replay of every runnable migration through
+0485, as a guest of Guest House, with one row about the ward in each table:
+the guest reads it in **51 of 59** tables. 0481's sweep already closes
+`care_log`, `expense_split_shares`, `expense_splits`, `family_places`,
+`gift_payments`, `medication_doses`, `member_locations` and
+`subscriptions_tracked` to a guest.
+
+0509 adds `is_family_guest(family_id)` (SECURITY DEFINER, pinned search_path,
+not executable by PUBLIC or anon): the caller's active membership in that
+family is `guest`, exactly, one row per family and user. Each of the 59 tables
+gets one RESTRICTIVE SELECT policy, "A guest does not read <table>", for
+authenticated: `not is_family_guest(family_id)`, plus
+`or is_self_member(member_id)` where the table has a `member_id`. Restrictive,
+so it narrows the permissive reads already there and widens nothing. 0509's
+guard also stands on the eight tables 0481 closes, so a permissive read added
+later cannot reopen them. A self-check requires all 59.
+
+The tables:
+- **Locations:** `member_locations`, `location_events`, `safety_check_ins`,
+  `driving_trips`, `family_places`, `home_locations`.
+- **Money and cards:**
+  - allowances and payments: `allowance_rules`, `babysitter_payments`,
+    `billing_customers`, `bills`, `budgets`;
+  - wallets and accounts: `child_wallets`, `family_wallets`,
+    `financial_accounts`;
+  - splits, gifts and investments: `expense_splits`, `expense_split_shares`,
+    `gift_payments`, `pay_handles`, `invest_holdings`, `invest_orders`;
+  - loyalty: `loyalty_accounts`, `loyalty_transactions`;
+  - ledgers: `money_timeline_insights`, `savings_goals`,
+    `subscriptions_tracked`, `transactions`, `utility_bills`;
+  - Stripe: `stripe_authorizations`, `stripe_cardholders`,
+    `stripe_connected_accounts`, `stripe_financial_accounts`,
+    `stripe_issuing_cards`;
+  - wallet internals: `wallet_audit_logs`, `wallet_buckets`, `wallet_cards`,
+    `wallet_goals`, `wallet_passes`, `wallet_rewards`, `wallet_rules`,
+    `wallet_transactions`.
+- **Medical and insurance:** `medications`, `medication_schedules`,
+  `medication_doses`, `health_providers`, `insurance_policies`,
+  `family_insurance_policies`, `auto_insurance_policies`, `care_log`,
+  `behavior_logs`, `vacation_medical_information`.
+- **Guardian and the household inbox:** `guardian_communications`,
+  `guardian_audit_log`, `guardian_contacts`, `guardian_escalations`,
+  `guardian_member_profiles`, `guardian_routing_rules`,
+  `guardian_screening_sessions`, `guardian_suggestions`,
+  `family_inbox_messages`.
+
+**Kept for a guest, deliberately:**
+- the family chat and their own conversations (`family_messages` reads through
+  `family_conversations`, which admits only participants);
+- calendar, lists, meals, chores and the other shared areas (0464 keeps them
+  view-only);
+- rides, and the emergency contacts and plans;
+- gift links, and the kid economy's points;
+- trip budgets;
+- `subscriptions`, the plan row feature gating reads.
+
+A caregiver is untouched.
+
+**App change, shipping with the source:**
+- **Route gate.** `lib/auth/guest-scope.ts` lists the pages over those areas.
+  `requireFeature` and every page in the list that resolves its context
+  another way send a guest to `/dashboard/grandparent-portal`:
+  - locator, check-in and driving safety;
+  - autopay, billing, bills, budgets, expenses, family CFO, money timeline,
+    payments, savings and subscriptions, and all of `/wallet`;
+  - medical, medications, health, family health, care, behaviour, insurance
+    and auto insurance;
+  - all of `/guardian`, and the inbox.
+
+  The Tax Vault answers every non-manager under 0508.
+- **Navigation.** The sidebars, the mobile tabs and the navigation settings
+  stop offering those links to a guest (`isNavItemVisibleToRole`, from the
+  same list).
+- **Copy.** The caregiver and guest descriptions, the two FAQ answers and the
+  permission matrix's caption now say what each role sees, in the seven base
+  locales. The caption no longer claims "enforced by database row-level
+  security" for the whole matrix; the guest row is enforced (0464, this), and
+  for other roles each area applies its own rules.
+- **Test.** `tests/a-guest-does-not-read-the-households-most-sensitive-areas.test.ts`:
+  - walks every page under the listed prefixes and holds each to the gate;
+  - drives `refuseGuest` for every role;
+  - ties the migration's 59 tables to the probe's;
+  - checks the copy.
+
+**Released probes made rule-aware:**
+- `member-scope-crossing-check.sql`'s attribution pin admits 0509's guard on
+  `behavior_logs` by name and exact predicate. 0481's FIX 2b deferred that
+  guard for exactly this pin.
+- The money-warnings probe expects a guest to read no warning where 0509 is
+  installed.
+
+Both pass with and without 0509.
+
+**Proof:** `.github/workflows/guest-scope-runtime.yml` requires the held probe
+`docs/audit/reserved/a-guest-does-not-read-the-households-most-sensitive-areas-check.sql`
+to fail on the released schema (51 of 59, and no guard), with no control
+failing. It applies 0509 twice, requires the probe to pass, and re-runs five
+released probes over guests and these tables. The fixture is one generic row
+per table, written by the table owner (required columns filled by type,
+foreign keys deferred for the seed only), about the ward and, where there is a
+`member_id`, about the guest. The passing run shows, in every table:
+- **The guest.** Reads no row that is not about them, reads the rows about
+  themselves, and 0509 takes none of those away.
+- **Everyone else.** With 0509's 59 policies taken away, the caregiver and
+  the parent read exactly what they read with them, so 0509 changes no one but
+  a guest. The parent reads every row.
+- **Per-family.** The guest reads the location row in the household they are
+  a parent of.
+- **Server.** The service role, with and without a user id, reads every row.
+- **Wiring.** 59 guards with the exact predicate, and the helper is checked.
+- **Negative control.** N1 (the 59 policies dropped): the guest reads the
+  ward's row in every table the released schema leaves open, and in none of
+  the eight it closes.
+- **Mutation control.** M1 (`is_family_guest` unbound from the row's family):
+  the guest loses their own household's row.
+
+188 of 188 released probes pass with 0509, and with every held migration
+through 0509 applied twice.
+
+**After approved release:** sign a test guest in, open `/dashboard/locator`
+and `/wallet`, and confirm they land on the guest page; through the API,
+confirm `transactions` and `member_locations` return nothing about others.
+Confirm a test caregiver still sees the locator.
+
+## `0508` (proposed, held) — the household's tax files were every member's
+
+`supabase/reserved/0508_tax_documents_are_a_managers.sql` — **held**: proposed
+as `0508`, the first number above `0507`. The account holder decided PROD-002's
+`tax_documents` item as "managers only", recorded and requested on #771 in
+comment 6101674181. Not yet confirmed.
+
+**Severity: medium (tax filings readable and erasable by a child or a guest,
+and by an enrolled manager without the second factor). Deploy order: any; the
+page change ships first and changes nothing for a manager.** 0481 (released,
+#989) replaced `tax_documents`' member policy with a manager's read and write,
+plus a teen's or child's read of a document about themselves. 0391's step-up
+still binds a manager on the rows. The files were left open: the documents
+bucket serves `{family}/tax/<year>/…` to every member, because
+`document_object_is_restricted` reads only `documents`. Measured on the replay
+through 0485:
+- every one of a teen, child, caregiver and guest lists all three tax files
+  (OK 3), moves the W-2's file and uploads under `tax/` (OK 1);
+- the child reads a tax document about themselves (OK 1);
+- a parent with a verified factor at aal1, whom 0391 refuses the rows, reads
+  all three files (OK 3), and moves, deletes and uploads them.
+
+0508:
+- **Rows.** Drops every permissive policy on `tax_documents` (0481's four,
+  with the teen/child self-read) and creates four, one per command, each
+  `can_manage_family(family_id)` for authenticated. 0391's four restrictive
+  step-up guards stay. The self-read goes because the decision was "only a
+  parent or adult reads and writes them"; restoring it is one policy if the
+  owner wants it.
+- **Files.** Adds `tax_file_is_withheld(name)` (SECURITY DEFINER, pinned
+  search_path, not executable by PUBLIC or anon) and one RESTRICTIVE policy on
+  `storage.objects`, "Tax files are a manager's", for every command, to
+  authenticated: `bucket_id <> 'documents' or not tax_file_is_withheld(name)`.
+  - An object counts as a tax file if it sits under its family's `tax/` folder
+    (where the Tax Vault uploads, a file whose row is not written yet
+    included), or if a `tax_documents` row of the object's own family names it.
+  - Such a file is withheld unless the caller manages that family and has
+    cleared the step-up 0391 asks of the rows (`session_cleared_step_up()`: no
+    verified factor, or aal2). That last clause is the #999 review (6101849884).
+  - The family is the object's first folder, cast as the bucket's policies
+    cast it (0499's rule). A row planted in another family withholds nothing.
+  - 0303's and 0499's four permissive policies are not touched, and the policy
+    names no `bucket_id = 'documents'`, so 0499's inventory is unchanged.
+
+**App change, shipping with the source:** `/dashboard/tax-vault` tells a
+non-manager the vault is kept by the household's parents
+(`taxVault.keptByParents*`, seven locales) before the step-up guard and the
+module. `tests/tax-documents-are-a-managers.test.ts` pins it.
+
+**Released and held probes made rule-aware:**
+- `a-password-alone-does-not-open-the-familys-vault-check.sql` (an enrolled
+  child reads 0 under 0508);
+- 0499's held probe (a non-manager is refused all six verbs on the W-2's file
+  under 0508);
+- `document-bytes-boundary-check.sql`, which credits 0508's restrictive policy
+  by name and exact predicate.
+
+**Proof:** `.github/workflows/tax-documents-runtime.yml` requires the held
+probe to fail on the released schema on those lines, with no control failing.
+It applies 0508 twice and requires the probe to pass, then re-runs the vault,
+bucket, document-vault and gated-write probes. The fixture is laid again
+before each role. The passing run shows:
+- **Non-managers.** The teen, child, caregiver and guest each read 0 rows (the
+  child's own included) and 0 files. Their row writes change 0 rows or are
+  refused (42501), their file moves, replaces and deletes change 0 rows, and
+  their upload under `tax/` (upper-cased family id) is refused by the tax-file
+  policy. The rows and files are unchanged, counted.
+- **Their controls.** Each still reads the receipt and uploads outside `tax/`.
+- **Managers.** The parent and the adult read the three rows and files,
+  annotate, file, upload under `tax/` and remove the in-flight file.
+- **Step-up.** The enrolled parent at aal1 reads 0 rows and 0 files. Their
+  move of the 1099's file (outside `tax/`) and delete of the W-2's change 0
+  rows, and their upload at a new path under `tax/` is refused. At aal2 they
+  read, upload and remove.
+- **Others.** A stranger reads nothing, and a tax row planted in Next Door
+  withholds nothing of Tax House's.
+- **Server stand-ins.** The service role reads the rows. The table owner with
+  no session reads the files; that stands in for storage-api as SQL, and no
+  download or signed URL is exercised.
+- **Negative control.** N1 (0481's read back, bucket open): the child reads
+  their own row and the files, and the enrolled parent at aal1 the files.
+- **Mutation controls.** M1 (each helper branch removed) lets the child read
+  the 1099's file or the in-flight file. M2 (step-up term removed) lets the
+  enrolled parent at aal1 read the files.
+
+184 of 184 released probes pass with 0508, and with every held migration
+applied twice.
+
+**After approved release:** as a test child, open `/dashboard/tax-vault` and
+confirm the parents-only message. As a test parent with a second factor at
+aal1, confirm the step-up is asked before the vault and that a tax file's
+signed link is refused until it is cleared. As a test parent at aal2, confirm
+the vault is unchanged.
+
+## `0507` (proposed, held) — a kid login known by the server's mark could start a household
+
+`supabase/reserved/0507_a_kid_login_does_not_start_a_household.sql` —
+**held**: proposed as `0507`, the first number above `0506`. Support found it
+and left it for the owner (#771 comment 6100987720). It was claimed, measured
+and requested on #771 in comment 6101311405 and is not yet confirmed. Recut on
+main through 0485 (#989), whose 0482 closed most of it.
+
+**Severity: low after 0482 (a narrow residual of a child-safety door). Deploy
+order: any.** `families_insert` checks `created_by = auth.uid()`, and
+`on_family_created` files the creator as the new household's parent. A kid
+login that does that can invite a stranger into a household its parents cannot
+see, the harm 0495 closes at `accept_invite`. 0482 (released) now also requires
+`not is_child_login_account()`, which is true for an account with a
+`child_logins` row or an address on the synthetic kid domain. It does not read
+the third mark the server writes, `app_metadata.bubaly_kid_login`, which
+`createChildLoginAction` sets with the service role and 0495 reads. Measured on
+the replay through 0485, as a kid login known only by that mark (its address
+moved off the domain, no mapping): it creates a family (**OK 1**, parent) and
+invites a stranger (**OK 1**). A kid login on the domain or with a mapping is
+refused.
+
+0507 replaces `is_child_login_account()` with 0482's body plus that one test,
+read from `auth.users` exactly as 0495 reads it (`user_metadata` is not read).
+0482's search path and grants are kept. A self-check requires all three tests
+and that `families_insert` still asks the function.
+
+**Recorded limits (not closed here):**
+- the server's own provisioning: `ensureActiveFamily` provisions through the
+  service role, which RLS does not bind. It refuses a child login it recognises
+  by a `child_logins` row or `user_metadata.child`. That is the membership
+  lane's repair (#771 6088720897, 6092045838, 6094677336, 6100987720), and an
+  orphaned or removed kid's provisioning test belongs with it (#999 review
+  6101404893);
+- households a kid login already created are left as they are;
+- a legacy kid login with no mark, no mapping and an address off the domain
+  is recognised by no test.
+
+**Proof:** `.github/workflows/kid-household-runtime.yml` requires the held
+probe to fail on the released schema on exactly the mark-only kid, applies 0507
+twice, requires the probe to pass, and re-runs seven released probes over
+family creation and invitations. The passing run shows:
+- three kid logins (domain and mark, mark only, address only) are each refused
+  with `42501: new row violates row-level security policy for table
+  "families"`, exact, and belong to no other household (counted);
+- an adult, and an adult whose `user_metadata` says child, each start a
+  household as its parent;
+- the service role with the kid's id, and a session-less writer, each create
+  a family;
+- the wiring is checked;
+- N1 (0482's body back): the mark-only kid's household and its invitation to
+  the stranger land;
+- M1 (`families_insert` no longer asking): the domain kid's household lands.
+
+**After approved release:** as a test kid login whose address is off the
+domain, try to create a family through the API and confirm 42501.
+
+## `0506` (proposed, held) — every member read every member's health record
+
+`supabase/reserved/0506_a_health_record_is_read_by_a_manager_or_its_own_member.sql`
+— **held**: proposed as `0506`, the first number above `0505`. The account
+holder decided it on the lead in #771 comment 6092825901 ("own record;
+caregivers too"). It was requested on #771 in comment 6100826185 and is not yet
+confirmed.
+
+**Severity: medium (health records read across the household). Deploy order:
+any; the screen changes ship first and change nothing for a manager.**
+`symptom_logs`, `health_metrics`, `health_goals`, `sleep_logs`,
+`sleep_checkins` and `nutrition_logs` each read with
+`is_family_member(family_id)` (`nutrition_logs` twice, one policy granted to
+public). Since 0481 (#989), `health_visits` and `immunizations` read
+family-wide for every role but a guest or caregiver; 0481 left "the child/teen
+half of this finding" to this owner decision (M23). So a teen and a child read
+every other member's symptoms, measurements, goals, visits, vaccinations, sleep
+and meals, and a caregiver and a guest all but the visits and vaccinations.
+`lib/ai/context/policy.ts` already lists all eight as sensitive, and 0438's
+header named `symptom_logs` as "the same per-member shape … a separate
+change". Measured on a replay of every runnable migration through 0485, as each of
+those roles, the Health House records about another member each reads: a teen
+and a child in 8 of 8 tables, a caregiver and a guest in 6 of 8 (5 to 7 rows a
+table).
+
+0506 drops every permissive policy that reads each table and creates one:
+`is_family_member(family_id) and (can_manage_family(family_id) or
+is_self_member(member_id) or created_by = auth.uid())`. **The author term is a
+policy exception beyond the decision as worded ("own record") and needs the
+owner's confirmation** (#999 review 6101355094): whoever wrote an entry about
+someone else keeps reading that whole row, later edits by others included, for
+as long as they are a member. It is there because these tables' own update and
+delete policies already treat the author as entitled to their row, because an
+insert that returns its row (PostgREST's) needs it, and because 0481 adopted
+the same term for `health_visits` and `immunizations`. The outer
+`is_family_member(family_id)` stays, so a member who has left reads nothing,
+not even what they wrote. A row with no member (`health_visits`,
+`immunizations` and `nutrition_logs` allow it) is a manager's or its author's.
+Writes are unchanged. A self-check refuses the migration unless each table ends
+with exactly that one read policy.
+
+**App change, shipping with the source, the same before and after release**
+(`lib/health/record-scope.ts`, the #999 review 6101355094):
+- anyone may still log a night, a check-in or a meal for any member, so a
+  caregiver still logs a ward's;
+- a manager, or the member themselves, sees the whole history and the
+  summaries built from it;
+- anyone else sees only the entries they logged for that member, labelled as
+  such, with no summary built from part of a record;
+- the visits and immunisation filters offer a non-manager their own member.
+
+For a manager nothing changes. The AI insights route reads through the caller's
+session, so RLS narrows it, and the health coach already grounds a non-manager
+on their own record.
+`tests/a-health-record-is-read-by-a-manager-or-its-own-member.test.ts` drives
+the helper as a caregiver with a ward, as the member, as a manager, and across
+role changes, against rows as the database returns them before release.
+
+**Released probes made rule-aware:** `health-record-boundary-check.sql` (0414)
+and `health-record-write-boundary-check.sql` (0430) asserted that a child
+reads the family's health records, which this changes; under 0506 they assert
+the child reads none of a sibling's and does read their own.
+`member-scope-crossing-check.sql`'s attribution pin credits 0506's policy by
+name and exact predicate when it is installed; the stranger's zero is still
+the outer `is_family_member(family_id)`. All three pass with and without 0506.
+
+**Not changed, recorded:** `behavior_logs` and `care_log` (notes about a
+member written by others; whether that member reads them is a separate
+decision) and the medication tables (with the 0465 candidate's owner).
+
+**Proof:** `.github/workflows/health-records-runtime.yml` replays every
+runnable migration. It requires the held probe
+`docs/audit/reserved/a-health-record-is-read-by-a-manager-or-its-own-member-check.sql`
+to fail on the released schema, with the teen and the child each reading other
+members' records in 8 of 8 tables and the caregiver and the guest in 6 of 8,
+and no control failing. It applies 0506 twice, requires the probe to pass, and re-runs the
+four released probes over these tables. The passing run shows, in every table:
+- the teen, the child, the caregiver and the guest read no record about
+  another member (counted), and each reads their own; the caregiver also reads
+  what they wrote about the ward;
+- the parent and the adult read every record, and the teen reads the record
+  in the household they manage (so the row's family decides);
+- a removed caregiver reads nothing, including what they wrote, and a
+  stranger reads nothing;
+- the service role, with the child's user id and without one, reads every
+  record;
+- the child's own symptom and the caregiver's meal for the ward come back from
+  an insert with returning (OK 1), and the child's night upserts onto their
+  own (OK 1);
+- negative control N1 (the family-wide read put back) lets the child read the
+  ward's record in all eight, and mutation M1 (0506 without its outer
+  `is_family_member`) lets the removed caregiver read what they wrote in all
+  eight.
+
+Source mutations, each failing its own controls: the policy without
+`is_self_member` (the caregiver's own record, and the insert returning) and
+without the author term (each non-manager's own record, and the upsert). 184
+of 184 released probes pass with and without 0506.
+
+**After approved release:** as a test child, open Sleep and Nutrition and
+confirm only their own tab shows; as a test parent, confirm every member's
+records still show.
+
+## `0505` (proposed, held) — a seller's Remove erased other families' records
+
+`supabase/reserved/0505_a_listing_others_hold_records_of_is_withdrawn_not_erased.sql`
+— **held**: proposed as `0505`, the first number above `0504`. The account
+holder decided it on the lead in #771 comment 6097101249. It was requested on
+#771 in comment 6100826185 and is not yet confirmed.
+
+**Severity: medium (other families' records and moderation evidence erased).
+Deploy order: any; the app change ships first and is a no-op until then.**
+`marketplace_listings_delete` lets a listing's own seller delete it, and the
+marketplace module offers that hard delete as "Remove". Every table recording a
+dealing with the listing cascades on `listing_id`: orders, offers, questions,
+bids, negotiations and their rounds, handoffs and reports. Those rows are other
+families'. A report carries the reporter's family, so the seller cannot even
+see it. Measured as Seller House's parent, on a listing where Buyer House has a
+confirmed order and a "scam" report: the delete is 1 row, and the order and
+the report are gone.
+
+0505 adds `marketplace_listing_keeps_others_records`, BEFORE DELETE, SECURITY
+DEFINER. A signed-in caller's delete of a listing that has any of those
+records is refused (42501, its own sentence). A listing with none still
+deletes. Reviews already survive a delete (`ON DELETE SET NULL`). The service
+role, session-less writers and a family deletion cascade are unaffected (0502's
+family-gone branch). A DELETE's row lock waits for any record being inserted
+alongside, which 0502's two-session probe shows for the same shape.
+
+**App change, shipping with the source** (`lib/marketplace/remove-listing.ts`,
+the #999 review 6101040142):
+- Remove deletes the row first, reading back the removed row's `photo_url`,
+  and deletes the photo only once the row is really gone. A listing 0505 keeps
+  keeps its photo, whatever happens after.
+- On 0505's refusal it always asks `marketplace_set_listing_status`
+  (0317, which locks the row) to withdraw, and treats 0317's "Cannot move
+  listing from withdrawn/completed to withdrawn" as already kept. So the
+  decision is the server's from the row as it is now: a listing another tab
+  relisted is withdrawn, and one already withdrawn is reported as kept, not
+  changed.
+- A removed listing whose photo cannot be deleted says so
+  (`marketplaceModule.removedButPhotoLeft`, seven locales).
+
+Until 0505 is released the refusal never comes, and Remove deletes as before,
+photo last. `tests/a-listing-others-hold-records-of-is-withdrawn.test.ts`
+drives these cases against a fake that answers as 0505 and 0317 do:
+- the refusal, and a failed withdrawal (no photo loss in either);
+- an already-withdrawn or completed listing;
+- a relisted listing behind a stale screen;
+- a filtered delete;
+- a failed photo cleanup.
+
+It also ties the module to both functions' exact sentences.
+
+**Recorded, not changed:** a family that has sold something on an order cannot
+be deleted by its own owner today. The family deletion sets the order's
+`seller_member` to null, which the order-terms guard refuses ("seller_member is
+a term of the deal…"). That is measured on the released schema, independent of
+0505.
+
+**Proof:** `.github/workflows/marketplace-records-runtime.yml` replays every
+runnable migration. It requires the held probe
+`docs/audit/reserved/a-listing-others-hold-records-of-is-withdrawn-not-erased-check.sql`
+to fail on the released schema, with the seller's six deletes landing and their
+records gone. It applies 0505 twice, requires the probe to pass, and re-runs
+the six released probes that delete listings. The passing run shows:
+- the seller's delete of a listing with an order and a report, an offer, a
+  question, a bid, a negotiation with its round, and one with only a report
+  they cannot see is each refused with the guard's sentence (42501, exact),
+  and every listing and record remains (counted);
+- the seller withdraws a listing with an order and a report, and both remain;
+- a listing nobody dealt with still deletes (OK 1);
+- **recorded limits, not a preservation guarantee** (pinned so a change is
+  seen; the retention policy's owner's to decide): the service role (carrying
+  a user id) and, separately, a null-uid writer each delete a listing with
+  records, and a family's own deletion still takes its listing and the offer
+  and report other families hold of it;
+- mutation M1 (the guard without its reports clause) and negative control N1
+  (the guard disabled) each let the refused delete land.
+
+Source mutations, each failing exactly its own control: the family-gone branch
+removed, the service-role exemption removed, the null-uid exemption removed. 184
+of 184 released probes pass with and without 0505.
+
+**After approved release:** as a test seller with a test order on a listing,
+press Remove and confirm the listing is withdrawn and the order is still there.
+On a listing nobody has dealt with, confirm Remove deletes it.
+
+## `0504` (proposed, held) — a kid login mapping is the server's to write
+
+`supabase/reserved/0504_a_kid_login_mapping_is_the_servers_to_write.sql` —
+**held**: proposed as `0504`, the first number above `0503`. The account holder
+decided it on the lead in #771 comment 6092615411. It was requested on #771 in
+comment 6100826185 and is not yet confirmed.
+
+**Severity: low (a recorded limit of 0495 closed at the root). Deploy order:
+any.** `child_logins` maps a kid login's username to its synthetic auth user.
+0297 left a manager write policy on it ("Managers manage child_logins", FOR
+ALL), and the client roles kept every DML grant. Nothing in the application
+uses either: every mapping is written through the service role
+(`app/(app)/family/child-login-actions.ts`), and the one session read
+(`/dashboard/family-access`) is covered by the members' read policy.
+
+What the policy still allowed is 0495's recorded limit. Measured on the replay
+as a household's parent:
+- writing a mapping onto one of its own grown-ups, demoted to a non-manager
+  role: 1 row;
+- repointing the kid's login at the parent's own account: 1 row;
+- deleting the kid's login: 1 row.
+
+Once a mapping names a grown-up, that grown-up's invitations elsewhere are
+refused as a kid login's.
+
+0504 drops the manager write policy and revokes INSERT, UPDATE and DELETE from
+`anon` and `authenticated`. SELECT and the members' read policy are unchanged,
+and the service role writes as before.
+
+**Released probes changed with it**, each now reading which rule is installed
+and passing under both:
+- `child-login-mapping-is-managers-only-check.sql` restates the client grants
+  only under 0297. Under 0504 it asserts that the child, in the family they
+  manage, and the parent are each refused outright ("permission denied for table
+  child_logins", exact), and that reads stay open.
+- `sensitive-role-boundary-check.sql` turns its child_logins control legs and
+  the adult's leg into the same refusal under 0504; the control row is cleaned
+  up by the owner.
+- `access-record-write-boundary-check.sql` accepts the privilege refusal beside
+  0297's zero-row filter.
+- `gated-write-tables-check.sql` drops `child_logins` from the member-filtered
+  list when no client role holds a write on it.
+
+**Proof:** `.github/workflows/kid-login-mapping-runtime.yml` replays every
+runnable migration. It requires the held probe
+`docs/audit/reserved/a-kid-login-mapping-is-the-servers-to-write-check.sql` to
+fail on the released schema with the parent's three writes landing. It applies
+0504 twice, requires the probe to pass, and re-runs the four probes above. The
+passing run shows:
+- the parent's mapping onto the demoted grown-up, their repoint and delete of
+  the kid's login, and the kid's own rename and delete are each refused with
+  `42501: permission denied for table child_logins` (exact);
+- no mapping reaches the grown-up, and the kid's login is unchanged (counted);
+- the parent and the kid still read the family's logins;
+- the service role (carrying a user id) writes, renames and removes a second
+  kid's mapping (1 row each);
+- no client write policy or grant remains, and the members' read is kept;
+- negative control: with 0297's rule put back, the parent's mapping onto the
+  grown-up lands.
+
+Mutations: dropping only the policy (grants kept) turns the refusals into an RLS
+refusal and fails every write line plus the grant line; revoking only the
+grants (policy kept) fails the policy line alone. 184 of 184 released probes
+pass with and without 0504.
+
+**After approved release:** as a test parent, try to insert a `child_logins`
+row through PostgREST and confirm 42501; create a kid login through the app and
+confirm it still works.
+
+## `0503` (proposed, held) — a trip item left its family through a move
+
+`supabase/reserved/0503_a_trip_item_stays_with_its_trips_family.sql` — **held**:
+proposed as `0503`, the first number above `0502`. It was requested on #771 in
+comments 6097696125 and 6097700163 and is not yet confirmed. Its probe is held
+with it in `docs/audit/reserved/`.
+
+**Severity: medium (a manager-only delete bypassed). Deploy order: any.**
+`trip_items` is manager-only to delete (restrictive), and
+`trip_item_content_guard` lets only a family manager change an item's content,
+family included. The guard authorises with `can_manage_family(NEW.family_id)`
+only, though, and the update policy is `is_family_member(family_id)` on both
+halves. Measured as a teen of Trip House who is a parent of their own house:
+- deleting a packing item: 0 rows; rewriting its label in place: refused;
+- moving it to their own house, relabelled, family only, or together with a
+  trip of their own house: 1 row each. Trip House then holds none of them.
+
+Binding `trip_id` alone (0311) does not close it: the last move takes a trip of
+the new family with it.
+
+0503 adds two things to `trip_items`:
+- **`trip_item_family_change_guard`**, BEFORE UPDATE OF family_id, SECURITY
+  DEFINER. A signed-in caller changes an item's family only if they manage both
+  the family it leaves and the family it joins (42501, its own sentence), the
+  shape `home_asset_manager_field_guard` already has.
+- **0311's own `reference_shares_family('trip_id', 'trips')`**, BEFORE INSERT
+  OR UPDATE OF trip_id, family_id, as 0497 and 0501 wire it. An item names only
+  its own family's trip, so even a manager of both families moves an item
+  together with a trip of the new family.
+
+The service role and session-less writers are exempt. Nothing in the
+application moves a trip item or names another family's trip; ticking an item
+done still lands for every member. `trips` are already manager-only to update
+on both halves.
+
+**Recorded, not changed** (the 6097700163 census): the other seven guards that
+ask only the new family are bounded on their tables:
+- `chores` by 0502;
+- `reward_redemptions` by 0500;
+- `chore_assignments` by 0311;
+- `economy_redemptions` and `invest_orders` by manager-only update RLS on both
+  halves;
+- `chore_disputes` and `chore_submissions` by owner-only rows;
+- `family_playbook_suggestions` by sensitive-row visibility.
+
+**Proof:** `.github/workflows/trip-item-family-runtime.yml` replays every
+runnable migration. It requires the held probe
+`docs/audit/reserved/a-trip-item-stays-with-its-trips-family-check.sql` to fail
+on the released schema with the teen's three moves and the manager's
+cross-family moves landing. It applies 0503 twice, requires the probe to pass,
+and re-runs the released probes over `trip_items` and 0311's references. The
+passing run shows:
+- the teen still ticks an item done (OK 1);
+- the teen's three moves are each refused with the move guard's sentence
+  (42501, exact), and Trip House holds all three items unchanged (counted);
+- a manager of both families moves an item together with a trip of the new
+  family (OK 1);
+- that manager's move keeping Trip House's trip, and their insert against the
+  other family's trip, are each refused with 0311's sentence for
+  `trip_items.trip_id`;
+- Trip House's parent files against its own trip (OK 1);
+- the service role (with a user id) and, separately, a null-uid writer each
+  move an item (1 row each);
+- both triggers are wired exactly;
+- mutation M1 (the guard without its old-family clause) and negative controls
+  N1 and N2 (each trigger disabled) each let the refused write land.
+
+Source mutations checked locally, each turning exactly its own lines red:
+- the move guard's trigger removed;
+- the binding removed;
+- the guard asking only the new family;
+- the service-role exemption removed;
+- the null-uid exemption removed.
+
+184 of 184 released probes pass with and without 0503, and the combined held
+stack (0488–0503) applies in order, twice.
+
+**After approved release:** as a test teen who is a parent of a second test
+family, try to move a test trip item there through PostgREST and confirm 42501;
+then move it as a parent of both families together with a trip of the second
+family and confirm it lands.
+
+## `0502` (confirmed, held) — deleting a chore cleared the assignments 0374 protects
+
+`supabase/reserved/0502_a_chore_with_assignments_is_a_managers_to_remove.sql` —
+**held**: `0502`, the first number above `0501`, for #981. It was requested on
+#771 in comment 6097049650 and confirmed as a held source and probe reservation
+in #981 comment 6097190516 (no installation or production policy approval).
+Its two probes are held with it in `docs/audit/reserved/`.
+
+**Severity: medium (F20, rated High, reopened through a cascade). Deploy
+order: any.** 0374 made deleting a chore assignment a manager's only, closing
+"a child could delete a sibling's approved assignment (and the points with
+it)". F20's ledger row notes that foreign-key cascades are unaffected, and
+they are the way around it: `chores` keeps DELETE for any member and
+`chore_assignments.chore_id` is `ON DELETE CASCADE`, which RLS does not gate.
+Measured as an active child, with a sibling's approved 50-point assignment on a
+chore:
+- deleting the sibling's assignment directly: 0 rows (0374 holds);
+- deleting the chore: 1 row, and the sibling's approved assignment is gone.
+
+Points are summed from approved assignments (`lib/rewards/points.ts`, 0439),
+so a child erases a sibling's earned points or clears the board this way.
+
+0502 adds a BEFORE DELETE OR UPDATE OF family_id guard on `chores`, SECURITY
+DEFINER so it sees every assignment. A signed-in caller who does not manage the
+chore's own family may delete it only while it has no assignments, and may not
+move it to another family at all (42501, a sentence for each). The move
+matters: `chores`' update policy is membership on both sides, and on the first
+cut (`e55bc1e74`) a child of this family who is a parent of another moved the
+chore there (1 row), deleted it as that family's manager (1 row), and the
+sibling's approved assignment went with it. The second cut (`a29d25220`)
+refused that move only while an assignment was visible. The owner's review
+(6097190516) pointed out that this cannot see an assignment insert still in
+flight: a `family_id` change is a non-key update, so its row lock (FOR NO KEY
+UPDATE) does not wait for the insert's foreign-key KEY SHARE, and 0311 reads
+the chore's family without a lock. A two-session test reproduced it on the
+second cut's rule, in both orders. With the insert open, the move landed. With
+the move open, the insert landed beside it. Either way the chore ended up in
+the other family with the sibling's approved assignment, and the child, as that
+family's parent, deleted both. So the move is now refused whatever the session
+sees; nothing in the application moves a chore between families. A DELETE is
+different: its FOR UPDATE row lock waits for the insert, and the trigger then
+sees the committed assignment, so the empty-chore rule stays for deletes. The
+probe now runs that person. The application deletes chores only to
+roll back one it just created after the assignment insert failed (missions'
+`createChoreAction`, `lib/services/tasks`, the assistant tool), when it has no
+assignments, so those still land. Managers, the service role and session-less
+writers are unchanged. A family deletion still cascades, because by the time
+it reaches a chore the family row is gone; without that branch the admin's own
+family delete is refused, which the probe's control shows.
+
+**Released probe changed with it:** `docs/audit/chore-price-check.sql`
+inventories the triggers on `chores` exactly to attribute its refusals to
+0307. It now counts only triggers that can fire on its own statements: INSERT
+triggers, and UPDATE triggers with no column list or one naming a column it
+updates (title, points, cash). A trigger on DELETE, or on UPDATE OF
+`family_id` only, cannot refuse one. It passes with and without 0502 and still
+fails when an extra INSERT trigger or UPDATE OF a price column is added.
+
+**Recorded, not changed:** `vacations` is member-deletable and cascades into
+six manager-only tables (0347's append-only `vacation_audit_logs` among them),
+but nothing in the application writes any of those six (0461), so today that
+cascade erases nothing.
+
+**Proof:** `.github/workflows/chore-cascade-runtime.yml` replays every runnable
+migration. It requires the held probe
+`docs/audit/reserved/a-chore-with-assignments-is-a-managers-to-remove-check.sql`
+to fail on the released schema with the child's deletes landing. It requires
+the two-session probe
+`docs/audit/reserved/a-chore-move-cannot-race-an-assignment-check.sql` to fail
+there on the insert-first and move-first timings. It applies 0502 twice,
+requires both probes to pass, then re-runs the released chore probes over the
+added trigger. The passing runs show:
+- as the child, deleting the chore holding a sibling's approved assignment and
+  the one holding their own open assignment are each refused with the guard's
+  sentence, and both assignments remain;
+- as the same child, who is also a parent of another family, moving either
+  chore there, or an empty chore, is refused with the move sentence and all
+  three stay home, while a title edit still lands;
+- in two sessions (the child; the parent filing an approved 50-point
+  assignment for the sibling), each timing on its own chore. Every step is
+  recorded with its exact outcome (`OK <rows>`, or the SQLSTATE, constraint
+  and message), and each timing's whole sequence must equal the expected one,
+  so an unexpected error anywhere is a failure (owner review 6097308389):
+  - insert first: with the insert open (OK 1), the child's move is refused
+    with 42501 and the move sentence; after the insert commits, one approved
+    assignment is there with its chore at home (counted);
+  - move first: the move is refused the same way at once, and the parent's
+    insert then lands (OK 1) at home (counted);
+  - with an insert open, the child's delete of the empty-looking chore is shown
+    waiting on a lock (`pg_locks`), then refused with 42501 and the delete
+    sentence, and the assignment stays;
+  - the rollback shape still works: the child's delete of an empty chore
+    commits (OK 1); the parent's insert waits on it, then fails with 23503 on
+    `chore_assignments_chore_id_fkey`, exactly; no assignment or chore is left;
+  - negative control: with the second cut's "refuse only if visible" move rule
+    swapped in, both timings must reproduce the race step for step. The insert
+    and every commit succeed, one approved assignment exists with its chore in
+    the other family before anything is deleted, the delete there is OK 1, and
+    nothing is left afterwards. The real guard is then restored and compared
+    byte for byte. The workflow also breaks only that control's insert fixtures
+    three ways (an unknown member, a member of the other family, a status that
+    is not one); each turns the control red and nothing else;
+  - cleanup: the fixtures, including the four synthetic auth users, are removed
+    at the start and the end and verified gone. An error inside the
+    negative-control block restores the guard and removes the fixtures through
+    its autocommitting connection before re-raising. A run killed inside that
+    block leaves a marker that the next run reverses first. Disposable
+    databases only;
+- the child still deletes a chore with no assignment (1 row);
+- a parent deletes a chore with its assignment, and the admin deletes the
+  family with all of it (counted);
+- the service role (carrying a user id) and, separately, a null-uid
+  session-less writer each delete a chore with assignments (1 row each);
+- negative control: with the guard disabled, the child's delete takes the
+  sibling's assignment.
+
+Each branch of the guard was removed in turn (the family-deletion branch, the
+manager branch, each exemption, the assignment check) and each turns exactly
+its own control or check red; asking for a manager of the NEW family instead
+of the chore's own (the first cut's shape) fails the move lines, and the
+first cut itself fails them too. 184 of 184 released probes pass with and without
+0502.
+
+**After approved release:** as a test child, try to delete a test chore that
+has an assignment through PostgREST and confirm 42501; as a test child who is a
+parent of a second test family, try to move a test chore there and confirm
+42501; then delete the first chore as a test parent and confirm the chore and
+its assignment are gone.
 
 ## `0471` and `0474` — the admin digest's delivery store, and a removed admin is not sent it
 

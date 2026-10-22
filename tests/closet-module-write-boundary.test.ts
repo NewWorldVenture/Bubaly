@@ -25,12 +25,18 @@ describe('closet-module writes fail visibly', () => {
     });
   }
 
-  it('logs a wear before bumping wear counts, and reports a failed bump', () => {
+  it('bumps every wear count before logging the wear, and logs nothing when a bump fails', () => {
     const b = body('logWear');
-    // The bump reads the live count first (compare-and-swap, C1-S9-90), so
-    // the ordering is pinned against the store's write, not the first chain.
-    expect(at(b, "from('outfit_logs').insert(")).toBeLessThan(at(b, ".update({ wear_count: next"));
+    // The order is inverted from the one first pinned here (H4): the log row
+    // is written LAST, once every wear it names has landed. Logging first left
+    // a log row and the other items' wears behind each failed attempt, and a
+    // deleted item in a saved outfit failed every attempt. The bump reads the
+    // live count first (compare-and-swap, C1-S9-90), so the ordering is pinned
+    // against the store's write, not the first chain.
+    expect(at(b, ".update({ wear_count: next")).toBeLessThan(at(b, "from('outfit_logs').insert("));
     expect(b).toContain("const failed = results.find((r): r is Extract<WearBump, { reason: 'error' }> => !r.ok && r.reason === 'error');");
+    expect(at(b, 'if (failed) return toastError(')).toBeLessThan(at(b, "from('outfit_logs').insert("));
+    expect(at(b, 'if (results.some((r) => !r.ok)) return toastError(')).toBeLessThan(at(b, "from('outfit_logs').insert("));
     expect(at(b, 'if (failed) return toastError(')).toBeLessThan(at(b, "success(t('closetModule.loggedTodaySOutfit'))"));
   });
 

@@ -18,6 +18,7 @@ import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument, DOCUM
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { todayInZone } from '@/lib/schedule/zoned';
+import { isManager } from '@/lib/constants/roles';
 
 type Memory = Tables<'trip_memories'>;
 type VacationLite = { id: string; title: string };
@@ -27,7 +28,11 @@ const blank = (tz: string) => ({ title: '', memory_date: todayInZone(tz), note: 
 export function TripMemoriesModule() {
   const { fmtDate } = useFormat();
   const t = useTranslations();
-  const { familyId, userId, members, family } = useApp();
+  const { familyId, userId, members, family, role } = useApp();
+  // 0481: only a parent or adult may delete a memory (trip_memories_delete is
+  // can_manage_family). The photo lives in the documents bucket, whose delete
+  // policy admits any member, so the screen must not let anyone else start one.
+  const canDelete = isManager(role);
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
@@ -99,6 +104,11 @@ export function TripMemoriesModule() {
   }
 
   async function remove(m: Memory) {
+    // Refused BEFORE storage is touched. The object goes first below, and the
+    // bucket would let a teen remove it; the row delete that follows is
+    // manager-only, so a teen's press destroyed the photo and then left the
+    // memory behind pointing at nothing, beyond any retry.
+    if (!canDelete) return toastError(t('tripMemoriesModule.onlyAParentOrAdultCanDelete'));
     if (!confirm(t('tripMemoriesModule.deleteThisMemory'))) return;
     const supabase = createClient();
     // The object goes first and its result is READ: deleting the row first
@@ -110,7 +120,7 @@ export function TripMemoriesModule() {
       if (storageError) return toastError(storageError);
     }
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
-    const { data: removed, error } = await supabase.from('trip_memories').delete().eq('id', m.id).select('id');
+    const { data: removed, error } = await supabase.from('trip_memories').delete().eq('id', m.id).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('tripMemoriesModule.deleted'));
   }
 
@@ -150,7 +160,7 @@ export function TripMemoriesModule() {
                   <div className="p-3">
                     <div className="flex items-start justify-between gap-2">
                       <p className="font-medium">{m.title}</p>
-                      <button onClick={() => remove(m)} className="text-muted hover:text-danger" aria-label={t('tripMemories.delete')}><Trash2 className="h-4 w-4" /></button>
+                      {canDelete && <button onClick={() => remove(m)} className="text-muted hover:text-danger" aria-label={t('tripMemories.delete')}><Trash2 className="h-4 w-4" /></button>}
                     </div>
                     <p className="mt-0.5 text-xs text-muted">
                       {fmtDate(m.memory_date)}{m.location ? <> · <MapPin className="inline h-3 w-3" /> {m.location}</> : ''}{mem ? ` · ${mem.display_name}` : ''}

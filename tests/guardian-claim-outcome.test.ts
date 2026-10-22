@@ -80,9 +80,8 @@ describe('claimGuardianCallback says which of the two things happened', () => {
 });
 
 describe('every Guardian callback route acts on the distinction', () => {
-  // Five routes read the helper's outcome directly.
+  // Four routes read the helper's outcome directly.
   const routes = [
-    'app/api/guardian/escalate/route.ts',
     'app/api/guardian/inbound/whatsapp/route.ts',
     'app/api/guardian/inbound/voice/route.ts',
     'app/api/guardian/screen/route.ts',
@@ -95,6 +94,20 @@ describe('every Guardian callback route acts on the distinction', () => {
     expect(source).toContain("=== 'unavailable'");
     expect(source).toContain('503');
     expect(source, 'and still acknowledges a settled one').toContain("!== 'claimed'");
+  });
+
+  // The escalation reads the helper's outcome in lib/guardian/escalate.ts (the
+  // inbound SMS, WhatsApp and screening flows call it directly now) and carries
+  // the distinction to its HTTP face as its own outcome kind.
+  it('the escalation keeps the distinction across its lib/route boundary', () => {
+    const lib = readFileSync('lib/guardian/escalate.ts', 'utf8');
+    const route = readFileSync('app/api/guardian/escalate/route.ts', 'utf8');
+    expect(lib, 'a truthiness check passes for every outcome now').not.toMatch(/if \(!(eventClaimed|claimed)\)/);
+    expect(lib).toContain("=== 'unavailable'");
+    expect(lib).toContain("!== 'claimed'");
+    expect(lib).toMatch(/kind: 'claim_unavailable'/);
+    expect(route).toMatch(/case 'claim_unavailable':[^\n]*503/);
+    expect(route, 'and still acknowledges a settled one').toMatch(/case 'duplicate':[^\n]*duplicate: true/);
   });
 
   // The sixth reaches the same invariant by a different route, so it is checked

@@ -1,7 +1,6 @@
 'use client';
 
 import { useLayoutEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { createBrowserClient, isChunkLike, parseCookieHeader, serializeCookieHeader } from '@supabase/ssr';
 import { Button } from '@/components/ui/button';
@@ -319,8 +318,8 @@ export function RecoveryForm({ request = false, initialGrant }: { request?: bool
       </form>}
       {view.phase === 'sent' && <p role="status" className="mt-4 text-sm text-muted">{t('authRecovery.sent')}</p>}
       {view.phase === 'updated' && <p role="status" className="mt-4 text-sm text-muted">{t('authRecovery.updated')}</p>}
-      {view.phase === 'error' && <Link href="/login?reset=1" className="mt-5 block text-sm text-brand-text underline">{t('authRecovery.requestAnother')}</Link>}
-      <Link href="/login" className="mt-5 block text-sm text-brand-text underline">{t('signup.backToSignIn')}</Link>
+      {view.phase === 'error' && <a href="/login?reset=1" className="mt-5 block text-sm text-brand-text underline">{t('authRecovery.requestAnother')}</a>}
+      <a href="/login" className="mt-5 block text-sm text-brand-text underline">{t('signup.backToSignIn')}</a>
     </div>
   );
 }

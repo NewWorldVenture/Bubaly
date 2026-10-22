@@ -19,6 +19,7 @@ import { isManager } from '@/lib/constants/roles';
 import { describeDbError } from '@/lib/supabase/errors';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { ROUTINE_ANCHORS, anchorByKey } from './anchors';
+import { addDaysToDayKey, dayKeyInTz, zonedTimeMs } from '../scope';
 import { nextCronRun, nextRelativeRun, parseSchedule, type RelativeSchedule, type Schedule } from './schedule';
 
 type DB = SupabaseClient<Database>;
@@ -212,48 +213,109 @@ export function scheduleOf(row: Pick<RuleRow, 'schedule_kind' | 'schedule_expr' 
   return null;
 }
 
+/** A relative routine's next fire as its anchor read found it, or that the read failed. */
+export type RelativeFire = { ok: true; at: Date | null } | { ok: false; error: unknown };
+
+/** The anchor read's builder, loosely typed: `select()` cannot type a column chosen at runtime. */
+type AnchorQuery = PromiseLike<{ data: Record<string, unknown>[] | null; error: unknown }> & {
+  eq(c: string, v: unknown): AnchorQuery;
+  not(c: string, op: string, v: unknown): AnchorQuery;
+  gte(c: string, v: unknown): AnchorQuery;
+  or(filters: string): AnchorQuery;
+  order(c: string, o: { ascending: boolean }): AnchorQuery;
+  limit(n: number): AnchorQuery;
+};
+
 /**
  * When a relative routine should next fire: the soonest anchor row that still
- * has its moment ahead of it.
+ * has its moment ahead of it, with `at: null` when there is none, and
+ * `ok: false` when the anchor rows could not be read. The two are not the
+ * same answer: "no trip" moves a routine off an occurrence, and a read that
+ * failed says nothing about the trip.
  *
  * Read through the allow-listed table and column only, and always filtered by
  * family — the anchor names a table, and the one thing that must never happen
  * is a sentence choosing which table a query reads.
  */
+export async function readRelativeFire(
+  db: DB, familyId: string, schedule: RelativeSchedule, from: Date, tz: string,
+): Promise<RelativeFire> {
+  const anchor = schedule.anchor;
+  // The earliest anchor day that can still fire after `from`, as the FAMILY's
+  // day: an anchor fires on its day plus `offsetDays`, at `atHour`, so the
+  // first day a fire can still land on (today, unless today's hour has
+  // passed) less the offset. The read starts there and nowhere earlier. It
+  // used to start `|offsetDays|` days BEFORE `from` (and one more day for an
+  // instant column), which for "the day before every event" took in three days
+  // that could not fire; with twenty rows read, a busy calendar filled the
+  // twenty before the anchor that could.
+  const fromKey = dayKeyInTz(from, tz);
+  const firstFireDay = zonedTimeMs(fromKey, schedule.atHour, 0, tz) > from.getTime() ? fromKey : addDaysToDayKey(fromKey, 1);
+  const earliest = addDaysToDayKey(firstFireDay, -schedule.offsetDays);
+  // The dynamic table/column comes from `ROUTINE_ANCHORS`, never from what a
+  // family typed, and the query is family-filtered like every other read.
+  let query = (db.from(anchor.table) as unknown as { select(columns: string): AnchorQuery })
+    .select(anchor.allDayField ? `${anchor.dateField}, ${anchor.allDayField}` : anchor.dateField)
+    .eq('family_id', familyId)
+    .not(anchor.dateField, 'is', null);
+  if (!anchor.instant) {
+    // A DATE column holds the family's day already.
+    query = query.gte(anchor.dateField, earliest);
+  } else {
+    // An instant's day is the family's day at that instant, which begins at
+    // the family's midnight. An all-day calendar row is stored at Greenwich
+    // midnight of its own date (anchorDay), which west of Greenwich comes
+    // first: there, all-day rows are read from Greenwich midnight and timed
+    // rows still only from the family's, so the evening before (already the
+    // next day in Greenwich) is not read either.
+    const dayStart = new Date(zonedTimeMs(earliest, 0, 0, tz)).toISOString();
+    const allDayStart = `${earliest}T00:00:00.000Z`;
+    if (anchor.allDayField && Date.parse(allDayStart) < Date.parse(dayStart)) {
+      query = query.gte(anchor.dateField, allDayStart)
+        .or(`${anchor.allDayField}.eq.true,${anchor.dateField}.gte.${dayStart}`);
+    } else {
+      query = query.gte(anchor.dateField, dayStart);
+    }
+  }
+  const { data, error } = await query.order(anchor.dateField, { ascending: true }).limit(20);
+  if (error) {
+    console.error('[service:routines] anchor read failed', error);
+    return { ok: false, error };
+  }
+  const fires = (data ?? [])
+    .map((row) => anchorDay(row, anchor, tz))
+    .filter((day): day is string => day !== null)
+    .map((day) => nextRelativeRun(schedule, day, from, tz))
+    .filter((d): d is Date => d !== null)
+    .sort((a, b) => a.getTime() - b.getTime());
+  return { ok: true, at: fires[0] ?? null };
+}
+
+/**
+ * The next fire, or null for none — and for a read that failed, which is how
+ * arming, pausing and rescheduling after a fire treat it: nothing to arm yet,
+ * and the next tick asks again. The pre-reserve re-check in the routine cron
+ * must tell the two apart, and reads `readRelativeFire` instead.
+ */
 export async function nextRelativeFire(
   db: DB, familyId: string, schedule: RelativeSchedule, from: Date, tz: string,
 ): Promise<Date | null> {
-  // The dynamic table/column comes from `ROUTINE_ANCHORS`, never from what a
-  // family typed, and the query is family-filtered like every other read — the
-  // cast is only because `select()` cannot type a column name chosen at runtime.
-  const { data, error } = await (db.from(schedule.anchor.table) as unknown as {
-    select(columns: string): {
-      eq(c: string, v: unknown): {
-        not(c: string, op: string, v: unknown): {
-          gte(c: string, v: unknown): {
-            order(c: string, o: { ascending: boolean }): {
-              limit(n: number): PromiseLike<{ data: Record<string, unknown>[] | null; error: unknown }>;
-            };
-          };
-        };
-      };
-    };
-  })
-    .select(schedule.anchor.dateField)
-    .eq('family_id', familyId)
-    .not(schedule.anchor.dateField, 'is', null)
-    .gte(schedule.anchor.dateField, new Date(from.getTime() - Math.abs(schedule.offsetDays) * 86_400_000).toISOString().slice(0, 10))
-    .order(schedule.anchor.dateField, { ascending: true })
-    .limit(20);
-  if (error) {
-    console.error('[service:routines] anchor read failed', error);
-    return null;
-  }
-  const fires = (data ?? [])
-    .map((row) => row[schedule.anchor.dateField])
-    .filter((value): value is string => typeof value === 'string')
-    .map((value) => nextRelativeRun(schedule, value.slice(0, 10), from, tz))
-    .filter((d): d is Date => d !== null)
-    .sort((a, b) => a.getTime() - b.getTime());
-  return fires[0] ?? null;
+  const fire = await readRelativeFire(db, familyId, schedule, from, tz);
+  return fire.ok ? fire.at : null;
+}
+
+/**
+ * The family's calendar day an anchor row falls on. A DATE column is its own
+ * day. A `timestamptz` was read as its first ten characters, which is
+ * Greenwich's date: a 6pm game in Los Angeles is 01:00Z the next day, so "the
+ * day before every game" fired on game day, and an 8am event in Tokyo is the
+ * previous day in Greenwich, so it fired a day early. An all-day calendar row
+ * is stored at Greenwich midnight of its own date, so its stored date stands.
+ */
+function anchorDay(row: Record<string, unknown>, anchor: RelativeSchedule['anchor'], tz: string): string | null {
+  const value = row[anchor.dateField];
+  if (typeof value !== 'string') return null;
+  if (!anchor.instant || (anchor.allDayField && row[anchor.allDayField] === true)) return value.slice(0, 10);
+  const at = new Date(value);
+  return Number.isNaN(at.getTime()) ? null : dayKeyInTz(at, tz);
 }

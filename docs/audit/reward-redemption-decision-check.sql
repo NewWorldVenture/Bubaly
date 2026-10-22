@@ -62,8 +62,10 @@
 -- 'fulfilled') and the writer is not the service role, is not sessionless, and
 -- does not `can_manage_family(new.family_id)`. 0308's cost guard is the only
 -- other trigger that can refuse anything; it raises 23514, which no check here
--- catches, and it early-returns when `reward_id` is NULL — as it is on every
--- write in this file, the control's included.
+-- catches. Every write in this file, the control's included, names a real
+-- reward of its own family at that reward's own title and price, so the cost
+-- guard (0308, and the held 0500, which refuses a ticket naming no reward)
+-- agrees with each of them and never speaks.
 --
 -- 0295 is the ONLY migration that names the guard: `grep -rl
 -- reward_redemption_decision_guard supabase/migrations` returns 0295 and
@@ -132,9 +134,10 @@
 --     `revoke update (decided_by)` sails straight past a control that only
 --     sets `status`, and then kills check 3 with a 42501 this probe would read
 --     as the guard holding.
--- It also leaves `reward_id` NULL, exactly as the writes under test do, so
--- 0308's cost guard early-returns for the control and for the checks alike and
--- cannot be the thing that makes either of them speak.
+-- It also names a real reward of its own family at that reward's title and
+-- price, exactly as the writes under test do, so 0308's cost guard (and the
+-- held 0500's) agrees with the control and the checks alike and cannot be the
+-- thing that makes either of them speak.
 begin;
 grant usage on schema public to authenticated;
 -- No blanket `grant ... on all tables in schema public` here. The bootstrap's
@@ -160,6 +163,8 @@ declare
   ctl_mid    uuid;
   red        uuid;
   chore      uuid;
+  reward     uuid;
+  ctl_reward uuid;
   ctl_q3     uuid;
   ctl_q4     uuid;
   blocked    boolean;
@@ -182,6 +187,9 @@ begin
   insert into public.chores (family_id, title) values (fam, 'Dishes') returning id into chore;
   insert into public.chore_assignments (family_id, chore_id, member_id, status, points_awarded)
   values (fam, chore, child_mid, 'approved', 100);
+  -- The reward every redemption below names, at its own title and price.
+  insert into public.rewards (family_id, title, cost_points) values (fam, 'Extra screen time', 100)
+    returning id into reward;
 
   -- ── The negative control's own household ─────────────────────────────────
   -- A SECOND family in which this SAME child is a manager, so
@@ -204,6 +212,8 @@ begin
   insert into public.chores (family_id, title) values (ctl_fam, 'Control chores') returning id into chore;
   insert into public.chore_assignments (family_id, chore_id, member_id, status, points_awarded)
   values (ctl_fam, chore, ctl_mid, 'approved', 1000);
+  insert into public.rewards (family_id, title, cost_points) values (ctl_fam, 'Extra screen time', 100)
+    returning id into ctl_reward;
 
   -- ── As the child ─────────────────────────────────────────────────────────
   perform set_config('request.jwt.claim.sub', child_uid::text, true);
@@ -232,8 +242,8 @@ begin
   -- 0a. Check 1's INSERT: mint an already-approved redemption, naming both
   --     `status` and `decided_by`.
   begin
-    insert into public.reward_redemptions (family_id, member_id, reward_title, cost_points, status, decided_by)
-    values (ctl_fam, ctl_mid, 'Extra screen time', 100, 'approved', ctl_mid);
+    insert into public.reward_redemptions (family_id, reward_id, member_id, reward_title, cost_points, status, decided_by)
+    values (ctl_fam, ctl_reward, ctl_mid, 'Extra screen time', 100, 'approved', ctl_mid);
     get diagnostics n = row_count;
     if n <> 1 then
       ctl_ok := false;
@@ -249,10 +259,10 @@ begin
   --     check starts from.
   if ctl_ok then
     begin
-      insert into public.reward_redemptions (family_id, member_id, reward_title, cost_points, status)
-      values (ctl_fam, ctl_mid, 'Extra screen time', 100, 'requested') returning id into ctl_q3;
-      insert into public.reward_redemptions (family_id, member_id, reward_title, cost_points, status)
-      values (ctl_fam, ctl_mid, 'Extra screen time', 100, 'requested') returning id into ctl_q4;
+      insert into public.reward_redemptions (family_id, reward_id, member_id, reward_title, cost_points, status)
+      values (ctl_fam, ctl_reward, ctl_mid, 'Extra screen time', 100, 'requested') returning id into ctl_q3;
+      insert into public.reward_redemptions (family_id, reward_id, member_id, reward_title, cost_points, status)
+      values (ctl_fam, ctl_reward, ctl_mid, 'Extra screen time', 100, 'requested') returning id into ctl_q4;
       if ctl_q3 is null or ctl_q4 is null then
         ctl_ok := false;
         ctl_why := 'leg 0b: this child could not queue a request in the family they DO manage, so checks 3 and 4 have no control';
@@ -315,8 +325,8 @@ begin
   -- 1. Cannot mint an already-approved redemption.
   blocked := false;
   begin
-    insert into public.reward_redemptions (family_id, member_id, reward_title, cost_points, status, decided_by)
-    values (fam, child_mid, 'Extra screen time', 100, 'approved', child_mid);
+    insert into public.reward_redemptions (family_id, reward_id, member_id, reward_title, cost_points, status, decided_by)
+    values (fam, reward, child_mid, 'Extra screen time', 100, 'approved', child_mid);
   exception when insufficient_privilege then blocked := true;
   end;
   if not blocked then
@@ -324,8 +334,8 @@ begin
   end if;
 
   -- 2. May still ASK. A guard that blocked this would break the product.
-  insert into public.reward_redemptions (family_id, member_id, reward_title, cost_points, status)
-  values (fam, child_mid, 'Extra screen time', 100, 'requested') returning id into red;
+  insert into public.reward_redemptions (family_id, reward_id, member_id, reward_title, cost_points, status)
+  values (fam, reward, child_mid, 'Extra screen time', 100, 'requested') returning id into red;
 
   -- 3. Cannot approve the request they just made.
   blocked := false;

@@ -211,11 +211,15 @@ describe('a row that licenses the next write is confirmed before it (C1-S9-82)',
     expect(at(fn, 'if (wroteNoRows(removedRow))')).toBeLessThan(at(fn, 'removeFamilyMedia(supabase, photo.storage_path)'));
   });
 
-  it('routines: a template edit is confirmed before its steps are cleared and replaced', () => {
+  it('routines: a template edit is confirmed before its steps are replaced, new steps first', () => {
+    // The replacement used to clear every step and then insert, so a refused
+    // insert left the routine with none (N19). The new steps now land, and are
+    // confirmed, before the old ones are removed by id.
     const src = readFileSync('components/modules/routines-panel.tsx', 'utf8');
     const fn = bodyOf(src, 'async function save() {', '\n  }\n');
-    expect(at(fn, 'if (wroteNoRows(renamed))')).toBeLessThan(at(fn, ".from('routine_template_items').delete()"));
-    expect(at(fn, ".from('routine_template_items').delete()")).toBeLessThan(at(fn, ".from('routine_template_items').insert("));
+    expect(at(fn, 'if (wroteNoRows(renamed))')).toBeLessThan(at(fn, ".from('routine_template_items').insert("));
+    expect(at(fn, ".from('routine_template_items').insert(")).toBeLessThan(at(fn, ".from('routine_template_items').delete()"));
+    expect(at(fn, '(inserted?.length ?? 0) !== steps.length')).toBeLessThan(at(fn, ".from('routine_template_items').delete()"));
   });
 
   it('expenses: a split rollback that matched nothing is logged, not silent', () => {
@@ -224,20 +228,24 @@ describe('a row that licenses the next write is confirmed before it (C1-S9-82)',
     expect(at(src, 'if (rollbackError)')).toBeLessThan(at(src, 'else if (wroteNoRows(rolledBack)) console.error('));
   });
 
-  it('two writes stay unconfirmed on purpose, and say why', () => {
-    // Zero rows is a legitimate answer for both: nothing was unread, and a
-    // template with no steps written. Confirming them would refuse a success.
+  it('one write stays unconfirmed on purpose, and says why; the routine step delete is now confirmed', () => {
+    // Zero rows is a legitimate answer for mark-all-read: nothing was unread.
+    // Confirming it would refuse a success.
     const notifications = readFileSync('components/modules/notifications-module.tsx', 'utf8');
     const all = bodyOf(notifications, 'async function markAllRead() {', '\n  }\n');
     expect(all).toContain(".update({ is_read: true })");
     expect(all).not.toContain(".select(");
     expect(all).toContain('Audit C1-S9-82');
+    // The routine steps used to be cleared wholesale and unconfirmed. They are
+    // now removed by the ids read before the new steps were written, and the
+    // delete is held to exactly that many rows (N19): fewer means another save
+    // replaced them in between.
     const routines = readFileSync('components/modules/routines-panel.tsx', 'utf8');
     const clear = at(routines, ".from('routine_template_items').delete()");
-    const clearLine = routines.slice(clear, routines.indexOf('\n', clear));
-    expect(clearLine).not.toContain('.select(');
-    const lead = routines.slice(0, clear).split('\n').slice(-12).join('\n');
-    expect(lead).toContain('Audit C1-S9-82');
+    const statement = routines.slice(clear, routines.indexOf(';', clear));
+    expect(statement).toContain(".in('id', previous)");
+    expect(statement).toContain(".select('id')");
+    expect(routines.slice(clear)).toContain('(removed?.length ?? 0) !== previous.length');
   });
 });
 
@@ -263,8 +271,14 @@ describe('access, defaults and undo say only what landed (C1-S9-83)', () => {
   });
 
   it('settings, connections, chores, decisions: the zero-row check precedes the claim', () => {
+    // The member edit moved into updateFamilyMemberAction, which reads back the
+    // rows it wrote; the screen claims success only on its `ok`.
     const settings = readFileSync('components/modules/settings-module.tsx', 'utf8');
-    expect(at(settings, 'if (wroteNoRows(edited))')).toBeLessThan(at(settings, "success(t('settingsModule.memberUpdated'))"));
+    expect(at(settings, 'if (!res.ok) return toastError(res.error);')).toBeLessThan(at(settings, "success(t('settingsModule.memberUpdated'))"));
+    const memberActions = readFileSync('app/(app)/family/member-actions.ts', 'utf8');
+    const edit = bodyOf(memberActions, 'export async function updateFamilyMemberAction(', '\n}\n');
+    expect(at(edit, ".eq('is_active', true).eq('updated_at', target.updated_at)\n    .select('id');")).toBeLessThan(at(edit, 'if (wroteNoRows(rows))'));
+    expect(at(edit, 'if (wroteNoRows(rows))')).toBeLessThan(edit.lastIndexOf('return { ok: true };'));
     const connections = readFileSync('components/modules/connections-module.tsx', 'utf8');
     expect(connections).toContain(".delete().eq('family_id', familyId).eq('provider', p.id).select('id')");
     expect(at(connections, 'if (wroteNoRows(removed))')).toBeLessThan(at(connections, "success(t('connections.nameDisconnected'"));
@@ -298,7 +312,8 @@ describe('a refused listing save lets go of nothing it uploaded (C1-S9-85)', () 
     // The save reaches .select('id') through a local `run` helper, which no
     // binding regex can see — so this is checked here, in its own function.
     const helper = bodyOf(src, 'const run = (uStrip: typeof fullUpdate, iStrip: typeof fullInsert) => reminder', ';\n');
-    expect(helper).toContain(".update(uStrip).eq('id', reminder.id).select('id')");
+    // Scoped by family as well as id (the gated-write rule, a-filtered-delete-is-not-a-deletion).
+    expect(helper).toContain(".update(uStrip).eq('id', reminder.id).eq('family_id', familyId).select('id')");
     expect(helper).toContain(".insert(iStrip).select('id')");
     expect(src).toContain('({ data: saved, error } = await run(stripNewCols(fullUpdate), stripNewCols(fullInsert)));');
     expect(at(src, 'let { data: saved, error } = await run(fullUpdate, fullInsert);')).toBeLessThan(at(src, "if (wroteNoRows(saved)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }"));

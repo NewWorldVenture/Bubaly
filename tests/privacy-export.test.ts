@@ -45,8 +45,9 @@ function household(aal: Aal = { currentLevel: 'aal1', nextLevel: 'aal1' }, maxRo
     maxRows,
     rpc: { rate_limit_hit: () => [{ allowed: true, retry_after: 0 }] },
   });
-  // The guard reads the level from the session; the fake has no session.
-  Object.assign(db.auth, { mfa: { getAuthenticatorAssuranceLevel: async () => ({ data: aal, error: null }) } });
+  // Explicit synthetic session receipt; real cookie/provider authority is covered
+  // by server-assurance-ignores-cookie-factor-claims.test.ts.
+  Object.assign(db.auth, { getSession: async () => ({ data: { session: { access_token: 'synthetic-assurance-token' } }, error: null }), mfa: { getAuthenticatorAssuranceLevel: async () => ({ data: aal, error: null }) } });
 
   db.seed('families', [{ id: FAMILY, name: 'The Riveras', timezone: FAMILY_TZ }]);
   db.seed('family_members', [

@@ -6,6 +6,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -27,6 +28,8 @@ import { todayInZone } from '@/lib/schedule/zoned';
 type SplitRow = Tables<'expense_splits'>;
 type Share = Tables<'expense_split_shares'>;
 
+/** A real ceiling for each read: past it the read fails, never a smaller balance. */
+const SPLIT_ROWS_MAX = 50_000;
 const CATEGORIES = ['Groceries', 'Dining', 'Travel', 'Utilities', 'Entertainment', 'Household', 'Gifts', 'Other'];
 const blank = (tz: string) => ({ description: '', amount: '', category: 'Groceries', paid_by: '', spent_on: todayInZone(tz), participants: [] as string[] });
 
@@ -43,13 +46,29 @@ export function ExpensesModule() {
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const memberName = (id: string | null) => (id ? memberById.get(id)?.display_name ?? 'Member' : '—');
 
+  // Both reads are SUMMED into "Settle up" and "Outstanding", so both are read
+  // whole. One unpaged select each came back as at most 1,000 rows (PostgREST's
+  // db-max-rows, no signal): past that an arbitrary subset of shares was summed,
+  // and a share whose split had dropped off the splits read had no payer, so an
+  // old unsettled debt left "Settle up" while still counting in "Outstanding".
+  // Paged on the id, not offsets, so a share settled between two pages is not
+  // read twice (readAllById); past the ceiling the read fails and the module
+  // shows its error state instead of transfers built on part of the ledger.
   const { data: splits, loading: splitsLoading, error: splitsError, refresh: refreshSplits } = useRealtimeQuery<SplitRow>({
     table: 'expense_splits', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('expense_splits').select('*').eq('family_id', familyId).order('spent_on', { ascending: false }),
+    fetcher: (sb) => readAllByIdAsQuery<SplitRow>((after, limit) => {
+      let q = sb.from('expense_splits').select('*').eq('family_id', familyId);
+      if (after) q = q.gt('id', after);
+      return q.order('id').limit(limit);
+    }, { max: SPLIT_ROWS_MAX }),
   });
   const { data: shares, loading: sharesLoading, error: sharesError, refresh: refreshShares } = useRealtimeQuery<Share>({
     table: 'expense_split_shares', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('expense_split_shares').select('*').eq('family_id', familyId),
+    fetcher: (sb) => readAllByIdAsQuery<Share>((after, limit) => {
+      let q = sb.from('expense_split_shares').select('*').eq('family_id', familyId);
+      if (after) q = q.gt('id', after);
+      return q.order('id').limit(limit);
+    }, { max: SPLIT_ROWS_MAX }),
   });
 
   const loading = splitsLoading || sharesLoading;
@@ -58,7 +77,11 @@ export function ExpensesModule() {
 
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
 
-  const allSplits = useMemo(() => splits ?? [], [splits]);
+  // Read in id order; listed newest spend first, as the read used to order them.
+  const allSplits = useMemo(
+    () => [...(splits ?? [])].sort((a, b) => b.spent_on.localeCompare(a.spent_on) || b.id.localeCompare(a.id)),
+    [splits],
+  );
   const allShares = useMemo(() => shares ?? [], [shares]);
   const sharesBySplit = useMemo(() => {
     const m = new Map<string, Share[]>();
@@ -131,7 +154,7 @@ export function ExpensesModule() {
       // Under RLS a refused row comes back with no error and zero rows. Audit C1-S9-82.
       const { data: toggled, error } = await createClient().from('expense_split_shares')
         .update({ settled: !s.settled, settled_at: !s.settled ? new Date().toISOString() : null })
-        .eq('id', s.id).select('id');
+        .eq('id', s.id).eq('family_id', familyId).select('id');
       if (error) throw error;
       if (wroteNoRows(toggled)) toastError(tr('errors.thatChangeWasNotSaved'));
     });

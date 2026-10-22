@@ -27,6 +27,12 @@
 // grammar does not contain it. Main found both of its search sanitizers missing
 // it for exactly that reason (a search for `*` became `%%%%`); the rule lives
 // here so the next caller cannot miss it a third time.
+//
+// Escaping a star stops it WIDENING a pattern; it does not make a literal star
+// matchable. PostgREST replaces every `*` in the value with `%`, escaped or not,
+// so `\*` reaches PostgreSQL as `\%` and matches a literal percent sign. A lookup
+// that must not MISS a starred value (an opt-out) sends `_` for the star and
+// compares exactly afterwards, as lib/marketing/automation-steps.ts does.
 export function escapeLike(value: string): string {
   return value.replace(/[\\%_*]/g, (m) => `\\${m}`);
 }
@@ -65,4 +71,20 @@ export function escapeLike(value: string): string {
 // repository cannot test. Widening a search by a space is a smaller cost.
 export function escapeOrValue(value: string): string {
   return escapeLike(value.replace(/[(),]/g, ' ')).trim();
+}
+
+/** Exact case-insensitive text for PostgREST imatch (~*), without LIKE's '*' alias. */
+export function literalCaseInsensitivePattern(value: string): string {
+  return `^${value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`;
+}
+
+/**
+ * Case-insensitive "contains this text" for PostgREST imatch (~*): the value,
+ * escaped, unanchored. A search that must keep a `*` a star uses this, not
+ * ilike: PostgREST turns every `*` in a like pattern into `%`, escaped or not,
+ * so a star can only be approximated there (`_`) and then filtered — after the
+ * row limit, which loses matches. imatch has no such alias.
+ */
+export function literalContainsPattern(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

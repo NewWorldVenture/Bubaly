@@ -11,23 +11,24 @@
 // is reclaimable only after ten minutes, so the caller's retry inside that
 // window was answered `{ ok: true, duplicate: true }`: an emergency escalation
 // reported as handled when nobody had been told. Its third failure, after the
-// alerts have gone out, keeps `error` on purpose, and that asymmetry is pinned
-// here too.
+// alerts have gone out, keeps `error` on purpose — final, never reclaimed, when
+// a manager's phone was reached — and that asymmetry is pinned here too.
 import { createHmac } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { guardianEscalationEventId } from '@/lib/guardian/escalation';
 
-const seam = vi.hoisted(() => ({ service: vi.fn(), turn: vi.fn(), sms: vi.fn(), call: vi.fn() }));
+const seam = vi.hoisted(() => ({ service: vi.fn(), turn: vi.fn(), sms: vi.fn(), call: vi.fn(), twilio: { ready: true } }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: seam.service }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/guardian/ai-screen', () => ({ screeningTurn: seam.turn, summarizeScreening: async () => 'summary' }));
-// The TwiML helpers stay real; only the outbound telephony is stubbed, and
-// isTwilioConfigured() false keeps the escalation on its push-only path.
+// The TwiML helpers stay real; only the outbound telephony is stubbed. It is
+// configured and succeeding unless a case says otherwise: an escalation that
+// reaches no manager by phone is no longer a completed one (see the last case).
 vi.mock('@/lib/guardian/twilio', async (original) => ({
   ...await original<typeof import('@/lib/guardian/twilio')>(),
-  isTwilioConfigured: () => false, sendSms: seam.sms, initiateCall: seam.call,
+  isTwilioConfigured: () => seam.twilio.ready, sendSms: seam.sms, initiateCall: seam.call,
 }));
 
 const ORIGIN = 'https://guardian-fixture.invalid';
@@ -52,7 +53,9 @@ let errors: unknown[][];
 /** The callback table as 0181 declares it, with the clock default added at insert time. */
 function database(): InMemorySupabase {
   const fresh = createInMemorySupabase({
-    uniques: { guardian_callback_events: [['event_id']] },
+    // The primary keys the escalation's stable ids rely on: a retry's insert
+    // of the same notification answers 23505, as Postgres does.
+    uniques: { guardian_callback_events: [['event_id']], notifications: [['id']], guardian_escalations: [['id']] },
     defaults: { guardian_callback_events: { status: 'processing', processed_at: null, error: null } },
   });
   const realFrom = fresh.from.bind(fresh);
@@ -125,8 +128,12 @@ beforeEach(() => {
   errors = [];
   seam.service.mockImplementation(() => db);
   seam.turn.mockRejectedValue(new Error('the AI turn is not part of these cases'));
+  seam.twilio.ready = true;
+  seam.sms.mockReset(); seam.call.mockReset();
+  seam.sms.mockResolvedValue(undefined); seam.call.mockResolvedValue(undefined);
   db.seed('families', [{ id: FAMILY, name: 'Fixture' }]);
   db.seed('family_members', [{ id: 'm-parent', family_id: FAMILY, user_id: 'u-parent', display_name: 'Ada', role: 'parent', is_active: true }]);
+  db.seed('profiles', [{ id: 'u-parent', phone: '+15550000777' }]);
   vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { errors.push(args); });
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
@@ -221,16 +228,81 @@ describe('the emergency escalation', () => {
   it('records and completes a first request, and acknowledges an exact retry as the duplicate it is', async () => {
     const [first, body] = await escalate();
     expect(first.status).toBe(200);
-    expect(body).toMatchObject({ ok: true, pushSent: true, smsSent: false, callAttempted: false });
+    // `high` texts but does not ring the house.
+    expect(body).toMatchObject({ ok: true, pushSent: true, smsSent: true, callAttempted: false, notifiedCount: 1 });
+    expect(seam.sms).toHaveBeenCalledTimes(1);
     expect(db.table('notifications')).toHaveLength(1);
     expect(db.table('guardian_escalations')).toHaveLength(1);
+    expect(db.table('guardian_escalations')[0]).toMatchObject({ notified_member_ids: ['m-parent'], sms_sent: true });
     expect(events()).toEqual([expect.objectContaining({ event_id: ESCALATION_EVENT, callback_type: 'emergency_escalation', status: 'processed' })]);
 
     const [retry, again] = await escalate();
     expect(retry.status).toBe(200);
     expect(again).toEqual({ ok: true, duplicate: true });
     expect(db.table('notifications'), 'the family is not alarmed twice').toHaveLength(1);
+    expect(seam.sms, 'nor texted twice').toHaveBeenCalledTimes(1);
     expect(reads('family_members')).toBe(1);
+  });
+
+  it('every send failing is not a completed escalation: it is recorded, said, and left retryable', async () => {
+    // Every text and call refused (a Twilio 5xx): the route used to write
+    // sms_sent=false, call_attempted=false, mark the claim processed and answer
+    // { ok: true } — so the retry was a duplicate and the emergency counted as
+    // handled with nobody told beyond an unaddressed in-app row.
+    seam.sms.mockRejectedValue(new Error('Twilio 503')); seam.call.mockRejectedValue(new Error('Twilio 503'));
+    const [first, body] = await escalate();
+    expect(first.status).toBe(503);
+    expect(body).toMatchObject({ ok: false, delivered: false, pushSent: true, notifiedCount: 0 });
+    expect(db.table('notifications'), 'the in-app row still lands').toHaveLength(1);
+    expect(db.table('guardian_escalations'), 'and the escalation is on record for the dashboard').toHaveLength(1);
+    expect(db.table('guardian_escalations')[0]).toMatchObject({ notified_member_ids: [], sms_sent: false, call_attempted: false });
+    expect(events(), 'the claim was given back so a retry is processed').toEqual([]);
+    expect(errors.some((args) => /reached no manager by SMS or call/.test(String(args[0])))).toBe(true);
+
+    // A retry while telephony is still down changes nothing and alarms nobody twice.
+    const [again] = await escalate();
+    expect(again.status).toBe(503);
+    expect(db.table('notifications')).toHaveLength(1);
+    expect(db.table('guardian_escalations')).toHaveLength(1);
+
+    // Once telephony is back the same request goes through and the record is updated in place.
+    seam.sms.mockResolvedValue(undefined); seam.call.mockResolvedValue(undefined);
+    const [third, delivered] = await escalate();
+    expect(third.status).toBe(200);
+    expect(delivered).toMatchObject({ ok: true, smsSent: true, notifiedCount: 1 });
+    expect(db.table('notifications')).toHaveLength(1);
+    expect(db.table('guardian_escalations')).toHaveLength(1);
+    expect(db.table('guardian_escalations')[0]).toMatchObject({ notified_member_ids: ['m-parent'], sms_sent: true });
+    expect(events()).toEqual([expect.objectContaining({ event_id: ESCALATION_EVENT, status: 'processed' })]);
+  });
+
+  it('telephony unconfigured is unreachable, not retryable: recorded, said, and complete', async () => {
+    // Unconfigured is not an outage to wait out — nothing can be sent until a
+    // deploy changes — so a 503 here asked the lanes to retry something no
+    // retry could mend. The escalation is on record with nobody to tell (a NULL
+    // notified_member_ids, which the retry sweep leaves alone), the in-app row
+    // lands, the claim is processed, and the answer is not `ok`.
+    seam.twilio.ready = false;
+    const [first, body] = await escalate();
+    expect(first.status).toBe(200);
+    expect(body).toMatchObject({ ok: false, delivered: false, unreachable: true, pushSent: true, notifiedCount: 0 });
+    expect(seam.sms).not.toHaveBeenCalled();
+    expect(db.table('notifications'), 'the in-app row still lands').toHaveLength(1);
+    expect(db.table('guardian_escalations'), 'and the escalation is on record for the dashboard').toHaveLength(1);
+    expect(db.table('guardian_escalations')[0]).toMatchObject({ notified_member_ids: null, sms_sent: false, call_attempted: false });
+    expect(events()).toEqual([expect.objectContaining({ event_id: ESCALATION_EVENT, status: 'processed' })]);
+    expect(errors.some((args) => /Twilio is not configured/.test(String(args[0])))).toBe(true);
+    expect(errors.some((args) => /nobody to text or call/.test(String(args[0])))).toBe(true);
+
+    // A retry — even once telephony is configured — is a duplicate: this
+    // emergency was handled as far as it could be, and alarms nobody twice.
+    seam.twilio.ready = true;
+    const [again, duplicate] = await escalate();
+    expect(again.status).toBe(200);
+    expect(duplicate).toEqual({ ok: true, duplicate: true });
+    expect(seam.sms).not.toHaveBeenCalled();
+    expect(db.table('notifications')).toHaveLength(1);
+    expect(db.table('guardian_escalations')).toHaveLength(1);
   });
 
   it('asks for a retry when the claim itself cannot be written, before any read', async () => {
@@ -257,7 +329,7 @@ describe('the emergency escalation', () => {
     heal();
     const [retry, again] = await escalate();
     expect(retry.status).toBe(200);
-    expect(again).toMatchObject({ ok: true, pushSent: true });
+    expect(again).toMatchObject({ ok: true, pushSent: true, smsSent: true });
     expect(db.table('notifications')).toHaveLength(1);
     expect(db.table('guardian_escalations')).toHaveLength(1);
     expect(events()).toEqual([expect.objectContaining({ event_id: ESCALATION_EVENT, status: 'processed' })]);
@@ -265,20 +337,64 @@ describe('the emergency escalation', () => {
 
   it('keeps the claim as an error when the record fails AFTER the alerts went out, so a retry inside ten minutes does not alarm twice', async () => {
     // The deliberate asymmetry. By this point the family-wide notification has
-    // been written (and, with telephony configured, every manager texted and
-    // called); the ten minutes before an `error` row can be reclaimed is what
-    // keeps an immediate retry from doing all of that again. The cost is a
-    // missing escalation record, which the 500 and the row's `error` text name.
+    // been written and the parent texted; the ten minutes before an `error` row
+    // can be reclaimed is what keeps an immediate retry from doing all of that
+    // again. The cost is a missing escalation record, which the 500 and the
+    // row's `error` text name.
     refuse(db, 'guardian_escalations', REFUSED);
     const [first, body] = await escalate();
     expect(first.status).toBe(500);
     expect(body).toEqual({ error: 'escalate.unableToProcessEscalation' });
     expect(db.table('notifications'), 'the alert had already gone out').toHaveLength(1);
+    expect(seam.sms).toHaveBeenCalledTimes(1);
     expect(events()).toEqual([expect.objectContaining({ event_id: ESCALATION_EVENT, status: 'error', error: 'Unable to record escalation.' })]);
 
     const [retry, again] = await escalate();
     expect(retry.status).toBe(200);
     expect(again).toEqual({ ok: true, duplicate: true });
     expect(db.table('notifications')).toHaveLength(1);
+    expect(seam.sms, 'the parent is not texted a second time').toHaveBeenCalledTimes(1);
+  });
+
+  it('and that error is final: a retry long after the ten minutes still does not text or call twice', async () => {
+    // The ten minutes were not the whole answer. Past them the claim was
+    // reclaimed like any other `error`, and the retry — this caller's, a
+    // provider redelivery's, the SMS lane's — texted every manager again.
+    const heal = refuse(db, 'guardian_escalations', REFUSED);
+    const [first] = await escalate();
+    expect(first.status).toBe(500);
+    expect(seam.sms).toHaveBeenCalledTimes(1);
+    heal();
+    for (const row of events()) row.received_at = new Date(Date.now() - 11 * MINUTE).toISOString();
+
+    const [retry, again] = await escalate();
+    expect(retry.status).toBe(200);
+    expect(again).toEqual({ ok: true, duplicate: true });
+    expect(seam.sms, 'the parent is not texted a second time').toHaveBeenCalledTimes(1);
+    expect(db.table('notifications')).toHaveLength(1);
+    expect(events()).toEqual([expect.objectContaining({ event_id: ESCALATION_EVENT, status: 'error', error: 'Unable to record escalation.' })]);
+  });
+
+  it('with nobody to text or call, a record that did not land holds its claim only the ten minutes: the retry after lands it and alarms nobody', async () => {
+    // Final is for an escalation that reached a phone. With nobody to reach
+    // there is nothing a retry could send twice (the in-app row has a stable
+    // id), so the claim stays reclaimable and a later retry writes the record.
+    seam.twilio.ready = false;
+    const heal = refuse(db, 'guardian_escalations', REFUSED);
+    const [first] = await escalate();
+    expect(first.status).toBe(500);
+    expect(events()).toEqual([expect.objectContaining({ event_id: ESCALATION_EVENT, status: 'error' })]);
+    heal();
+    const [, held] = await escalate();
+    expect(held, 'inside the ten minutes it is held').toEqual({ ok: true, duplicate: true });
+
+    for (const row of events()) row.received_at = new Date(Date.now() - 11 * MINUTE).toISOString();
+    const [late, body] = await escalate();
+    expect(late.status).toBe(200);
+    expect(body).toMatchObject({ unreachable: true });
+    expect(db.table('guardian_escalations')).toEqual([expect.objectContaining({ notified_member_ids: null })]);
+    expect(db.table('notifications')).toHaveLength(1);
+    expect(seam.sms).not.toHaveBeenCalled();
+    expect(events()).toEqual([expect.objectContaining({ event_id: ESCALATION_EVENT, status: 'processed' })]);
   });
 });

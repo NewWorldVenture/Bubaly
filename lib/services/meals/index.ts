@@ -122,7 +122,16 @@ export type MealLibraryInput = {
   ingredients?: Ingredient[];
   recipeUrl?: string | null;
   imageUrl?: string | null;
+  /** The method, when the dish arrives with one (Fridge Chef's steps). */
+  notes?: string | null;
 };
+
+/** The longest method a dish carries — what Fridge Chef always stored. */
+const MAX_MEAL_NOTES = 2000;
+
+function validOptionalNotes(value: unknown): boolean {
+  return value == null || (typeof value === 'string' && value.length <= MAX_MEAL_NOTES);
+}
 
 function validIngredients(value: unknown): value is Ingredient[] {
   return Array.isArray(value) && value.length <= 100 && value.every((line) =>
@@ -143,8 +152,28 @@ function matchesMealInput(meal: Meal, input: MealLibraryInput): boolean {
     && (input.mealType == null || meal.meal_type === input.mealType)
     && (input.ingredients === undefined || JSON.stringify(parseIngredients(meal.ingredients)) === JSON.stringify(parseIngredients(ingredientsToJson(input.ingredients))))
     && (input.recipeUrl === undefined || (meal.recipe_url || null) === (input.recipeUrl?.trim() || null))
-    && (input.imageUrl === undefined || (meal.image_url || null) === (input.imageUrl?.trim() || null));
+    && (input.imageUrl === undefined || (meal.image_url || null) === (input.imageUrl?.trim() || null))
+    && (input.notes === undefined || (meal.notes?.trim() || null) === (input.notes?.trim() || null));
 }
+
+/** A dish named and nothing else: no ingredients, no links, no method. */
+function namesTheDishAlone(input: MealLibraryInput): boolean {
+  return !input.ingredients?.length && !input.recipeUrl?.trim() && !input.imageUrl?.trim() && !input.notes?.trim();
+}
+
+export type EnsureMealOptions = {
+  /**
+   * The dish is being PLANNED, so `mealType` is the slot it goes in rather than
+   * a property of the dish. A dish named with nothing else then reuses the
+   * family's saved dish of that name whatever its own meal type: the one of
+   * the slot's type when there is one (the oldest, as before), otherwise the
+   * only one — and several of other types are refused as ambiguous rather than
+   * guessed between. Without this, "plan Lentil soup for dinner" missed the
+   * family's lunch-type Lentil soup and saved an EMPTY dinner copy of it, which
+   * then refused to build a shopping list.
+   */
+  planning?: boolean;
+};
 
 // ── Meal library ────────────────────────────────────────────────────────────
 
@@ -154,23 +183,27 @@ function matchesMealInput(meal: Meal, input: MealLibraryInput): boolean {
  * Reuse by name is what keeps the library from filling with "Tacos", "tacos"
  * and "Tacos " every time the planner runs; the legacy `create_meal_plan_entry`
  * action inserted a new `meals` row on every call and families noticed.
+ *
+ * Adding a dish to the library (no `planning`) keeps the meal type it was
+ * given: a "Toast" for dinner beside the breakfast "Toast" is a second dish.
  */
 export async function ensureMealByName(
   scope: ServiceScope,
   input: MealLibraryInput,
+  options: EnsureMealOptions = {},
 ): Promise<ServiceResult<{ meal: Meal; created: boolean }>> {
   const name = typeof input?.name === 'string' ? input.name.trim() : '';
   if (!name || name.length > 300 || (input.mealType != null && !isMealType(input.mealType))
     || (input.ingredients !== undefined && !validIngredients(input.ingredients))
-    || !validOptionalUrl(input.recipeUrl) || !validOptionalUrl(input.imageUrl)) {
+    || !validOptionalUrl(input.recipeUrl) || !validOptionalUrl(input.imageUrl) || !validOptionalNotes(input.notes)) {
     return fail('Check the meal name, ingredients and links.', { code: SERVICE_CODES.invalidInput });
   }
   const mealType = isMealType(input.mealType) ? input.mealType : 'dinner';
 
   const term = name;
-  const { data: existing, error: lookupError } = await scope.db
+  const { data: existing, error: lookupError, count } = await scope.db
     .from('meals')
-    .select('*')
+    .select('*', { count: 'exact' })
     .eq('family_id', scope.familyId)
     .ilike('name', escapeLike(term))
     .order('created_at', { ascending: true })
@@ -180,9 +213,26 @@ export async function ensureMealByName(
     return fail(describeDbError(lookupError, 'Could not look up that meal.'), { code: SERVICE_CODES.db });
   }
   if (!Array.isArray(existing)) return fail('Could not read the meal library.', { code: SERVICE_CODES.db });
-  const matching = existing.find((meal) => matchesMealInput(meal, input));
-  if (matching) return ok({ meal: matching, created: false });
-  if (existing.length === 200) return fail('Choose an existing meal with that name from the library.', { code: SERVICE_CODES.invalidInput });
+  // Fewer rows than there are dishes of that name: the 200 asked for, or a
+  // server cap below it that says nothing. Either way a choice made from these
+  // rows may not be the family's, so it is not made.
+  const partial = existing.length === 200 || (typeof count === 'number' && count > existing.length);
+  if (options.planning && namesTheDishAlone(input)) {
+    const sameName = existing.filter((meal) => normalizeDishName(meal.name) === normalizeDishName(name));
+    const sameType = sameName.find((meal) => meal.meal_type === mealType);
+    if (sameType) return ok({ meal: sameType, created: false });
+    // Two saved dishes of that name, neither of this slot's type, or a lookup
+    // that may have stopped short of the rest: which one the family meant is
+    // theirs to say, and an empty third copy is the one answer that is wrong.
+    if (sameName.length > 1 || partial) {
+      return fail('Choose an existing meal with that name from the library.', { code: SERVICE_CODES.invalidInput });
+    }
+    if (sameName.length === 1) return ok({ meal: sameName[0], created: false });
+  } else {
+    const matching = existing.find((meal) => matchesMealInput(meal, input));
+    if (matching) return ok({ meal: matching, created: false });
+    if (partial) return fail('Choose an existing meal with that name from the library.', { code: SERVICE_CODES.invalidInput });
+  }
 
   const { data, error } = await scope.db
     .from('meals')
@@ -193,6 +243,7 @@ export async function ensureMealByName(
       ingredients: ingredientsToJson(input.ingredients),
       recipe_url: input.recipeUrl?.trim() || null,
       image_url: input.imageUrl?.trim() || null,
+      notes: input.notes?.trim() || null,
       // meals.created_by references auth.users (0002).
       created_by: scope.userId,
     })
@@ -288,6 +339,8 @@ export type PlanEntryInput = {
   ingredients?: Ingredient[];
   recipeUrl?: string | null;
   imageUrl?: string | null;
+  /** The method for a dish named here; saved meals and recipes keep their own. */
+  notes?: string | null;
 };
 
 type ResolvedEntry = { date: string; mealType: MealType; mealId: string; name: string; ingredients: Ingredient[] };
@@ -322,7 +375,7 @@ async function resolveEntries(
     }
     let source: MealLibraryInput = {
       name: entry.mealName?.trim() ?? '', mealType, ingredients: entry.ingredients,
-      recipeUrl: entry.recipeUrl, imageUrl: entry.imageUrl,
+      recipeUrl: entry.recipeUrl, imageUrl: entry.imageUrl, notes: entry.notes,
     };
     if (entry.recipeId) {
       const { data: recipe, error } = await scope.db.from('family_recipes').select('*')
@@ -337,7 +390,9 @@ async function resolveEntries(
       resolved.push({ date: entry.date, mealType, mealId: cached.id, name: cached.name, ingredients: parseIngredients(cached.ingredients) });
       continue;
     }
-    const ensured = await ensureMealByName(scope, source);
+    // A saved recipe is converted with its own ingredients and links, so it is
+    // never reused by name alone; a dish the entry merely names is.
+    const ensured = await ensureMealByName(scope, source, { planning: !entry.recipeId });
     if (!ensured.ok) return ensured;
     if (ensured.data.created) createdMealIds.push(ensured.data.meal.id);
     byName.set(key, ensured.data.meal);
@@ -357,9 +412,9 @@ function validateEntries(entries: PlanEntryInput[]): ServiceResult<PlanEntryInpu
     const sources = [entry.mealId, entry.recipeId, entry.mealName];
     if (sources.some((value) => value != null && (typeof value !== 'string' || value.length > 300))
       || sources.filter((value) => typeof value === 'string' && value.trim()).length !== 1
-      || ((entry.mealId || entry.recipeId) && (entry.ingredients !== undefined || entry.recipeUrl !== undefined || entry.imageUrl !== undefined))
+      || ((entry.mealId || entry.recipeId) && (entry.ingredients !== undefined || entry.recipeUrl !== undefined || entry.imageUrl !== undefined || entry.notes !== undefined))
       || (entry.ingredients !== undefined && !validIngredients(entry.ingredients))
-      || !validOptionalUrl(entry.recipeUrl) || !validOptionalUrl(entry.imageUrl)) {
+      || !validOptionalUrl(entry.recipeUrl) || !validOptionalUrl(entry.imageUrl) || !validOptionalNotes(entry.notes)) {
       return fail('Choose one meal, recipe or custom dish with valid ingredients.', { code: SERVICE_CODES.invalidInput });
     }
     const slot = `${entry.date}|${entry.mealType ?? 'dinner'}`;
@@ -392,6 +447,31 @@ export type PlanWeekResult = {
  * Replace only the captured rows and verify the resulting slots. Without a
  * database transaction this is best-effort compensation: a competing writer
  * is reported as a conflict and its rows are never cleared during rollback.
+ *
+ * ONE ROW PER SLOT IS NOT GUARANTEED HERE. `meal_plans` has no unique
+ * (family_id, plan_date, meal_type) index — that index is held owner SQL, not
+ * yet in the migrations — and only it can make a second row in a slot
+ * impossible. What this code bounds, without it (AUD-1041-SLOT-RESTORE):
+ *
+ * - A rollback always yields. Two taps both read tonight's dinner O; A cleared
+ *   it, B's clear found nothing (a clear whose receipt does not match what was
+ *   captured is not trusted, so B compensates), B's rollback read the slot
+ *   empty while A was between its clear and its write, and B wrote O back
+ *   AFTER A had written and verified its new dinner N and answered success —
+ *   leaving N and O, and the meals page refused the week. A restore still
+ *   goes only into a slot that is empty when re-read just before it, but it is
+ *   now read back after, and a restored row sharing its slot with anything
+ *   else is withdrawn again and reported as not restored.
+ * - Success is answered only when the last read shows each slot holding
+ *   exactly this call's row. A row found beside it there is not withdrawn:
+ *   whoever wrote that row reads back after this call's row was in place, so
+ *   it is that writer's verification that sees the pair and yields.
+ *
+ * What remains possible until the index exists: a writer that stops between
+ * its insert and its read-back (a crash, a lost connection, a failed withdraw)
+ * leaves its row beside another; and two fresh plans whose read-backs each see
+ * both rows each withdraw their own, leaving the slot empty and both callers
+ * told to refresh. The second is preferred to a duplicate; neither is a lock.
  */
 export async function planWeek(scope: ServiceScope, entries: PlanEntryInput[]): Promise<ServiceResult<PlanWeekResult>> {
   const valid = validateEntries(entries);
@@ -454,6 +534,7 @@ export async function planWeek(scope: ServiceScope, entries: PlanEntryInput[]): 
     // meal_plans.created_by references auth.users (0002).
     created_by: scope.userId,
   }));
+  const slotOf = (row: { plan_date: string; meal_type: string }) => `${row.plan_date}|${row.meal_type}`;
   const restore = async (removeInserted: boolean): Promise<boolean> => {
     if (removeInserted) {
       // Rows deliberately not checked here: `readTargetRows()` below RE-READS
@@ -463,18 +544,39 @@ export async function planWeek(scope: ServiceScope, entries: PlanEntryInput[]): 
         .eq('family_id', scope.familyId).in('id', rows.map((row) => row.id));
       if (error) { console.error('[service:meals] rollback clear failed', error); return false; }
     }
+    // Re-read immediately before restoring: a slot that holds anything now is
+    // not ours to fill.
     const current = await readTargetRows();
     if (!current.ok) return false;
     const presentIds = new Set(current.data.map((row) => row.id));
-    const occupied = new Set(current.data.map((row) => `${row.plan_date}|${row.meal_type}`));
+    const occupied = new Set(current.data.map(slotOf));
     const missing = snapshot.filter((row) => !presentIds.has(row.id));
-    const safe = missing.filter((row) => !occupied.has(`${row.plan_date}|${row.meal_type}`));
+    const safe = missing.filter((row) => !occupied.has(slotOf(row)));
     if (safe.length) {
-      const { error } = await scope.db.from('meal_plans').insert(safe.map((row) => ({
+      const { data: put, error } = await scope.db.from('meal_plans').insert(safe.map((row) => ({
         id: row.id, family_id: row.family_id, meal_id: row.meal_id, plan_date: row.plan_date,
         meal_type: row.meal_type, created_by: row.created_by, idempotency_key: row.idempotency_key,
-      })));
-      if (error) { console.error('[service:meals] rollback restore failed', error); return false; }
+      }))).select('id');
+      if (error || !Array.isArray(put) || put.length !== safe.length) {
+        console.error('[service:meals] rollback restore failed', error ?? { restored: Array.isArray(put) ? put.length : null, wanted: safe.length });
+      }
+      // Read back whatever happened: another writer can fill the slot between
+      // the read above and that insert, and nothing in the database refuses
+      // the second row. A restored row that shares its slot with anything but
+      // the rows restored beside it is withdrawn.
+      const after = await readTargetRows();
+      if (!after.ok) return false;
+      const putBack = new Set(safe.map((row) => row.id));
+      const crowded = safe.filter((row) => after.data.some((other) => other.id === row.id)
+        && after.data.some((other) => !putBack.has(other.id) && slotOf(other) === slotOf(row)));
+      if (crowded.length) {
+        const { data: withdrawn, error: withdrawError } = await scope.db.from('meal_plans').delete()
+          .eq('family_id', scope.familyId).in('id', crowded.map((row) => row.id)).select('id');
+        if (withdrawError || !Array.isArray(withdrawn) || withdrawn.length !== crowded.length) {
+          console.error('[service:meals] rollback could not withdraw a restored row', withdrawError ?? { withdrawn: withdrawn?.length ?? 0, crowded: crowded.length });
+        }
+        return false;
+      }
     }
     const verified = await readTargetRows();
     if (!verified.ok) return false;
@@ -486,8 +588,11 @@ export async function planWeek(scope: ServiceScope, entries: PlanEntryInput[]): 
   };
   const failure = async (message: string, removeInserted = false) => {
     const restored = await restore(removeInserted);
-    // A concurrently adopted meal must not be removed merely because this plan failed.
-    if (restored && createdMealIds.length) {
+    // A concurrently adopted meal must not be removed merely because this plan
+    // failed — which the reference read decides, whether or not the slots could
+    // be put back: a rollback that yielded its slot to another writer reports
+    // "not restored" and must still leave no dish of its own behind.
+    if (createdMealIds.length) {
       const { data: references, error } = await scope.db.from('meal_plans').select('meal_id')
         .eq('family_id', scope.familyId).in('meal_id', createdMealIds);
       if (!error && Array.isArray(references) && references.length === 0) await removeCreatedMeals();
@@ -525,7 +630,12 @@ export async function planWeek(scope: ServiceScope, entries: PlanEntryInput[]): 
   if (!savedSlots.ok) return savedSlots;
   const ownedIds = new Set<string>(rows.map((row) => row.id));
   const planned = savedSlots.data.filter((slot) => ownedIds.has(slot.id));
-  if (planned.length !== rows.length || rows.some((row) => !planned.some((slot) =>
+  // Exactly this call's row in each slot it planned, at the last read before
+  // answering. Another row there is not withdrawn (see above: its writer reads
+  // back after ours was in place, and yields), but it is not called a success.
+  const targeted = new Set(rows.map(slotOf));
+  const besideOurs = savedSlots.data.some((slot) => !ownedIds.has(slot.id) && targeted.has(`${slot.date}|${slot.mealType}`));
+  if (besideOurs || planned.length !== rows.length || rows.some((row) => !planned.some((slot) =>
     slot.id === row.id && slot.date === row.plan_date && slot.mealType === row.meal_type && slot.mealId === row.meal_id))
     || planned.some((slot) => !resolved.data.some((entry) => entry.date === slot.date && entry.mealType === slot.mealType
       && entry.name === slot.name && JSON.stringify(entry.ingredients) === JSON.stringify(slot.ingredients)))) {

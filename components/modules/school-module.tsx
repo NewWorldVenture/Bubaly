@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables, GradeType } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { type FamilyClock, useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { datetimeLocalToInstant } from '@/lib/time/datetime-local';
 import { wallWeekStart } from '@/lib/time/wall-clock';
 import type { Format } from '@/lib/utils/format';
 import type { LocaleCode } from '@/lib/i18n/locales';
@@ -146,7 +147,7 @@ export function SchoolModule() {
   const tr = useTranslations();
   // One time-ago, and it follows the reader (lib/utils/format.ts fmtTimeAgo).
   const { fmtTimeAgo } = useFormat();
-  const { familyId, userId, members, family } = useApp();
+  const { familyId, userId, members, family, role } = useApp();
   const { toast, success, error: toastError } = useToast();
   const [tab, setTab] = useState<Tab>('overview');
   const [scheduleIdx, setScheduleIdx] = useState(0);
@@ -202,9 +203,14 @@ export function SchoolModule() {
   const pendingProposal = useRef<DeskProposal | null>(null);
   const [proposalState, setProposalState] = useState<DeskProposal | null>(null);
   const proposing = proposalState?.scope === deskScope ? proposalState.messageId : null;
+  // The desk lists the household inbox — subject, body and sender — and that
+  // is not a guest's (ROLE-SCOPE-001; /dashboard/inbox and the Contact Center
+  // send a guest away). Until the reserved 0509 refuses them the rows, the
+  // browser does not ask: no read, and no desk.
+  const readsInbox = role !== 'guest';
 
   const loadDesk = useCallback(async () => {
-    if (!deskScope.active || currentDeskScope.current !== deskScope) return;
+    if (!readsInbox || !deskScope.active || currentDeskScope.current !== deskScope) return;
     const request = ++deskScope.request;
     deskScope.controller?.abort();
     const controller = deskScope.controller = new AbortController();
@@ -245,7 +251,7 @@ export function SchoolModule() {
       console.error('[school-desk] front desk read failed', cause);
       setDeskState(previous => isCurrent() ? { scope: deskScope, snapshot: null, loading: false, error: true } : previous);
     }
-  }, [deskScope, familyId]);
+  }, [deskScope, familyId, readsInbox]);
 
   useEffect(() => {
     deskScope.active = true;
@@ -391,11 +397,14 @@ export function SchoolModule() {
   // ── CRUD handlers ────────────────────────────────────────
   async function saveEvent() {
     if (!eventForm.title || !eventForm.starts_at) return;
+    // The `datetime-local` reading is on the FAMILY's clock, not the device's.
+    const startsAt = datetimeLocalToInstant(eventForm.starts_at, clock.timeZone);
+    if (!startsAt) { toastError(tr('schoolModule.failedToSaveEvent')); return; }
     setSaving(true);
     const sb = createClient();
     const { error: err } = await sb.from('school_events').insert({
       family_id: familyId, title: eventForm.title, event_type: eventForm.event_type,
-      starts_at: new Date(eventForm.starts_at).toISOString(), notes: eventForm.notes || null,
+      starts_at: startsAt, notes: eventForm.notes || null,
       member_id: eventForm.member_id || null, school_name: eventForm.school_name || null, created_by: userId,
     });
     setSaving(false);
@@ -506,7 +515,7 @@ export function SchoolModule() {
         </div>
 
         {/* School & Sports desk — inbox messages this module can act on */}
-        {tab === 'overview' && (
+        {tab === 'overview' && readsInbox && (
           <div className="rounded-2xl border border-border bg-surface/40">
             <div className="flex items-center justify-between p-5">
               <div>
@@ -607,7 +616,7 @@ export function SchoolModule() {
                             </td>
                             <td className="px-4 py-3.5 capitalize text-fg">{(e.event_type ?? 'general').replace('_', ' ')}</td>
                             <td className="px-4 py-3.5"><p className="font-medium">{due.label}</p><p className={cn('text-xs', due.urgent ? 'text-orange-400' : 'text-muted')}>{due.sub}</p></td>
-                            <td className="px-4 py-3.5"><button type="button" onClick={() => void removeEvent(e.id, e.title)} aria-label={tr('schoolModule.deleteEventTitle', { title: e.title })} className="text-muted/60 hover:text-danger focus-ring rounded"><Trash2 className="h-4 w-4" /></button></td>
+                            <td className="px-4 py-3.5"><button type="button" onClick={() => void removeEvent(e.id, e.title)} aria-label={tr('schoolModule.deleteEventTitle', { title: e.title })} className="text-muted hover:text-danger focus-ring rounded"><Trash2 className="h-4 w-4" /></button></td>
                           </tr>
                         );
                       })}
@@ -705,7 +714,7 @@ export function SchoolModule() {
 
         {/* Two-column grid: Class Schedules + Announcements (Overview) */}
         {tab === 'overview' && (
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             {/* Class Schedules */}
             <div className="rounded-2xl border border-border bg-surface/40 p-5">
               <div className="mb-4 flex items-center justify-between">

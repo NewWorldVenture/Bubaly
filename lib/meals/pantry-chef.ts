@@ -4,6 +4,8 @@
 // suggestion that conflicts with a family allergy (defense-in-depth in case the
 // model slips). Kept side-effect-free so it unit-tests without a network/DB.
 import { isValidTimezone, localPartsAt } from '@/lib/time/zoned';
+import { allergenConflict } from '@/lib/meals/substitutions';
+import { readReplyArray } from '@/lib/ai/reply-array';
 
 export type PantryRecipe = {
   title: string;
@@ -54,28 +56,51 @@ Rules:
 - If the photo shows no food, return [].`;
 }
 
-function coerceStringArray(value: unknown): string[] {
+/**
+ * The longest ingredient or grocery name Fridge Chef will carry, matching the
+ * services it feeds: `addItems` (lib/services/groceries) and `validIngredients`
+ * (lib/services/meals) both refuse a name over 300 characters. A recipe that
+ * carried one into a planned meal made "add this week's plan to the list" fail
+ * for the whole week with "Check the items to add.", so it is dropped here,
+ * where it first arrives.
+ */
+export const MAX_PANTRY_ITEM_CHARS = 300;
+
+/** Trimmed, non-empty strings no longer than the services accept, at most `max` of them. */
+export function boundedNames(value: unknown, max: number): string[] {
   if (!Array.isArray(value)) return [];
   return value
     .map((v) => (typeof v === 'string' ? v.trim() : ''))
-    .filter((v) => v.length > 0)
-    .slice(0, 25);
+    .filter((v) => v.length > 0 && v.length <= MAX_PANTRY_ITEM_CHARS)
+    .slice(0, max);
+}
+
+function coerceStringArray(value: unknown): string[] {
+  return boundedNames(value, 25);
 }
 
 /** Robustly parse the model's reply (fenced or bare JSON) into recipes. */
 export function parsePantryRecipes(text: string): PantryRecipe[] {
-  if (typeof text !== 'string' || !text.trim()) return [];
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
-  const candidate = (fenced ?? text).match(/\[[\s\S]*\]/)?.[0];
-  if (!candidate) return [];
-  let raw: unknown;
-  try {
-    raw = JSON.parse(candidate);
-  } catch {
-    return [];
-  }
-  if (!Array.isArray(raw)) return [];
-  return raw
+  return readPantryRecipes(text) ?? [];
+}
+
+/**
+ * The same parse, telling "the model said there is no food" (a JSON `[]`) apart
+ * from "the model said nothing this can read": null for a refusal, prose, an
+ * empty reply or an array cut off at the token limit. Only the first is "No
+ * food spotted"; the second is a photo that could not be read.
+ *
+ * The `[]` has to be the reply's own value (readReplyArray): the empty array
+ * inside `{"error":[]}` is not the model saying "no food", and neither is an
+ * object wrapping a list (`{"recipes":[…]}`), which this prompt never asks
+ * for. A list whose every item fails the recipe shape — `[{}]`, recipes with
+ * no title — is null too: filtered to nothing, it read exactly like `[]`. A
+ * list with some good recipes keeps those.
+ */
+export function readPantryRecipes(text: string): PantryRecipe[] | null {
+  const raw = readReplyArray(text);
+  if (!raw) return null;
+  const recipes = raw
     .map((r): PantryRecipe | null => {
       if (!r || typeof r !== 'object') return null;
       const o = r as Record<string, unknown>;
@@ -94,8 +119,9 @@ export function parsePantryRecipes(text: string): PantryRecipe[] {
         allergenConflict: null,
       };
     })
-    .filter((r): r is PantryRecipe => r !== null)
-    .slice(0, 6);
+    .filter((r): r is PantryRecipe => r !== null);
+  if (raw.length > 0 && recipes.length === 0) return null;
+  return recipes.slice(0, 6);
 }
 
 /**
@@ -116,15 +142,19 @@ export function normalizePlanDate(value: unknown, timezone: string, now: Date = 
 }
 
 /**
- * Defense-in-depth: flag (don't silently drop) any recipe whose title/have/need
- * mentions a family allergy term, so the UI can warn or exclude it even if the
- * model ignored the prompt.
+ * Defense-in-depth: flag (don't silently drop) any recipe whose title, have,
+ * need or method runs into a family allergy, so the UI can warn or exclude it
+ * even if the model ignored the prompt.
+ *
+ * Through `allergenConflict` (lib/meals/substitutions), not a substring test:
+ * "peanuts" is not a substring of "peanut butter", "tree nuts" names no almond,
+ * "severe peanut allergy (epipen)" is a substring of nothing, and an allergen
+ * named only in the steps ("finish with cashews") was never looked at.
  */
 export function annotateAllergens(recipes: PantryRecipe[], allergies: string[]): PantryRecipe[] {
   if (allergies.length === 0) return recipes;
-  return recipes.map((recipe) => {
-    const haystack = [recipe.title, ...recipe.have, ...recipe.need].join(' ').toLowerCase();
-    const hit = allergies.find((term) => haystack.includes(term));
-    return { ...recipe, allergenConflict: hit ?? null };
-  });
+  return recipes.map((recipe) => ({
+    ...recipe,
+    allergenConflict: allergenConflict([recipe.title, ...recipe.have, ...recipe.need, recipe.steps], allergies),
+  }));
 }

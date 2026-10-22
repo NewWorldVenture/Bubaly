@@ -48,7 +48,8 @@ type Write = { table: string; operation: string };
 
 function failingReadClient(failingTable: string) {
   const writes: Write[] = [];
-  const methods = ['select', 'eq', 'neq', 'in', 'gte', 'lte', 'lt', 'not', 'order', 'limit', 'maybeSingle', 'single'];
+  // `is`: the scan reads the family's open shopping lists (both archive columns) first.
+  const methods = ['select', 'eq', 'neq', 'is', 'in', 'gte', 'lte', 'lt', 'not', 'order', 'limit', 'maybeSingle', 'single'];
   const client = {
     from(table: string) {
       const result: QueryResult = table === failingTable
@@ -97,7 +98,7 @@ function suggestionInsertFailureClient() {
     from(table: string) {
       let operation = 'read';
       const chain: Record<string, unknown> = {};
-      for (const method of ['select', 'eq', 'neq', 'in', 'gte', 'lte', 'lt', 'not', 'order', 'limit', 'maybeSingle', 'single']) {
+      for (const method of ['select', 'eq', 'neq', 'is', 'in', 'gte', 'lte', 'lt', 'not', 'order', 'limit', 'maybeSingle', 'single']) {
         chain[method] = () => chain;
       }
       chain.insert = () => { operation = 'insert'; writes.push({ table, operation }); return chain; };
@@ -342,6 +343,61 @@ describe('accepting a learned policy suggestion', () => {
     expect(db.table('trust_policies')).toHaveLength(1);
     expect(db.table('trust_policies')[0].id).toBe('held-1');
     expect(db.table('autopilot_suggestions')[0].status).toBe('executed');
+  });
+
+  it('two simultaneous accepts write ONE policy: the second loses the claim', async () => {
+    seedSuggestion(db);
+
+    const results = await Promise.all([
+      acceptPolicySuggestionAction({ suggestionId: 'sug-1' }),
+      acceptPolicySuggestionAction({ suggestionId: 'sug-1' }),
+    ]);
+
+    expect(db.table('trust_policies')).toHaveLength(1);
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.find((r) => !r.ok)).toEqual({ ok: false, error: 'That suggestion is no longer open.' });
+    expect(db.table('autopilot_suggestions')[0].status).toBe('executed');
+  });
+
+  it('recovers an abandoned claim of your own: an old \'approved\' row with no policy is accepted again, once', async () => {
+    // The accept claimed the row and then stopped before writing the policy.
+    seedSuggestion(db, { status: 'approved', resolved_by: 'user-1', resolved_at: new Date(Date.now() - 10 * 60_000).toISOString() });
+
+    const results = await Promise.all([
+      acceptPolicySuggestionAction({ suggestionId: 'sug-1' }),
+      acceptPolicySuggestionAction({ suggestionId: 'sug-1' }),
+    ]);
+
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(db.table('trust_policies')).toHaveLength(1);
+    expect(db.table('autopilot_suggestions')[0]).toMatchObject({ status: 'executed', resolved_by: 'user-1' });
+  });
+
+  it('leaves a claim that is still in flight, or another manager\'s, alone', async () => {
+    seedSuggestion(db, { status: 'approved', resolved_by: 'user-1', resolved_at: new Date().toISOString() });
+    expect(await acceptPolicySuggestionAction({ suggestionId: 'sug-1' })).toEqual({ ok: false, error: 'That suggestion is no longer open.' });
+    db.reset();
+    seedSuggestion(db, { status: 'approved', resolved_by: 'user-2', resolved_at: new Date(Date.now() - 10 * 60_000).toISOString() });
+    expect(await acceptPolicySuggestionAction({ suggestionId: 'sug-1' })).toEqual({ ok: false, error: 'That suggestion is no longer open.' });
+    expect(db.table('trust_policies')).toEqual([]);
+    expect(db.table('autopilot_suggestions')[0].status).toBe('approved');
+  });
+
+  it('never flips a dismissal that landed mid-accept back to executed, and writes no policy', async () => {
+    seedSuggestion(db);
+    // Another member dismisses the card while the accept re-derives the evidence.
+    harness.candidates = new Proxy([SUPPORTED], {
+      get(target, prop, receiver) {
+        if (prop === 'find') Object.assign(db.table('autopilot_suggestions')[0], { status: 'dismissed', resolved_by: 'user-2', updated_at: '2026-09-09T11:00:00Z' });
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+
+    const res = await acceptPolicySuggestionAction({ suggestionId: 'sug-1' });
+
+    expect(res).toEqual({ ok: false, error: 'That suggestion is no longer open.' });
+    expect(db.table('autopilot_suggestions')[0]).toMatchObject({ status: 'dismissed', resolved_by: 'user-2' });
+    expect(db.table('trust_policies')).toEqual([]);
   });
 
   it('fails closed when the suggestion cannot be read: no policy, no reassurance', async () => {

@@ -252,7 +252,10 @@ describe('a URL a user chose is only fetched through the SSRF guard', () => {
     // The two properties that make it a real defence rather than a string test.
     const src = readFileSync('lib/server/public-calendar-fetch.ts', 'utf8');
     expect(src, 'must resolve the hostname, not just parse it').toMatch(/lookup/);
-    expect(src, 'link-local / metadata range must be blocked').toMatch(/0xa9fe0000/);
+    // The address ranges live in the one shared policy, which the calendar fetch
+    // must use rather than a private copy (a copy drifted once: SEC-002).
+    expect(src, 'addresses must be judged by the shared policy').toMatch(/import \{ isPublicAddress \} from '@\/lib\/server\/public-address'/);
+    expect(readFileSync('lib/server/public-address.ts', 'utf8'), 'link-local / metadata range must be blocked').toMatch(/\['169\.254\.0\.0', 16\]/);
     expect(src, 'google metadata host must be blocked').toMatch(/metadata\.google\.internal/);
     expect(src, 'redirects must not be followed blindly').toMatch(/redirect: 'manual'/);
     expect(src, 'each redirect target must be re-validated').toMatch(/validatePublicCalendarUrl\(new URL\(location/);
