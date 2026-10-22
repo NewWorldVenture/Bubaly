@@ -7,6 +7,12 @@ import { GET } from '@/app/api/calendar/occurrences/route';
 // A provider outage must not be presented as an expired user session, and no
 // cookie or database context can substitute for an unverified bearer token.
 const token = 'synthetic.bearer.token';
+// The calendar route reads the family's plan standing (refuseIfLocked, the gate
+// /api/ai and the voice routes share) with the service client, which carries
+// this key, not the member's token. Those two reads are the only ones allowed
+// to: every other read, and every calendar read, is the member's own.
+const serviceKey = 'synthetic-service-role';
+const PLAN_READS = ['/rest/v1/families', '/rest/v1/subscriptions'];
 const userId = 'synthetic-user';
 const familyId = 'synthetic-family';
 const ownerMismatches: Record<string, string>[] = [{ 'X-Bubaly-User-Id': 'another-user' }, { 'X-Bubaly-Family-Id': 'another-family' }];
@@ -24,6 +30,7 @@ beforeEach(() => {
   status = 503;
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://bearer-outage-fixture.supabase.co');
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'synthetic-anon');
+  vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', serviceKey);
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
@@ -37,7 +44,8 @@ beforeEach(() => {
       return Response.json({ id: userId, email: 'synthetic@example.invalid' });
     }
     if (url.pathname === '/rest/v1/family_members') return Response.json([{ id: 'synthetic-member', family_id: familyId, user_id: userId, role: 'parent', is_active: true }]);
-    if (url.pathname === '/rest/v1/families') return Response.json([{ id: familyId, timezone: 'UTC' }]);
+    if (url.pathname === '/rest/v1/families') return Response.json([{ id: familyId, timezone: 'UTC', trial_ends_at: null, closed_at: null }]);
+    if (url.pathname === '/rest/v1/subscriptions') return Response.json([]);
     if (url.pathname === '/rest/v1/user_preferences') return Response.json({ active_family_id: familyId });
     if (url.pathname === '/rest/v1/calendar_events') return Response.json([], { headers: { 'content-range': '*/0' } });
     throw new Error(`Unexpected synthetic request ${url.pathname}`);
@@ -93,13 +101,20 @@ describe('bearer authentication outage through the installed SDK and real calend
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ userId, familyId, count: 0, occurrences: [] });
     expect(reads.filter(read => read.path === '/auth/v1/user')).toHaveLength(2);
-    expect(reads.every(read => read.authorization === `Bearer ${token}` && read.cookie === null)).toBe(true);
+    const planReads = reads.filter(read => read.authorization === `Bearer ${serviceKey}`);
+    expect(planReads.map(read => read.path).sort()).toEqual(PLAN_READS);
+    expect(planReads.every(read => read.cookie === null && read.query.get('select') !== '*')).toBe(true);
+    expect(planReads.find(read => read.path === '/rest/v1/families')?.query.get('id')).toBe(`eq.${familyId}`);
+    expect(planReads.find(read => read.path === '/rest/v1/subscriptions')?.query.get('family_id')).toBe(`eq.${familyId}`);
+    expect(reads.filter(read => !planReads.includes(read))
+      .every(read => read.authorization === `Bearer ${token}` && read.cookie === null)).toBe(true);
     const membership = reads.find(read => read.path === '/rest/v1/family_members');
     expect(membership?.query.get('user_id')).toBe(`eq.${userId}`);
     expect(membership?.query.get('is_active')).toBe('eq.true');
     const calendars = reads.filter(read => read.path === '/rest/v1/calendar_events');
     expect(calendars).toHaveLength(2);
     expect(calendars.every(read => read.query.get('family_id') === `eq.${familyId}`)).toBe(true);
+    expect(calendars.every(read => read.authorization === `Bearer ${token}`)).toBe(true);
     expect(response.headers.get('set-cookie')).toBeNull();
   });
 
