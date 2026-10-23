@@ -60,6 +60,9 @@ function matches(row: PushFixtureRow, expression: string): boolean {
     const found = listMembers(list[3]).includes(String(row[list[1]]));
     return list[2] ? !found : found;
   }
+  // `col.not.is.null`: IS NOT NULL, the one negated IS a dispatcher writes.
+  const notNull = expression.match(/^([a-z_]+)\.not\.is\.null$/);
+  if (notNull) return row[notNull[1]] != null;
   const match = expression.match(/^([a-z_]+)\.(eq|neq|is|gt|gte|lt|lte)\.(.+)$/);
   if (!match) throw new Error(`Unsupported fixture filter: ${expression}`);
   if (match[2] === 'is' && match[3] === 'null') return row[match[1]] == null;

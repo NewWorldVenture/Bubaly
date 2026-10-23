@@ -13,7 +13,9 @@ import { guardianSmsScope, notifyGuardianSms } from './sms-notification';
 import { smsStep } from './sms-deadline';
 import { escalateGuardianEmergency } from './escalate';
 import { guardianEscalationDescription } from './escalation';
-import { GUARDIAN_INBOUND_CAP_REASON, GUARDIAN_INBOUND_FAMILY_CAP, GUARDIAN_INBOUND_SENDER_CAP, GUARDIAN_INBOUND_WINDOW_MS } from './inbound-caps';
+import {
+  GUARDIAN_INBOUND_CAP_REASON, GUARDIAN_INBOUND_CLOCK_SKEW_MS, GUARDIAN_INBOUND_FAMILY_CAP, GUARDIAN_INBOUND_SENDER_CAP, GUARDIAN_INBOUND_WINDOW_MS,
+} from './inbound-caps';
 import { runUnderLearningLease } from './learning-lease';
 
 type Client = SupabaseClient<Database>;
@@ -143,10 +145,12 @@ async function overInboundCap(client: Client, input: GuardianSmsReceiptInput, si
   // still lets a parent or an adult insert a record with any started_at, and a
   // record dated in the future counted in every window until that date: a
   // family cap's worth dated 2100 held every routine text to the family,
-  // unannounced, for good.
+  // unannounced, for good. "Now" with the clock-skew allowance: the message's
+  // own record was dated by the database's clock, which may run ahead of this
+  // host's (GUARDIAN_INBOUND_CLOCK_SKEW_MS).
   const nowMs = Date.now();
   const since = new Date(nowMs - GUARDIAN_INBOUND_WINDOW_MS).toISOString();
-  const until = new Date(nowMs).toISOString();
+  const until = new Date(nowMs + GUARDIAN_INBOUND_CLOCK_SKEW_MS).toISOString();
   const count = async (sender: boolean): Promise<number | null> => {
     try {
       const result = resultEnvelope(await smsStep(signal, current => {

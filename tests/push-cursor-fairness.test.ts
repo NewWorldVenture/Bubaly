@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { dispatchPendingPushes, PUSH_ROWS_PER_RECIPIENT } from '@/lib/server/push';
+import { dispatchPendingPushes, PUSH_ROWS_PER_FAMILY, PUSH_ROWS_PER_RECIPIENT } from '@/lib/server/push';
 import { notificationId, pushDispatchDb, type PushFixtureRow } from './helpers/push-dispatch-db';
 
 const provider = vi.hoisted(() => ({ send: vi.fn() }));
@@ -24,7 +24,7 @@ const storedCursor = (id: number, createdAt = NOW.toISOString()) => ({
   ...cursor(id, createdAt),
   generation: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
 });
-function fixture(rows: PushFixtureRow[], unconfigured = ['unconfigured']) {
+function fixture(rows: PushFixtureRow[], unconfigured = ['unconfigured'], families: string[] = []) {
   return pushDispatchDb({
     notifications: rows,
     push_devices: [
@@ -33,7 +33,7 @@ function fixture(rows: PushFixtureRow[], unconfigured = ['unconfigured']) {
     ],
     // These delivery fixtures represent eligible recipients. Missing or
     // revoked membership is independently tested in push-family-membership.
-    family_members: ['family-a', 'family-b'].flatMap(family_id =>
+    family_members: ['family-a', 'family-b', ...families].flatMap(family_id =>
       ['healthy', ...unconfigured].map(user_id => ({ family_id, user_id, role: 'parent', is_active: true }))),
     family_ai_settings: [], user_preferences: [],
   });
@@ -50,11 +50,16 @@ afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe('bounded pending-push traversal', () => {
   it('reaches a healthy notification beyond 200 unresolved native deliveries and wraps to retry earlier rows', async () => {
-    // Ten recipients, each within its share of a batch (PUSH_ROWS_PER_RECIPIENT),
-    // so this pins the cursor alone. One recipient's 200 is the next case.
-    const ten = Array.from({ length: 10 }, (_, i) => `unconfigured-${i}`);
-    expect(200 / ten.length).toBeLessThanOrEqual(PUSH_ROWS_PER_RECIPIENT);
-    const f = fixture(Array.from({ length: 201 }, (_, index) => row(index + 1, { user_id: index < 200 ? ten[index % 10] : 'healthy' })).reverse(), ten);
+    // Twenty recipients in five families, each within its share of a batch
+    // (PUSH_ROWS_PER_RECIPIENT, PUSH_ROWS_PER_FAMILY), so this pins the cursor
+    // alone. One recipient's 200 is the next case.
+    const twenty = Array.from({ length: 20 }, (_, i) => `unconfigured-${i}`);
+    const five = Array.from({ length: 5 }, (_, i) => `family-u${i}`);
+    expect(200 / twenty.length).toBeLessThanOrEqual(PUSH_ROWS_PER_RECIPIENT);
+    expect(200 / five.length).toBeLessThanOrEqual(PUSH_ROWS_PER_FAMILY);
+    const f = fixture(Array.from({ length: 201 }, (_, index) => row(index + 1, index < 200
+      ? { user_id: twenty[index % 20], family_id: five[index % 5] }
+      : { user_id: 'healthy' })).reverse(), twenty, five);
     expect(await dispatchPendingPushes(f.db, { now: NOW })).toMatchObject({ notifications: 200, result: { skipped: 200, sent: 0 } });
     expect(f.tables.app_settings[0].value).toEqual(storedCursor(200));
     const second = await dispatchPendingPushes(f.db, { now: NOW });

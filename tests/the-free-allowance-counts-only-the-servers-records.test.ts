@@ -153,6 +153,8 @@ describe('the Free plan’s monthly allowance counts only the server’s records
         requested_by: i % 2 ? CHILD_USER : PARENT_USER, requested_by_member_id: i % 2 ? CHILD : PARENT,
         // A concierge request the intake moved on is the server's record, whatever it came to.
         kind: i < 4 ? 'concierge' : 'feature', status: ['planning', 'completed', 'failed', 'awaiting_context', 'completed'][i % 5],
+        // A failed one counts only for the model work it recorded (round 9): these did some.
+        prompt_tokens: i % 5 === 2 ? 812 : null,
         request_text: 'earlier', created_at: hoursAgo(i + 1),
       })));
 
@@ -162,6 +164,43 @@ describe('the Free plan’s monthly allowance counts only the server’s records
       expect(await res.json()).toMatchObject({ code: 'allowance_exceeded' });
       expect(helper.provider()).toBe(0);
     });
+
+    // household-roles round 9 (R8-RV2-FREE-ALLOWANCE-COUNTS-FAILED-CALLS): a
+    // failed call does not use up the month. withAiRequest settles a provider
+    // error or a thrown call as 'failed', with no usage recorded, so ten of them
+    // in an outage cost a Free family its month.
+    it('ten calls that failed this month with no model usage leave the eleventh open', async () => {
+      db.seed('ai_requests', Array.from({ length: 10 }, (_, i) => ({
+        id: `00000000-0000-4000-8000-0000000a8c${String(i).padStart(2, '0')}`, family_id: FAMILY,
+        requested_by: PARENT_USER, requested_by_member_id: PARENT, kind: 'feature', feature: 'journal.prompt',
+        status: 'failed', error: 'provider unavailable', prompt_tokens: null, completion_tokens: null,
+        request_text: 'earlier', created_at: hoursAgo(i + 1), completed_at: hoursAgo(i + 1),
+      })));
+
+      const res = await helper.call();
+
+      expect(res.status).toBe(200);
+      expect(helper.provider()).toBe(1);
+    });
+  });
+
+  it('a call that fails for real is recorded failed and does not count; one that succeeds does', async () => {
+    // Nine settled uses: one more closes the month.
+    db.seed('ai_requests', Array.from({ length: 9 }, (_, i) => ({
+      id: `00000000-0000-4000-8000-0000000a8d${String(i).padStart(2, '0')}`, family_id: FAMILY, requested_by: PARENT_USER,
+      kind: 'feature', status: 'completed', request_text: 'earlier', created_at: hoursAgo(i + 1),
+    })));
+    h.complete.mockRejectedValueOnce(Object.assign(new Error('overloaded'), { status: 529 }));
+
+    // The Journal falls back to the evergreen prompt; the request is recorded failed, with no usage.
+    const failed = await JOURNAL.call();
+    expect(failed.status).toBe(200);
+    expect(await failed.json()).toMatchObject({ source: 'evergreen' });
+    expect(db.table('ai_requests').filter((r) => r.status === 'failed').map((r) => r.prompt_tokens ?? null)).toEqual([null]);
+    // So the tenth use is still there to make, and it closes the month.
+    expect(await (await JOURNAL.call()).json()).toMatchObject({ source: 'ai' });
+    expect((await JOURNAL.call()).status).toBe(429);
+    expect(h.complete).toHaveBeenCalledTimes(2);
   });
 
   it('control: ten real uses this month, by a parent and a child through both helpers, refuse the eleventh before any provider is asked', async () => {

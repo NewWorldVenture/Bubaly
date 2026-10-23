@@ -102,6 +102,17 @@ function nextMonthStartIso(now: Date): string {
  */
 const SERVER_RECORDED_REQUESTS = 'kind.neq.concierge,status.neq.queued';
 
+/**
+ * Every row but a call that failed before the model did any work: a failed
+ * call does not use up the month. withAiRequest (lib/ai/observability.ts) and
+ * the intake settle a provider error or a thrown call as status 'failed', so a
+ * Free family whose ten calls failed in an outage had lost its month. A failed
+ * row that recorded model usage (prompt_tokens, summed by recordModelCall) did
+ * cost a model call, and still counts. prompt_tokens is NULL until a call is
+ * recorded, and `gt` is not true on NULL, so such a row is left out.
+ */
+const CALLS_THAT_DID_WORK = 'status.neq.failed,prompt_tokens.gt.0';
+
 // `count_family_ai_requests_month` arrives with held migration 0493. Until a
 // database has it, the allowance is counted as the previous release counted it:
 // a direct `ai_requests` count under the caller's RLS. Recognised only from the
@@ -112,9 +123,9 @@ const SERVER_RECORDED_REQUESTS = 'kind.neq.concierge,status.neq.queued';
 // (`NOTIFY pgrst, 'reload schema'`): until then this fallback keeps counting
 // directly, and under 0493's private-read RLS that count misses private rows.
 // 0493's function as held counts EVERY row of the month, a member's queued
-// concierge filing included; it is to leave that shape out before it is
-// applied, as the direct count below does (an owner action: this code cannot
-// filter what a count-only function returns).
+// concierge filing and a call that failed before any model work included; it
+// is to leave both out before it is applied, as the direct count below does
+// (an owner action: this code cannot filter what a count-only function returns).
 const MONTHLY_COUNT_RPC = 'count_family_ai_requests_month';
 const MONTHLY_COUNT_MIGRATION = 'supabase/reserved/0493_ai_copy_private_read_and_quota.sql';
 let warnedMissingMonthlyCount = false;
@@ -300,7 +311,9 @@ async function meterMonthlyAllowance(
         .eq('family_id', familyId)
         .gte('created_at', monthStartIso(now))
         .lt('created_at', nextMonthStartIso(now))
-        .or(SERVER_RECORDED_REQUESTS);
+        .or(SERVER_RECORDED_REQUESTS)
+        // A second `or` ANDs with the first: both must hold.
+        .or(CALLS_THAT_DID_WORK);
       // No `?? 0`: a head count with no error and no count (supabase-js leaves
       // `count` null when Content-Range does not come back) is an unread
       // count, not an empty month. It fails closed below, as a null RPC

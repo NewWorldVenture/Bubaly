@@ -42,9 +42,10 @@ vi.mock('@/lib/server/push-endpoint', () => ({ isDeliverablePushEndpoint: async 
 vi.mock('@/lib/email', () => ({ emailEnabled: () => true, sendReactEmail: providers.email }));
 vi.mock('@/lib/server/list-all-auth-users', () => ({ listAllAuthUsers: providers.users }));
 
-const { dispatchPendingPushes, PUSH_ROWS_PER_RECIPIENT, PUSH_RETRY_WINDOW_MS } = await import('@/lib/server/push');
-const { deliverNotificationEmails, EMAIL_ROWS_PER_RECIPIENT } = await import('@/lib/server/notification-emails');
+const { dispatchPendingPushes, PUSH_ROWS_PER_FAMILY, PUSH_ROWS_PER_RECIPIENT, PUSH_RETRY_WINDOW_MS } = await import('@/lib/server/push');
+const { deliverNotificationEmails, EMAIL_ROWS_PER_FAMILY, EMAIL_ROWS_PER_RECIPIENT } = await import('@/lib/server/notification-emails');
 const { readFairBatch } = await import('@/lib/notifications/fair-batch');
+type FairExclusion = import('@/lib/notifications/fair-batch').FairExclusion;
 
 type DB = SupabaseClient<Database>;
 const NOW = new Date('2026-10-23T12:00:00.000Z');
@@ -123,7 +124,10 @@ describe('a member\'s own notifications cannot hold back anyone else\'s push', (
     expect(notifications).toBeLessThanOrEqual(200);
   });
 
-  it('a family-wide notice is never left out with the flood (no member can plant one)', async () => {
+  // Round 9: a member CAN cause whole-family rows (0191's price-drop trigger),
+  // so they are shared like any recipient's (tests/a-familys-notifications-
+  // take-only-its-share-of-a-batch.test.ts); one beside a member's flood still goes out.
+  it('a family-wide notice beside a member\'s flood still goes out with it', async () => {
     db.seed('notifications', [...planted(1000, at), notice(notificationId(5003), FAMILY, null, at(NOW.getTime() - 10_000), 'Family dinner at 6')]);
 
     await dispatchPendingPushes(asDb(), { now: NOW });
@@ -228,34 +232,42 @@ describe('readFairBatch', () => {
     expect(PUSH_ROWS_PER_RECIPIENT).toBeLessThan(200);
     expect(EMAIL_ROWS_PER_RECIPIENT).toBeGreaterThan(0);
     expect(EMAIL_ROWS_PER_RECIPIENT).toBeLessThan(120);
+    // Round 9: the batch is shared by family first, a recipient's share inside it.
+    expect(PUSH_ROWS_PER_FAMILY).toBeGreaterThan(PUSH_ROWS_PER_RECIPIENT);
+    expect(PUSH_ROWS_PER_FAMILY).toBeLessThan(200);
+    expect(EMAIL_ROWS_PER_FAMILY).toBeGreaterThan(EMAIL_ROWS_PER_RECIPIENT);
+    expect(EMAIL_ROWS_PER_FAMILY).toBeLessThan(120);
   });
 
-  type R = { id: string; user_id: string | null };
-  /** A range of rows read the way PostgREST would: in order, leaving out excluded recipients. */
+  type R = { id: string; family_id: string; user_id: string | null };
+  /** What a FairExclusion leaves out, written out here rather than imported. */
+  const leftOut = (excluded: FairExclusion, r: R) => excluded.families.includes(r.family_id)
+    || (r.user_id ? excluded.recipients.includes(r.user_id) : excluded.familyWide.includes(r.family_id));
+  /** A range of rows read the way PostgREST would: in order, leaving out what is excluded. */
   const range = (rows: R[]) => {
-    const calls: { size: number; excluded: string[] }[] = [];
-    const read = async (size: number, excluded: readonly string[]) => {
-      calls.push({ size, excluded: [...excluded] });
-      return rows.filter((r) => !r.user_id || !excluded.includes(r.user_id)).slice(0, size);
+    const calls: { size: number; excluded: number }[] = [];
+    const read = async (size: number, excluded: FairExclusion) => {
+      calls.push({ size, excluded: excluded.families.length + excluded.recipients.length + excluded.familyWide.length });
+      return rows.filter((r) => !leftOut(excluded, r)).slice(0, size);
     };
     return { read, calls };
   };
 
   it('gives everyone else the room ahead of a recipient\'s surplus, then fills what is left', async () => {
     const rows: R[] = [
-      ...Array.from({ length: 50 }, (_, i) => ({ id: `a${i}`, user_id: 'flood' })),
-      { id: 'b0', user_id: 'other' }, { id: 'f0', user_id: null },
+      ...Array.from({ length: 50 }, (_, i) => ({ id: `a${i}`, family_id: 'fam', user_id: 'flood' })),
+      { id: 'b0', family_id: 'fam', user_id: 'other' }, { id: 'f0', family_id: 'fam', user_id: null },
     ];
     const { read } = range(rows);
-    const batch = await readFairBatch(read, 10, 3);
+    const batch = await readFairBatch(read, 10, { perFamily: 10, perRecipient: 3 });
     expect(batch.map((r) => r.id).sort()).toEqual(['a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'b0', 'f0'].sort());
   });
 
   it('ends after a bounded number of reads however many recipients flood, with a short exclusion list', async () => {
     // Forty recipients, each one row over their share, one after another.
-    const rows: R[] = Array.from({ length: 21 * 40 }, (_, i) => ({ id: `r${i}`, user_id: `u${Math.floor(i / 21)}` }));
+    const rows: R[] = Array.from({ length: 21 * 40 }, (_, i) => ({ id: `r${i}`, family_id: 'fam', user_id: `u${Math.floor(i / 21)}` }));
     const { read, calls } = range(rows);
-    const batch = await readFairBatch(read, 200, 20);
+    const batch = await readFairBatch(read, 200, { perFamily: 200, perRecipient: 20 });
     expect(batch).toHaveLength(200);
     expect(new Set(batch.map((r) => r.id)).size).toBe(200);
     const held = new Map<string, number>();
@@ -263,12 +275,12 @@ describe('readFairBatch', () => {
     expect(Math.max(...held.values())).toBeLessThanOrEqual(20);
     expect(calls.length).toBeGreaterThan(1);
     expect(calls.length).toBeLessThanOrEqual(200 / 20 + 1);
-    expect(Math.max(...calls.map((c) => c.excluded.length))).toBeLessThan(200 / 20);
+    expect(Math.max(...calls.map((c) => c.excluded))).toBeLessThan(200 / 20);
   });
 
   it('ends when a read ignores the exclusion it was given', async () => {
-    const rows: R[] = Array.from({ length: 300 }, (_, i) => ({ id: `r${i}`, user_id: 'only' }));
-    const batch = await readFairBatch(async (size) => rows.slice(0, size), 500, 50);
+    const rows: R[] = Array.from({ length: 300 }, (_, i) => ({ id: `r${i}`, family_id: 'fam', user_id: 'only' }));
+    const batch = await readFairBatch(async (size) => rows.slice(0, size), 500, { perFamily: 100, perRecipient: 50 });
     expect(batch).toHaveLength(300);
   });
 

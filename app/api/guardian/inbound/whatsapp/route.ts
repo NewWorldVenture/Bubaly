@@ -17,7 +17,9 @@ import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { escalateGuardianEmergency, type GuardianEscalationOutcome } from '@/lib/guardian/escalate';
 import { guardianEscalationDescription, type GuardianEscalationInput } from '@/lib/guardian/escalation';
 import { guardianEscalationKeyedOnText, markGuardianEscalationKeyedOnText } from '@/lib/guardian/escalation-owed';
-import { GUARDIAN_INBOUND_CAP_REASON, GUARDIAN_INBOUND_FAMILY_CAP, GUARDIAN_INBOUND_SENDER_CAP, GUARDIAN_INBOUND_WINDOW_MS } from '@/lib/guardian/inbound-caps';
+import {
+  GUARDIAN_INBOUND_CAP_REASON, GUARDIAN_INBOUND_CLOCK_SKEW_MS, GUARDIAN_INBOUND_FAMILY_CAP, GUARDIAN_INBOUND_SENDER_CAP, GUARDIAN_INBOUND_WINDOW_MS,
+} from '@/lib/guardian/inbound-caps';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
 export const runtime = 'nodejs';
@@ -48,10 +50,12 @@ const UNREADABLE_CAP: InboundCap = { sender: false, family: false, unreadable: t
 async function overInboundCap(supabase: ReturnType<typeof createServiceClient>, familyId: string, from: string | null): Promise<InboundCap> {
   // The last hour, and nothing dated after now: a parent or an adult may still
   // insert a record with any started_at (0453), and one dated in the future
-  // counted in every window until then (lib/guardian/sms-processing.ts).
+  // counted in every window until then (lib/guardian/sms-processing.ts). "Now"
+  // with the clock-skew allowance, so this message's own record, dated by the
+  // database's clock, is counted (GUARDIAN_INBOUND_CLOCK_SKEW_MS).
   const nowMs = Date.now();
   const since = new Date(nowMs - GUARDIAN_INBOUND_WINDOW_MS).toISOString();
-  const until = new Date(nowMs).toISOString();
+  const until = new Date(nowMs + GUARDIAN_INBOUND_CLOCK_SKEW_MS).toISOString();
   const count = async (sender: boolean): Promise<number | null> => {
     try {
       let query = supabase.from('guardian_communications').select('id', { count: 'exact', head: true })

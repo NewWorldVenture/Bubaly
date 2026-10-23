@@ -14,7 +14,7 @@ import { listAllAuthUsers } from './list-all-auth-users';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
 import { isChildLoginEmail } from '@/lib/onboarding/child-login';
 import { readAllInChunks, readInChunks, writeInChunks } from '@/lib/supabase/chunked-in';
-import { latestCreatedAt, readFairBatch, recipientList } from '@/lib/notifications/fair-batch';
+import { latestCreatedAt, readFairBatch, recipientList, type FairExclusion } from '@/lib/notifications/fair-batch';
 
 type DB = SupabaseClient<Database>;
 export type NotificationEmailResult = { sent: number; failed: number; skipped: number };
@@ -25,14 +25,18 @@ const emptyResult = (): NotificationEmailResult => ({ sent: 0, failed: 0, skippe
 const EMAIL_BATCH = 500;
 
 /**
- * The most rows of a run's batch a single recipient takes while anyone else's
- * are waiting (lib/notifications/fair-batch.ts). A member's session may insert
- * notifications addressed to themselves, any number, dated 1970 so they sort
- * first (0388), and a kid login's are settled unsent 500 at a time: until such
- * a flood drained, no family was emailed. A recipient with nobody else waiting
- * still gets their whole backlog in one digest.
+ * The most rows of a run's batch a single family takes while another family's
+ * are waiting, and the most one recipient inside a family takes while anyone
+ * else's are: the same family share push uses (lib/notifications/fair-batch.ts).
+ * A member's session may insert notifications addressed to themselves, any
+ * number, dated 1970 so they sort first (0388), and a kid login's are settled
+ * unsent 500 at a time: until such a flood drained, no family was emailed, and
+ * a recipient share alone still let one family's ten children take the whole
+ * run. A family with nobody else waiting still gets its whole backlog, each
+ * recipient's in one digest.
  */
-export const EMAIL_ROWS_PER_RECIPIENT = 50;
+export const EMAIL_ROWS_PER_FAMILY = 100;
+export const EMAIL_ROWS_PER_RECIPIENT = 25;
 
 /** A refused read of one pending page, told apart from a thrown transport failure. */
 class PendingReadError extends Error {
@@ -58,7 +62,7 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
   // Nothing dated after now: no writer sets created_at, so only a member's
   // own planted row can be.
   const createdBy = latestCreatedAt(now);
-  const pendingPage = async (size: number, excluded: readonly string[]) => {
+  const pendingPage = async (size: number, excluded: FairExclusion) => {
     let query = supabase
       .from('notifications')
       // OPEN families only (families.closed_at): a closed account is not emailed.
@@ -74,9 +78,11 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
       .order('created_at', { ascending: true })
       .order('id', { ascending: true })
       .limit(size);
-    // Recipients who already hold their share of this run (user_id is never
-    // null here, so NOT IN leaves out nobody else).
-    if (excluded.length) query = query.not('user_id', 'in', recipientList(excluded));
+    // Families and recipients who already hold their share of this run
+    // (neither column is null here, so NOT IN leaves out nobody else). No
+    // whole-family row is read, so there is none of those to leave out.
+    if (excluded.families.length) query = query.not('family_id', 'in', recipientList(excluded.families));
+    if (excluded.recipients.length) query = query.not('user_id', 'in', recipientList(excluded.recipients));
     const { data, error } = await query;
     if (error) throw new PendingReadError(error);
     return data ?? [];
@@ -84,7 +90,7 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
   let pending: Awaited<ReturnType<typeof pendingPage>> = [];
   let pendingError: unknown = null;
   try {
-    pending = await readFairBatch(pendingPage, EMAIL_BATCH, EMAIL_ROWS_PER_RECIPIENT);
+    pending = await readFairBatch(pendingPage, EMAIL_BATCH, { perFamily: EMAIL_ROWS_PER_FAMILY, perRecipient: EMAIL_ROWS_PER_RECIPIENT });
   } catch (error) {
     if (!(error instanceof PendingReadError)) throw error;
     pendingError = error.failure ?? error;

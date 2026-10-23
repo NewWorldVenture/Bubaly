@@ -18,7 +18,9 @@ import { childrenBlockedOn } from '@/lib/notifications/child-channels';
 import { isMissingRelationError } from '@/lib/supabase/errors';
 import { readAll } from '@/lib/supabase/read-all';
 import { readAllInChunks } from '@/lib/supabase/chunked-in';
-import { latestCreatedAt, NOTIFICATION_CLOCK_SKEW_MS, readFairBatch, recipientList } from '@/lib/notifications/fair-batch';
+import {
+  aheadAndBehind, latestCreatedAt, NOTIFICATION_CLOCK_SKEW_MS, readFairBatch, recipientList, type FairExclusion,
+} from '@/lib/notifications/fair-batch';
 
 type DB = SupabaseClient<Database>;
 
@@ -38,16 +40,31 @@ type DB = SupabaseClient<Database>;
 export const PUSH_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
- * The most rows of one dispatch batch a single recipient takes while anyone
- * else's are waiting in the same range (lib/notifications/fair-batch.ts).
+ * The most rows of one dispatch batch a single family takes while another
+ * family's rows are waiting, and the most one recipient inside a family takes
+ * while anyone else's are (lib/notifications/fair-batch.ts). A family's
+ * whole-family rows count as one more of its recipients.
  *
  * A member's session may still insert notifications addressed to themselves,
- * any number of them, dated whenever they like (0388), so a child's flood
- * ahead of the cursor held back every family's pushes for as many ticks as it
- * took to drain at 200 rows a tick. Now it takes this many of them, and the
- * room it leaves goes to everyone else first.
+ * any number of them, dated whenever they like (0388), and a member can cause
+ * whole-family rows by the hundred through 0191's price-drop trigger, so a
+ * child's flood ahead of the cursor held back every family's pushes for as
+ * many ticks as it took to drain at 200 rows a tick. Now their family takes 40
+ * of a batch, the child (or the price drops) 10 of those, and the room left
+ * goes to everyone else first.
  */
-export const PUSH_ROWS_PER_RECIPIENT = 20;
+export const PUSH_ROWS_PER_FAMILY = 40;
+export const PUSH_ROWS_PER_RECIPIENT = 10;
+
+/**
+ * The part of each read a run keeps for the rows behind its cursor: the
+ * retries (a failed delivery inside PUSH_RETRY_WINDOW_MS, a row skipped for
+ * configuration or cut by the run's time budget) and any surplus a fair batch
+ * left behind. 50 of a 200-row batch. The wrap used to run only when the
+ * forward page came back short, so a forward range one member kept full
+ * starved every family's retries.
+ */
+export const PUSH_RETRY_SHARE = 0.25;
 
 import { isDeliverablePushEndpoint } from '@/lib/server/push-endpoint';
 import { MAX_PUSH_DEVICES_PER_USER } from '@/lib/push/device-cap';
@@ -651,12 +668,15 @@ function parsePushCursor(value: unknown): PushCursor | null {
  * tonight. `send_at` is `not null default now()` (0002_tables.sql:415), so this
  * withholds nothing that was due.
  *
- * A batch is shared fairly by recipient (PUSH_ROWS_PER_RECIPIENT), and a row
- * dated after now is not read: a member may plant rows addressed to
- * themselves with any created_at (lib/notifications/fair-batch.ts). No writer
- * sets created_at, so the date bound leaves out only planted rows, and the
- * share holds back only a recipient's own surplus, only while someone else's
- * rows are waiting.
+ * A batch is shared fairly by family and, inside a family, by recipient
+ * (PUSH_ROWS_PER_FAMILY, PUSH_ROWS_PER_RECIPIENT); the retries behind the
+ * cursor keep their own part of every read (PUSH_RETRY_SHARE); and a row
+ * dated after now is not read. A member may plant rows addressed to
+ * themselves with any created_at, and cause whole-family rows through 0191's
+ * price-drop trigger (lib/notifications/fair-batch.ts). No writer sets
+ * created_at, so the date bound leaves out only planted rows, and the shares
+ * hold back only a family's or a recipient's own surplus, only while someone
+ * else's rows are waiting.
  */
 export async function dispatchPendingPushes(
   supabase: DB,
@@ -684,7 +704,7 @@ export async function dispatchPendingPushes(
   // like the budget: `opts.now` decides what is due, and no row is created
   // after the real now.
   const createdBy = latestCreatedAt(new Date());
-  async function page(size: number, wrap: boolean, excluded: readonly string[]) {
+  async function page(size: number, wrap: boolean, excluded: FairExclusion) {
     let q = supabase.from('notifications')
       // Rows of OPEN families only (families.closed_at): a closed account's
       // devices are not buzzed. In the query, before the page limit, so queued
@@ -701,9 +721,13 @@ export async function dispatchPendingPushes(
       // Strictly validated timestamp/UUID values cannot inject filter syntax.
       q = q.or(`created_at.${wrap ? 'lt' : 'gt'}.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.${wrap ? 'lte' : 'gt'}.${cursor.id})`);
     }
-    // Recipients who already hold their share of this batch. Whole-family rows
-    // (user_id null) are never left out: a member cannot plant one.
-    if (excluded.length) q = q.or(`user_id.is.null,user_id.not.in.${recipientList(excluded)}`);
+    // Families, recipients and families' whole-family rows that already hold
+    // their share of this batch. Whole-family rows are shared like any other:
+    // a member causes them through 0191's price-drop trigger. Each `or` ANDs
+    // with the rest; a NULL user_id passes the first and is judged by the second.
+    if (excluded.families.length) q = q.not('family_id', 'in', recipientList(excluded.families));
+    if (excluded.recipients.length) q = q.or(`user_id.is.null,user_id.not.in.${recipientList(excluded.recipients)}`);
+    if (excluded.familyWide.length) q = q.or(`user_id.not.is.null,family_id.not.in.${recipientList(excluded.familyWide)}`);
     const { data, error } = await q;
     if (error) {
       console.error('[push] pending-push read failed', { familyId: opts.familyId ?? null, error });
@@ -711,14 +735,22 @@ export async function dispatchPendingPushes(
     }
     return data ?? [];
   }
-  const rows = (await readFairBatch((size, excluded) => page(size, false, excluded), limit, PUSH_ROWS_PER_RECIPIENT))
-    .sort(traversalOrder);
-  if (cursor && rows.length < limit) {
-    rows.push(...(await readFairBatch((size, excluded) => page(size, true, excluded), limit - rows.length, PUSH_ROWS_PER_RECIPIENT))
-      .sort(traversalOrder));
-  }
+  const forward = (size: number, excluded: FairExclusion) => page(size, false, excluded);
+  // With a cursor, every read keeps part of the batch for the rows behind it,
+  // so retries progress whatever lies ahead (PUSH_RETRY_SHARE).
+  const ranges = cursor ? aheadAndBehind(forward, (size, excluded) => page(size, true, excluded), PUSH_RETRY_SHARE) : null;
+  const batch = await readFairBatch(ranges?.read ?? forward, limit, {
+    perFamily: PUSH_ROWS_PER_FAMILY, perRecipient: PUSH_ROWS_PER_RECIPIENT,
+  });
+  const ahead = batch.filter((n) => !ranges?.isBehind(n)).sort(traversalOrder);
+  const behind = ranges ? batch.filter((n) => ranges.isBehind(n)).sort(traversalOrder) : [];
+  const rows = [...ahead, ...behind];
   if (rows.length === 0) return { notifications: 0, result: { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 } };
-  const last = rows[rows.length - 1];
+  // The cursor follows the forward traversal. Only a batch that took
+  // everything ahead of it wraps, to its last row behind; one whose retries
+  // rode along on their reserve keeps its place ahead.
+  const wraps = !ranges || ahead.length === 0 || behind.length === 0 || ranges.aheadExhausted(batch);
+  const last = wraps ? rows[rows.length - 1] : ahead[ahead.length - 1];
   const nextPosition = parsePushCursor({ version: 1, createdAt: last.created_at, id: last.id });
   if (!nextPosition) throw new Error('Push notification cursor fields are invalid.');
   // A wrap can return to the same position. Change the stored identity even

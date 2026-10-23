@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
+import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 
 const holder = vi.hoisted(() => ({ service: null as SupabaseClient<Database> | null }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => holder.service }));
@@ -178,5 +179,55 @@ describe('remindPendingApprovals', () => {
     holder.service = store.db;
     expect(await remindPendingApprovals(store.db, NOW)).toEqual({ reminded: 0, families: 0, failures: 1 });
     errors.mockRestore();
+  });
+});
+
+// household-roles round 9 (R8-RV4-APPROVAL-REMINDER-DEDUPE-READ-CROWDABLE).
+// The "already reminded" read was one unpaged page of every row under the
+// candidates' keys. 0388 lets a teen file any number of rows addressed to
+// themselves under a manager's key, so PostgREST's max-rows page came back
+// full of the teen's rows and without the manager's reminder, and the sweep
+// sent it again; notify()'s own unread-only guard is crowded the same way.
+// Against the in-memory database with PostgREST's 1,000-row page.
+describe('remindPendingApprovals against a teen’s thousand rows', () => {
+  const KEYS = ['ai-approval:appr-1:m1', 'ai-approval:appr-1:m2'];
+  function crowdedDb() {
+    const db = createInMemorySupabase({ maxRows: 1000 });
+    const data = seed();
+    db.seed('approval_requests', data.approval_requests);
+    db.seed('families', data.families.map((f) => ({ ...f, closed_at: null })));
+    db.seed('family_members', data.family_members);
+    db.seed('notifications', Array.from({ length: 1000 }, (_, i) => ({
+      id: `planted-${i}`, family_id: 'fam-1', user_id: 'u3', type: 'system', title: 'ok', body: null,
+      related_type: 'approval_requests', related_id: KEYS[i % 2], is_read: false,
+      created_at: '2026-09-01T00:00:00Z', send_at: '2026-09-01T00:00:00Z',
+    })));
+    return db;
+  }
+  const remindersFor = (db: InMemorySupabase, userId: string) =>
+    db.table('notifications').filter((n) => n.user_id === userId && KEYS.includes(String(n.related_id)));
+
+  it('a reminder each manager already has is not sent again', async () => {
+    const db = crowdedDb();
+    db.seed('notifications', [['u1', KEYS[0]], ['u2', KEYS[1]]].map(([userId, key]) => ({
+      id: `sent-${userId}`, family_id: 'fam-1', user_id: userId, type: 'system', title: 'Needs your OK: Add soccer', body: null,
+      related_type: 'approval_requests', related_id: key, is_read: true, created_at: '2026-09-04T12:00:00Z', send_at: '2026-09-04T12:00:00Z',
+    })));
+    holder.service = db as unknown as SupabaseClient<Database>;
+
+    expect(await remindPendingApprovals(db as unknown as SupabaseClient<Database>, NOW)).toEqual({ reminded: 0, families: 0, failures: 0 });
+    expect(remindersFor(db, 'u1')).toHaveLength(1);
+    expect(remindersFor(db, 'u2')).toHaveLength(1);
+  });
+
+  it('a reminder sent on one sweep is the only one, however many sweeps follow', async () => {
+    const db = crowdedDb();
+    holder.service = db as unknown as SupabaseClient<Database>;
+    const client = db as unknown as SupabaseClient<Database>;
+
+    expect(await remindPendingApprovals(client, NOW)).toEqual({ reminded: 2, families: 1, failures: 0 });
+    expect(await remindPendingApprovals(client, new Date(NOW.getTime() + 86_400_000))).toEqual({ reminded: 0, families: 0, failures: 0 });
+    expect(remindersFor(db, 'u1')).toHaveLength(1);
+    expect(remindersFor(db, 'u2')).toHaveLength(1);
   });
 });

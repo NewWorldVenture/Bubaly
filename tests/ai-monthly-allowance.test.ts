@@ -288,6 +288,8 @@ describe('without held migration 0493, the previous direct count keeps the allow
           ['eq', 'family_id', 'fam-1'], ['gte', 'created_at', '2026-09-01T00:00:00.000Z'], ['lt', 'created_at', '2026-10-01T00:00:00.000Z'],
           // Every row but a concierge request still as a member may file it (round 8).
           ['or', 'kind.neq.concierge,status.neq.queued', null],
+          // ...and but a call that failed before the model did any work (round 9).
+          ['or', 'status.neq.failed,prompt_tokens.gt.0', null],
         ],
       }]);
     });

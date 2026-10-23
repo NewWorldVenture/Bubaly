@@ -125,6 +125,8 @@ function refuseCounts(client: InMemorySupabase): void {
  * defaults to now(), which is what the hourly window counts. The in-memory
  * client's defaults are static values, so the clock default is added at insert time.
  */
+/** How far the database's clock runs ahead of this host's (round 9: the window's upper bound). */
+let databaseClockAheadMs = 0;
 function database(): InMemorySupabase {
   const fresh = createInMemorySupabase({
     uniques: { guardian_callback_events: [['event_id']], notifications: [['id']], ai_tool_calls: [['id']], guardian_communications: [['twilio_sms_sid']] },
@@ -135,7 +137,9 @@ function database(): InMemorySupabase {
     const query = realFrom(table);
     if (table !== 'guardian_communications') return query;
     const realInsert = query.insert.bind(query);
-    query.insert = (rows) => realInsert((Array.isArray(rows) ? rows : [rows]).map((row) => ({ started_at: new Date().toISOString(), ...row })));
+    query.insert = (rows) => realInsert((Array.isArray(rows) ? rows : [rows]).map((row) => ({
+      started_at: new Date(Date.now() + databaseClockAheadMs).toISOString(), ...row,
+    })));
     return query;
   }) as InMemorySupabase['from'];
   return fresh;
@@ -143,6 +147,7 @@ function database(): InMemorySupabase {
 
 beforeEach(() => {
   vi.resetModules();
+  databaseClockAheadMs = 0;
   vi.stubEnv('NODE_ENV', 'production'); vi.stubEnv('NEXT_PUBLIC_APP_URL', ORIGIN); vi.stubEnv('TWILIO_AUTH_TOKEN', TOKEN);
   vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('live transport is prohibited in this fixture'); }));
   db = database();
@@ -487,5 +492,47 @@ describe('a record dated after now is not one of this hour’s messages', () => 
     expect(seam.scam).not.toHaveBeenCalled();
     expect(seam.notify).not.toHaveBeenCalled();
     expect(db.table('notifications')).toEqual([]);
+  });
+});
+
+// household-roles round 9 (R8-RV3-GUARDIAN-CAP-BOUND-ON-APP-CLOCK): round 8's
+// upper bound was this host's own now. The message is recorded first, dated
+// by the DATABASE's clock (started_at defaults to now()), and the count is to
+// include it; with the database a few seconds ahead, that record fell past the
+// bound, the count came up one short, and the `>` cap let the message through
+// to a model call and a ping. The bound now allows for the skew.
+describe('a record the database dated a moment ahead of this host still counts', () => {
+  /** The sender's cap's worth this hour, the latest dated a few seconds ahead of this host, as the database dated it. */
+  function capWithOneAhead(commType: 'sms_inbound' | 'whatsapp_inbound', firstSid: number) {
+    priorMessages(GUARDIAN_INBOUND_SENDER_CAP - 1, SENDER, commType, firstSid);
+    priorMessages(1, SENDER, commType, firstSid + GUARDIAN_INBOUND_SENDER_CAP);
+    db.table('guardian_communications').at(-1)!.started_at = new Date(Date.now() + 3_000).toISOString();
+  }
+
+  it('an SMS past the sender cap, its own record dated 3 s ahead, buys no model call', async () => {
+    databaseClockAheadMs = 3_000;
+    capWithOneAhead('sms_inbound', 6000);
+    expect(await sms(sid(46), SENDER)).toBe('completed');
+    expect(seam.scam).not.toHaveBeenCalled();
+    expect(commFor(sid(46))).toMatchObject({ status: 'blocked' });
+    expect(String(commFor(sid(46))?.ai_decision_reason)).toMatch(/hourly message cap/);
+    expect(db.table('notifications')).toEqual([]);
+  });
+
+  it('a WhatsApp past the sender cap, its own record dated 3 s ahead, buys no model call', async () => {
+    databaseClockAheadMs = 3_000;
+    capWithOneAhead('whatsapp_inbound', 6100);
+    expect((await whatsapp(sid(47), SENDER)).status).toBe(200);
+    expect(seam.scam).not.toHaveBeenCalled();
+    expect(seam.notify).not.toHaveBeenCalled();
+    expect(commFor(sid(47))).toMatchObject({ status: 'blocked' });
+  });
+
+  it('control: one under the cap, the same skew, is still analysed and announced', async () => {
+    databaseClockAheadMs = 3_000;
+    priorMessages(GUARDIAN_INBOUND_SENDER_CAP - 1, SENDER, 'sms_inbound', 6200);
+    expect(await sms(sid(48), SENDER)).toBe('completed');
+    expect(seam.scam).toHaveBeenCalledOnce();
+    expect(commFor(sid(48))).toMatchObject({ status: 'received' });
   });
 });

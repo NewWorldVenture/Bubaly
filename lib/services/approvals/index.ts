@@ -1878,6 +1878,14 @@ export async function remindPendingApprovals(db: DB, now: Date = new Date()): Pr
     // Batched: a dedupe key is a composite string, not a uuid, so a few hundred
     // of them overflow the request line and the read fails `URI too long` —
     // which, per the branch below, skips the family every tick.
+    //
+    // Only the managers the candidates name: a row addressed to anyone else
+    // answers for nobody here (below), and the read is one unpaged page per
+    // chunk, so a teen's thousand rows of their own under a manager's key
+    // filled it and pushed the manager's reminder out, and the manager was
+    // reminded again at every sweep. A family's managers are a handful of ids.
+    // (aiApprovalReminders names only managers with a login.)
+    const managerUserIds = [...new Set(candidates.map((c) => c.user_id))];
     const { data: existing, error: existingError } = await readInChunks<
       { related_id: string | null; user_id: string | null }, { message: string }
     >(candidates.map((c) => c.dedupe_key), (chunk) => db
@@ -1885,6 +1893,7 @@ export async function remindPendingApprovals(db: DB, now: Date = new Date()): Pr
       .select('related_id, user_id')
       .eq('family_id', familyId)
       .eq('related_type', 'approval_requests')
+      .in('user_id', managerUserIds)
       .in('related_id', chunk), 50);
     if (existingError) {
       // Without the dedupe read every manager would be re-notified; skip the
