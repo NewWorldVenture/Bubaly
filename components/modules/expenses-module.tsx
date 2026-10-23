@@ -40,7 +40,7 @@ export function ExpensesModule() {
   // Money follows the reader; the currency stays the money's own.
   const locale = useLocale();
   const usd = (cents: number) => usdIn(cents, locale.code);
-  const { familyId, userId, members, family, role } = useApp();
+  const { familyId, userId, members, family, role, selfMember } = useApp();
   // 0481 refuses a caregiver every share write: expense_split_shares_insert,
   // _update and _delete all exclude 'caregiver'. A split a caregiver started was
   // rolled back with an RLS error, and a settle came back "not saved", on every
@@ -56,6 +56,14 @@ export function ExpensesModule() {
   // child what 0481 refuses them directly. The Trash follows the share rule.
   // (Narrowing expense_splits to match is the owner's SQL.)
   const removesSplit = (sp: SplitRow) => writesShares && (isManager(role) || sp.created_by === userId);
+  // Settling is a share update, and 0481's expense_split_shares_update lets a
+  // member who is not a manager settle only their own share, or a share of a
+  // split they created or paid. A teen or a child was offered the toggle on
+  // every share, and one on anyone else's came back "not saved" on every try.
+  // The toggle follows that rule; any other share reads as it does for a
+  // caregiver.
+  const settlesShare = (sp: SplitRow, s: Share) => writesShares && (isManager(role)
+    || s.member_id === selfMember?.id || sp.created_by === userId || sp.paid_by === selfMember?.id);
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
   const [saving, setSaving] = useState(false);
@@ -248,7 +256,7 @@ export function ExpensesModule() {
                 )}
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {sh.map((s) => !writesShares ? (
+                {sh.map((s) => !settlesShare(sp, s) ? (
                   <span key={s.id} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${s.settled ? 'bg-success/15 text-success' : 'bg-border/40 text-muted'}`}>
                     {s.settled && <Check className="h-3 w-3" />} {memberName(s.member_id)} {usd(s.share_cents)}
                   </span>
