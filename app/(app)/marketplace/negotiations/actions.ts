@@ -104,7 +104,7 @@ export async function makeOfferAction(
   // answer says nothing about one they cannot; an unseen listing is left to
   // the RPC's not_found.
   const { data: listing, error: listingError } = await readBidTarget(supabase, input.listingId);
-  if (listingError) return actionFailure('read the listing before the offer', t('marketplace.couldNotSendTheOffer'), listingError);
+  if (listingError) return actionFailure('read the listing before the offer', t('marketplace.couldNotSendTheOffer'), listingError, t);
   if (listing) {
     const seller = await readSellerStanding(createServiceClient(), input.listingId);
     if (seller === 'unknown') return { ok: false, error: t('marketplace.couldNotSendTheOffer') };
@@ -168,7 +168,7 @@ export async function respondToOfferAction(
       .eq('id', input.negotiationId)
       .or(ownFamilies.map(eitherPartyFamily).join(','))
       .maybeSingle();
-    if (threadError) return actionFailure('read the negotiation', t('negotiations.couldNotRespondToTheOffer'), threadError);
+    if (threadError) return actionFailure('read the negotiation', t('negotiations.couldNotRespondToTheOffer'), threadError, t);
     if (thread?.listing_id) {
       const service = createServiceClient();
       const seller = await readSellerStanding(service, thread.listing_id);
