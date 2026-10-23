@@ -6,7 +6,7 @@ import { CASE_STUDIES_CACHE_TAG } from './case-study';
 // failed read is logged and treated as empty rather than filled in.
 import { unstable_cache } from 'next/cache';
 import { createServiceClient } from '@/lib/supabase/server';
-import { clampRating, publishedOnly } from '@/lib/marketing/reputation';
+import { clampRating, publishedOnly, TESTIMONIALS_CACHE_TAG } from '@/lib/marketing/reputation';
 import { withPublicReadBudget } from '@/lib/marketing/public-read';
 
 export type PublicTestimonial = {
@@ -79,7 +79,7 @@ const cachedPublishedTestimonials = unstable_cache(
     }));
   }),
   ['public-testimonials-validated-v2'],
-  { revalidate: 3600 },
+  { revalidate: 3600, tags: [TESTIMONIALS_CACHE_TAG] },
 );
 
 /** Keep transient failures outside the cache, preserving last-good quotes. */

@@ -2,7 +2,7 @@
 
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
-import { slugify, clampRating } from '@/lib/marketing/reputation';
+import { slugify, clampRating, TESTIMONIALS_CACHE_TAG } from '@/lib/marketing/reputation';
 import { CASE_STUDIES_CACHE_TAG } from '@/lib/marketing/case-study';
 
 function s(fd: FormData, k: string): string | null {
@@ -17,13 +17,15 @@ export async function saveTestimonialAction(formData: FormData) {
   const author_name = s(formData, 'author_name');
   const quote = s(formData, 'quote');
   if (!author_name || !quote) return;
+  const rating = s(formData, 'rating');
 
   const row = {
     author_name,
     author_role: s(formData, 'author_role'),
     company: s(formData, 'company'),
     quote,
-    rating: clampRating(Number(s(formData, 'rating') ?? '')),
+    // Optional field: blank is "no rating", not Number('') = 0 raised to 1 star.
+    rating: rating === null ? null : clampRating(Number(rating)),
     is_published: formData.get('is_published') === 'on',
   };
 
@@ -36,6 +38,7 @@ export async function saveTestimonialAction(formData: FormData) {
     if (error || !data) marketingActionFailure('create the testimonial', error ?? new Error('The testimonial row was not returned after save.'));
     await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'testimonial', resourceId: data.id });
   }
+  revalidateTag(TESTIMONIALS_CACHE_TAG, { expire: 0 });
   revalidatePath('/admin/marketing/reputation');
 }
 
@@ -44,6 +47,7 @@ export async function togglePublishTestimonialAction(id: string, publish: boolea
   const { data, error } = await supabase.from('testimonials').update({ is_published: publish }).eq('id', id).select('id').maybeSingle();
   if (error || !data) marketingActionFailure('publish the testimonial', error ?? new Error('Testimonial not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'testimonial', resourceId: id, metadata: { is_published: publish } });
+  revalidateTag(TESTIMONIALS_CACHE_TAG, { expire: 0 });
   revalidatePath('/admin/marketing/reputation');
 }
 
@@ -52,6 +56,7 @@ export async function deleteTestimonialAction(id: string) {
   const { data, error } = await supabase.from('testimonials').delete().eq('id', id).select('id').maybeSingle();
   if (error || !data) marketingActionFailure('delete the testimonial', error ?? new Error('Testimonial not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'delete', resource: 'testimonial', resourceId: id });
+  revalidateTag(TESTIMONIALS_CACHE_TAG, { expire: 0 });
   revalidatePath('/admin/marketing/reputation');
 }
 

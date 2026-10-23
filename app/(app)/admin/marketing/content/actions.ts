@@ -6,7 +6,7 @@ import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from
 import { buildBlogPost } from '@/lib/marketing/blog-publish';
 import { deriveArticleAeoQuestions } from '@/lib/marketing/aeo-generate';
 import { retireAeoQuestionsForPath } from '@/lib/marketing/platform';
-import { archiveLegacyBlogOnPlatform, syncLegacyBlogToPlatform, syncLegacyBlogVisibility } from '@/lib/marketing/legacy-bridge';
+import { archiveLegacyBlogOnPlatform, assertLegacyBlogPathFree, syncLegacyBlogToPlatform, syncLegacyBlogVisibility } from '@/lib/marketing/legacy-bridge';
 import type { Json } from '@/lib/database.types';
 
 function s(fd: FormData, k: string): string | null {
@@ -84,6 +84,8 @@ export async function publishContentToBlogAction(formData: FormData): Promise<vo
   }
 
   const payload = buildBlogPost(item, new Date().toISOString());
+  // Before the first write, so a /blog path a console page holds publishes nothing (admin reach N12-S1).
+  await assertLegacyBlogPathFree(supabase, payload.slug);
   const { data: post, error } = await supabase
     .from('blog_posts')
     .upsert({ ...payload, body: payload.body as unknown as Json }, { onConflict: 'slug' }).select('slug').single();

@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   Store, Plus, Search, Tag, Clock, HandHeart, Check, X, Pencil, Trash2,
-  ShoppingBag, Package, Gift, HelpCircle, MapPin, Inbox, Database, Repeat,
+  ShoppingBag, Package, Gift, HelpCircle, MapPin, Inbox, Repeat,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -63,13 +63,11 @@ const blank = {
 };
 
 export function MarketplaceModule({
-  canSeed = false,
   initialKind = 'all',
   initialCategory = 'all',
   initialQuery = '',
   autoOpenPost = null,
 }: {
-  canSeed?: boolean;
   initialKind?: ListingKind | 'all';
   initialCategory?: ListingCategory | 'all';
   initialQuery?: string;
@@ -291,12 +289,6 @@ export function MarketplaceModule({
         description={t('marketplaceModule.buySellRentBorrowOr')}
         action={
           <div className="flex items-center gap-2">
-            {canSeed && (
-              <Link href="/marketplace/seed"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted transition hover:bg-elevated hover:text-fg">
-                <Database className="h-4 w-4" /> {t('marketplace.seedTestData')}
-              </Link>
-            )}
             {canPost && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('marketplace.postAListing')}</Button>}
           </div>
         }
