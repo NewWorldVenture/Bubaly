@@ -33,7 +33,12 @@ export default async function AdminFeedbackPage() {
   // and every idea's votes added up, paged on the id so a vote cast between
   // two pages cannot add an idea twice. Past VOTE_ROW_CEILING ideas Total
   // votes alone says it is not shown. The list itself is as it was.
-  const [ideasResult, commentsResult, notesResult, gh, totalResult, votesResult, statusCountResults] = await Promise.all([
+  //
+  // The relay's "N new" badge counted the unread among the newest 50
+  // notifications it lists, while Mark all read marks every unread one (review
+  // R8B-FEEDBACK-RELAY-UNREAD-BADGE-CAPPED). It is a head:true count of every
+  // unread notification now, as /admin counts it.
+  const [ideasResult, commentsResult, notesResult, gh, totalResult, votesResult, statusCountResults, unreadResult] = await Promise.all([
     settle(supabase.from('feedback_ideas')
       .select('id, title, problem, body, category, impact, audience, kind, status, admin_note, image_url, author_name, vote_count, comment_count, pinned, github_issue_number, github_issue_url, created_at')
       .order('pinned', { ascending: false })
@@ -59,6 +64,7 @@ export default async function AdminFeedbackPage() {
     }, { max: VOTE_ROW_CEILING })),
     settleAll(FILTERABLE_STATUSES.map((status) =>
       supabase.from('feedback_ideas').select('id', { count: 'exact', head: true }).eq('status', status))),
+    settle(supabase.from('admin_notifications').select('id', { count: 'exact', head: true }).eq('is_read', false)),
   ]);
 
   // The comment rows only fill the threads. Past the ceiling they are a prefix,
@@ -72,7 +78,8 @@ export default async function AdminFeedbackPage() {
   const votesCeiling = 'truncated' in votesResult && votesResult.truncated;
   if (votesCeiling) console.warn('[admin-feedback] the vote read reached its ceiling; Total votes is not shown');
   const readError = ideasResult.error ?? (threadsCeiling ? null : commentsResult.error) ?? notesResult.error
-    ?? totalResult.error ?? (votesCeiling ? null : votesResult.error) ?? statusCountResults.find((r) => r.error)?.error;
+    ?? totalResult.error ?? (votesCeiling ? null : votesResult.error) ?? statusCountResults.find((r) => r.error)?.error
+    ?? unreadResult.error;
   if (readError) {
     console.error('[admin-feedback] feedback read failed', readError);
     return <AdminFeedbackReadError />;
@@ -128,6 +135,7 @@ export default async function AdminFeedbackPage() {
         counts={counts}
         comments={threadsCeiling ? null : (comments ?? []) as AdminComment[]}
         notifications={(notes ?? []) as AdminNotification[]}
+        unreadCount={unreadResult.count ?? 0}
         githubConfigured={gh.ok}
       />
     </div>

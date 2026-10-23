@@ -231,7 +231,8 @@ export default async function AdminBillingPage() {
               <tbody className="divide-y divide-border/60">
                 {recent.map((s) => (
                   <tr key={s.id} className="hover:bg-surface/30">
-                    <td className="px-4 py-3 font-medium">{familyName.get(s.family_id) ?? '—'}</td>
+                    {/* A name read that failed is no name, not "no family" (coverage sweep round 9). */}
+                    <td className="px-4 py-3 font-medium">{familyName.get(s.family_id) ?? (familiesResult.error ? tr('strategyMetrics.unavailable') : '—')}</td>
                     <td className="px-4 py-3 text-muted">{planName(s.plan)}</td>
                     <td className="px-4 py-3"><Badge tone={STATUS_TONE[s.status] ?? 'neutral'} className="capitalize">{s.status.replace('_', ' ')}</Badge></td>
                     <td className="px-4 py-3 font-medium">{fmtMoney(planMonthlyCents(s.plan))}</td>

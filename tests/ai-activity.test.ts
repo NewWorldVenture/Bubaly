@@ -193,7 +193,9 @@ describe('summarizeAiActivity', () => {
 
   it('survives a failed count rather than taking the page down with it', async () => {
     const { db } = stubDb({ error: { message: 'nope' } });
-    await expect(summarizeAiActivity(db, '2026-09-05T00:00:00.000Z')).resolves.toEqual({ failed: 0, inFlight: 0, total: 0 });
+    // ...and does not read it as 0, which the strip showed as an all-clear: a
+    // failed count is null, and the tile says Unavailable (coverage sweep round 9).
+    await expect(summarizeAiActivity(db, '2026-09-05T00:00:00.000Z')).resolves.toEqual({ failed: null, inFlight: null, total: null });
   });
 });
 

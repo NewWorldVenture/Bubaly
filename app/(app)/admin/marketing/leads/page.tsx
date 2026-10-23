@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { Flame, Target, Inbox, ThermometerSun } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settle } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
@@ -16,6 +18,12 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 export const dynamic = 'force-dynamic';
 
+/** The newest leads read for the list, and the highest-scoring of them it shows. */
+const LISTED = 100;
+const SHOWN = 60;
+/** Leads the tiles may score through before they say they are not shown (one round trip per 1,000). */
+const SUM_ROW_CEILING = 10_000;
+
 const BAND_STYLE: Record<LeadBand, string> = {
   hot: 'text-rose-300 bg-rose-500/15',
   warm: 'text-amber-300 bg-amber-500/15',
@@ -26,12 +34,24 @@ export default async function LeadScoringPage() {
   const tr = await getTranslations();
   const supabase = createServiceClient();
 
-  const [ticketsResult, customersResult] = await Promise.all([
+  // The four tiles were tallied from the list, the newest 100 leads, so past
+  // them each was the list's count presented as every lead's (coverage sweep
+  // round 9, class B). They score every contact-form lead now, paged on the id
+  // (the form files leads while this reads) to a ceiling past which they say
+  // they are not shown, and the list says when it holds part of the leads.
+  const [ticketsResult, customersResult, allLeadsResult] = await Promise.all([
     settle(supabase.from('support_tickets').select('id, subject, description, requester_name, requester_email, status, created_at, family_id')
-      .contains('tags', ['contact-form']).order('created_at', { ascending: false }).limit(100)),
+      .contains('tags', ['contact-form']).order('created_at', { ascending: false }).limit(LISTED)),
     getMarketingCustomersWithError(supabase),
+    settle(readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('support_tickets').select('id, description, requester_name, requester_email, status, created_at, family_id')
+        .contains('tags', ['contact-form']);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING })),
   ]);
-  const readError = ticketsResult.error ?? customersResult.error;
+  const leadsCeiling = 'truncated' in allLeadsResult && allLeadsResult.truncated;
+  const readError = ticketsResult.error ?? customersResult.error ?? (leadsCeiling ? null : allLeadsResult.error);
   if (readError) {
     console.error('[admin-marketing-leads] lead read failed', readError);
     return <AdminLeadsReadError />;
@@ -41,23 +61,29 @@ export default async function LeadScoringPage() {
 
   const customerEmails = new Set(customers.map((c) => c.ownerEmail?.toLowerCase()).filter(Boolean) as string[]);
 
-  const rows = (tickets ?? []).map((t) => {
+  const score = (t: { created_at: string; status: string; description: string | null; requester_name: string | null; requester_email: string | null; family_id: string | null }) => {
     const isCustomer = Boolean(t.family_id) || customerEmails.has((t.requester_email ?? '').toLowerCase());
-    const s = scoreLead({ createdAt: t.created_at, status: t.status, message: t.description, name: t.requester_name, isCustomer });
-    return { t, s, isCustomer };
-  }).sort((a, b) => b.s.score - a.s.score);
+    return { s: scoreLead({ createdAt: t.created_at, status: t.status, message: t.description, name: t.requester_name, isCustomer }), isCustomer };
+  };
+  const rows = (tickets ?? []).map((t) => ({ t, ...score(t) })).sort((a, b) => b.s.score - a.s.score);
 
-  const summary = summarizeLeads(rows.map((r) => ({ band: r.s.band, status: r.t.status })));
+  const summary = summarizeLeads((allLeadsResult.data ?? []).map((t) => ({ band: score(t).s.band, status: t.status })));
+  const unavailable = tr('strategyMetrics.unavailable');
+  const summed = (value: number) => (leadsCeiling ? unavailable : value.toLocaleString());
 
   const stats = [
-    { label: 'Total Leads', value: summary.total, icon: Inbox, tint: 'text-violet-400 bg-violet-500/15' },
-    { label: 'Hot', value: summary.hot, icon: Flame, tint: 'text-rose-400 bg-rose-500/15' },
-    { label: 'Warm', value: summary.warm, icon: ThermometerSun, tint: 'text-amber-400 bg-amber-500/15' },
-    { label: 'Open', value: summary.open, icon: Target, tint: 'text-emerald-400 bg-emerald-500/15' },
+    { label: 'Total Leads', value: summed(summary.total), icon: Inbox, tint: 'text-violet-400 bg-violet-500/15' },
+    { label: 'Hot', value: summed(summary.hot), icon: Flame, tint: 'text-rose-400 bg-rose-500/15' },
+    { label: 'Warm', value: summed(summary.warm), icon: ThermometerSun, tint: 'text-amber-400 bg-amber-500/15' },
+    { label: 'Open', value: summed(summary.open), icon: Target, tint: 'text-emerald-400 bg-emerald-500/15' },
   ];
 
   return (
     <div className="space-y-5">
+      <PartialReadBanner
+        title={tr('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
+        failures={leadsCeiling ? stats.map((s) => s.label) : []}
+      />
       <p className="text-sm text-muted">{tr('adminMarketingLeads.inboundLeadsFromTheContactForm')}</p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -71,6 +97,9 @@ export default async function LeadScoringPage() {
 
       <Card>
         <h2 className="mb-4 text-base font-semibold">{tr('adminMarketingLeads.leadsToFollowUp')}</h2>
+        {!leadsCeiling && summary.total > Math.min(rows.length, SHOWN) && (
+          <p className="mb-3 text-xs text-muted">{tr('adminCeiling.listShowsPart', { shown: Math.min(rows.length, SHOWN).toLocaleString(), total: summary.total.toLocaleString() })}</p>
+        )}
         {rows.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">{tr('adminMarketingLeads.noInboundLeadsYet')}</p>
         ) : (
@@ -80,7 +109,7 @@ export default async function LeadScoringPage() {
                 <tr><th className="pb-2">{tr('adminMarketingLeads.lead')}</th><th className="pb-2">{tr('adminMarketingLeads.status')}</th><th className="pb-2">Age</th><th className="pb-2">{tr('adminMarketingLeads.signals')}</th><th className="pb-2 text-right">{tr('adminMarketingLeads.score')}</th></tr>
               </thead>
               <tbody>
-                {rows.slice(0, 60).map(({ t, s, isCustomer }) => (
+                {rows.slice(0, SHOWN).map(({ t, s, isCustomer }) => (
                   <tr key={t.id} className="border-t border-border align-top">
                     <td className="py-2">
                       <p className="font-medium">{t.requester_name || t.requester_email}</p>

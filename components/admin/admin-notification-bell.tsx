@@ -37,9 +37,18 @@ function timeAgo(iso: string): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
-export function AdminNotificationBell({ notifications, pendingInviteCount }: {
-  notifications: AdminNotificationRow[];
-  pendingInviteCount: number;
+/**
+ * `unreadCount` is every unread notification, counted: `notifications` is the
+ * newest few, listed, and a tally of them stopped at the list. Each of the
+ * three is null when its read failed, and the bell says so rather than
+ * reading it as 0 or as an empty feed: the badge is a "!" and not a number,
+ * the dropdown names what it could not read, and Mark all read, which acts on
+ * the unread count, is not offered.
+ */
+export function AdminNotificationBell({ notifications, pendingInviteCount, unreadCount }: {
+  notifications: AdminNotificationRow[] | null;
+  pendingInviteCount: number | null;
+  unreadCount: number | null;
 }) {
   const t = useTranslations();
   const router = useRouter();
@@ -48,8 +57,10 @@ export function AdminNotificationBell({ notifications, pendingInviteCount }: {
   const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
-  const unread = notifications.filter((n) => !n.is_read).length;
-  const badge = badgeText(unread + (pendingInviteCount > 0 ? 1 : 0));
+  const unread = unreadCount ?? 0;
+  const badge = unreadCount === null || pendingInviteCount === null
+    ? '!'
+    : badgeText(unread + (pendingInviteCount > 0 ? 1 : 0));
 
   useEffect(() => {
     if (!open) return;
@@ -92,7 +103,7 @@ export function AdminNotificationBell({ notifications, pendingInviteCount }: {
         <div className="absolute right-0 top-full z-30 mt-2 w-80 overflow-hidden rounded-xl popover-surface shadow-glass animate-fade-in sm:w-96">
           <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
             <p className="text-sm font-bold">{t('adminNotificationBell.notifications')}</p>
-            {unread > 0 && (
+            {unreadCount !== null && unreadCount > 0 && (
               <button type="button" onClick={markAll} disabled={pending}
                 className="inline-flex items-center gap-1 text-xs font-semibold text-brand-text hover:underline disabled:opacity-50">
                 <Check className="h-3.5 w-3.5" /> {t('adminNotificationBell.markAllRead')}
@@ -104,7 +115,10 @@ export function AdminNotificationBell({ notifications, pendingInviteCount }: {
 
           <div className="max-h-[60vh] overflow-y-auto">
             {/* Pending invites — a live count, not an admin_notifications row */}
-            {pendingInviteCount > 0 && (
+            {pendingInviteCount === null && (
+              <p className="border-b border-border/40 px-4 py-3 text-xs text-muted">{t('adminCredential.invitesUnavailable')}</p>
+            )}
+            {pendingInviteCount !== null && pendingInviteCount > 0 && (
               <Link href="/admin/users?tab=invitations" onClick={() => setOpen(false)}
                 className="flex items-start gap-3 border-b border-border/40 bg-brand/5 px-4 py-3 transition hover:bg-elevated">
                 <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand/15 text-brand-text"><UserPlus className="h-4 w-4" /></span>
@@ -115,7 +129,9 @@ export function AdminNotificationBell({ notifications, pendingInviteCount }: {
               </Link>
             )}
 
-            {notifications.length === 0 && pendingInviteCount === 0 ? (
+            {notifications === null ? (
+              <p className="px-4 py-8 text-center text-sm text-muted">{t('adminCredential.notificationsUnavailable')}</p>
+            ) : notifications.length === 0 && pendingInviteCount === 0 ? (
               <p className="px-4 py-8 text-center text-sm text-muted">{t('adminNotificationBell.youreAllCaughtUp')}</p>
             ) : (
               notifications.map((n) => {

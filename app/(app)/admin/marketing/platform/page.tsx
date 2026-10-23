@@ -32,7 +32,11 @@ export default async function MarketingPlatformPage() {
     settle(supabase.from('marketing_generation_jobs').select('*').order('created_at', { ascending: false }).limit(30)),
     settle(supabase.from('marketing_provider_syncs').select('*').order('provider')),
   ]);
-  const [jobCountResults, staleJobsResult, latestSuccessResult, observationStats, embeddingCountResults] = await Promise.all([
+  // The Pages, Published and Templates metrics counted the registry's list,
+  // which is the 40 most recently updated pages, and the templates' unbounded
+  // read (db-max-rows), so past them each was the list's count (coverage sweep
+  // round 9, class B). They are head:true counts now.
+  const [jobCountResults, staleJobsResult, latestSuccessResult, observationStats, embeddingCountResults, inventoryCounts] = await Promise.all([
     Promise.all(jobStatuses.map(async (status) => ({
       status,
       result: await settle(supabase.from('marketing_generation_jobs').select('id', { count: 'exact', head: true }).eq('status', status)),
@@ -50,7 +54,13 @@ export default async function MarketingPlatformPage() {
       status,
       result: await settle(supabase.from('marketing_embeddings').select('id', { count: 'exact', head: true }).eq('status', status)),
     }))),
+    settleAll([
+      supabase.from('marketing_pages').select('id', { count: 'exact', head: true }).is('deleted_at', null),
+      supabase.from('marketing_pages').select('id', { count: 'exact', head: true }).is('deleted_at', null).eq('status', 'published'),
+      supabase.from('marketing_content_templates').select('id', { count: 'exact', head: true }).neq('status', 'archived'),
+    ]),
   ]);
+  const [pageCountResult, publishedCountResult, templateCountResult] = inventoryCounts;
   const error = pagesResult.error ?? templatesResult.error ?? rulesResult.error ?? jobsResult.error ?? syncResult.error;
   const observationError = observationStats.find(({ countResult, latestResult }) => countResult.error ?? latestResult.error);
   const embeddingError = embeddingCountResults.find(({ result }) => result.error)?.result.error;
@@ -59,7 +69,8 @@ export default async function MarketingPlatformPage() {
     ?? latestSuccessResult.error
     ?? observationError?.countResult.error
     ?? observationError?.latestResult.error
-    ?? embeddingError;
+    ?? embeddingError
+    ?? pageCountResult.error ?? publishedCountResult.error ?? templateCountResult.error;
   if (error || operationsError) return <ErrorState message={t('platform.couldNotLoadTheMarketing')} />;
   const pages = pagesResult.data ?? [];
   const templates = templatesResult.data ?? [];
@@ -77,7 +88,8 @@ export default async function MarketingPlatformPage() {
     latestStatus: latestResult.data?.source_status ?? null,
   }]));
   const embeddingCounts = Object.fromEntries(embeddingCountResults.map(({ status, result }) => [status, result.count ?? 0])) as Record<(typeof embeddingStatuses)[number], number>;
-  const published = pages.filter((page) => page.status === 'published').length;
+  const pageCount = pageCountResult.count ?? 0;
+  const published = publishedCountResult.count ?? 0;
 
   return (
     <div className="space-y-5">
@@ -91,9 +103,9 @@ export default async function MarketingPlatformPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-        <Metric icon={FileText} label={t('adminMarketingPlatform.pages')} value={pages.length} />
+        <Metric icon={FileText} label={t('adminMarketingPlatform.pages')} value={pageCount} />
         <Metric icon={Sparkles} label={t('adminMarketingPlatform.published')} value={published} />
-        <Metric icon={Layers3} label={t('adminMarketingPlatform.templates')} value={templates.length} />
+        <Metric icon={Layers3} label={t('adminMarketingPlatform.templates')} value={templateCountResult.count ?? 0} />
         <Metric icon={Activity} label={t('adminMarketingPlatform.jobsActive')} value={activeJobs} />
         <Metric icon={RefreshCw} label={t('adminMarketingPlatform.jobsNeedingReview')} value={failed} />
         <Metric icon={Layers3} label={t('adminMarketingPlatform.vectorChunksReady')} value={embeddingCounts.ready} />
@@ -102,6 +114,7 @@ export default async function MarketingPlatformPage() {
       <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
         <Card>
           <div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">{t('adminMarketingPlatform.pageRegistry')}</h3><p className="text-xs text-muted">{t('adminMarketingPlatform.theCanonicalPublicPageInventory')}</p></div><Badge tone="neutral">{pages.length} loaded</Badge></div>
+          {pageCount > pages.length && <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsPart', { shown: pages.length.toLocaleString(), total: pageCount.toLocaleString() })}</p>}
           {pages.length === 0 ? <EmptyState icon={FileText} title={t('adminMarketingPlatform.noPlatformPagesYet')} description={t('platform.createTheFirstPageAnd')} /> : (
             <div className="space-y-3">{pages.map((page) => <PageEditor key={page.id} page={page} />)}</div>
           )}

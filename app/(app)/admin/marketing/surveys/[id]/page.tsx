@@ -145,6 +145,10 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
       {/* Responses */}
       <Card>
         <h3 className="mb-3 text-sm font-semibold">{t('adminMarketingSurveys.responses')}</h3>
+        {/* The list is the newest few; the score covers every response (coverage sweep round 9). */}
+        {!scoresCeiling && scores.length > rows.length && (
+          <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsTheNewest', { shown: rows.length.toLocaleString(), total: scores.length.toLocaleString() })}</p>
+        )}
         {rows.length === 0 ? (
           <EmptyState icon={MessagesSquare} title={t('adminMarketingSurveys.noResponsesYet')} description={t('surveys.shareTheLinkAboveTo')} />
         ) : (
