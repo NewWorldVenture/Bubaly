@@ -277,9 +277,14 @@ async function aPublishedConsolePage(slug: string, fields: Record<string, string
  * `changes`. The form stamps a published page's `published_at` afresh, so it
  * is posted after the millisecond of the last stamp: a save inside that same
  * millisecond changes no column 0237 compares, which no admin's next save does.
+ * Under a faked clock that millisecond never passes on its own, so the clock is
+ * stepped one millisecond past the stamp instead.
  */
 async function theConsoleSaves(page: Row, changes: Record<string, string> = {}) {
-  while (page.published_at && Date.now() <= Date.parse(String(page.published_at))) await new Promise((resolve) => setTimeout(resolve, 1));
+  while (page.published_at && Date.now() <= Date.parse(String(page.published_at))) {
+    if (vi.isFakeTimers()) vi.setSystemTime(Date.parse(String(page.published_at)) + 1);
+    else await new Promise((resolve) => setTimeout(resolve, 1));
+  }
   return anAdminSaves(() => updatePlatformPage(form({
     id: page.id, page_type: 'landing', slug: page.slug, title: page.title, summary: page.summary ?? '', body: page.body ?? '', status: page.status, ...changes,
   })));
@@ -324,6 +329,7 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { errors.push(args); });
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
