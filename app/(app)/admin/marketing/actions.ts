@@ -4,7 +4,7 @@ import { revalidatePath, revalidateTag } from 'next/cache';
 import { AEO_TAG } from '@/lib/marketing/aeo';
 import { redirect } from 'next/navigation';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
-import { archiveLegacyLandingOnPlatform, assertLegacyLandingPathFree, retireLegacyLandingAliases, syncLegacyLandingToPlatform } from '@/lib/marketing/legacy-bridge';
+import { archiveLegacyLandingOnPlatform, assertLegacyLandingPathFree, legacyLandingPathTaken, retireLegacyLandingAliases, syncLegacyLandingToPlatform } from '@/lib/marketing/legacy-bridge';
 import { normalizeSlug } from '@/lib/marketing/landing';
 import type { SegmentRules, Lifecycle } from '@/lib/marketing/customers';
 import type { Json } from '@/lib/database.types';
@@ -553,15 +553,27 @@ export async function setLandingPublished(formData: FormData) {
   const id = str(formData.get('id'));
   if (!id) return;
   const publish = str(formData.get('publish')) === '1';
+  // Admin reach N12-R1. The sync below upserts marketing_pages on `path`. When
+  // another page holds /lp/<slug> (the platform console can rename this page's
+  // mirror off it and make a page there), that overwrote the other page and
+  // gave it this one's status, and a published legacy row serves /lp/<slug> in
+  // its place. So publishing there is refused before this row changes, as on
+  // create and rename. Unpublishing still takes this page down, but leaves the
+  // other page's row alone. The write is scoped to the slug that was checked.
+  const { data: current, error: currentError } = await supabase.from('marketing_landing_pages')
+    .select('slug').eq('id', id).is('deleted_at', null).maybeSingle();
+  if (currentError || !current) marketingActionFailure('update the landing page', currentError ?? new Error('Landing page not found'));
+  if (publish) await assertLegacyLandingPathFree(supabase, current.slug, id);
+  const writeMirror = publish || !await legacyLandingPathTaken(supabase, current.slug, id);
   const { data, error } = await supabase.from('marketing_landing_pages')
     .update({ published: publish, status: publish ? 'published' : 'draft' })
-    .eq('id', id).is('deleted_at', null).select('id, slug').maybeSingle();
+    .eq('id', id).eq('slug', current.slug).is('deleted_at', null).select('id, slug').maybeSingle();
   if (error || !data) marketingActionFailure('update the landing page', error ?? new Error('Landing page not found'));
   const { data: landing, error: landingError } = await supabase.from('marketing_landing_pages')
     .select('id, slug, title, headline, subhead, body, metadata, published')
     .eq('id', id).is('deleted_at', null).maybeSingle();
   if (landingError) marketingActionFailure('load the landing page for synchronization', landingError);
-  if (landing) await syncLegacyLandingToPlatform(supabase, {
+  if (landing && writeMirror) await syncLegacyLandingToPlatform(supabase, {
     id: landing.id,
     slug: landing.slug,
     title: landing.title,
@@ -645,7 +657,7 @@ export async function archiveLandingPage(formData: FormData) {
   const { data, error } = await supabase.from('marketing_landing_pages').update(archiveValues as never)
     .eq('id', id).is('deleted_at', null).select('id, slug').maybeSingle();
   if (error || !data) marketingActionFailure('archive the landing page', error ?? new Error('Landing page not found.'));
-  await archiveLegacyLandingOnPlatform(supabase, data.slug, actorId);
+  await archiveLegacyLandingOnPlatform(supabase, { id: data.id, slug: data.slug, actorId });
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'archive', resource: 'marketing_landing_page', resourceId: id });
   revalidatePath('/admin/marketing/landing-pages');
   revalidatePath(`/lp/${data.slug}`);

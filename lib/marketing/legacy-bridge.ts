@@ -53,6 +53,39 @@ function isMissingPlatformSchema(error: { code?: string; message?: string } | nu
   return error?.code === 'PGRST205' || /marketing_pages|schema cache|relation .* does not exist/i.test(error?.message ?? '');
 }
 
+function contentSource(content: Json | null | undefined): { source?: unknown; source_id?: unknown } {
+  return content && typeof content === 'object' && !Array.isArray(content)
+    ? content as { source?: unknown; source_id?: unknown }
+    : {};
+}
+
+/**
+ * The rows at /blog/<slug> that mirror the legacy blog: this publisher's own,
+ * and the copies scripts/backfill-marketing-pages.mjs made of blog_posts. Any
+ * of them is the article's own row, whichever content item last published it:
+ * blog_posts is keyed by slug, so the article at /blog/<slug> is the one a
+ * publish there replaces, and its mirror follows it.
+ */
+const LEGACY_BLOG_SOURCES = ['marketing_content_items', 'blog_posts'];
+
+/**
+ * Admin reach N12-S1. Refuse a blog publish whose /blog/<slug> belongs to a
+ * page that is not a legacy blog mirror, such as one made in the platform
+ * console, which offers page type "Blog" under the same prefix. The sync below
+ * upserts on `path`, so it replaced that page's title, body, content, SEO and
+ * AEO with the post's and forced it published. The caller runs this BEFORE its
+ * blog_posts write, so a refusal publishes nothing.
+ */
+export async function assertLegacyBlogPathFree(db: MarketingDb, slug: string): Promise<void> {
+  const { data, error } = await db.from('marketing_pages').select('content').eq('path', `/blog/${slug}`).maybeSingle();
+  if (error) {
+    if (isMissingPlatformSchema(error)) return;
+    throw error;
+  }
+  if (!data || LEGACY_BLOG_SOURCES.includes(String(contentSource(data.content).source))) return;
+  refuseInput(`/blog/${slug} is already used by another marketing page.`, 'duplicate');
+}
+
 /**
  * Keep the established blog publisher compatible while making the canonical
  * platform registry the source for new SEO/AEO/vector work. Missing migration
@@ -88,12 +121,15 @@ export async function syncLegacyBlogToPlatform(db: MarketingDb, post: LegacyBlog
 }
 
 export async function syncLegacyBlogVisibility(db: MarketingDb, slug: string, actorId: string, published: boolean): Promise<boolean> {
+  // Only a legacy blog mirror (admin reach N12-S1): a console page at the path
+  // is not this post's to draft. Answers are still retired below by path: the
+  // public /blog/<slug> renders blog_posts alone, and the post is now down.
   const { data, error } = await db.from('marketing_pages').update({
     status: published ? 'published' : 'draft',
     published_at: published ? new Date().toISOString() : null,
     updated_by: actorId,
     deleted_at: null,
-  }).eq('path', `/blog/${slug}`).select('id').maybeSingle();
+  }).eq('path', `/blog/${slug}`).in('content->>source', LEGACY_BLOG_SOURCES).select('id').maybeSingle();
   if (error) {
     if (isMissingPlatformSchema(error)) return false;
     throw error;
@@ -106,9 +142,10 @@ export async function syncLegacyBlogVisibility(db: MarketingDb, slug: string, ac
 }
 
 export async function archiveLegacyBlogOnPlatform(db: MarketingDb, slug: string, actorId: string): Promise<boolean> {
+  // Scoped, and its answers retired, as in syncLegacyBlogVisibility (N12-S1).
   const { data, error } = await db.from('marketing_pages').update({
     status: 'archived', deleted_at: new Date().toISOString(), updated_by: actorId,
-  }).eq('path', `/blog/${slug}`).select('id').maybeSingle();
+  }).eq('path', `/blog/${slug}`).in('content->>source', LEGACY_BLOG_SOURCES).select('id').maybeSingle();
   if (error) {
     if (isMissingPlatformSchema(error)) return false;
     throw error;
@@ -135,20 +172,23 @@ function isMissingLandingRegistry(error: { code?: string; message?: string }): b
  * page's retired alias), which no live page holds.
  */
 export async function assertLegacyLandingPathFree(db: MarketingDb, slug: string, landingId: string | null): Promise<void> {
+  if (await legacyLandingPathTaken(db, slug, landingId)) refuseInput(`/lp/${slug} is already used by another marketing page.`, 'duplicate');
+}
+
+/** The same rule as a yes/no, for a caller that can go on without writing the mirror (setLandingPublished, N12-R1). */
+export async function legacyLandingPathTaken(db: MarketingDb, slug: string, landingId: string | null): Promise<boolean> {
   const { data, error } = await db.from('marketing_pages')
     .select('id, content, deleted_at').eq('path', `/lp/${slug}`).maybeSingle();
   if (error) {
-    if (isMissingLandingRegistry(error)) return;
+    if (isMissingLandingRegistry(error)) return false;
     throw error;
   }
-  if (!data) return;
-  const content = data.content && typeof data.content === 'object' && !Array.isArray(data.content)
-    ? data.content as { source?: unknown; source_id?: unknown }
-    : {};
+  if (!data) return false;
+  const content = contentSource(data.content);
   const legacy = content.source === 'marketing_landing_pages';
-  if (legacy && landingId !== null && content.source_id === landingId) return;
-  if (legacy && data.deleted_at != null) return;
-  refuseInput(`/lp/${slug} is already used by another marketing page.`, 'duplicate');
+  if (legacy && landingId !== null && content.source_id === landingId) return false;
+  if (legacy && data.deleted_at != null) return false;
+  return true;
 }
 
 export async function syncLegacyLandingToPlatform(db: MarketingDb, page: LegacyLanding): Promise<{ available: boolean; pageId: string | null }> {
@@ -203,14 +243,22 @@ export async function retireLegacyLandingAliases(db: MarketingDb, page: Pick<Leg
   return data.map(row => row.path);
 }
 
-export async function archiveLegacyLandingOnPlatform(db: MarketingDb, slug: string, actorId: string): Promise<boolean> {
+/**
+ * Admin reach N12-R1: this page's own mirror and its answers only. By path
+ * alone this archived whatever page held /lp/<slug> (such as a platform page
+ * made there after the console renamed the mirror off it) and retired that
+ * page's answers, though it is what /lp/<slug> serves once the legacy page goes.
+ */
+export async function archiveLegacyLandingOnPlatform(db: MarketingDb, page: Pick<LegacyLanding, 'id' | 'slug' | 'actorId'>): Promise<boolean> {
   const { data, error } = await db.from('marketing_pages').update({
-    status: 'archived', deleted_at: new Date().toISOString(), updated_by: actorId,
-  }).eq('path', `/lp/${slug}`).select('id').maybeSingle();
+    status: 'archived', deleted_at: new Date().toISOString(), updated_by: page.actorId,
+  }).eq('path', `/lp/${page.slug}`).contains('content', { source: 'marketing_landing_pages', source_id: page.id })
+    .select('id').maybeSingle();
   if (error) {
     if (isMissingPlatformSchema(error)) return false;
     throw error;
   }
-  await retirePublicAnswers(db, `/lp/${slug}`);
-  return Boolean(data?.id);
+  if (!data?.id) return false;
+  await retirePublicAnswers(db, `/lp/${page.slug}`);
+  return true;
 }
