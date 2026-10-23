@@ -119,6 +119,10 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
         ))}
       </div>
 
+      {/* The list is the newest 500 of its status; the counts are every review (coverage sweep round 9). */}
+      {!ratingsCeiling && (active === 'all' ? ratings.length : ratings.filter((r) => r.status === active).length) > filtered.length && (
+        <p className="text-xs text-muted">{t('adminCeiling.listShowsTheNewest', { shown: filtered.length.toLocaleString(), total: (active === 'all' ? ratings.length : ratings.filter((r) => r.status === active).length).toLocaleString() })}</p>
+      )}
       {filtered.length === 0 ? (
         <EmptyState icon={MessageSquareQuote} title={t('adminMarketingReviews.noReviewsHere')} description={t('reviews.shareYourReviewLinkTo')} />
       ) : (

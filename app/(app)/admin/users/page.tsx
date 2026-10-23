@@ -56,7 +56,8 @@ type EnrichedUser = {
   family: Tables<'families'> | null;
   role: MemberRole;
   plan: string | null;
-  hasAccount: boolean;
+  /** null when the member has a login whose profile could not be read. */
+  hasAccount: boolean | null;
   name: string;
   email: string | null;
   joinedAt: string;
@@ -250,6 +251,18 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   // chunk failed is not known, and a family absent from the rows is Free only
   // when the read succeeded.
   const plansUnread = !!subscriptionsRes.error;
+  // The same for the other reads a row is enriched from (review
+  // R7C-USERS-FAILED-PROFILES-OR-SUPER-ADMINS-READ-IS-A-VALUE). A failed
+  // profiles read is not "No account" for a member who has a login: that
+  // member's email and status are unknown, so they read Unavailable and offer
+  // no super-admin toggle. A member without a login (`user_id` null) is "No
+  // account" whatever that read did. A failed super_admins read is not "not an
+  // admin": the toggle, which would offer to grant access to someone who may
+  // already hold it, reads Unavailable, and only the code allowlist, which
+  // needs no read, stays. A failed family name read is not "no family".
+  const profilesUnread = !!profilesRes.error;
+  const superAdminsUnread = !!superAdminsRes.error;
+  const familyLabelsUnread = !!familyLabelsRes.error;
   const unavailable = tr('strategyMetrics.unavailable');
   const profileByUserId = new Map(profiles.map((p) => [p.id, p]));
   // Site super-admins: the DB-backed `super_admins` table (toggleable here) plus
@@ -266,13 +279,16 @@ export default async function AdminUsersPage({ searchParams }: Params) {
     const profile = member.user_id ? profileByUserId.get(member.user_id) ?? null : null;
     const family = familyById.get(member.family_id) ?? null;
     const sub = subByFamily.get(member.family_id);
+    // Whether this member's login is known: always without one, and with one
+    // only when the profiles read succeeded.
+    const accountKnown = !member.user_id || !profilesUnread;
     return {
       member,
       profile,
       family,
       role: member.role,
       plan: plansUnread ? null : sub?.plan ?? 'free',
-      hasAccount: !!profile,
+      hasAccount: accountKnown ? !!profile : null,
       name: profile?.full_name || member.display_name,
       email: profile?.email ?? null,
       joinedAt: member.created_at,
@@ -281,18 +297,25 @@ export default async function AdminUsersPage({ searchParams }: Params) {
 
   // Stats: exact counts over the whole table, not over the rows in hand and not
   // over the filtered/paginated view. "With account" is a member with a login
-  // (`user_id` set); "No account" is the remainder.
-  const totalUsers = memberCountRes.count ?? 0;
-  const activeUsers = withAccountCountRes.count ?? 0;
-  const newThisMonth = newThisMonthCountRes.count ?? 0;
-  const noAccountUsers = Math.max(0, totalUsers - activeUsers);
+  // (`user_id` set); "No account" is the remainder, so it is known only when
+  // both counts are. A count that failed is no figure, not 0 (review
+  // R7C-USERS-FAILED-COUNT-READS-ZERO): its tile reads Unavailable, and the
+  // role donut, whose arcs are shares of the total, is not drawn when any of
+  // its counts failed.
+  const counted = (res: { count: number | null; error: unknown }) => (res.error ? null : res.count ?? 0);
+  const totalUsers = counted(memberCountRes);
+  const activeUsers = counted(withAccountCountRes);
+  const newThisMonth = counted(newThisMonthCountRes);
+  const noAccountUsers = totalUsers === null || activeUsers === null ? null : Math.max(0, totalUsers - activeUsers);
 
   const roleCounts = new Map<MemberRole, number>();
   ROLE_ORDER.forEach((role, i) => {
     const count = roleCountResults[i].count ?? 0;
     if (count > 0) roleCounts.set(role, count);
   });
-  const adminCount = roleCounts.get('parent') ?? 0;
+  const adminCount = counted(roleCountResults[ROLE_ORDER.indexOf('parent')]);
+  const roleDonutUnread = totalUsers === null || roleCountResults.some((res) => res.error);
+  const figure = (n: number | null) => (n === null ? unavailable : n.toLocaleString());
 
   // Filters (applied in-memory; q/role/status/plan all derived from joined data).
   const q = (sp.q ?? '').trim().toLowerCase();
@@ -300,8 +323,16 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   const statusFilter = sp.status ?? '';
   const planFilter = sp.plan ?? '';
   const page = Math.max(1, Number(sp.page ?? '1') || 1);
+  // A filter over a column whose read failed matches nobody for a reason that
+  // is not the filter: with the subscriptions read failed every plan is
+  // unknown, so ?plan= listed no member, "No members match these filters",
+  // and an empty Export (review R7C-USERS-PLAN-FILTER-OVER-UNREAD-PLAN-IS-NO-MATCH).
+  // The status filter reads the profiles, and the search the profiles' names
+  // and emails and the families' names. Such a list is the read-error state.
+  const filterUnread = (!!planFilter && plansUnread) || (!!statusFilter && profilesUnread)
+    || (!!q && (profilesUnread || familyLabelsUnread));
 
-  const filtered = enriched.filter((u) => {
+  const filtered = filterUnread ? [] : enriched.filter((u) => {
     if (q) {
       const hay = `${u.name} ${u.email ?? ''} ${u.member.display_name} ${u.family?.name ?? ''}`.toLowerCase();
       if (!hay.includes(q)) return false;
@@ -329,7 +360,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
         </div>
         <UsersToolbar families={(families ?? []).map((f) => ({ id: f.id, name: f.name }))} exportRows={pageRows.map((u) => ({
           name: u.name, email: u.email ?? '', family: u.family?.name ?? '',
-          role: u.role ?? '', plan: u.plan ?? '', status: u.hasAccount ? 'active' : 'no_account', joined: u.joinedAt,
+          role: u.role ?? '', plan: u.plan ?? '', status: u.hasAccount === null ? '' : u.hasAccount ? 'active' : 'no_account', joined: u.joinedAt,
         }))} />
       </div>
 
@@ -370,11 +401,11 @@ export default async function AdminUsersPage({ searchParams }: Params) {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-5">
             <div className="grid-stats">
-              <StatCard icon={UsersRound} label={tr('adminUsers.totalMembers')} value={totalUsers} tone="bg-brand/10 text-brand-text" />
-              <StatCard icon={UserCheck} label={tr('adminUsers.withAccount')} value={activeUsers} tone="bg-success/10 text-success" />
-              <StatCard icon={UserPlus} label={tr('adminUsers.newThisMonth')} value={newThisMonth} tone="bg-accent/10 text-accent" />
-              <StatCard icon={UserX} label={tr('adminUsers.noAccount')} value={noAccountUsers} tone="bg-warning/10 text-warning" />
-              <StatCard icon={ShieldCheck} label={tr('adminUsers.parents')} value={adminCount} tone="bg-danger/10 text-danger" />
+              <StatCard icon={UsersRound} label={tr('adminUsers.totalMembers')} value={figure(totalUsers)} tone="bg-brand/10 text-brand-text" />
+              <StatCard icon={UserCheck} label={tr('adminUsers.withAccount')} value={figure(activeUsers)} tone="bg-success/10 text-success" />
+              <StatCard icon={UserPlus} label={tr('adminUsers.newThisMonth')} value={figure(newThisMonth)} tone="bg-accent/10 text-accent" />
+              <StatCard icon={UserX} label={tr('adminUsers.noAccount')} value={figure(noAccountUsers)} tone="bg-warning/10 text-warning" />
+              <StatCard icon={ShieldCheck} label={tr('adminUsers.parents')} value={figure(adminCount)} tone="bg-danger/10 text-danger" />
             </div>
 
             <Card>
@@ -395,10 +426,11 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                 ]} />
               </FilterForm>
 
-              {membersCeiling ? (
+              {membersCeiling || filterUnread ? (
                 // Past the ceiling the list is its own read-error state, not a
                 // prefix: it is searched, filtered and paged in memory, and the
-                // first members by id are no useful part of it.
+                // first members by id are no useful part of it. So is a list
+                // filtered on a column that could not be read.
                 <div className="mt-4"><ErrorState message={tr('users.couldNotLoadUsersAnd')} /></div>
               ) : pageRows.length === 0 ? (
                 totalUsers === 0 && loadErrors.length === 0 ? (
@@ -430,21 +462,23 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                         <tr key={u.member.id}>
                           <td className="px-3 py-2.5">
                             <p className="font-medium">{u.name || '—'}</p>
-                            <p className="text-xs text-muted">{u.email ?? <span className="italic">{tr('users.noLoginAccount')}</span>}</p>
+                            <p className="text-xs text-muted">{u.email ?? (u.hasAccount === null ? unavailable : <span className="italic">{tr('users.noLoginAccount')}</span>)}</p>
                           </td>
-                          <td className="px-3 py-2.5 text-muted">{u.family ? u.family.name : '—'}</td>
+                          <td className="px-3 py-2.5 text-muted">{u.family ? u.family.name : familyLabelsUnread ? unavailable : '—'}</td>
                           <td className="px-3 py-2.5">{u.role ? <Badge tone="brand">{roleLabel(tr, u.role)}</Badge> : '—'}</td>
                           <td className="px-3 py-2.5 text-muted">{plansUnread ? unavailable : u.plan ? PLANS.find((p) => p.id === u.plan)?.name ?? u.plan : '—'}</td>
                           <td className="px-3 py-2.5">
-                            <Badge tone={u.hasAccount ? 'success' : 'neutral'}>{u.hasAccount ? 'Active' : 'No account'}</Badge>
+                            {u.hasAccount === null
+                              ? <span className="text-xs text-muted">{unavailable}</span>
+                              : <Badge tone={u.hasAccount ? 'success' : 'neutral'}>{u.hasAccount ? 'Active' : 'No account'}</Badge>}
                           </td>
                           <td className="px-3 py-2.5">
-                            {u.email ? (
-                              <SuperAdminToggle
-                                email={u.email}
-                                isAdmin={superAdminDbEmails.has(u.email.toLowerCase()) || codeAdminEmails.has(u.email.toLowerCase())}
-                                locked={codeAdminEmails.has(u.email.toLowerCase())}
-                              />
+                            {u.email && codeAdminEmails.has(u.email.toLowerCase()) ? (
+                              <SuperAdminToggle email={u.email} isAdmin locked />
+                            ) : u.email && !superAdminsUnread ? (
+                              <SuperAdminToggle email={u.email} isAdmin={superAdminDbEmails.has(u.email.toLowerCase())} locked={false} />
+                            ) : u.email || u.hasAccount === null ? (
+                              <span className="text-xs text-muted">{unavailable}</span>
                             ) : '—'}
                           </td>
                           <td className="px-3 py-2.5 text-muted">{fmtDate(u.joinedAt, 'MMM d, yyyy')}</td>
@@ -458,7 +492,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                 </div>
               )}
 
-              {!membersCeiling && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
+              {!membersCeiling && !filterUnread && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
                 <span>{tr('adminUsers.showing')} {pageRows.length === 0 ? 0 : (pageSafe - 1) * PAGE_SIZE + 1} to {(pageSafe - 1) * PAGE_SIZE + pageRows.length} of {filtered.length} members</span>
                 <div className="flex gap-1">
                   {Array.from({ length: totalPages }, (_, i) => i + 1).slice(0, 7).map((p) => (
@@ -475,7 +509,9 @@ export default async function AdminUsersPage({ searchParams }: Params) {
           <div className="space-y-5">
             <Card>
               <h2 className="mb-3 text-base font-semibold">{tr('adminUsers.usersByRole')}</h2>
-              <RoleDonut counts={roleCounts} total={totalUsers} />
+              {roleDonutUnread || totalUsers === null
+                ? <p className="text-sm text-muted">{unavailable}</p>
+                : <RoleDonut counts={roleCounts} total={totalUsers} />}
             </Card>
             <Card>
               <h2 className="mb-3 text-base font-semibold">{tr('adminUsers.recentInvites')}</h2>
@@ -572,7 +608,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                   {invites.map((inv) => (
                     <tr key={inv.id}>
                       <td className="px-3 py-2.5 font-medium">{inv.email}</td>
-                      <td className="px-3 py-2.5 text-muted">{familyById.get(inv.family_id)?.name ?? '—'}</td>
+                      <td className="px-3 py-2.5 text-muted">{familyById.get(inv.family_id)?.name ?? (familyLabelsUnread ? unavailable : '—')}</td>
                       <td className="px-3 py-2.5"><Badge tone="brand">{roleLabel(tr, inv.role)}</Badge></td>
                       <td className="px-3 py-2.5">
                         <Badge tone={inv.status === 'pending' ? 'warning' : inv.status === 'accepted' ? 'success' : inv.status === 'revoked' ? 'danger' : 'neutral'}>
@@ -660,7 +696,7 @@ async function AdminUsersReadError() {
 }
 
 function StatCard({ icon: Icon, label, value, tone }: {
-  icon: React.ComponentType<{ className?: string }>; label: string; value: number; tone: string;
+  icon: React.ComponentType<{ className?: string }>; label: string; value: string; tone: string;
 }) {
   return (
     <div className="stat-card">
@@ -668,7 +704,7 @@ function StatCard({ icon: Icon, label, value, tone }: {
         <Icon className="h-5 w-5" />
       </div>
       <div>
-        <p className="text-xl font-bold leading-none">{value.toLocaleString()}</p>
+        <p className="text-xl font-bold leading-none">{value}</p>
         <p className="mt-1 text-xs text-muted">{label}</p>
       </div>
     </div>

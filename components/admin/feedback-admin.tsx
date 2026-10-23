@@ -43,8 +43,11 @@ const fmtIn = (locale: LocaleCode) => (iso: string) => {
  * `counts` are the board's own (lib/feedback/admin.ts), not a tally of
  * `ideas`, which is the listed newest 1,000 at most.
  */
-export function FeedbackAdmin({ ideas, counts, comments, notifications = [], githubConfigured = false }: {
-  ideas: IdeaRow[]; counts: FeedbackBoardCounts; comments: AdminComment[] | null; notifications?: AdminNotification[]; githubConfigured?: boolean;
+export function FeedbackAdmin({ ideas, counts, comments, notifications = [], unreadCount, githubConfigured = false }: {
+  ideas: IdeaRow[]; counts: FeedbackBoardCounts; comments: AdminComment[] | null; notifications?: AdminNotification[];
+  /** Every unread notification, counted: `notifications` is the newest few, listed. */
+  unreadCount: number;
+  githubConfigured?: boolean;
 }) {
   const locale = useLocale();
   const fmt = fmtIn(locale.code);
@@ -58,7 +61,6 @@ export function FeedbackAdmin({ ideas, counts, comments, notifications = [], git
   const [marking, startMark] = useTransition();
 
   const summary = useMemo(() => feedbackBoardSummary(counts), [counts]);
-  const unreadNotes = notifications.filter((n) => !n.is_read);
 
   function runSync() {
     startSync(async () => {
@@ -111,10 +113,10 @@ export function FeedbackAdmin({ ideas, counts, comments, notifications = [], git
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <p className="flex items-center gap-2 text-sm font-bold text-fg">
             <Bell className="h-4 w-4 text-brand-text" /> {t('feedbackAdmin.activityRelay')}
-            {unreadNotes.length > 0 && <span className="rounded-full bg-brand px-2 py-0.5 text-[11px] font-bold text-brand-fg">{unreadNotes.length} new</span>}
+            {unreadCount > 0 && <span className="rounded-full bg-brand px-2 py-0.5 text-[11px] font-bold text-brand-fg">{unreadCount.toLocaleString(locale.code)} new</span>}
           </p>
           <div className="flex items-center gap-2">
-            {unreadNotes.length > 0 && (
+            {unreadCount > 0 && (
               <button type="button" onClick={markAllRead} disabled={marking}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-50">
                 {marking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} {t('feedbackAdmin.markAllRead')}
@@ -193,6 +195,13 @@ export function FeedbackAdmin({ ideas, counts, comments, notifications = [], git
           </div>
         </div>
       </div>
+
+      {/* The chips count the whole board; the list holds the first 1,000 of it
+          (pinned, then newest), so past them a chip can promise ideas the list
+          does not have, and the list says so (review R8B-FEEDBACK-CHIP-COUNTS-PROMISE-UNLISTED-IDEAS). */}
+      {counts.total > ideas.length && (
+        <p className="text-xs text-muted">{t('feedbackAdmin.theListHoldsPartOfTheBoard', { shown: ideas.length.toLocaleString(locale.code), total: counts.total.toLocaleString(locale.code) })}</p>
+      )}
 
       {/* List */}
       {visible.length === 0 ? (

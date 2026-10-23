@@ -111,6 +111,10 @@ export default async function CrmPage() {
 
       <Card>
         <h2 className="mb-4 text-base font-semibold">{t('adminMarketingCrm.contacts')}</h2>
+        {/* The list is the newest 500; the tiles count every contact (coverage sweep round 9). */}
+        {(contactCountResult.count ?? 0) > list.length && (
+          <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsTheNewest', { shown: list.length.toLocaleString(), total: (contactCountResult.count ?? 0).toLocaleString() })}</p>
+        )}
         {list.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">{t('adminMarketingCrm.noContactsYetAddOneAbove')}</p>
         ) : (

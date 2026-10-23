@@ -22,6 +22,8 @@ export const dynamic = 'force-dynamic';
 
 /** Referrals the commission figures may page through before they are reported as not shown. */
 const SUM_ROW_CEILING = 10000;
+/** The newest partners the list holds. */
+const LISTED = 200;
 
 type Affiliate = Tables<'affiliates'>;
 
@@ -31,8 +33,11 @@ const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white ho
 export default async function AffiliatesPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const [affiliatesResult, referralsResult] = await settleAll([
-    supabase.from('affiliates').select('*').order('created_at', { ascending: false }).limit(200),
+  // The Affiliates tile counted the list, which is the newest 200, so past
+  // them it read 200 (coverage sweep round 9, class B); it is a head:true count
+  // now, and the list says when it holds part of the partners.
+  const [affiliatesResult, referralsResult, affiliateCountResult] = await settleAll([
+    supabase.from('affiliates').select('*').order('created_at', { ascending: false }).limit(LISTED),
     // `.limit(N)` above 1,000 is not a bound — PostgREST caps at db-max-rows.
     // The commissions are summed, so the read pages on the id, not on offsets:
     // a referral recorded between two pages shifted every later offset by one,
@@ -51,9 +56,10 @@ export default async function AffiliatesPage() {
       if (after) query = query.gt('id', after);
       return query.order('id').limit(limit);
     }, { max: SUM_ROW_CEILING, failOnMax: false }),
+    supabase.from('affiliates').select('id', { count: 'exact', head: true }),
   ]);
   const referralsCeiling = 'truncated' in referralsResult && referralsResult.truncated;
-  const readError = affiliatesResult.error ?? referralsResult.error;
+  const readError = affiliatesResult.error ?? referralsResult.error ?? affiliateCountResult.error;
   if (readError) {
     console.error('[admin-marketing-affiliates] affiliate read failed', readError);
     return <AdminAffiliatesReadError />;
@@ -69,7 +75,7 @@ export default async function AffiliatesPage() {
   const summed = (value: string | number) => (referralsCeiling ? unavailable : value);
 
   const stats = [
-    { label: t('affiliates.affiliates'), value: list.length, icon: Handshake, tint: 'text-violet-400 bg-violet-500/15' },
+    { label: t('affiliates.affiliates'), value: (affiliateCountResult.count ?? 0).toLocaleString(), icon: Handshake, tint: 'text-violet-400 bg-violet-500/15' },
     { label: 'Conversions', value: summed(overall.conversions), icon: BadgeCheck, tint: 'text-emerald-400 bg-emerald-500/15' },
     { label: 'Owed (unpaid)', value: summed(formatCents(overall.pendingPayoutCents)), icon: Wallet, tint: 'text-amber-400 bg-amber-500/15' },
     { label: 'Paid out', value: summed(formatCents(overall.paidCents)), icon: DollarSign, tint: 'text-blue-400 bg-blue-500/15' },
@@ -105,6 +111,9 @@ export default async function AffiliatesPage() {
 
       <Card>
         <h2 className="mb-4 text-base font-semibold">{t('adminMarketingAffiliates.affiliates')}</h2>
+        {(affiliateCountResult.count ?? 0) > list.length && (
+          <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsTheNewest', { shown: list.length.toLocaleString(), total: (affiliateCountResult.count ?? 0).toLocaleString() })}</p>
+        )}
         {list.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">{t('adminMarketingAffiliates.noAffiliatesYet')}</p>
         ) : (

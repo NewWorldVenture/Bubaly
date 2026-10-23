@@ -1,6 +1,10 @@
 import type { Metadata } from 'next';
 import { Repeat, CircleAlert } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
+import { getTranslations } from '@/lib/i18n/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -14,26 +18,45 @@ import { safeWebLink } from '@/lib/utils/safe-link';
 export const metadata: Metadata = { title: 'Marketing · Recurring social ads', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
+/** Campaigns Posts sent may add up before it says it is not shown (one round trip per 1,000). */
+const SUM_ROW_CEILING = 10_000;
+
 type RunRow = {
   id: string; ad_id: string; occurrence: number; platform: string;
   status: string; ran_at: string; error_message: string | null; permalink_url: string | null;
 };
 
 export default async function RecurringAdsPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
-  const { data: ads, error: adsError } = await supabase
-    .from('marketing_recurring_ads').select('*').is('deleted_at', null)
-    .order('created_at', { ascending: false });
-  if (adsError) {
-    console.error('[admin-recurring-ads] campaign read failed', adsError);
+  // Campaigns, Active and Posts sent were counted and summed from the list, an
+  // unbounded read PostgREST answers with at most db-max-rows (coverage sweep
+  // round 9, class B): they are head:true counts and a sum paged on the id now,
+  // past whose ceiling Posts sent says it is not shown. A failed run history
+  // read drew no history on any campaign, as if none had run (class A); each
+  // campaign says its history could not be read instead.
+  const counted = () => supabase.from('marketing_recurring_ads').select('id', { count: 'exact', head: true }).is('deleted_at', null);
+  const [{ data: ads, error: adsError }, { data: runs, error: runsError }, campaignCountResult, activeCountResult, sentResult] = await settleAll([
+    supabase.from('marketing_recurring_ads').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
+    supabase.from('marketing_recurring_ad_runs').select('*').order('ran_at', { ascending: false }).limit(60),
+    counted(),
+    counted().eq('status', 'active'),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('marketing_recurring_ads').select('id, occurrences').is('deleted_at', null);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
+  ]);
+  const sentCeiling = 'truncated' in sentResult && sentResult.truncated;
+  const campaignsError = adsError ?? campaignCountResult.error ?? activeCountResult.error ?? (sentCeiling ? null : sentResult.error);
+  if (campaignsError) {
+    console.error('[admin-recurring-ads] campaign read failed', campaignsError);
     return <ErrorState message="Recurring campaigns could not be read. Refresh, or check the server logs." />;
   }
-  const rows = (ads ?? []) as unknown as AdRow[];
-
-  const { data: runs, error: runsError } = await supabase
-    .from('marketing_recurring_ad_runs').select('*')
-    .order('ran_at', { ascending: false }).limit(60);
   if (runsError) console.error('[admin-recurring-ads] run history read failed', runsError);
+  const rows = (ads ?? []) as unknown as AdRow[];
+  const postsSent = (sentResult.data ?? []).reduce((n, a) => n + (a.occurrences ?? 0), 0);
+  const unavailable = t('strategyMetrics.unavailable');
   const recentRuns = (runs ?? []) as unknown as RunRow[];
   const runsByAd = new Map<string, RunRow[]>();
   for (const run of recentRuns) {
@@ -45,7 +68,6 @@ export default async function RecurringAdsPage() {
   // Readiness is read from the environment, not from a flag someone can tick.
   const readiness = PLATFORMS.map((p) => ({ platform: p, label: PROVIDERS[p].label, state: providerReadiness(p) }));
   const readyCount = readiness.filter((r) => r.state === 'ready').length;
-  const active = rows.filter((a) => a.status === 'active').length;
   const now = new Date();
 
   return (
@@ -69,10 +91,15 @@ export default async function RecurringAdsPage() {
         </div>
       )}
 
+      <PartialReadBanner
+        title={t('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
+        failures={sentCeiling ? [t('adminRecurringAds.postsSent')] : []}
+      />
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Card><p className="text-xs text-muted">Campaigns</p><p className="text-2xl font-bold">{rows.length}</p></Card>
-        <Card><p className="text-xs text-muted">Active</p><p className="text-2xl font-bold">{active}</p></Card>
-        <Card><p className="text-xs text-muted">Posts sent</p><p className="text-2xl font-bold">{rows.reduce((n, a) => n + a.occurrences, 0)}</p></Card>
+        <Card><p className="text-xs text-muted">Campaigns</p><p className="text-2xl font-bold">{campaignCountResult.count ?? 0}</p></Card>
+        <Card><p className="text-xs text-muted">Active</p><p className="text-2xl font-bold">{activeCountResult.count ?? 0}</p></Card>
+        <Card><p className="text-xs text-muted">Posts sent</p><p className="text-2xl font-bold">{sentCeiling ? unavailable : postsSent}</p></Card>
         <Card><p className="text-xs text-muted">Platforms ready</p><p className="text-2xl font-bold">{readyCount}<span className="text-base text-muted">/{PLATFORMS.length}</span></p></Card>
       </div>
 
@@ -125,7 +152,9 @@ export default async function RecurringAdsPage() {
                   <div><dt className="text-muted">Messages</dt><dd>{(ad.body_variants ?? []).length} in rotation</dd></div>
                 </dl>
 
-                {history.length > 0 && (
+                {runsError ? (
+                  <p className="text-xs text-muted">{t('adminRecurringAds.runHistoryUnavailable')}</p>
+                ) : history.length > 0 && (
                   <details className="rounded-xl border border-border bg-surface/40 p-3">
                     <summary className="cursor-pointer text-xs font-medium">Recent runs ({history.length})</summary>
                     <ul className="mt-2 space-y-1.5">

@@ -79,6 +79,8 @@ function chip(tree: ReactNode, label: string): string {
 }
 
 const readError = () => SOURCE_MESSAGES['feedback.couldNotLoadFeedbackFrom'];
+const partOfTheBoard = (shown: number, total: number) =>
+  translate(SOURCE_MESSAGES, 'feedbackAdmin.theListHoldsPartOfTheBoard', { shown: shown.toLocaleString(), total: total.toLocaleString() });
 const notShownTitle = () => translate(SOURCE_MESSAGES, 'adminCeiling.figuresNotShown', { n: VOTE_CEILING.toLocaleString() });
 const totalVotes = () => SOURCE_MESSAGES['feedbackAdmin.totalVotes'];
 /** The cards the list draws: one pin control each. */
@@ -144,6 +146,21 @@ describe('/admin/feedback past 1,000 ideas', () => {
     expect(has(tree, `Idea ${TOTAL - 1}`)).toBe(true);
     expect(has(tree, `Idea ${TOTAL - CAP - 1}`)).toBe(false);
     expect(has(tree, notShownTitle())).toBe(false);
+    // ...and it says it holds part of the board: the chip says Shipped 300,
+    // and every shipped idea is older than the thousand listed (review
+    // R8B-FEEDBACK-CHIP-COUNTS-PROMISE-UNLISTED-IDEAS).
+    expect(has(tree, partOfTheBoard(CAP, TOTAL))).toBe(true);
+  });
+
+  it('the control: under 1,000 ideas the list is the whole board and says nothing about part of it', async () => {
+    db.seed('feedback_ideas', Array.from({ length: 40 }, (_, k) => idea(k, k % 2 ? 'planned' : 'shipped', 1)));
+    db.seed('feedback_comments', []);
+    db.seed('admin_notifications', []);
+    const tree = await open();
+    expect(has(tree, readError())).toBe(false);
+    expect(listed(tree)).toBe(40);
+    expect(tile(tree, 'Total ideas')).toBe('40');
+    expect(has(tree, partOfTheBoard(40, 40).slice(0, 12))).toBe(false);
   });
 
   it('past 25,000 ideas Total votes alone says it is not shown, and the ceiling banner names it', async () => {
@@ -189,5 +206,69 @@ describe('/admin/feedback past 1,000 ideas', () => {
     expect(has(tree, readError())).toBe(true);
     expect(has(tree, 'Total ideas')).toBe(false);
     expect(has(tree, `Idea ${TOTAL - 1}`)).toBe(false);
+  });
+});
+
+// The relay's "N new" badge counted the unread among the 50 newest
+// notifications the page lists, while Mark all read marks every unread row:
+// past 50 unread it said "50 new" or fewer (review R8B-FEEDBACK-RELAY-UNREAD-BADGE-CAPPED).
+// It is a head:true count of every unread notification now.
+describe('/admin/feedback: the relay counts every unread notification', () => {
+  const note = (k: number, isRead: boolean): Row => ({
+    id: `note-${pad(k)}`, kind: 'feedback_new', title: `Note ${k}`, body: null, url: null, is_read: isRead,
+    created_at: new Date(Date.UTC(2026, 0, 1) + k * 60_000).toISOString(),
+  });
+  /** The relay's badge: "N new" beside its heading, or null. */
+  const badge = (tree: ReactNode): string | null => {
+    const span = nodes(tree).find((n) => n.type === 'span' && /^[\d,]+ new$/.test(text(n).trim()));
+    return span ? text(span).trim() : null;
+  };
+  const markAllRead = (tree: ReactNode) => has(tree, SOURCE_MESSAGES['feedbackAdmin.markAllRead']);
+
+  function seedNotes(unread: number, read: number) {
+    db.seed('feedback_ideas', [idea(0, 'under_review', 1)]);
+    db.seed('feedback_comments', []);
+    // The unread are the OLDEST, so the 50 newest the relay lists hold none of them past the read ones.
+    db.seed('admin_notifications', [
+      ...Array.from({ length: unread }, (_, k) => note(k, false)),
+      ...Array.from({ length: read }, (_, k) => note(unread + k, true)),
+    ]);
+  }
+
+  it('past 50 unread, the badge counts every one, not the unread among the 50 listed', async () => {
+    seedNotes(75, 40);
+    const tree = await open();
+    expect(has(tree, readError())).toBe(false);
+    expect(badge(tree)).toBe('75 new');
+    expect(markAllRead(tree)).toBe(true);
+  });
+
+  it('every unread notification older than the 50 listed still shows the badge and Mark all read', async () => {
+    seedNotes(3, 60);
+    const tree = await open();
+    expect(badge(tree)).toBe('3 new');
+    expect(markAllRead(tree)).toBe(true);
+  });
+
+  it('the control: with nothing unread there is no badge and no Mark all read', async () => {
+    seedNotes(0, 60);
+    const tree = await open();
+    expect(has(tree, readError())).toBe(false);
+    expect(badge(tree)).toBeNull();
+    expect(markAllRead(tree)).toBe(false);
+  });
+
+  it('the unread count that FAILS is the read-error state, not a badge of 0', async () => {
+    seedNotes(75, 40);
+    let faulted = 0;
+    h.db = withFaults(db, (table, calls) => {
+      if (table !== 'admin_notifications' || !calls.some((c) => c.method === 'eq' && c.args[0] === 'is_read')) return null;
+      faulted += 1;
+      return { message: 'admin_notifications unavailable' };
+    });
+    const tree = await open();
+    expect(faulted).toBe(1);
+    expect(has(tree, readError())).toBe(true);
+    expect(badge(tree)).toBeNull();
   });
 });

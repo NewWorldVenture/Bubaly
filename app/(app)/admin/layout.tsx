@@ -19,21 +19,28 @@ export default async function SiteAdminLayout({ children }: { children: React.Re
   const t = await getTranslations();
 
   const supabase = createServiceClient();
-  const [profileRes, invitesRes, notificationsRes] = await settleAll([
+  // The bell's unread badge counted the unread among the 20 newest
+  // notifications it lists, and past them it said 9+ or fewer while there were
+  // more; it is a head:true count of every unread notification now, as /admin
+  // counts it.
+  const reads = await settleAll([
     supabase.from('profiles').select('full_name, email').eq('id', user.id).maybeSingle(),
     supabase.from('invites').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     supabase.from('admin_notifications')
       .select('id, kind, title, body, url, is_read, created_at')
       .order('created_at', { ascending: false })
       .limit(20),
+    supabase.from('admin_notifications').select('id', { count: 'exact', head: true }).eq('is_read', false),
   ]);
+  const [profileRes, invitesRes, notificationsRes] = reads;
+  const unreadRes = reads[3];
 
   // A rejected service-role key is not a per-page fault: it fails every read in
   // the console identically. 69 of the 79 admin pages bail to their own generic
   // "could not load X" state, so without this the operator sees 69 different
   // dead ends and no cause. Detecting it once, here, explains all of them —
   // including the pages that render nothing else at all.
-  const credentialFault = [profileRes, invitesRes, notificationsRes].some((r) => isCredentialError(r.error))
+  const credentialFault = [profileRes, invitesRes, notificationsRes, unreadRes].some((r) => isCredentialError(r.error))
     ? [describeConfiguredServiceKey(t), serviceKeyRemedy(t)].filter(Boolean).join(' ')
     : null;
 
@@ -50,6 +57,10 @@ export default async function SiteAdminLayout({ children }: { children: React.Re
     console.error('[admin-shell] notification feed read failed:', notificationsRes.error);
     dataWarnings.push(t('adminCredential.notificationsUnavailable'));
   }
+  if (unreadRes.error) {
+    console.error('[admin-shell] unread notification count read failed:', unreadRes.error);
+    if (!notificationsRes.error) dataWarnings.push(t('adminCredential.notificationsUnavailable'));
+  }
 
   const adminName = profileRes.data?.full_name || profileRes.data?.email || user.email || 'Admin';
 
@@ -57,8 +68,10 @@ export default async function SiteAdminLayout({ children }: { children: React.Re
     <AdminShell
       adminName={adminName}
       adminEmail={user.email ?? null}
-      pendingInviteCount={invitesRes.count ?? 0}
-      notifications={notificationsRes.data ?? []}
+      // A read that failed reaches the bell as null, not as 0 or an empty feed.
+      pendingInviteCount={invitesRes.error ? null : invitesRes.count ?? 0}
+      unreadCount={unreadRes.error ? null : unreadRes.count ?? 0}
+      notifications={notificationsRes.error ? null : notificationsRes.data ?? []}
       dataWarnings={dataWarnings}
       credentialFault={credentialFault}
     >

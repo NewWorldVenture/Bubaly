@@ -37,7 +37,7 @@ export default async function LoyaltyPage() {
   // balance below the hundredth was left out of what the program owes.
   const [
     settingsResult, rewardsResult, accountsResult, redemptionsResult, familiesResult,
-    memberCountResult, pendingCountResult, balancesResult,
+    memberCountResult, pendingCountResult, activeRewardCountResult, rewardCountResult, redemptionCountResult, balancesResult,
   ] = await settleAll([
     supabase.from('loyalty_settings').select('*').eq('singleton', true).maybeSingle(),
     supabase.from('loyalty_rewards').select('*').is('deleted_at', null).order('sort', { ascending: true }).limit(200),
@@ -52,6 +52,12 @@ export default async function LoyaltyPage() {
       supabase.from('families').select('id, name').order('id').range(from, to), { max: FAMILY_OPTION_CEILING, failOnMax: false }),
     supabase.from('loyalty_accounts').select('id', { count: 'exact', head: true }),
     supabase.from('loyalty_redemptions').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    // Active rewards counted the catalog's list, the first 200 (coverage sweep
+    // round 9, class B); it is a head:true count now, as are every reward, so
+    // the catalog can say when it lists part of them.
+    supabase.from('loyalty_rewards').select('id', { count: 'exact', head: true }).is('deleted_at', null).eq('is_active', true),
+    supabase.from('loyalty_rewards').select('id', { count: 'exact', head: true }).is('deleted_at', null),
+    supabase.from('loyalty_redemptions').select('id', { count: 'exact', head: true }),
     // Summed while families earn and spend, so paged on the id: an offset read
     // counts a balance twice when an account is opened between two pages.
     readAllByIdAsQuery((after, limit) => {
@@ -67,7 +73,8 @@ export default async function LoyaltyPage() {
   // part of the balance. Any other failure is still the read-error state.
   const balancesCeiling = 'truncated' in balancesResult && balancesResult.truncated;
   const readError = settingsResult.error ?? rewardsResult.error ?? accountsResult.error ?? redemptionsResult.error ?? familiesResult.error
-    ?? memberCountResult.error ?? pendingCountResult.error ?? (balancesCeiling ? null : balancesResult.error);
+    ?? memberCountResult.error ?? pendingCountResult.error ?? activeRewardCountResult.error ?? rewardCountResult.error ?? redemptionCountResult.error
+    ?? (balancesCeiling ? null : balancesResult.error);
   if (balancesCeiling) console.warn('[admin-marketing-loyalty] the balance read reached its ceiling; Points outstanding is not shown');
   if (readError) {
     console.error('[admin-marketing-loyalty] loyalty read failed', readError);
@@ -129,13 +136,16 @@ export default async function LoyaltyPage() {
       <div className="grid gap-3 sm:grid-cols-4">
         <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.members')}</p><p className="mt-1 text-3xl font-bold leading-none">{memberCount}</p></Card>
         <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.pointsOutstanding')}</p><p className="mt-1 text-3xl font-bold leading-none">{balancesCeiling ? t('strategyMetrics.unavailable') : totalOutstanding.toLocaleString()}</p></Card>
-        <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.activeRewards')}</p><p className="mt-1 text-3xl font-bold leading-none">{rewardRows.filter((r) => r.is_active).length}</p></Card>
+        <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.activeRewards')}</p><p className="mt-1 text-3xl font-bold leading-none">{activeRewardCountResult.count ?? 0}</p></Card>
         <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.pendingRedemptions')}</p><p className="mt-1 text-3xl font-bold leading-none">{pendingCount}</p></Card>
       </div>
 
       {/* Rewards catalog */}
       <Card>
         <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Gift className="h-4 w-4 text-brand-text" /> {t('adminMarketingLoyalty.rewardsCatalog')}</h3>
+        {(rewardCountResult.count ?? 0) > rewardRows.length && (
+          <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsPart', { shown: rewardRows.length.toLocaleString(), total: (rewardCountResult.count ?? 0).toLocaleString() })}</p>
+        )}
         {rewardRows.length === 0 ? (
           <EmptyState icon={Gift} title={t('adminMarketingLoyalty.noRewardsYet')} description={t('loyalty.addYourFirstRewardSo')} />
         ) : (
@@ -147,6 +157,9 @@ export default async function LoyaltyPage() {
       {/* Redemptions queue */}
       <Card>
         <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> {t('adminMarketingLoyalty.redemptions')} {pendingCount > 0 && <Badge tone="warning">{pendingCount} pending</Badge>}</h3>
+        {(redemptionCountResult.count ?? 0) > redemptionView.length && (
+          <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsTheNewest', { shown: redemptionView.length.toLocaleString(), total: (redemptionCountResult.count ?? 0).toLocaleString() })}</p>
+        )}
         {redemptionView.length === 0 ? (
           <EmptyState icon={Sparkles} title={t('adminMarketingLoyalty.noRedemptionsYet')} description={t('loyalty.redemptionsFromFamiliesWillAppear')} />
         ) : (
@@ -157,6 +170,9 @@ export default async function LoyaltyPage() {
       {/* Members + manual award */}
       <Card>
         <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Users className="h-4 w-4 text-brand-text" /> {t('adminMarketingLoyalty.members')}</h3>
+        {memberCount > accountRows.length && (
+          <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsPart', { shown: accountRows.length.toLocaleString(), total: memberCount.toLocaleString() })}</p>
+        )}
         {accountRows.length === 0 ? (
           <EmptyState icon={Users} title={t('adminMarketingLoyalty.noMembersYet')} description={t('loyalty.accountsAreCreatedAutomaticallyWhen')} />
         ) : (
