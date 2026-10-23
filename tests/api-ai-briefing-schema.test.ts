@@ -276,7 +276,7 @@ function queryResult(data: unknown[], calendar = false) {
   // notifications in: `listUnread` scopes with `.or(user_id…)` and the route
   // marks the rows it rendered read. The fake has to offer every method the
   // route really calls, or a missing one reads as a route failure.
-  for (const method of ['select', 'eq', 'gte', 'lte', 'gt', 'order', 'limit', 'in', 'neq', 'is', 'not', 'or', 'update', 'abortSignal', 'maybeSingle']) {
+  for (const method of ['select', 'eq', 'gte', 'lte', 'gt', 'order', 'limit', 'range', 'in', 'neq', 'is', 'not', 'or', 'update', 'abortSignal', 'maybeSingle']) {
     query[method] = vi.fn(() => query);
   }
   return query;
