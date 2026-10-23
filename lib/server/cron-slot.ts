@@ -46,11 +46,12 @@ export function weeklyWindow(slot: Date): { start: string; end: string } {
 }
 
 // The daily form, for a sweep that rotates where it starts
-// (lib/autopilot/cron-rotation.ts rotateForSlot). The dispatcher runs these
-// twice a day and vercel.json once, at the first slot. Numbered by the UTC day
-// alone, both runs of a day started at the same family, so a run the budget cut
-// short was followed by one that re-served its prefix. A run is named by the
-// latest slot at or before the call instead: its day and its place in the day.
+// (lib/autopilot/cron-rotation.ts rotateForSlot). The dispatcher runs every
+// slot and vercel.json one of them (the first; push-scan's 12:00). Numbered by
+// the UTC day alone, both runs of a day started at the same family, so a run
+// the budget cut short was followed by one that re-served its prefix. A run is
+// named by the latest slot at or before the call instead: its day and its place
+// in the day.
 
 /** A cron that fires at fixed UTC times every day (`m h1,h2 * * *`), as minutes past midnight, ascending. */
 export type DailySlots = readonly number[];
@@ -59,6 +60,8 @@ export type DailySlots = readonly number[];
 export const AUTOPILOT_SCAN_SLOTS: DailySlots = [6 * 60 + 30, 18 * 60 + 30];
 /** `/api/cron/model-refresh`: `0 4,16 * * *`. */
 export const MODEL_REFRESH_SLOTS: DailySlots = [4 * 60, 16 * 60];
+/** `/api/cron/push-scan`: on the hour, every even hour (the dispatcher's two-hour step); vercel.json fires the 12:00 one. */
+export const PUSH_SCAN_SLOTS: DailySlots = Array.from({ length: 12 }, (_, i) => i * 2 * 60);
 
 /** The cron expression daily slots stand for (they share one minute), to compare with the schedules. */
 export function dailySlotsCron(slots: DailySlots): string {

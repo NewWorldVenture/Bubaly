@@ -10,8 +10,11 @@
 // the run that holds this lease (lib/server/app-settings-lease.ts) is the only
 // one that learns for the family, and it stays correct after.
 //
-// Both callers take it: the cron with its own service client, the manager's
-// action with a service client (app_settings is service-role only).
+// Every writer of a learning suggestion takes it: the cron with its own
+// service client, the manager's action with a service client (app_settings is
+// service-role only), and the inbound-SMS path (lib/guardian/sms-processing.ts)
+// for its "add to contacts?" suggestion, the same trust:<phone>:known_contact
+// key the run drafts.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { claimLease, releaseLease } from '@/lib/server/app-settings-lease';
@@ -22,16 +25,16 @@ const LEARNING_LEASE_TTL_MS = 60_000;
 
 export const learningLeaseKey = (familyId: string) => `guardian-learning:${familyId}`;
 
-export type LeasedLearning =
-  | { ran: true; result: LearningRunResult }
+export type LeasedLearning<T = LearningRunResult> =
+  | { ran: true; result: T }
   /** `held`: another run is learning for this family now. `error`: the lease could not be read or written. */
   | { ran: false; reason: 'held' | 'error' };
 
-export async function runUnderLearningLease(
+export async function runUnderLearningLease<T = LearningRunResult>(
   db: SupabaseClient<Database>,
   familyId: string,
-  run: () => Promise<LearningRunResult>,
-): Promise<LeasedLearning> {
+  run: () => Promise<T>,
+): Promise<LeasedLearning<T>> {
   const key = learningLeaseKey(familyId);
   const lease = await claimLease(db, key, { ttlMs: LEARNING_LEASE_TTL_MS });
   if (!lease.claimed) return { ran: false, reason: lease.reason };

@@ -9,6 +9,7 @@ import { dispatchPendingPushes } from '@/lib/server/push';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { sweepFamilies } from '@/lib/server/cron-family-sweep';
 import { claimGenerationLease } from '@/lib/server/notification-generation-lease';
+import { lastDailySlot, PUSH_SCAN_SLOTS } from '@/lib/server/cron-slot';
 
 export const runtime = 'nodejs';
 // Inside the dispatcher's 120 s abort (scripts/cron-dispatch.mjs), which is
@@ -22,7 +23,6 @@ const GENERATION_BUDGET_MS = 60_000;
 // One family's reads outliving this are that family's failure, not the run's.
 const FAMILY_TIMEOUT_MS = 15_000;
 const FAMILY_CONCURRENCY = 4;
-const HOUR_MS = 3_600_000;
 
 // Frequent push scan (every ~2h via Vercel Cron). Regenerates each family's
 // "who needs to know" notifications and delivers any un-pushed ones as device
@@ -71,9 +71,14 @@ export async function GET(req: NextRequest) {
   // Rotated, bounded and budgeted (lib/server/cron-family-sweep.ts), for the
   // same reason as the notifications cron: a serial `order('id')` loop with no
   // budget served the same prefix every tick and never reached push dispatch.
+  // Named by its slot (lib/server/cron-slot.ts): the UTC day picks the start
+  // and the two-hour slot moves it on by its share of the ring. Numbered by the
+  // two-hour slot alone, the one run vercel.json sends (12:00, index 12d+6)
+  // always started in the same quarter of the ring when only it fired.
+  const run = lastDailySlot(startedAt, PUSH_SCAN_SLOTS);
   const swept = await sweepFamilies(families ?? [], {
-    // Every two hours: that is the run's index, so consecutive runs start apart.
-    budgetMs: GENERATION_BUDGET_MS, itemTimeoutMs: FAMILY_TIMEOUT_MS, concurrency: FAMILY_CONCURRENCY, startedAt, runIndex: Math.floor(startedAt / (2 * HOUR_MS)),
+    budgetMs: GENERATION_BUDGET_MS, itemTimeoutMs: FAMILY_TIMEOUT_MS, concurrency: FAMILY_CONCURRENCY, startedAt,
+    runIndex: run.day, slot: { index: run.slot, of: PUSH_SCAN_SLOTS.length },
   }, async (f, counted) => {
     try {
       const lease = await claimGenerationLease(supabase, f.id);

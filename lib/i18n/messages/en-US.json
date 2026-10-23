@@ -7423,7 +7423,7 @@
   "guardian.couldNotUpdateContactTrust": "Could not update contact trust.",
   "guardian.couldNotUpdateTheGuardianContext": "Could not update the Guardian context.",
   "guardian.couldNotUpdateTheGuardianRouting": "Could not update the Guardian routing rule.",
-  "guardian.aScanIsAlreadyRunning": "A scan is already running for your family. Its tips will appear here in a moment.",
+  "guardian.aScanIsAlreadyRunning": "A scan is already running for your family. Reload this page in a minute to see its tips.",
   "guardian.escalations": "escalations",
   "guardian.memberProfiles": "member profiles",
   "guardian.recentCallsAndMessages": "recent calls and messages",

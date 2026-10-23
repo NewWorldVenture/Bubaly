@@ -7243,7 +7243,7 @@
   "guardian.couldNotUpdateContactTrust": "Não foi possível atualizar a confiança do contacto.",
   "guardian.couldNotUpdateTheGuardianContext": "Não foi possível atualizar o contexto do Guardian.",
   "guardian.couldNotUpdateTheGuardianRouting": "Não foi possível atualizar a regra de encaminhamento do Guardian.",
-  "guardian.aScanIsAlreadyRunning": "Já está em curso uma análise para a sua família. As dicas vão aparecer aqui dentro de momentos.",
+  "guardian.aScanIsAlreadyRunning": "Já está em curso uma análise para a sua família. Recarregue esta página daqui a um minuto para ver as dicas.",
   "guardian.escalations": "escalonamentos",
   "guardian.memberProfiles": "perfis dos membros",
   "guardian.recentCallsAndMessages": "chamadas e mensagens recentes",
