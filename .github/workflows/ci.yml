@@ -495,6 +495,10 @@ jobs:
         if: matrix.shard == 1
         run: node node_modules/vitest/vitest.mjs run --config vitest.toast-browser.config.ts --maxWorkers 1
 
+      - name: Verify feedback submission outcomes in Chromium
+        if: matrix.shard == 1
+        run: node node_modules/vitest/vitest.mjs run --config vitest.feedback-browser.config.ts --maxWorkers 1
+
       # Diagnostic only (never fails): key shapes + PostgREST status/body for
       # every header combination, so a red schema audit explains itself here.
       - name: Probe isolated REST auth
