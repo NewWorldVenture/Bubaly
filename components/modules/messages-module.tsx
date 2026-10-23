@@ -547,16 +547,18 @@ function MessagesWorkspace() {
     const config = presenceChannelConfig(presenceSchema, userId);
     if (!config) return;
     const supabase = createClient();
+    let active = true;
     const ch = supabase.channel(`presence:family:${familyId}`, { config });
     ch.on('presence', { event: 'sync' }, () => {
+      if (!active) return;
       const state = ch.presenceState() as Record<string, Array<{ user_id?: string }>>;
       const ids = new Set<string>();
       Object.values(state).forEach((arr) => arr.forEach((p) => { if (p.user_id) ids.add(p.user_id); }));
       setOnlineIds(ids);
     }).subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') await ch.track({ user_id: userId, at: Date.now() });
+      if (active && status === 'SUBSCRIBED') await ch.track({ user_id: userId, at: Date.now() });
     });
-    return () => { void supabase.removeChannel(ch); };
+    return () => { active = false; void supabase.removeChannel(ch); };
   }, [familyId, userId, schemaSettled, presenceSchema]);
 
   function acceptMessage(message: Message) {
