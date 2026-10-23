@@ -11,10 +11,18 @@
 // in Settings → Privacy and names the ones it does not include — in every base
 // catalogue, and both pages' revision dates moved with their copy.
 //
-// The REAL /faq and /security pages are rendered, through the real request
-// translator, in each language; only the request's locale cookie, the
-// Knowledge Center and public-stats reads, and the sections that read the
-// database on their own are stood in for.
+// N5-S1-sibling-ledger: /security said it twice more. Its trust ledger row
+// (trustCenter.rowExport, rendered by <TrustLedger />) offered "Export your
+// family's data anytime", and its "We give you control" commitment
+// (security.commitControlDetail) had the data "exported ... on request",
+// though export is self-serve and only account deletion is on request
+// (lib/marketing/trust-ledger.ts). Both now name what the export covers — the
+// modules listed in Settings → Privacy — and put "on request" on deletion only.
+//
+// The REAL /faq and /security pages are rendered, the real trust ledger
+// included, through the real request translator, in each language; only the
+// request's locale cookie, the Knowledge Center and public-stats reads, and the
+// sections that read the database on their own are stood in for.
 import { createElement, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
@@ -40,7 +48,6 @@ vi.mock('@/lib/marketing/stats', () => ({
   getPublicStats: async () => ({ families: 0, members: 0, tasksCompleted: 0, handledCompleted: 0, handled30d: 0, familiesWithRuns: 0 }),
 }));
 vi.mock('@/components/marketing/marketing-aeo-section', () => ({ MarketingAeoSection: () => null }));
-vi.mock('@/components/marketing/trust-ledger', () => ({ TrustLedger: () => null }));
 vi.mock('@/components/marketing/cta', () => ({ CTASection: () => null }));
 
 const { default: FAQPage } = await import('@/app/(marketing)/faq/page');
@@ -94,6 +101,18 @@ async function securityControlIn(locale: LocaleCode): Promise<{ page: string; bo
   return { page: plain(html), body: plain(body![1]) };
 }
 
+/** /security's trust ledger row for export and deletion, and its "We give you control" commitment. */
+async function securityLedgerIn(locale: LocaleCode): Promise<{ row: string; commitment: string }> {
+  const html = await renderIn(locale, SecurityPage);
+  const row = html.match(/<li[^>]*id="ledger-export_delete"[^>]*>([\s\S]*?)<\/li>/);
+  expect(row, `${locale} /security ledger row`).not.toBeNull();
+  const heading = escaped(translate(getMessages(locale), 'security.commitControl'));
+  const at = html.indexOf(`>${heading}</p>`);
+  expect(at, `${locale} /security control commitment`).toBeGreaterThan(-1);
+  const detail = html.slice(at + heading.length + 5).match(/<p[^>]*>([\s\S]*?)<\/p>/);
+  return { row: plain(row![1]), commitment: plain(detail![1]) };
+}
+
 // What each catalogue said before.
 const OLD_FAQ: Record<string, string> = {
   'en-US': 'everything your role can see',
@@ -122,6 +141,36 @@ const LEFT_OUT: Record<string, [string, string]> = {
   'it-IT': ['salute', 'diario'],
   'nl-NL': ['gezondheid', 'dagboek'],
   'pt-PT': ['saúde', 'diário'],
+};
+// The ledger row and the commitment, as each catalogue had them.
+const OLD_LEDGER_ROW: Record<string, string> = {
+  'en-US': "Export your family's data anytime",
+  'de-DE': 'Daten Ihrer Familie jederzeit exportieren',
+  'es-ES': 'Exporta los datos de tu familia cuando quieras',
+  'fr-FR': 'Exporter les données de votre famille à tout moment',
+  'it-IT': 'Esporta i dati della tua famiglia quando vuoi',
+  'nl-NL': 'De gegevens van je gezin altijd exporteren',
+  'pt-PT': 'Exporte os dados da sua família quando quiser',
+};
+const OLD_COMMITMENT: Record<string, string> = {
+  'en-US': 'your data exported or deleted on request',
+  'de-DE': 'Ihre Daten auf Anfrage exportiert oder gelöscht',
+  'es-ES': 'tus datos exportados o eliminados a petición',
+  'fr-FR': 'vos données exportées ou supprimées sur demande',
+  'it-IT': 'i tuoi dati esportati o eliminati su richiesta',
+  'nl-NL': 'je gegevens op verzoek geëxporteerd of verwijderd',
+  'pt-PT': 'os seus dados exportados ou eliminados a pedido',
+};
+// Where the export's coverage is listed, as each catalogue names the screen
+// (the same words its security.controlExportBody uses).
+const COVERAGE_SCREEN: Record<string, string> = {
+  'en-US': 'Settings → Privacy',
+  'de-DE': 'Einstellungen → Datenschutz',
+  'es-ES': 'Ajustes → Privacidad',
+  'fr-FR': 'Réglages → Confidentialité',
+  'it-IT': 'Impostazioni → Privacy',
+  'nl-NL': 'Instellingen → Privacy',
+  'pt-PT': 'Definições → Privacidade',
 };
 const LOCALES = Object.keys(OLD_FAQ) as LocaleCode[];
 const COVERAGE_EN = 'It covers the modules listed there, and the file itself names the ones it does not include yet, such as health, journal and locations.';
@@ -158,6 +207,21 @@ describe('/security, "Export anytime, delete on request"', () => {
     const { page, body } = await securityControlIn(locale);
     expect(page).not.toContain(OLD_SECURITY[locale]);
     for (const word of LEFT_OUT[locale]) expect(body, `${locale} ${word}`).toContain(word);
+  });
+});
+
+describe('/security, the trust ledger\'s export row and the "We give you control" commitment', () => {
+  it('in English, say the export covers the modules listed in Settings → Privacy, and only deletion is on request', async () => {
+    const { row, commitment } = await securityLedgerIn('en-US');
+    expect(row).toContain('Export the modules listed in Settings → Privacy anytime; delete your account on request');
+    expect(commitment).toBe('Roles per member, a download of the modules listed in Settings → Privacy whenever you like, and account deletion on request.');
+  });
+
+  it.each(LOCALES)('in %s, no longer offer the family\'s data unqualified, and name where the coverage is listed', async (locale) => {
+    const { row, commitment } = await securityLedgerIn(locale);
+    expect(row, `${locale} ledger row`).not.toContain(OLD_LEDGER_ROW[locale]);
+    expect(commitment, `${locale} commitment`).not.toContain(OLD_COMMITMENT[locale]);
+    for (const text of [row, commitment]) expect(text, locale).toContain(COVERAGE_SCREEN[locale]);
   });
 });
 

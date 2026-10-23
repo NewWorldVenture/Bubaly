@@ -77,7 +77,7 @@ const HASH_BY_TAB: Record<SettingsTab, string> = {
 export function SettingsModule({ referralConfig }: { referralConfig?: ReferralConfig } = {}) {
   const t = useTranslations();
   const { fmtMoney } = useFormat();
-  const { family, members, role, userId, userEmail, defaultDashboard } = useApp();
+  const { family, members, refreshMembers, role, userId, userEmail, defaultDashboard } = useApp();
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -197,16 +197,18 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
     const res = await removeFamilyMemberAction({ memberId }).catch(() => null);
     if (!res) return toastError(t('errors.thatChangeWasNotSaved'));
     if (!res.ok) return toastError(res.error);
-    // Said before the reload, and as an error: the member is gone from the
-    // list, but their login is still live and someone has to know.
-    if (res.loginRevocation === 'failed') { toastError(t('familyModule.removedButLoginStillActive')); return; }
+    // Said instead of the reload, and as an error: the member is gone, but
+    // their login is still live and someone has to know. The reload was the
+    // only roster refresh here (family_members is not published), so each
+    // warning re-reads the list itself, or the removed member stays on it.
+    if (res.loginRevocation === 'failed') { toastError(t('familyModule.removedButLoginStillActive')); void refreshMembers(); return; }
     // Likewise a last position that could not be cleared: it may still be on
     // the family map, and nothing scheduled clears it (the retention sweep
     // that would is held, pending the owner's decision).
-    if (!res.locationForgotten) { toastError(t('familyModule.removedButLocationStillVisible')); return; }
+    if (!res.locationForgotten) { toastError(t('familyModule.removedButLocationStillVisible')); void refreshMembers(); return; }
     // And a pending invite to them that could not be revoked would let them
     // straight back in; the Pending invites list below can revoke it by hand.
-    if (!res.invitesRevoked) { toastError(t('familyModule.removedButInviteStillOpen')); return; }
+    if (!res.invitesRevoked) { toastError(t('familyModule.removedButInviteStillOpen')); void refreshMembers(); return; }
     success(t('settingsModule.memberRemoved'));
     window.location.reload();
   }
@@ -473,7 +475,7 @@ function EditMemberModal({ member, isSelf, onClose }: {
   member: Tables<'family_members'>; isSelf: boolean; onClose: () => void;
 }) {
   const t = useTranslations();
-  const { role: actorRole } = useApp();
+  const { role: actorRole, refreshMembers } = useApp();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   // The same roles the family page's editor offers: never `parent` from an
@@ -514,8 +516,10 @@ function EditMemberModal({ member, isSelf, onClose }: {
     // Said before the reload, and as an error, the way removeMember does: a
     // toast lives in React state, so the reload below cleared this warning the
     // moment it appeared. The role did change; the Pending invites list can
-    // revoke the one still open by hand.
-    if (res.invitesRevoked === false) { toastError(t('familyModule.roleChangedButInviteStillOpen')); onClose(); return; }
+    // revoke the one still open by hand. Without the reload the roster is
+    // re-read here, or the row keeps the old role and a second edit sends the
+    // old updated_at and is refused as "changed meanwhile".
+    if (res.invitesRevoked === false) { toastError(t('familyModule.roleChangedButInviteStillOpen')); void refreshMembers(); onClose(); return; }
     success(t('settingsModule.memberUpdated'));
     onClose();
     window.location.reload();
