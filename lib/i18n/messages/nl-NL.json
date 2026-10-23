@@ -17120,5 +17120,6 @@
   "handoff.theOtherPersonEntersTheCode": "Jij hebt de overdrachtscode: deel hem bij de ontmoeting, de ander voert hem in.",
   "handoffPanel.pickedUpLoanStarted": "Opgehaald — de uitleen is begonnen.",
   "marketplace.reviewsAcrossHouseholdsAreNotOpenYet": "Beoordelingen tussen twee huishoudens zijn nog niet mogelijk.",
-  "marketplace.anAuctionTakesBidsNotInterest": "Dit is een veiling: breng in plaats daarvan een bod uit."
+  "marketplace.anAuctionTakesBidsNotInterest": "Dit is een veiling: breng in plaats daarvan een bod uit.",
+  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Vragen tussen twee huishoudens zijn nog niet mogelijk."
 }

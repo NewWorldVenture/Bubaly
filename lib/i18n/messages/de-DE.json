@@ -17120,5 +17120,6 @@
   "handoff.theOtherPersonEntersTheCode": "Sie haben den Übergabecode: Teilen Sie ihn beim Treffen, die andere Person gibt ihn ein.",
   "handoffPanel.pickedUpLoanStarted": "Abgeholt – die Ausleihe hat begonnen.",
   "marketplace.reviewsAcrossHouseholdsAreNotOpenYet": "Bewertungen zwischen zwei Haushalten sind noch nicht möglich.",
-  "marketplace.anAuctionTakesBidsNotInterest": "Dies ist eine Auktion: Geben Sie stattdessen ein Gebot ab."
+  "marketplace.anAuctionTakesBidsNotInterest": "Dies ist eine Auktion: Geben Sie stattdessen ein Gebot ab.",
+  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Fragen zwischen zwei Haushalten sind noch nicht möglich."
 }

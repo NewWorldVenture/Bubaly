@@ -17120,5 +17120,6 @@
   "handoff.theOtherPersonEntersTheCode": "You hold the hand-off code: share it when you meet, and the other person enters it.",
   "handoffPanel.pickedUpLoanStarted": "Picked up — the loan has started.",
   "marketplace.reviewsAcrossHouseholdsAreNotOpenYet": "Reviews between two households are not open yet.",
-  "marketplace.anAuctionTakesBidsNotInterest": "This is an auction: place a bid instead."
+  "marketplace.anAuctionTakesBidsNotInterest": "This is an auction: place a bid instead.",
+  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Questions between two households are not open yet."
 }

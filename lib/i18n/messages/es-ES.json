@@ -17120,5 +17120,6 @@
   "handoff.theOtherPersonEntersTheCode": "Tú tienes el código de entrega: compártelo al quedar y la otra persona lo introducirá.",
   "handoffPanel.pickedUpLoanStarted": "Recogido: el préstamo ha empezado.",
   "marketplace.reviewsAcrossHouseholdsAreNotOpenYet": "Las reseñas entre dos hogares aún no están disponibles.",
-  "marketplace.anAuctionTakesBidsNotInterest": "Esto es una subasta: haz una puja en su lugar."
+  "marketplace.anAuctionTakesBidsNotInterest": "Esto es una subasta: haz una puja en su lugar.",
+  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Las preguntas entre dos hogares aún no están disponibles."
 }

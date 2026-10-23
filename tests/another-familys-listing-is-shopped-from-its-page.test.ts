@@ -14,7 +14,10 @@ import { renderTranslated } from './helpers/render-translated';
  * or report was reachable from the UI. The page now resolves the listing from
  * the table, then the view (or, without the view, the table read the old
  * policy answered), and treats the viewer as a shopper: no seller member, no
- * pickup spot, none of its own family's reads about the listing.
+ * pickup spot, none of its own family's reads about the listing. It is not
+ * offered a question either: one asked there is filed under the asker's family
+ * and the seller can never read it, so the page says questions between two
+ * households are not open yet.
  *
  * The same cause emptied the buyer's side of the offers inbox and made every
  * report on a circle listing answer "that listing no longer exists".
@@ -141,6 +144,7 @@ const BID_HINT = t('auction.enterYourMaxWeBidThe');
 const REPORT = t('reportButton.report');
 const MAKE_OFFER = t('negotiation.makeAnOffer');
 const ASK = t('listingQuestions.askTheSellerAQuestionIs');
+const QUESTIONS_NOT_OPEN = t('marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet');
 
 beforeEach(() => {
   harness.role = 'parent';
@@ -177,11 +181,36 @@ describe("another family's listing page (N1)", () => {
 
     expect(html).toContain('Oak desk');
     expect(html).toContain(MAKE_OFFER);
-    expect(html).toContain(ASK);
     expect(html).not.toContain(INTERESTED);
     // No trust score computed from rows this family does not hold.
     expect(html).not.toContain(t('marketplaceItem.noReviewsYet'));
     if (schema === 'after') expect(html).toContain('The Riveras');
+  });
+
+  // A question is filed under the ASKER's family (0371 checks the asker is a
+  // member of it), and the seller's Q&A, /marketplace/questions and 0153's read
+  // policy see only the seller's own family's questions. Asked here, it was
+  // "sent" and never reached the seller, so it is not offered until the
+  // database lets the listing's family read it.
+  it.each<Schema>(['after', 'before'])("%s 0483: another family's listing does not offer a question its seller could never read", async (schema) => {
+    const db = database(schema);
+    seedTheirs(db, schema, sale({ id: 'desk', member_id: 'm-seller' }));
+
+    const html = await visit('desk');
+
+    expect(html).toContain(MAKE_OFFER);
+    expect(html).not.toContain(ASK);
+    expect(html).toContain(QUESTIONS_NOT_OPEN);
+  });
+
+  it("the viewer's own family's sale still offers the ask box", async () => {
+    const db = database('after');
+    db.seed('marketplace_listings', [{ ...sale({ id: 'ours', member_id: 'm-sibling' }), family_id: 'fam-buyer', status: 'available', created_at: '2026-10-01T00:00:00Z' }]);
+
+    const html = await visit('ours');
+
+    expect(html).toContain(ASK);
+    expect(html).not.toContain(QUESTIONS_NOT_OPEN);
   });
 
   it('a listing no family of the viewer can see is still not found', async () => {

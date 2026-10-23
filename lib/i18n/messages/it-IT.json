@@ -17120,5 +17120,6 @@
   "handoff.theOtherPersonEntersTheCode": "Il codice di consegna ce l’hai tu: condividilo all’incontro e l’altra persona lo inserisce.",
   "handoffPanel.pickedUpLoanStarted": "Ritirato: il prestito è iniziato.",
   "marketplace.reviewsAcrossHouseholdsAreNotOpenYet": "Le recensioni tra due famiglie non sono ancora disponibili.",
-  "marketplace.anAuctionTakesBidsNotInterest": "Questa è un’asta: fai invece un’offerta."
+  "marketplace.anAuctionTakesBidsNotInterest": "Questa è un’asta: fai invece un’offerta.",
+  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Le domande tra due famiglie non sono ancora disponibili."
 }

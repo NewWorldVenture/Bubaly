@@ -17120,5 +17120,6 @@
   "handoff.theOtherPersonEntersTheCode": "C’est vous qui avez le code de remise : partagez-le lors de la rencontre, l’autre personne le saisit.",
   "handoffPanel.pickedUpLoanStarted": "Récupéré — le prêt a commencé.",
   "marketplace.reviewsAcrossHouseholdsAreNotOpenYet": "Les avis entre deux foyers ne sont pas encore ouverts.",
-  "marketplace.anAuctionTakesBidsNotInterest": "Ceci est une enchère : enchérissez plutôt."
+  "marketplace.anAuctionTakesBidsNotInterest": "Ceci est une enchère : enchérissez plutôt.",
+  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Les questions entre deux foyers ne sont pas encore ouvertes."
 }
