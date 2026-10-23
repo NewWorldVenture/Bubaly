@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
+import { at } from './helpers/source-order';
 
 const workflow = readFileSync(resolve(process.cwd(), '.github/workflows/ci.yml'), 'utf8');
 
@@ -150,8 +151,8 @@ function requireReadOnlyProductionGraph(candidate: Workflow) {
   const link = steps.find(step => step.name === 'Link production project')!;
   expect(cli.if).toBe(manualProductionApply); expect(link.if).toBe(manualProductionApply);
   expect(link.run).toBe('supabase link --project-ref "$SUPABASE_PROJECT_REF"');
-  expect(steps.indexOf(held)).toBeLessThan(steps.indexOf(cli));
-  expect(steps.indexOf(held)).toBeLessThan(steps.indexOf(link));
+  expect(at(steps, held)).toBeLessThan(at(steps, cli));
+  expect(at(steps, held)).toBeLessThan(at(steps, link));
   for (const step of steps.filter(step => step.uses === 'supabase/setup-cli@v1' || /(?:^|\n)\s*supabase\s/.test(step.run ?? ''))) {
     expect(step.if).toBe(manualProductionApply);
     expect(step.env?.SUPABASE_TELEMETRY_DISABLED).toBeUndefined();
