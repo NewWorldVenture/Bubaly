@@ -161,6 +161,37 @@ describe('the admin bell never shows a failed read as a value', () => {
     expect(has(open, 'Note 4')).toBe(true);
   });
 
+  // The shell's footer and the bell said "The admin notification feed is
+  // unavailable." when only the count had failed, while the feed loaded and
+  // was listed (review R9-UNREAD-COUNT-FAILURE-COPY). The count has its own line.
+  it('an unread count that FAILS names the count, in the shell and in the bell, not the feed', async () => {
+    seed(3, 2);
+    let faulted = 0;
+    h.db = withFaults(db, (name, calls) => {
+      if (name !== 'admin_notifications' || !head(calls)) return null;
+      faulted += 1;
+      return { message: 'admin_notifications unavailable' };
+    });
+    const { default: Layout } = await import('@/app/(app)/admin/layout');
+    const element = await Layout({ children: null }) as ReactElement<BellProps & { dataWarnings: string[] }>;
+    expect(faulted).toBe(1);
+    expect(element.props.dataWarnings).toEqual([SOURCE_MESSAGES['adminCredential.unreadCountUnavailable']]);
+    const { open } = await openBell(element.props);
+    expect(has(open, SOURCE_MESSAGES['adminCredential.unreadCountUnavailable'])).toBe(true);
+    expect(has(open, SOURCE_MESSAGES['adminCredential.notificationsUnavailable'])).toBe(false);
+    expect(has(open, 'Note 4')).toBe(true);
+  });
+
+  it('the control: a feed and a count that both FAIL are one line, the feed\'s', async () => {
+    seed(3, 2);
+    fault('admin_notifications', () => true);
+    const { default: Layout } = await import('@/app/(app)/admin/layout');
+    const element = await Layout({ children: null }) as ReactElement<BellProps & { dataWarnings: string[] }>;
+    expect(element.props.dataWarnings).toEqual([SOURCE_MESSAGES['adminCredential.notificationsUnavailable']]);
+    const { open } = await openBell(element.props);
+    expect(has(open, SOURCE_MESSAGES['adminCredential.unreadCountUnavailable'])).toBe(false);
+  });
+
   it('a feed that FAILS is "unavailable", not "You\'re all caught up"', async () => {
     seed(0, 0);
     fault('admin_notifications', (calls) => !head(calls));
@@ -176,6 +207,7 @@ describe('the admin bell never shows a failed read as a value', () => {
     const props = await bellProps();
     expect(props).toMatchObject({ pendingInviteCount: 2, unreadCount: 0 });
     const { closed, open } = await openBell(props);
+    expect(has(open, SOURCE_MESSAGES['adminCredential.unreadCountUnavailable'])).toBe(false);
     expect(badge(closed)).toBe('1');
     expect(has(open, `2 ${SOURCE_MESSAGES['adminNotificationBell.pendingInvite']}s`)).toBe(true);
     expect(has(open, SOURCE_MESSAGES['adminCredential.invitesUnavailable'])).toBe(false);

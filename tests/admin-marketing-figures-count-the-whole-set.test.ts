@@ -193,6 +193,14 @@ describe('/admin/marketing/lead-scores: the band tiles', () => {
     fault('crm_lead_scores', (c) => head(c) && eqTo(c, 'band', 'qualified'));
     expect(await render('lead-scores')).toContain(SOURCE_MESSAGES['leadScores.couldNotLoadLeadScores']);
   });
+  // Each band's check on its own (review R9-NEW-COUNT-CHECKS-HAVE-NO-ISOLATED-FAILS-CONTROL):
+  // only the qualified band was faulted, so deleting the hot or warm check left everything green.
+  it.each(['hot', 'warm'])('the %s band count that FAILS, alone, is the read-error state', async (band) => {
+    seed();
+    const faulted = fault('crm_lead_scores', (c) => head(c) && eqTo(c, 'band', band));
+    expect(await render('lead-scores')).toContain(SOURCE_MESSAGES['leadScores.couldNotLoadLeadScores']);
+    expect(faulted.n).toBe(1);
+  });
   it('the control: a few scores are counted the same', async () => {
     db.seed('crm_lead_scores', [{ contact_id: 'ct-1', score: 50, band: 'warm', factors: [] }]);
     db.seed('crm_contacts', []);
@@ -225,6 +233,12 @@ describe('/admin/marketing/loyalty: Active rewards', () => {
     fault('loyalty_rewards', (c) => head(c) && eqTo(c, 'is_active', true));
     expect(await render('loyalty')).toContain(SOURCE_MESSAGES['loyalty.couldNotLoadLoyaltyData']);
   });
+  it('the count of every reward that FAILS, alone, is the read-error state', async () => {
+    seed(200, 50);
+    const faulted = fault('loyalty_rewards', (c) => head(c) && !c.some((call) => call.method === 'eq'));
+    expect(await render('loyalty')).toContain(SOURCE_MESSAGES['loyalty.couldNotLoadLoyaltyData']);
+    expect(faulted.n).toBe(1);
+  });
   it('the control: a catalog that fits the list is counted the same', async () => {
     seed(1, 2);
     const html = await render('loyalty');
@@ -245,6 +259,12 @@ describe('/admin/marketing/personalization: each slot\'s count', () => {
     db.seed('marketing_personalization_rules', Array.from({ length: 3 }, (_, k) => rule(k, 'hero')));
     fault('marketing_personalization_rules', (c) => head(c) && eqTo(c, 'slot', 'hero'));
     expect(await render('personalization')).toContain(SOURCE_MESSAGES['personalization.couldNotLoadPersonalizationRules']);
+  });
+  it('the count of every rule that FAILS, alone, is the read-error state', async () => {
+    db.seed('marketing_personalization_rules', Array.from({ length: 3 }, (_, k) => rule(k, 'hero')));
+    const faulted = fault('marketing_personalization_rules', (c) => head(c) && !eqTo(c, 'slot'));
+    expect(await render('personalization')).toContain(SOURCE_MESSAGES['personalization.couldNotLoadPersonalizationRules']);
+    expect(faulted.n).toBe(1);
   });
   it('the control: a few rules are counted the same', async () => {
     db.seed('marketing_personalization_rules', [rule(1, 'hero'), rule(2, 'banner')]);
@@ -280,6 +300,16 @@ describe('/admin/marketing/platform: Pages, Published and Templates', () => {
     seed(10, 40);
     fault('marketing_pages', (c) => head(c) && eqTo(c, 'status', 'published'));
     expect(await render('platform')).toContain(SOURCE_MESSAGES['platform.couldNotLoadTheMarketing']);
+  });
+  it.each([
+    ['the page count', 'marketing_pages', (c: FaultCall[]) => head(c) && !eqTo(c, 'status')],
+    ['the template count', 'marketing_content_templates', head],
+    ['the brand rule count', 'marketing_brand_rules', head],
+  ])('%s that FAILS, alone, is the read-error state', async (_, table, failing) => {
+    seed(10, 40);
+    const faulted = fault(table, failing);
+    expect(await render('platform')).toContain(SOURCE_MESSAGES['platform.couldNotLoadTheMarketing']);
+    expect(faulted.n).toBe(1);
   });
   it('the control: a registry that fits the list is counted the same', async () => {
     seed(1, 1);
@@ -361,6 +391,12 @@ describe('/admin/marketing/exit-intent: the offer tiles', () => {
     fault('marketing_exit_intent', (c) => c.some((call) => call.method === 'select' && call.args[0] === 'id, status, impressions, conversions'));
     expect(await render('exit-intent')).toContain(SOURCE_MESSAGES['exitIntent.couldNotLoadExitIntent']);
   });
+  it('the offer count that FAILS, alone, is the read-error state', async () => {
+    seed();
+    const faulted = fault('marketing_exit_intent', head);
+    expect(await render('exit-intent')).toContain(SOURCE_MESSAGES['exitIntent.couldNotLoadExitIntent']);
+    expect(faulted.n).toBe(1);
+  });
   it('the control: a few offers are counted the same', async () => {
     db.seed('marketing_exit_intent', [offer(1, 0, 'active', 7)]);
     const html = await render('exit-intent');
@@ -430,6 +466,19 @@ describe('/admin/marketing/social/recurring: the campaign tiles and the run hist
     fault('marketing_recurring_ads', head);
     expect(textOf(await render('social/recurring'))).toContain('Recurring campaigns could not be read');
   });
+  // Each tile's read on its own: the case above faults both head counts at once,
+  // and nothing faulted the Posts sent sum, so deleting any one check left it green.
+  it.each([
+    ['the campaign count', (c: FaultCall[]) => head(c) && !eqTo(c, 'status')],
+    ['the active count', (c: FaultCall[]) => head(c) && eqTo(c, 'status', 'active')],
+    ['the Posts sent sum', (c: FaultCall[]) => c.some((call) => call.method === 'select' && call.args[0] === 'id, occurrences')],
+  ])('%s that FAILS, alone, is the read-error state', async (_, failing) => {
+    db.seed('marketing_recurring_ads', [ad(1, 'active')]);
+    db.seed('marketing_recurring_ad_runs', []);
+    const faulted = fault('marketing_recurring_ads', failing);
+    expect(textOf(await render('social/recurring'))).toContain('Recurring campaigns could not be read');
+    expect(faulted.n).toBe(1);
+  });
   it('the control: the run history shows, and a few campaigns are counted the same', async () => {
     db.seed('marketing_recurring_ads', [ad(1, 'active')]);
     db.seed('marketing_recurring_ad_runs', [{ id: 'run-1', ad_id: 'ra-000001', occurrence: 0, platform: 'x', status: 'published', ran_at: at(2), error_message: null, permalink_url: null }]);
@@ -462,6 +511,16 @@ describe('/admin/marketing/video: the catalog count and the upload picker', () =
     db.seed('marketing_assets', []);
     fault('marketing_videos', (c) => head(c) && eqTo(c, 'status', 'published'));
     expect(await render('video')).toContain(SOURCE_MESSAGES['video.couldNotLoadMarketingVideos']);
+  });
+  it.each([
+    ['the video count', 'marketing_videos', (c: FaultCall[]) => head(c) && !eqTo(c, 'status')],
+    ['the uploaded-video count', 'marketing_assets', head],
+  ])('%s that FAILS, alone, is the read-error state', async (_, table, failing) => {
+    db.seed('marketing_videos', [video(1, 'published')]);
+    db.seed('marketing_assets', []);
+    const faulted = fault(table, failing);
+    expect(await render('video')).toContain(SOURCE_MESSAGES['video.couldNotLoadMarketingVideos']);
+    expect(faulted.n).toBe(1);
   });
   it('the control: a few videos are counted the same, and the picker offers every upload', async () => {
     db.seed('marketing_videos', [video(1, 'published'), video(2, 'draft')]);

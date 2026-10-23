@@ -25,7 +25,12 @@ type StoredConfig = {
  */
 export async function getAIConfig(supabase: DB): Promise<AIProviderConfig> {
   const { data } = await supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle();
-  const stored = (data?.value ?? {}) as StoredConfig;
+  return configFrom(data?.value);
+}
+
+/** The stored value over the environment. */
+function configFrom(value: unknown): AIProviderConfig {
+  const stored = (value ?? {}) as StoredConfig;
   // OpenAI-only deployment: provider is always 'openai' regardless of what was stored.
   return {
     provider: 'openai',
@@ -33,6 +38,28 @@ export async function getAIConfig(supabase: DB): Promise<AIProviderConfig> {
     anthropicKey: stored.anthropicKey || process.env.ANTHROPIC_API_KEY || null,
     openaiKey: stored.openaiKey || process.env.OPENAI_API_KEY || null,
   };
+}
+
+/** The AI config with its real keys, or the read that could not be made. */
+export type AIConfigRead =
+  | { config: AIProviderConfig; error: null }
+  | { config: null; error: { message: string } };
+
+/**
+ * getAIConfig for the admin console's Test connection, which asks whether the
+ * STORED config works. getAIConfig drops its read's error, so a refused or
+ * unreachable read is "nothing stored" and the environment answers: the test
+ * said "No OpenAI key configured" over a key saved in the console, or tested
+ * the environment's key and model and called the stored config OK (review
+ * R9-2-ADMIN-TEST-CONNECTION-FAILED-READ-IS-NO-KEY). The admin caller gets the
+ * error and says the settings could not be read. getAIConfig itself is
+ * unchanged: for the runtime callers the environment is the documented
+ * fallback. Settled, so a transport rejection arrives the same way.
+ */
+export async function readAIConfig(supabase: DB): Promise<AIConfigRead> {
+  const { data, error } = await settle(supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle());
+  if (error) return { config: null, error };
+  return { config: configFrom(data?.value), error: null };
 }
 
 /**

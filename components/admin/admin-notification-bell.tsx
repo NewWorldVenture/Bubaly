@@ -118,6 +118,10 @@ export function AdminNotificationBell({ notifications, pendingInviteCount, unrea
             {pendingInviteCount === null && (
               <p className="border-b border-border/40 px-4 py-3 text-xs text-muted">{t('adminCredential.invitesUnavailable')}</p>
             )}
+            {/* The "!" badge names its cause here, as the invite count's does above. */}
+            {unreadCount === null && notifications !== null && (
+              <p className="border-b border-border/40 px-4 py-3 text-xs text-muted">{t('adminCredential.unreadCountUnavailable')}</p>
+            )}
             {pendingInviteCount !== null && pendingInviteCount > 0 && (
               <Link href="/admin/users?tab=invitations" onClick={() => setOpen(false)}
                 className="flex items-start gap-3 border-b border-border/40 bg-brand/5 px-4 py-3 transition hover:bg-elevated">

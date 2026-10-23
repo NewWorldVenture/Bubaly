@@ -10,13 +10,14 @@ import { listAllAuthUsers } from '@/lib/server/list-all-auth-users';
 import { sendReactEmail, APP_URL } from '@/lib/email';
 import { InviteEmail } from '@/lib/emails/invite';
 import { emailSchema } from '@/lib/validation';
-import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
+import { readStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { stripeFromKey } from '@/lib/stripe';
 import { REMOVED_MEMBER_PATCH, inviteRolesLostOnRoleChange, isManager, type MemberRole } from '@/lib/constants/roles';
 import { REMOVED_CHILD_BAN_MARKER, isChildLoginAccount, memberHasAKidLogin, revokeRemovedChildLogin } from '@/lib/server/child-account';
 import type { PlanId } from '@/lib/constants/plans';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
+import { settleAll } from '@/lib/supabase/settle';
 import { isValidTimezone } from '@/lib/time/zoned';
 import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
 import { forgetMemberLocation } from '@/lib/location/retention';
@@ -502,7 +503,14 @@ export async function testStripeConnectionAction(): Promise<Result<{ livemode: b
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
   try {
-    const settings = await getStripeSettings();
+    // A failed read is not "nothing saved": the environment's key would answer
+    // for the stored one, or "no key" would be said over a saved one (review
+    // R9-2-ADMIN-TEST-CONNECTION-FAILED-READ-IS-NO-KEY).
+    const { settings, error: readError } = await readStripeSettings();
+    if (readError) {
+      console.error('[admin-action] stripe settings read failed', readError);
+      return { ok: false, error: t('stripe.couldNotLoadStripeFinancial') };
+    }
     const key = effectiveSecretKey(settings);
     if (!key) return { ok: false, error: t('actions.noStripeSecretKeyConfigured') };
     // balance.retrieve needs no id and fails fast on a bad/expired key.
@@ -525,10 +533,21 @@ export async function adminResendInviteAction(inviteId: string): Promise<Result>
   if (inviteReadError) return { ok: false, error: describeActionError(inviteReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!invite || invite.status !== 'pending') return { ok: false, error: t('actions.inviteIsNoLongerPending') };
 
-  const { data: family } = await supabase.from('families').select('name').eq('id', invite.family_id).maybeSingle();
-  const inviterName = invite.invited_by
-    ? (await supabase.from('profiles').select('full_name, email').eq('id', invite.invited_by).maybeSingle()).data
-    : null;
+  // Read with their errors. Dropped, a failed read sent the real invitee a
+  // reminder to join "a family" from "A family admin", reported as a resend
+  // (review R9-2-RESEND-INVITE-FAILED-NAME-READS-SENT-AS-GENERIC). Nothing is
+  // sent until both answer; a family or inviter that is really gone still
+  // reads as the generic words.
+  const [familyRes, inviterRes] = await settleAll([
+    supabase.from('families').select('name').eq('id', invite.family_id).maybeSingle(),
+    invite.invited_by
+      ? supabase.from('profiles').select('full_name, email').eq('id', invite.invited_by).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+  const nameReadError = familyRes.error ?? inviterRes.error;
+  if (nameReadError) return { ok: false, error: describeActionError(nameReadError, t('actions.couldNotCheckThatRefresh')) };
+  const family = familyRes.data;
+  const inviterName = inviterRes.data;
 
   const { ok, skipped } = await sendReactEmail({
     to: invite.email,

@@ -525,8 +525,9 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                   {invites.slice(0, RECENT_INVITES).map((inv) => (
                     <li key={inv.id} className="text-sm">
                       <p className="truncate font-medium">{inv.email}</p>
+                      {/* A failed family-name read is Unavailable, as on the Invitations tab, not "a family". */}
                       <p className="text-xs text-muted">
-                        Invited to {familyById.get(inv.family_id)?.name ?? 'a family'} · {fmtDate(inv.created_at, 'MMM d')}
+                        Invited to {familyById.get(inv.family_id)?.name ?? (familyLabelsUnread ? unavailable : 'a family')} · {fmtDate(inv.created_at, 'MMM d')}
                       </p>
                       <Badge tone={inv.status === 'pending' ? 'warning' : inv.status === 'accepted' ? 'success' : 'neutral'}>{inv.status}</Badge>
                     </li>

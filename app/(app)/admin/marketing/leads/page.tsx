@@ -100,6 +100,10 @@ export default async function LeadScoringPage() {
         {!leadsCeiling && summary.total > Math.min(rows.length, SHOWN) && (
           <p className="mb-3 text-xs text-muted">{tr('adminCeiling.listShowsPart', { shown: Math.min(rows.length, SHOWN).toLocaleString(), total: summary.total.toLocaleString() })}</p>
         )}
+        {/* Past the ceiling the list is certainly part of the leads, with no total to name. */}
+        {leadsCeiling && (
+          <p className="mb-3 text-xs text-muted">{tr('adminCeiling.listShowsPartTotalNotShown', { shown: Math.min(rows.length, SHOWN).toLocaleString() })}</p>
+        )}
         {rows.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">{tr('adminMarketingLeads.noInboundLeadsYet')}</p>
         ) : (

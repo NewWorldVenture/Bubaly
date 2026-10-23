@@ -195,6 +195,10 @@ export default async function CompetitivePage() {
         {!backlinksCeiling && (backlinkSummaryResult.data ?? []).length > links.length && (
           <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsTheNewest', { shown: links.length.toLocaleString(), total: (backlinkSummaryResult.data ?? []).length.toLocaleString() })}</p>
         )}
+        {/* Past the ceiling the list is certainly part of the backlinks, with no total to name. */}
+        {backlinksCeiling && (
+          <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsTheNewestTotalNotShown', { shown: links.length.toLocaleString() })}</p>
+        )}
         {links.length === 0 ? <p className="py-3 text-center text-sm text-muted">{t('adminMarketingCompetitive.noBacklinksTracked')}</p> : (
           <div className="space-y-1.5">
             {links.map((l) => (

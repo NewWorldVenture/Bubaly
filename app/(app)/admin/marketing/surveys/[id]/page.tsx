@@ -149,6 +149,10 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
         {!scoresCeiling && scores.length > rows.length && (
           <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsTheNewest', { shown: rows.length.toLocaleString(), total: scores.length.toLocaleString() })}</p>
         )}
+        {/* Past the ceiling the list is certainly part of the responses, with no total to name. */}
+        {scoresCeiling && (
+          <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsTheNewestTotalNotShown', { shown: rows.length.toLocaleString() })}</p>
+        )}
         {rows.length === 0 ? (
           <EmptyState icon={MessagesSquare} title={t('adminMarketingSurveys.noResponsesYet')} description={t('surveys.shareTheLinkAboveTo')} />
         ) : (

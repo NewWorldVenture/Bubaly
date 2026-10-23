@@ -21,6 +21,8 @@ const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3
 const FILTERS = ['all', 'pending', 'approved', 'featured', 'rejected'] as const;
 /** Reviews the rating figures may page through before they are reported as not shown (one round trip per 1,000). */
 const SUM_ROW_CEILING = 25_000;
+/** The newest reviews of the chosen status the list holds. */
+const LISTED = 500;
 
 export default async function ReviewsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   const t = await getTranslations();
@@ -36,7 +38,7 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
   // they say they are not shown rather than describing part of them.
   const listed = supabase.from('reviews').select('*').is('deleted_at', null);
   const [reviewsResult, settingsResult, ratingsResult] = await settleAll([
-    (active === 'all' ? listed : listed.eq('status', active)).order('submitted_at', { ascending: false }).limit(500),
+    (active === 'all' ? listed : listed.eq('status', active)).order('submitted_at', { ascending: false }).limit(LISTED),
     supabase.from('reputation_settings').select('*').eq('singleton', true).maybeSingle(),
     readAllByIdAsQuery((after, limit) => {
       let query = supabase.from('reviews').select('id, rating, status').is('deleted_at', null);
@@ -122,6 +124,12 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
       {/* The list is the newest 500 of its status; the counts are every review (coverage sweep round 9). */}
       {!ratingsCeiling && (active === 'all' ? ratings.length : ratings.filter((r) => r.status === active).length) > filtered.length && (
         <p className="text-xs text-muted">{t('adminCeiling.listShowsTheNewest', { shown: filtered.length.toLocaleString(), total: (active === 'all' ? ratings.length : ratings.filter((r) => r.status === active).length).toLocaleString() })}</p>
+      )}
+      {/* Past the ceiling there is no total to name, but a full list is still
+          the newest part of its status, and says so (review
+          R9-PARTIAL-LISTS-THAT-DO-NOT-SAY-SO). */}
+      {ratingsCeiling && filtered.length >= LISTED && (
+        <p className="text-xs text-muted">{t('adminCeiling.listShowsTheNewestTotalNotShown', { shown: filtered.length.toLocaleString() })}</p>
       )}
       {filtered.length === 0 ? (
         <EmptyState icon={MessageSquareQuote} title={t('adminMarketingReviews.noReviewsHere')} description={t('reviews.shareYourReviewLinkTo')} />

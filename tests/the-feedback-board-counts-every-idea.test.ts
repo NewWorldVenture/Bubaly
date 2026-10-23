@@ -13,19 +13,24 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase, withFaults, type FaultCall, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { renderTranslated } from './helpers/render-translated';
-import { SOURCE_MESSAGES } from '@/lib/i18n/messages';
+import { SOURCE_MESSAGES, getMessages } from '@/lib/i18n/messages';
 import { translate } from '@/lib/i18n/translate';
 import { KIND_META, STATUS_META, type FeedbackKind, type FeedbackStatus } from '@/lib/feedback/board';
 
-const io = vi.hoisted(() => ({ db: null as unknown }));
+const io = vi.hoisted(() => ({ db: null as unknown, locale: 'en-US' }));
 vi.mock('@/lib/supabase/auth', () => ({
   requireUserContext: async () => ({ user: { id: 'user-1', email: 'pat@example.invalid' }, memberships: [], active: { familyId: 'fam-1', role: 'parent', member: { id: 'member-1', display_name: 'Pat' }, family: { name: 'Rivera', timezone: 'UTC' } } }),
   isSuperAdmin: async () => false,
 }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => io.db }));
+// The request's locale is switchable, so a case can render the page for a German reader.
 vi.mock('@/lib/i18n/server', async () => {
-  const { SOURCE_MESSAGES: messages, translate: tr } = await import('@/lib/i18n/messages');
-  return { getTranslations: async () => (key: string, params?: Record<string, string | number>) => tr(messages, key, params) };
+  const { getMessages, translate: tr } = await import('@/lib/i18n/messages');
+  const { localeOrDefault } = await import('@/lib/i18n/locales');
+  return {
+    getTranslations: async () => (key: string, params?: Record<string, string | number>) => tr(getMessages(localeOrDefault(io.locale).code), key, params),
+    getLocaleContext: async () => ({ locale: localeOrDefault(io.locale), source: 'cookie', messages: getMessages(localeOrDefault(io.locale).code) }),
+  };
 });
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: () => {}, error: () => {}, info: () => {} }) }));
 vi.mock('next/link', () => ({ default: ({ href, children, ...props }: { href: string; children: ReactNode }) => createElement('a', { ...props, href }, children) }));
@@ -41,7 +46,7 @@ const idea = (k: number, kind: FeedbackKind, status: FeedbackStatus, votes: numb
   comment_count: 0, pinned: false, github_issue_number: null, github_issue_url: null, github_state: null, github_synced_at: null,
   created_at: new Date(Date.UTC(2026, 0, 1) + k * 60_000).toISOString(), updated_at: '2026-10-01T00:00:00.000Z',
 });
-const page = async () => renderTranslated(await FeedbackPage());
+const page = async () => renderTranslated(await FeedbackPage(), io.locale);
 
 /** The figure the rail shows beside a kind's or a status's label. */
 const kindFigure = (html: string, kind: FeedbackKind) =>
@@ -68,6 +73,7 @@ function seedPastTheList() {
 beforeEach(() => {
   db = createInMemorySupabase<SupabaseClient<Database>>({ maxRows: CAP });
   io.db = db;
+  io.locale = 'en-US';
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => vi.restoreAllMocks());
@@ -134,5 +140,33 @@ describe('the idea board past the 400 ideas it lists', () => {
     expect(listed(html)).toBe(400);
     expect(html).not.toContain(partOfTheBoard(400, 450).slice(0, 14));
     expect(kindFigure(html, 'bug')).toBe('50');
+  });
+});
+
+// The rail's counts went through toLocaleString() with no locale, so they were
+// the server's en-US "1,337" while the board's own note beside them read the
+// reader's "1.337" (review R9-BOARD-RAIL-FORMATS-IN-SERVER-LOCALE).
+describe('the rail formats its counts in the reader\'s locale', () => {
+  function seedPastAThousand() {
+    db.seed('feedback_ideas', Array.from({ length: 1337 }, (_, k) => idea(k, 'bug', 'shipped', 0)));
+    db.seed('feedback_votes', []);
+  }
+
+  it('a German reader reads 1.337 in the rail, as the board\'s note beside it does', async () => {
+    seedPastAThousand();
+    io.locale = 'de-DE';
+    const html = await page();
+    expect(kindFigure(html, 'bug')).toBe('1.337');
+    expect(statusFigure(html, 'shipped')).toBe('1.337');
+    expect(html).toContain(translate(getMessages('de-DE'), 'feedbackFeedbackBoard.theBoardListsTheTop', { shown: '400', total: '1.337' }));
+    expect(html).not.toContain('1,337');
+  });
+
+  it('the control: an American reader reads 1,337', async () => {
+    seedPastAThousand();
+    const html = await page();
+    expect(kindFigure(html, 'bug')).toBe('1,337');
+    expect(statusFigure(html, 'shipped')).toBe('1,337');
+    expect(html).toContain(partOfTheBoard(400, 1337));
   });
 });

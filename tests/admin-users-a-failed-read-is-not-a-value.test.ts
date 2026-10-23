@@ -271,6 +271,30 @@ describe('/admin/users: a family name read that FAILS is Unavailable, not "no fa
     expect(invitations).toContain(`<td class="px-3 py-2.5 font-medium">guest@example.com</td><td class="px-3 py-2.5 text-muted">${unavailable}</td>`);
   });
 
+  // The All tab's Recent invites rail still read "Invited to a family" for the
+  // same failure (review R9-UNREAD-COUNT-FAILURE-COPY).
+  it('the All tab\'s Recent invites rail says Unavailable, as the Invitations tab does, not "a family"', async () => {
+    seed();
+    db.replace('invites', [{
+      id: 'inv-1', family_id: OWNER, email: 'guest@example.com', role: 'adult', status: 'pending',
+      created_at: '2026-01-10T00:00:00Z', expires_at: '2026-02-10T00:00:00Z',
+    }]);
+    const faulted = fault('families', (calls) => calls.some((c) => c.method === 'in'));
+    const all = textOf(await render());
+    expect(faulted.n).toBe(1);
+    expect(all).toContain(`guest@example.com Invited to ${unavailable} ·`);
+    expect(all).not.toContain('Invited to a family');
+  });
+
+  it('the control: the rail names the family a read that succeeds returned', async () => {
+    seed();
+    db.replace('invites', [{
+      id: 'inv-1', family_id: OWNER, email: 'guest@example.com', role: 'adult', status: 'pending',
+      created_at: '2026-01-10T00:00:00Z', expires_at: '2026-02-10T00:00:00Z',
+    }]);
+    expect(textOf(await render())).toContain('guest@example.com Invited to Owner family ·');
+  });
+
   it('the control: a family name read that succeeds names each row\'s family', async () => {
     seed();
     const all = await render();

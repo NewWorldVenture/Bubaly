@@ -59,7 +59,10 @@ export default async function SiteAdminLayout({ children }: { children: React.Re
   }
   if (unreadRes.error) {
     console.error('[admin-shell] unread notification count read failed:', unreadRes.error);
-    if (!notificationsRes.error) dataWarnings.push(t('adminCredential.notificationsUnavailable'));
+    // Its own line: the feed itself loaded and is listed in the bell, so
+    // "the feed is unavailable" was not what had failed (review
+    // R9-UNREAD-COUNT-FAILURE-COPY). When both failed, the feed's line says it.
+    if (!notificationsRes.error) dataWarnings.push(t('adminCredential.unreadCountUnavailable'));
   }
 
   const adminName = profileRes.data?.full_name || profileRes.data?.email || user.email || 'Admin';

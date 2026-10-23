@@ -105,6 +105,12 @@ export default async function RecurringAdsPage() {
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-3">
+          {/* The list is an unbounded read, which PostgREST answers with at
+              most db-max-rows; Campaigns is a count of every one (review
+              R9-PARTIAL-LISTS-THAT-DO-NOT-SAY-SO). */}
+          {(campaignCountResult.count ?? 0) > rows.length && (
+            <p className="text-xs text-muted">{t('adminCeiling.listShowsTheNewest', { shown: rows.length.toLocaleString(), total: (campaignCountResult.count ?? 0).toLocaleString() })}</p>
+          )}
           {rows.length === 0 ? (
             <EmptyState icon={Repeat} title="No recurring campaigns yet" description="Create one on the right. It will post on its own from then on." />
           ) : rows.map((ad) => {

@@ -43,6 +43,8 @@ vi.mock('@/app/(app)/admin/marketing/surveys/[id]/survey-controls', () => ({ Sur
 vi.mock('@/app/(app)/admin/marketing/loyalty/actions', () => ({ saveLoyaltySettingsAction: noop, awardPointsAction: noop }));
 vi.mock('@/app/(app)/admin/marketing/loyalty/reward-editor', () => ({ RewardRow: () => null, AddReward: () => null }));
 vi.mock('@/app/(app)/admin/marketing/loyalty/redemption-row', () => ({ RedemptionRow: () => null }));
+vi.mock('@/app/(app)/admin/marketing/platform/actions', () => ({ archivePlatformPage: noop, createPlatformPage: noop, retryMarketingJob: noop, saveMarketingBrandRule: noop, saveMarketingTemplate: noop, updatePlatformPage: noop }));
+vi.mock('@/app/(app)/admin/marketing/social/recurring/controls', () => ({ RecurringAdControls: () => null, NewRecurringAdForm: () => null }));
 
 let db: InMemorySupabase;
 const m = (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params);
@@ -185,5 +187,103 @@ describe('/admin/marketing/surveys/[id]: the response list', () => {
     seed(2);
     const page = await render('surveys/[id]', { params: Promise.resolve({ id: 'sv-1' }) });
     expect(page).not.toContain(part('adminCeiling.listShowsTheNewest', 2, 2).slice(0, 30));
+  });
+});
+
+// Round 10 (review R9-PARTIAL-LISTS-THAT-DO-NOT-SAY-SO), two kinds.
+//  1. Unbounded reads PostgREST answers with at most db-max-rows: the recurring
+//     campaign list beside a Campaigns count, and the platform's Templates and
+//     Brand rules cards, whose badges counted their lists.
+//  2. Notes hidden past a summed ceiling, where the list is certainly part of a
+//     set larger than the ceiling: they say so now, without a total.
+describe('/admin/marketing/social/recurring: the campaign list', () => {
+  const ad = (k: number): Row => ({
+    id: `ra-${pad(k)}`, name: `Recurring ${k}`, status: 'paused', platforms: ['x'], body_variants: ['Hi'], occurrences: 0, max_occurrences: null,
+    cadence: 'weekly', starts_at: at(k), ends_at: null, next_run_at: null, last_run_at: null, deleted_at: null, created_at: at(k), timezone: 'UTC',
+  });
+  it('says it holds the newest 1,000 of every campaign', async () => {
+    db.seed('marketing_recurring_ads', Array.from({ length: 1100 }, (_, k) => ad(k)));
+    db.seed('marketing_recurring_ad_runs', []);
+    expect(await render('social/recurring')).toContain(part('adminCeiling.listShowsTheNewest', 1000, 1100));
+  });
+  it('the control: a list that holds every campaign says nothing', async () => {
+    db.seed('marketing_recurring_ads', [ad(1), ad(2)]);
+    db.seed('marketing_recurring_ad_runs', []);
+    expect(await render('social/recurring')).not.toContain(part('adminCeiling.listShowsTheNewest', 2, 2).slice(0, 30));
+  });
+});
+
+describe('/admin/marketing/platform: the Templates and Brand rules cards', () => {
+  const template = (k: number): Row => ({ id: `tp-${pad(k)}`, name: `Template ${k}`, page_type: 'guide', status: 'active', description: null, instructions: 'Write it.', defaults: {}, is_default: false });
+  const rule = (k: number): Row => ({ id: `br-${pad(k)}`, rule_key: `rule_${k}`, name: `Rule ${k}`, instructions: 'Say it.', value: {}, active: true });
+  function seed(templates: number, rules: number) {
+    db.seed('marketing_content_templates', Array.from({ length: templates }, (_, k) => template(k)));
+    db.seed('marketing_brand_rules', Array.from({ length: rules }, (_, k) => rule(k)));
+    for (const table of ['marketing_pages', 'marketing_generation_jobs', 'marketing_provider_syncs', 'marketing_provider_observations', 'marketing_embeddings']) db.seed(table, []);
+  }
+  /** The badge beside a card's heading. */
+  const badge = (html: string, heading: string) => new RegExp(`<h3 class="font-semibold">${heading}</h3>.*?</div><span[^>]*>([^<]*)</span>`).exec(html)?.[1];
+  async function renderHtml(): Promise<string> {
+    const { default: Page } = await import('@/app/(app)/admin/marketing/platform/page');
+    return renderServerPage(await (Page as () => Promise<React.ReactElement>)());
+  }
+  it('each badge counts every row past the 1,000 listed, and each list says it is part', async () => {
+    seed(1001, 1002);
+    const html = await renderHtml();
+    expect(badge(html, m('adminMarketingPlatform.templates'))).toBe('1,001');
+    expect(badge(html, m('adminMarketingPlatform.brandRules'))).toBe('1,002');
+    expect(textOf(html)).toContain(part('adminCeiling.listShowsPart', 1000, 1001));
+    expect(textOf(html)).toContain(part('adminCeiling.listShowsPart', 1000, 1002));
+  });
+  it('the control: lists that hold everything are counted the same and say nothing', async () => {
+    seed(2, 3);
+    const html = await renderHtml();
+    expect(badge(html, m('adminMarketingPlatform.templates'))).toBe('2');
+    expect(badge(html, m('adminMarketingPlatform.brandRules'))).toBe('3');
+    expect(textOf(html)).not.toContain(part('adminCeiling.listShowsPart', 2, 2).slice(0, 20));
+  });
+});
+
+describe('past a summed ceiling, a list that is certainly part of its set says so without a total', () => {
+  const newest = (shown: number) => m('adminCeiling.listShowsTheNewestTotalNotShown', { shown: shown.toLocaleString() });
+  it('/admin/marketing/reviews: the newest 500 of more than 25,000 reviews', async () => {
+    db.seed('reviews', Array.from({ length: 25_001 }, (_, k) => ({ id: `rv-${pad(k)}`, rating: 5, status: 'approved', author_name: 'A', body: 'Good', deleted_at: null, submitted_at: at(k), reply: null })));
+    db.seed('reputation_settings', []);
+    const page = await render('reviews', { searchParams: Promise.resolve({}) });
+    expect(page).toContain(m('adminCeiling.figuresNotShown', { n: '25,000' }).slice(0, 30));
+    expect(page).toContain(newest(500));
+    expect(await render('reviews', { searchParams: Promise.resolve({ status: 'approved' }) })).toContain(newest(500));
+  });
+  it('/admin/marketing/reviews, the control: a status past the ceiling whose list is not full says nothing', async () => {
+    db.seed('reviews', Array.from({ length: 25_001 }, (_, k) => ({ id: `rv-${pad(k)}`, rating: 5, status: k < 3 ? 'pending' : 'approved', author_name: 'A', body: 'Good', deleted_at: null, submitted_at: at(k), reply: null })));
+    db.seed('reputation_settings', []);
+    expect(await render('reviews', { searchParams: Promise.resolve({ status: 'pending' }) })).not.toContain(newest(3).slice(0, 30));
+  });
+  it('/admin/marketing/competitive: the newest 500 of more than 25,000 backlinks', async () => {
+    db.seed('competitors', []);
+    db.seed('keyword_intel', []);
+    db.seed('backlinks', Array.from({ length: 25_001 }, (_, k) => ({ id: `bl-${pad(k)}`, source_domain: `s${k}.example`, target_url: '/', authority: 10, status: 'active', created_at: at(k) })));
+    expect(await render('competitive')).toContain(newest(500));
+  });
+  it('/admin/marketing/surveys/[id]: the newest 100 of more than 25,000 responses', async () => {
+    db.seed('surveys', [{ id: 'sv-1', name: 'NPS', slug: 'nps', type: 'nps', status: 'active', scale_min: 0, scale_max: 10, question: 'How likely?', deleted_at: null, created_at: at(0) }]);
+    db.seed('survey_responses', Array.from({ length: 25_001 }, (_, k) => ({ id: `sr-${pad(k)}`, survey_id: 'sv-1', score: 9, comment: null, submitted_at: at(k) })));
+    expect(await render('surveys/[id]', { params: Promise.resolve({ id: 'sv-1' }) })).toContain(newest(100));
+  });
+  it('/admin/marketing/leads: 60 of more than 10,000 leads', async () => {
+    db.seed('support_tickets', Array.from({ length: 10_001 }, (_, k) => ({
+      id: `ld-${pad(k)}`, subject: `Lead ${k}`, description: 'Hello', requester_name: `Person ${k}`, requester_email: `p${k}@example.com`,
+      status: 'open', created_at: at(k), family_id: null, tags: ['contact-form'],
+    })));
+    for (const table of ['families', 'subscriptions', 'family_members', 'profiles']) db.seed(table, []);
+    expect(await render('leads')).toContain(m('adminCeiling.listShowsPartTotalNotShown', { shown: '60' }));
+  });
+  it('the control: below the ceiling each list names its total, not "the total is not shown"', async () => {
+    db.seed('backlinks', Array.from({ length: 600 }, (_, k) => ({ id: `bl-${pad(k)}`, source_domain: `s${k}.example`, target_url: '/', authority: 10, status: 'active', created_at: at(k) })));
+    db.seed('competitors', []);
+    db.seed('keyword_intel', []);
+    const page = await render('competitive');
+    expect(page).toContain(part('adminCeiling.listShowsTheNewest', 500, 600));
+    expect(page).not.toContain(newest(500));
   });
 });

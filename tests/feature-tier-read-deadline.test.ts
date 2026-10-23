@@ -8,7 +8,9 @@ import type { Database } from '@/lib/database.types';
 // lasted. (/pricing has its own bounded reader since #729.)
 //
 // The fix bounds the WHOLE read and splits what a failure means by caller:
-//   display (nav, admin listing) — the catalog defaults, as before;
+//   display (nav) — the catalog defaults, as before (the admin listing, which
+//           offers a tier button on every row, shows its read-error state:
+//           tests/admin-tier-features-a-failed-read-offers-no-tier.test.ts);
 //   access  (resolveFeatureEntitlement, the autopilot cron, ai-access) — no
 //           answer. A failed lookup must never grant a feature: an admin can
 //           make a feature stricter than its catalog default, and the default

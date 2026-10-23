@@ -7,7 +7,7 @@ import { LEGEND_STATUSES, STATUS_META, KIND_ORDER, KIND_META, type IdeaRow } fro
 import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
 import { FeedbackBoard } from './feedback-board';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -23,6 +23,10 @@ const STEPS = [
 
 export default async function FeedbackPage() {
   const t = await getTranslations();
+  // The reader's locale, as the board's own note beside the rail formats with:
+  // without one the rail's counts were the server's (en-US) "1,337" beside the
+  // note's "1.337" (review R9-BOARD-RAIL-FORMATS-IN-SERVER-LOCALE).
+  const { locale } = await getLocaleContext();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   // The rail's "On the board" and status legend figures were tallied from the
@@ -76,7 +80,7 @@ export default async function FeedbackPage() {
   const unavailable = t('strategyMetrics.unavailable');
   const figure = (res: { count: number | null; error: unknown }) => {
     if (res.error) console.error('[feedback] board count read failed', res.error);
-    return res.error ? unavailable : (res.count ?? 0).toLocaleString();
+    return res.error ? unavailable : (res.count ?? 0).toLocaleString(locale.code);
   };
   const totalIdeas = totalRes.error ? null : totalRes.count ?? 0;
   if (totalRes.error) console.error('[feedback] board count read failed', totalRes.error);
