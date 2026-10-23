@@ -22,6 +22,14 @@
 //   it read it after a model call of up to a minute. A newer version's
 //   embedding finishing inside that call (an overlapping cron run) marked
 //   stale what it found, and the older chunks landed 'ready' after it.
+// - RV61-F5-STALES-A-CHUNK-THE-REGENERATION-RESTORES. That fix marks stale a
+//   chunk the page no longer has once its version moved on. A legacy save
+//   inside the model call writes the raw legacy text over its mirror, which
+//   the regeneration it queued then fills back to the very text embedded; the
+//   newer embedding reused the stale row by hash, so the mirror kept no ready
+//   chunk. A chunk the page needs that only a stale row holds is ready again,
+//   and one deleted before it could be is embedded afresh. All three cases
+//   fail on eb7281f1e.
 //
 // Driven through the REAL legacy and platform actions, the job worker behind
 // the REAL /api/cron/marketing route (CRON_SECRET stubbed), the public /lp
@@ -185,6 +193,32 @@ function beforeTheNextAnswerDelete(during: () => Promise<void>) {
       if (!race) return query;
       const send = query.then.bind(query);
       query.then = (ok, ko) => race().then(() => send(ok, ko));
+      return query;
+    };
+    return builder;
+  };
+}
+
+/**
+ * Runs `during` once, as runEmbedding sends its update making a page's stale
+ * chunks ready again: after it read them, before the update reaches the table.
+ * Nothing else sets a chunk 'ready' by update.
+ */
+function beforeTheNextChunkRestore(during: () => void) {
+  type Thenable = { then: (ok: unknown, ko: unknown) => unknown };
+  const from = db.from.bind(db);
+  let pending: (() => void) | null = during;
+  (db as unknown as { from: (table: string) => unknown }).from = (table: string) => {
+    const builder = from(table) as unknown as { update: (values: Row) => Thenable };
+    if (table !== 'marketing_embeddings') return builder;
+    const update = builder.update.bind(builder);
+    builder.update = (values: Row) => {
+      const query = update(values);
+      const race = pending;
+      if (values.status !== 'ready' || !race) return query;
+      pending = null;
+      const send = query.then.bind(query);
+      query.then = (ok, ko) => { race(); return send(ok, ko); };
       return query;
     };
     return builder;
@@ -457,6 +491,75 @@ describe('F5-EMBED-STALE-CHUNKS: only the page as it now stands keeps ready chun
     expect(page).toMatchObject({ version: 4 });
     expect(embeddedText(page)).toBe(read);
     expect(chunksOf(page.id, 'ready').map((row) => row.content)).toEqual([read]);
+    for (const run of runs) expect(run).toEqual(cleanRun);
+    expect(workerFailures()).toEqual([]);
+  });
+
+  // RV61-F5-STALES-A-CHUNK-THE-REGENERATION-RESTORES. A legacy save writes the
+  // legacy page's raw text over its mirror (an empty subhead and body are
+  // null), so a mirror embedded inside that save no longer has the chunk this
+  // run embedded, and it is marked stale. The regeneration the save queued
+  // fills those fields as it did before, so the newer version's embedding needs
+  // exactly that chunk again; it reused the stale row by hash and inserted
+  // nothing, leaving the page no ready chunk at all. No overlapping cron run.
+  it('a legacy save inside its model call that the regeneration undoes leaves the mirror its chunk ready', async () => {
+    const { legacy, mirror } = await aPublishedLegacyPage('lent');
+    let asSaved = '';
+    h.duringEmbedding = async () => {
+      await anAdminSaves(() => updateLandingPage(form({ id: legacy.id, title: 'Spring', slug: 'lent', headline: 'Legacy spring' })));
+      asSaved = embeddedText(pageById(mirror.id)!);
+    };
+
+    const runs = await theCronDrainsTheQueue();
+
+    const page = pageById(mirror.id)!;
+    expect(page).toMatchObject({ version: 3, status: 'published', deleted_at: null });
+    expect(asSaved).not.toBe(embeddedText(page));
+    expect(chunksOf(mirror.id, 'ready').map((row) => row.content)).toEqual([embeddedText(page)]);
+    expect(chunksOf(mirror.id, 'stale')).toEqual([]);
+    expect(db.table('marketing_embeddings')).toHaveLength(1);
+    const [olderJob, newerJob] = jobsFor(mirror.id).filter((row) => row.job_type === 'embed_page');
+    expect(olderJob).toMatchObject({ status: 'succeeded', error: null, result: { pageId: mirror.id, embedded: 1, superseded: true, staled: 1 } });
+    expect(newerJob).toMatchObject({ status: 'succeeded', error: null, result: { pageId: mirror.id, embedded: 0, reused: 1, restored: 1 } });
+    for (const run of runs) expect(run).toEqual(cleanRun);
+    expect(workerFailures()).toEqual([]);
+    expect(await visit('lent')).toBe('legacy page');
+  });
+
+  it('a legacy unpublish inside its model call, then a republish, leaves the mirror its chunk ready', async () => {
+    const { legacy, mirror } = await aPublishedLegacyPage('lent');
+    h.duringEmbedding = async () => { await anAdminSaves(() => setLandingPublished(form({ id: legacy.id, publish: '0' }))); };
+    const whileHidden = await theCronDrainsTheQueue();
+    expect(await visit('lent')).toBe('not found');
+
+    await anAdminSaves(() => setLandingPublished(form({ id: legacy.id, publish: '1' })));
+    const republished = await theCronDrainsTheQueue();
+
+    const page = pageById(mirror.id)!;
+    expect(page).toMatchObject({ status: 'published', deleted_at: null });
+    expect(chunksOf(mirror.id, 'ready').map((row) => row.content)).toEqual([embeddedText(page)]);
+    expect(chunksOf(mirror.id, 'stale')).toEqual([]);
+    for (const run of [...whileHidden, ...republished]) expect(run).toEqual(cleanRun);
+    expect(workerFailures()).toEqual([]);
+    expect(await visit('lent')).toBe('legacy page');
+  });
+
+  it('a stale chunk deleted before it is made ready again is embedded afresh', async () => {
+    const { legacy, mirror } = await aPublishedLegacyPage('lent');
+    h.duringEmbedding = async () => {
+      await anAdminSaves(() => updateLandingPage(form({ id: legacy.id, title: 'Spring', slug: 'lent', headline: 'Legacy spring' })));
+    };
+    beforeTheNextChunkRestore(() => { db.table('marketing_embeddings').splice(0); });
+
+    const runs = await theCronDrainsTheQueue();
+
+    const page = pageById(mirror.id)!;
+    expect(chunksOf(mirror.id, 'ready').map((row) => row.content)).toEqual([embeddedText(page)]);
+    expect(db.table('marketing_embeddings')).toHaveLength(1);
+    const [, newerJob] = jobsFor(mirror.id).filter((row) => row.job_type === 'embed_page');
+    expect(newerJob).toMatchObject({ status: 'succeeded', error: null, result: { pageId: mirror.id, chunks: 1, embedded: 1, reused: 0 } });
+    expect(newerJob.result).not.toHaveProperty('restored');
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
     for (const run of runs) expect(run).toEqual(cleanRun);
     expect(workerFailures()).toEqual([]);
   });

@@ -498,6 +498,34 @@ function embeddableChunks(page: Pick<MarketingPage, 'title' | 'summary' | 'body'
   return chunkMarketingText([page.title, page.summary ?? '', page.body ?? ''].filter(Boolean).join('\n\n'));
 }
 
+/**
+ * Admin reach F5-EMBED-STALE-CHUNKS. A run's chunks are the page as READ, and
+ * the model call can take a minute. A save landing inside it queues the newer
+ * version's own embedding, which an overlapping cron run can finish first: it
+ * marked stale what it found, and these then landed 'ready' after it, beside
+ * its own, until the page was embedded again. So once the version has moved
+ * on, what this run made ready that the page no longer has is stale. With the
+ * version unmoved nothing newer is queued to embed the page again, so its
+ * chunks stay as they are. A chunk staled here that the newer version needs
+ * after all is made ready again by that version's own run (runEmbedding).
+ */
+async function staleWhatThePageMovedPast(
+  supabase: MarketingPlatformDb,
+  page: { id: string; version: number },
+  madeReady: { id: string; content_hash: string }[],
+): Promise<{ superseded: true; staled: number } | null> {
+  if (!madeReady.length) return null;
+  const { data: now, error: nowError } = await supabase.from('marketing_pages').select('version, title, summary, body').eq('id', page.id).maybeSingle();
+  if (nowError) throw nowError;
+  if (now?.version === page.version) return null;
+  const kept = new Set((now ? embeddableChunks(now) : []).map(contentHash));
+  const outdated = madeReady.filter((row) => !kept.has(row.content_hash)).map((row) => row.id);
+  if (!outdated.length) return null;
+  const { data: marked, error: markError } = await supabase.from('marketing_embeddings').update({ status: 'stale' }).in('id', outdated).select('id');
+  if (markError) throw markError;
+  return { superseded: true, staled: marked?.length ?? 0 };
+}
+
 async function runEmbedding(supabase: MarketingPlatformDb, job: Tables<'marketing_generation_jobs'>) {
   if (!job.target_id) throw new Error('Embedding job is missing target_id.');
   const { data: page, error } = await supabase.from('marketing_pages').select('id, title, summary, body, version, deleted_at').eq('id', job.target_id).maybeSingle();
@@ -508,12 +536,11 @@ async function runEmbedding(supabase: MarketingPlatformDb, job: Tables<'marketin
   if (!chunks.length) throw new Error('Marketing page has no embeddable content.');
   const hashes = chunks.map(contentHash);
   const { data: existingRows, error: existingError } = await supabase.from('marketing_embeddings')
-    .select('id, chunk_index, content_hash').eq('source_type', 'page').eq('source_id', page.id);
+    .select('id, chunk_index, content_hash, status').eq('source_type', 'page').eq('source_id', page.id);
   if (existingError) throw existingError;
+  const existing = existingRows ?? [];
   const currentHashes = new Set(hashes);
-  const reusable = new Set((existingRows ?? []).filter((row) => currentHashes.has(row.content_hash)).map((row) => row.content_hash));
-  const missing = chunks.map((content, index) => ({ content, index, hash: hashes[index] })).filter((row) => !reusable.has(row.hash));
-  const staleIds = (existingRows ?? []).filter((row) => !currentHashes.has(row.content_hash)).map((row) => row.id);
+  const staleIds = existing.filter((row) => !currentHashes.has(row.content_hash)).map((row) => row.id);
   if (staleIds.length) {
     // Rows deliberately not checked: these ids were read just above, so fewer
     // matching means some were deleted — which keeps them out of retrieval at
@@ -521,10 +548,39 @@ async function runEmbedding(supabase: MarketingPlatformDb, job: Tables<'marketin
     const { error: staleError } = await supabase.from('marketing_embeddings').update({ status: 'stale' }).in('id', staleIds);
     if (staleError) throw staleError;
   }
-  if (!missing.length) return { pageId: page.id, chunks: chunks.length, embedded: 0, reused: reusable.size };
+  // Admin reach RV61-F5-STALES-A-CHUNK-THE-REGENERATION-RESTORES. A chunk is
+  // reused by its hash, and one this page needs that only a 'stale' row still
+  // holds was reused as it stood, so the page kept no ready chunk for it.
+  // staleWhatThePageMovedPast makes that ordinary: a legacy save inside a
+  // run's model call writes the raw legacy text over its mirror, so that run
+  // stales what it embedded, and the regeneration the save queued fills the
+  // mirror back to that very text. Such a row is made ready again, one per
+  // chunk (the one at the chunk's own index where there is one); a row deleted
+  // since the read comes back from the update as nothing, and is embedded
+  // afresh.
+  const ready = new Set(existing.filter((row) => row.status === 'ready').map((row) => row.content_hash));
+  const restore = new Map<string, string>();
+  hashes.forEach((hash, index) => {
+    if (ready.has(hash) || restore.has(hash)) return;
+    const held = existing.filter((row) => row.content_hash === hash && row.status === 'stale');
+    const row = held.find((candidate) => candidate.chunk_index === index) ?? held[0];
+    if (row) restore.set(hash, row.id);
+  });
+  const madeReady: { id: string; content_hash: string }[] = [];
+  if (restore.size) {
+    const { data: back, error: restoreError } = await supabase.from('marketing_embeddings')
+      .update({ status: 'ready' }).in('id', [...restore.values()]).select('id, content_hash');
+    if (restoreError) throw restoreError;
+    madeReady.push(...(back ?? []));
+  }
+  const restored = madeReady.length;
+  const gone = new Set([...restore.keys()].filter((hash) => !madeReady.some((row) => row.content_hash === hash)));
+  const reusable = new Set(existing.filter((row) => currentHashes.has(row.content_hash) && !gone.has(row.content_hash)).map((row) => row.content_hash));
+  const missing = chunks.map((content, index) => ({ content, index, hash: hashes[index] })).filter((row) => !reusable.has(row.hash));
+  const result = (embedded: number) => ({ pageId: page.id, chunks: chunks.length, embedded, reused: reusable.size, ...(restored ? { restored } : {}) });
+  if (!missing.length) return { ...result(0), ...await staleWhatThePageMovedPast(supabase, page, madeReady) };
   const aiConfig = await getAIConfig(supabase);
   let embedded = 0;
-  const inserted: { id: string; content_hash: string }[] = [];
   for (let offset = 0; offset < missing.length; offset += 32) {
     const batch = missing.slice(offset, offset + 32);
     const { vectors, model } = await openAIEmbeddings(batch.map((row) => row.content), aiConfig.openaiKey);
@@ -533,27 +589,10 @@ async function runEmbedding(supabase: MarketingPlatformDb, job: Tables<'marketin
       embedding: JSON.stringify(vectors[index]) as unknown as Json, model, dimensions: vectors[index].length, status: 'ready',
     }))).select('id, content_hash');
     if (insertError) throw insertError;
-    inserted.push(...(landed ?? []));
+    madeReady.push(...(landed ?? []));
     embedded += batch.length;
   }
-  const done = { pageId: page.id, chunks: chunks.length, embedded, reused: reusable.size };
-  // Admin reach F5-EMBED-STALE-CHUNKS. These chunks are the page as READ, and
-  // the model call can take a minute. A save landing inside it queues the newer
-  // version's own embedding, which an overlapping cron run can finish first: it
-  // marked stale what it found, and these then landed 'ready' after it, beside
-  // its own, until the page was embedded again. So once the version has moved
-  // on, what this run added that the page no longer has is stale. With the
-  // version unmoved nothing newer is queued to embed the page again, so its
-  // chunks stay as they are.
-  const { data: now, error: nowError } = await supabase.from('marketing_pages').select('version, title, summary, body').eq('id', page.id).maybeSingle();
-  if (nowError) throw nowError;
-  if (now?.version === page.version) return done;
-  const kept = new Set((now ? embeddableChunks(now) : []).map(contentHash));
-  const outdated = inserted.filter((row) => !kept.has(row.content_hash)).map((row) => row.id);
-  if (!outdated.length) return done;
-  const { data: marked, error: markError } = await supabase.from('marketing_embeddings').update({ status: 'stale' }).in('id', outdated).select('id');
-  if (markError) throw markError;
-  return { ...done, superseded: true, staled: marked?.length ?? 0 };
+  return { ...result(embedded), ...await staleWhatThePageMovedPast(supabase, page, madeReady) };
 }
 
 async function runJob(supabase: MarketingPlatformDb, job: Tables<'marketing_generation_jobs'>) {
