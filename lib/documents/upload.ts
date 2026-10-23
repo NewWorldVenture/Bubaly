@@ -15,7 +15,7 @@
 // The database is still the boundary (0266). This is so a person gets a
 // sentence instead of a policy error, and so the bucket does not collect
 // orphans from writes the policy was always going to reject.
-import { isSensitiveCategory } from './sensitivity';
+import { isSensitiveCategory, needsSecureFlag } from './sensitivity';
 
 export type UploadView = 'cloud' | 'vault' | 'shared';
 export type UploadTranslator = (key: string, params?: Record<string, string | number>) => string;
@@ -41,7 +41,8 @@ export type UploadDecision =
  * the obvious way around a flag-only rule, which is why `0266`'s SQL predicate
  * checks the category too.
  *
- * When it is allowed, `isSecure` is the destination the person actually chose.
+ * When it is allowed, `isSecure` is the destination the person actually chose,
+ * raised (never lowered) for a folder that is sensitive only in translation.
  * Never a quiet downgrade: a refusal they can read beats a success they cannot
  * verify.
  */
@@ -58,7 +59,10 @@ export function decideUpload(request: UploadRequest, t: UploadTranslator): Uploa
       reason: t('filesHubModule.refuseSensitive', { category: request.category.trim().toLowerCase() }),
     };
   }
-  return { allowed: true, isSecure: request.view === 'vault' };
+  // A folder that is sensitive only in translation ("Financiën", "Santé") is
+  // ordinary to the database's category rule, so the row carries the flag the
+  // database does read; otherwise a child reads what a teen was refused.
+  return { allowed: true, isSecure: request.view === 'vault' || needsSecureFlag(request.category) };
 }
 
 export type UploadEffects = {

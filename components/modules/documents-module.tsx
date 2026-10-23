@@ -311,12 +311,14 @@ export function DocumentsModule() {
       { view: 'shared', category: folder, manager: isManager(role), folderFallback: 'general' },
       {
         store: (storeFolder) => uploadFamilyDocument(sb, { familyId, folder: storeFolder, file }),
-        record: async ({ storagePath }) => {
+        record: async ({ storagePath, isSecure }) => {
           const { error: err } = await sb.from('documents').insert({
             family_id: familyId, title: form.title, category: folder,
             member_id: form.member_id || null, created_by: userId,
             storage_path: storagePath, size_bytes: file.size, mime_type: file.type || null,
             expires_at: form.expires_at || null,
+            // Set for a folder sensitive only in translation, so the database withholds it too.
+            is_secure: isSecure,
           });
           return { error: err ? tr('documentsModule.failedToSaveFile') : null };
         },
