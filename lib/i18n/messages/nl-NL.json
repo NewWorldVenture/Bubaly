@@ -7250,6 +7250,7 @@
   "guardian.couldNotUpdateContactTrust": "Kan het contactvertrouwen niet bijwerken.",
   "guardian.couldNotUpdateTheGuardianContext": "Kan de Guardian-context niet bijwerken.",
   "guardian.couldNotUpdateTheGuardianRouting": "Kan de Guardian-routeringsregel niet bijwerken.",
+  "guardian.aScanIsAlreadyRunning": "Er loopt al een scan voor je gezin. De tips verschijnen hier zo meteen.",
   "guardian.escalations": "escalaties",
   "guardian.memberProfiles": "ledenprofielen",
   "guardian.recentCallsAndMessages": "recente gesprekken en berichten",

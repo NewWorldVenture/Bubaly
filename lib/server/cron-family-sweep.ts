@@ -15,7 +15,7 @@
 // run's, stop STARTING families once the budget is spent, and hand back the
 // families that were never attempted so the caller can report them and answer
 // 502 — an unserved tail must not look like a clean run.
-import { rotateForRun } from '@/lib/autopilot/cron-rotation';
+import { rotateForRun, rotateForSlot } from '@/lib/autopilot/cron-rotation';
 
 export type SweepOptions = {
   /** Stop starting new items once this much time has passed since `startedAt`. */
@@ -25,6 +25,13 @@ export type SweepOptions = {
   concurrency: number;
   /** Which run this is, for the rotation; defaults to the hour. */
   runIndex?: number;
+  /**
+   * For a cron with several fixed slots a day (lib/server/cron-slot.ts
+   * lastDailySlot): `runIndex` then names the DAY, and run `index` of `of`
+   * starts that share of the ring further on (rotateForSlot), so the day's
+   * second run does not re-serve the first run's prefix.
+   */
+  slot?: { index: number; of: number };
   startedAt?: number;
 };
 
@@ -46,7 +53,10 @@ export async function sweepFamilies<T>(
   work: (item: T, counted: { current: boolean }) => Promise<void>,
 ): Promise<SweepResult<T>> {
   const startedAt = opts.startedAt ?? Date.now();
-  const queue = rotateForRun(items, opts.runIndex ?? Math.floor(startedAt / 3_600_000));
+  const runIndex = opts.runIndex ?? Math.floor(startedAt / 3_600_000);
+  const queue = opts.slot
+    ? rotateForSlot(items, { day: runIndex, slot: opts.slot.index }, opts.slot.of)
+    : rotateForRun(items, runIndex);
   const unreached: T[] = [];
   const timedOut: T[] = [];
   let cursor = 0;

@@ -38,9 +38,9 @@ const ALLOWED = new Map([
   // family zone to resolve, and UTC bucketing is what a cross-household
   // benchmark should use.
   ['lib/network/aggregate-server.ts', 'platform-wide aggregation; UTC bucketing is correct'],
-  // Cron, all families in one pass. Cost of not resolving each family's zone is
-  // bounded at one day early for families west of UTC; documented in the file.
-  ['app/api/cron/wallet-allowance/route.ts', 'platform-wide cron; bounded to one day early, documented in file'],
+  // app/api/cron/wallet-allowance/route.ts left this list when it began
+  // deciding each rule on its own family's day: its "bounded to one day early"
+  // was a Pacific child paid on the eve of the due day.
   // lib/planning/prep-server.ts was the LAST of five entries that read "needs a
   // tz threaded through its signature" — lib/family/signals.ts,
   // lib/autopilot/scan.ts, lib/finance/timeline-load.ts and

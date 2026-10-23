@@ -32,6 +32,9 @@ vi.mock('@/lib/services/scope', async (importOriginal) => ({
   systemScopeForFamily: async (_db: unknown, familyId: string) => ({ familyId, tz: 'UTC' }),
 }));
 vi.mock('@/lib/services/notifications', () => ({
+  // The route words each notice for the day it will be read (quiet hours can
+  // hold it to the next morning); nothing is held in this fixture.
+  deliveryTimeFor: async () => ({ sendAt: new Date().toISOString(), deferred: false }),
   notify: async (scope: { familyId: string }, n: { title: string; relatedId: string | null }) => {
     state.notified.push({ familyId: scope.familyId, relatedId: n.relatedId, title: n.title });
     return { ok: true, data: { created: 1 } };

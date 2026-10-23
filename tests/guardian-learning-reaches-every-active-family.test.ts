@@ -79,12 +79,16 @@ describe('a pass that outgrows its budget', () => {
     const active = families(6);
     db.seed('families', active.map((id) => ({ id, closed_at: null })));
     db.seed('guardian_communications', active.map((familyId) => ({ id: `${familyId}-gc`, family_id: familyId, started_at: '2026-10-10T12:00:00.000Z' })));
-    h.learningTakesMs = 15_000; // three families spend the budget
+    // Four families start at once (the pass's concurrency) and each takes its
+    // learning lease (lib/guardian/learning-lease.ts) before it learns, so all
+    // four are under way before the clock moves; their learning then spends the
+    // budget, and the last two are never started.
+    h.learningTakesMs = 15_000;
 
     const res = await GET(req());
     expect(res.status, 'an unreached tail looked like a clean run').toBe(502);
-    expect(await res.json()).toMatchObject({ ok: false, families: 6, unreached: 3, failed: 3 });
-    expect(h.learned).toHaveLength(3);
+    expect(await res.json()).toMatchObject({ ok: false, families: 6, unreached: 2, failed: 2 });
+    expect(h.learned).toHaveLength(4);
   });
 
   it('rotates where it starts, so the same families are not the unreached ones every night', async () => {

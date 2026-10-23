@@ -106,9 +106,11 @@ describe('the weekly digest', () => {
     const keys = h.sends.map((s) => s.idempotencyKey);
     expect(keys[0], 'sent with no key: nothing folds the mirrored tick').toMatch(/^weekly-digest\/[a-f0-9]{64}$/);
     expect(new Set(keys).size, 'the ticks sent under different keys').toBe(1);
-    // The same bytes: every tick asked the calendar for the slot's week.
+    // The same bytes: every tick asked the calendar for the slot's week, which
+    // is the family's Monday-to-Sunday (this family keeps UTC): from its Monday
+    // midnight to the next one, not from the 08:00 UTC instant.
     expect(new Set(h.windows.map((w) => `${w.from}|${w.to}`)).size).toBe(1);
-    expect(h.windows[0]).toEqual({ from: '2026-10-05T08:00:00.000Z', to: '2026-10-12T08:00:00.000Z' });
+    expect(h.windows[0]).toEqual({ from: '2026-10-05T00:00:00.000Z', to: '2026-10-12T00:00:00.000Z' });
   });
 
   it('keys the next slot apart', async () => {

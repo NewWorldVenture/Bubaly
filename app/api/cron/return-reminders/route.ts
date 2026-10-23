@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { readAll } from '@/lib/supabase/read-all';
 import { needsDueReminder, needsOverdueAlert, daysUntilDue } from '@/lib/marketplace/returns';
-import { notify } from '@/lib/services/notifications';
+import { deliveryTimeFor, notify } from '@/lib/services/notifications';
 import { dayKeyInTz, systemScopeForFamily } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
 import { readInChunks } from '@/lib/supabase/chunked-in';
@@ -66,6 +66,30 @@ export async function GET(req: NextRequest) {
     };
     const now = new Date();
     const nowIso = now.toISOString();
+    // The day the family will READ the notice, which is not always the day this
+    // run sends it. notify() holds a courtesy notice past the family's quiet
+    // hours, and a window that crosses midnight holds the 08:00 UTC tick (21:00
+    // in Auckland, 22:00 the evening before in Honolulu) until the next local
+    // morning. Worded from the tick's own day, "Due today" arrived the morning
+    // after the item was due and "Due in 1 day" on the day itself. The words are
+    // the reading day's, from the same deliveryTimeFor() notify() stamps the row
+    // with; WHETHER to send is still decided on the family's day at the tick
+    // (todayKey), so neither one-shot stamp is spent ahead of its day. One
+    // answer per family.
+    const readDays = new Map<string, string>();
+    const readDayFor = async (scope: ServiceScope): Promise<string> => {
+      const known = readDays.get(scope.familyId);
+      if (known !== undefined) return known;
+      const { sendAt } = await deliveryTimeFor(scope);
+      const day = dayKeyInTz(new Date(sendAt), scope.tz);
+      readDays.set(scope.familyId, day);
+      return day;
+    };
+    // An overdue notice, worded for the day it is read on.
+    const overdueWords = (title: string, verb: string, late: number) => ({
+      title: `Overdue: "${title}"`,
+      body: `This ${verb} was due ${late} day${late === 1 ? '' : 's'} ago. Arrange the return so it doesn't hold anyone up.`,
+    });
     // The dedupe stamp is a CLAIM taken before the send, not a receipt written
     // after it: fenced on the column being unset, so of two overlapping runs
     // only one sends, and handed back if the send did not go out, so the next
@@ -144,20 +168,20 @@ export async function GET(req: NextRequest) {
         continue;
       }
       const todayKey = dayKeyInTz(now, scope.tz);
+      const readKey = await readDayFor(scope);
 
       if (needsOverdueAlert(order, todayKey)) {
         const claim = await claimStamp('overdue_notified_at', o.id);
         if (claim === 'error') { failed++; continue; }
         if (claim === 'taken') continue; // another run holds it, or the order is gone
-        const late = Math.abs(daysUntilDue(o.ends_on, todayKey) ?? 0);
+        const late = Math.abs(daysUntilDue(o.ends_on, readKey) ?? 0);
         // Its OWN identity. The due-soon nudge went out under `relatedId: o.id`
         // and notify()'s default guard drops a recipient whose row under the
         // same type and related_id is still unread, so the overdue alert was
         // never delivered to anyone who had not opened the due-soon notice —
         // and was stamped as sent. `once`: an overdue alert is said one time.
         const notified = await notifyFamily(o.family_id, {
-          title: `Overdue: "${title}"`,
-          body: `This ${verb} was due ${late} day${late === 1 ? '' : 's'} ago. Arrange the return so it doesn't hold anyone up.`,
+          ...overdueWords(title, verb, late),
           relatedType: 'marketplace_orders', relatedId: `${o.id}:overdue`, once: true,
         });
         if (!notified) {
@@ -174,10 +198,14 @@ export async function GET(req: NextRequest) {
         const claim = await claimStamp('due_reminder_sent_at', o.id);
         if (claim === 'error') { failed++; continue; }
         if (claim === 'taken') continue;
-        const d = daysUntilDue(o.ends_on, todayKey) ?? 0;
+        // Read the morning after its due day, a nudge due today is already late,
+        // and says so rather than "Due today".
+        const d = daysUntilDue(o.ends_on, readKey) ?? 0;
         const notified = await notifyFamily(o.family_id, {
-          title: `Due ${d === 0 ? 'today' : `in ${d} day${d === 1 ? '' : 's'}`}: "${title}"`,
-          body: `Time to return this ${verb}. Tap to see the exchange details.`,
+          ...(d < 0 ? overdueWords(title, verb, -d) : {
+            title: `Due ${d === 0 ? 'today' : `in ${d} day${d === 1 ? '' : 's'}`}: "${title}"`,
+            body: `Time to return this ${verb}. Tap to see the exchange details.`,
+          }),
           relatedType: 'marketplace_orders', relatedId: `${o.id}:due`,
         });
         if (!notified) {
