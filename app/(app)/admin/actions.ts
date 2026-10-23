@@ -21,6 +21,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { isValidTimezone } from '@/lib/time/zoned';
 import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
 import { forgetMemberLocation } from '@/lib/location/retention';
+import { releaseRemovedMembersGiftClaims } from '@/lib/wishlists/release-claims';
 import { closePendingInvitesFor, revokeInvitesIssuedBy } from '@/lib/server/member-invites';
 import { recordTrustChange } from '@/lib/trust/ledger';
 
@@ -277,8 +278,11 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result<
   const invitesToThemClosed = await closePendingInvitesFor(supabase, member.family_id, member, 'revoked');
   const invitesByThemRevoked = await revokeInvitesIssuedBy(supabase, member.family_id, member.user_id);
   const invitesRevoked = invitesToThemClosed && invitesByThemRevoked;
+  // A gift they had claimed goes back to the list, as on the family screen's
+  // removal (lib/wishlists/release-claims.ts). Stands if it fails; logged and audited.
+  const giftClaims = await releaseRemovedMembersGiftClaims(supabase, member.family_id, memberId);
 
-  await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name, login_revocation: loginRevocation, location_forgotten: forgotten.ok, invites_revoked: invitesRevoked, invites_they_issued_revoked: invitesByThemRevoked } });
+  await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name, login_revocation: loginRevocation, location_forgotten: forgotten.ok, invites_revoked: invitesRevoked, invites_they_issued_revoked: invitesByThemRevoked, gift_claims_released: giftClaims.ok } });
   revalidatePath('/admin/users');
   const warning = loginRevocation === 'failed'
     ? t('familyModule.removedButLoginStillActive')

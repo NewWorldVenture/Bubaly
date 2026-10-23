@@ -34,7 +34,8 @@ export default async function GraphPage() {
 
   // X7 — how complete the household model is. Null when the read failed; the
   // card then says so rather than scoring the family on rows we could not read.
-  const completeness = await loadGraphCompleteness(supabase, ctx.active.familyId);
+  // Scored on what this viewer reads: a guest is not asked for what RLS keeps from them.
+  const completeness = await loadGraphCompleteness(supabase, ctx.active.familyId, ctx.active.role);
 
   return (
     <>
