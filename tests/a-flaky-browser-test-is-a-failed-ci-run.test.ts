@@ -32,7 +32,7 @@ function runControl(kind: 'flaky' | 'healthy') {
   // Deliberately do not spread process.env: even when run from a developer's
   // authenticated shell, this child receives only runtime paths and local homes.
   const env: NodeJS.ProcessEnv = {
-    CI: '1', PLAYWRIGHT_EXTERNAL_SERVER: '1', TZ: 'UTC',
+    NODE_ENV: 'test', CI: '1', PLAYWRIGHT_EXTERNAL_SERVER: '1', TZ: 'UTC',
     TEMP: childTemp, TMP: childTemp, TMPDIR: childTemp,
     HOME: home, USERPROFILE: home, APPDATA: home, LOCALAPPDATA: home,
     XDG_CACHE_HOME: home, XDG_CONFIG_HOME: home, XDG_DATA_HOME: home,
