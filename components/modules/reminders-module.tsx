@@ -222,13 +222,17 @@ export function RemindersModule() {
       if (wroteNoRows(completedRows)) { toastError(tr('errors.thatChangeWasNotSaved')); void refresh(); return; }
 
       // Recurring reminder → spawn the next occurrence so it keeps recurring
-      // (the completed one stays as history, like iOS).
+      // (the completed one stays as history, like iOS). It is the same
+      // reminder, so it keeps its author: written as whoever ticked it, a child
+      // who ticked a parent's daily reminder once became the author of every
+      // one after it, and an author may delete their own (deleteReminderAction).
+      // None stays none — an unauthored reminder is a manager's to remove.
       let recurred = false;
       const next = reminder.remind_at && reminder.recurrence !== 'none'
         ? nextRemindAt(reminder.remind_at, reminder.recurrence, family?.timezone) : null;
       if (next) {
         const nextRow = {
-          family_id: familyId, created_by: userId, title: reminder.title, notes: reminder.notes,
+          family_id: familyId, created_by: reminder.created_by, title: reminder.title, notes: reminder.notes,
           kind: reminder.kind, priority: reminder.priority, recurrence: reminder.recurrence,
           location_name: reminder.location_name, remind_at: next, member_id: reminder.member_id,
           assigned_to_id: reminder.assigned_to_id, url: reminder.url, flagged: reminder.flagged,
@@ -239,7 +243,18 @@ export function RemindersModule() {
         };
         let { error: insErr } = await supabase.from('family_reminders').insert(nextRow);
         if (insErr && isMissingRelationError(insErr)) ({ error: insErr } = await supabase.from('family_reminders').insert(stripNewCols(nextRow)));
-        recurred = !insErr;
+        if (insErr) {
+          // The series would end here with "Reminder completed" on screen. Put
+          // the reminder back as it was and say so, as the assistant's
+          // complete_reminder does (C1-S9-69). Zero rows is a failed restore.
+          const { data: restored, error: restoreErr } = await supabase.from('family_reminders')
+            .update({ status: reminder.status, completed_at: reminder.completed_at ?? null })
+            .eq('id', reminder.id).eq('family_id', familyId).eq('status', 'completed').select('id');
+          if (restoreErr || wroteNoRows(restored)) console.error('[reminders] could not restore a reminder whose next occurrence failed', { id: reminder.id, error: restoreErr ?? 'no rows updated' });
+          void refresh();
+          throw insErr;
+        }
+        recurred = true;
       }
       success(recurred ? 'Completed ✓ — next one scheduled' : 'Reminder completed ✓');
       void refresh();
