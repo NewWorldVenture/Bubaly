@@ -79,6 +79,9 @@ const expectReleased = () => {
   // giver reads it as bought, not as a gift still to buy.
   expect(wish('wish-carer')).toMatchObject({ claimed_by: null, claimed_at: null, is_purchased: true });
   expect(claimState(wish('wish-carer'), C.KID)).toBe('purchased');
+  // And it is closed: claiming it would let the claim's release reset
+  // is_purchased (tests/a-bought-gift-is-not-offered-to-be-claimed-again.test.ts).
+  expect(canToggleClaim(wish('wish-carer'), C.KID)).toBe(false);
   // The unbought claim: back on the list, and another giver may claim it.
   expect(wish('wish-carer-unbought')).toMatchObject({ claimed_by: null, claimed_at: null, is_purchased: false });
   expect(claimState(wish('wish-carer-unbought'), C.KID)).toBe('unclaimed');

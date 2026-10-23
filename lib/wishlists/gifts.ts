@@ -29,9 +29,18 @@ export function claimState(item: WishLike, viewerMemberId: string | null): Claim
   return item.claimed_by === viewerMemberId ? 'claimed_by_you' : 'claimed_by_other';
 }
 
-/** Only the claimer (or an unclaimed item) can be claimed/unclaimed by a viewer. */
+/**
+ * Only the claimer (or an unclaimed item) can be claimed/unclaimed by a viewer.
+ *
+ * A gift that is bought with no claimer is closed: its claimer was removed and
+ * released it (lib/wishlists/release-claims.ts), or was deleted (the ON DELETE
+ * SET NULL on claimed_by), and both keep is_purchased. It reads 'purchased',
+ * and claiming it would let the claim's release reset is_purchased, putting a
+ * present already bought back on the list.
+ */
 export function canToggleClaim(item: WishLike, viewerMemberId: string | null): boolean {
   if (!canSeeClaim(item, viewerMemberId)) return false; // owner can't claim own
+  if (item.is_purchased && !item.claimed_by) return false;
   return !item.claimed_by || item.claimed_by === viewerMemberId;
 }
 

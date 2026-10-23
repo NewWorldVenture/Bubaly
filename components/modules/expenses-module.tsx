@@ -24,6 +24,7 @@ import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { categoryLabel } from '@/lib/finance/category-label';
 import { todayInZone } from '@/lib/schedule/zoned';
+import { isManager } from '@/lib/constants/roles';
 
 type SplitRow = Tables<'expense_splits'>;
 type Share = Tables<'expense_split_shares'>;
@@ -43,14 +44,18 @@ export function ExpensesModule() {
   // 0481 refuses a caregiver every share write: expense_split_shares_insert,
   // _update and _delete all exclude 'caregiver'. A split a caregiver started was
   // rolled back with an RLS error, and a settle came back "not saved", on every
-  // try. Deleting a split is a share delete too: its shares go with it
-  // (expense_split_shares.split_id is ON DELETE CASCADE). 0481 still lets any
-  // member but a guest delete a split, so the cascade does what 0481 refuses a
-  // caregiver directly. So the screen offers a caregiver only reading the household's
-  // splits: no Split, no Settle, no Trash. (Narrowing expense_splits to match,
-  // and whether a caregiver should settle a share they owe or paid, are the
-  // owner's calls on those policies.)
+  // try. So the screen offers a caregiver only reading the household's splits:
+  // no Split, no Settle, no Trash. (Whether a caregiver should settle a share
+  // they owe or paid is the owner's call on that policy.)
   const writesShares = role !== 'caregiver';
+  // Deleting a split is a share delete too: its shares go with it
+  // (expense_split_shares.split_id is ON DELETE CASCADE). 0481 lets a share be
+  // deleted only by a manager or by the member who created its split
+  // (expense_split_shares_delete), but still lets any member but a guest
+  // delete the split itself, so the cascade did for a caregiver, a teen or a
+  // child what 0481 refuses them directly. The Trash follows the share rule.
+  // (Narrowing expense_splits to match is the owner's SQL.)
+  const removesSplit = (sp: SplitRow) => writesShares && (isManager(role) || sp.created_by === userId);
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
   const [saving, setSaving] = useState(false);
@@ -236,7 +241,7 @@ export function ExpensesModule() {
                   <p className="font-medium">{sp.description} <span className="text-muted">· {usd(sp.total_cents)}</span></p>
                   <p className="text-xs text-muted">{categoryLabel(tr, sp.category)} {tr('expenses.paidBy')} {memberName(sp.paid_by)} · {fmtDate(sp.spent_on)}</p>
                 </div>
-                {writesShares && (
+                {removesSplit(sp) && (
                   <button onClick={() => removeSplit(sp.id)} disabled={isPending(`remove:${sp.id}`)} className="text-muted transition hover:text-danger disabled:opacity-50" aria-label={tr('expenses.delete')}>
                     {isPending(`remove:${sp.id}`) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                   </button>
