@@ -199,8 +199,16 @@ export async function GET(req: NextRequest) {
         if (claim === 'error') { failed++; continue; }
         if (claim === 'taken') continue;
         // Read the morning after its due day, a nudge due today is already late,
-        // and says so rather than "Due today".
+        // and says so rather than "Due today". Said that way it IS the overdue
+        // alert, so it takes that stamp too: left unset, the next tick sent
+        // "Overdue" a second morning running. Taken, an overdue alert has said
+        // it (or is saying it) and this would be its second copy. Refused, the
+        // nudge still goes and the run is counted failed: a stamp that landed
+        // with its answer lost would otherwise hold back the only notice, and
+        // the worst left is the old second "Overdue".
         const d = daysUntilDue(o.ends_on, readKey) ?? 0;
+        const late = d < 0 ? await claimStamp('overdue_notified_at', o.id) : null;
+        if (late === 'taken') continue;
         const notified = await notifyFamily(o.family_id, {
           ...(d < 0 ? overdueWords(title, verb, -d) : {
             title: `Due ${d === 0 ? 'today' : `in ${d} day${d === 1 ? '' : 's'}`}: "${title}"`,
@@ -211,9 +219,11 @@ export async function GET(req: NextRequest) {
         if (!notified) {
           console.error(`Return-reminders due notification failed for ${o.id}`);
           await restoreStamp('due_reminder_sent_at', o.id);
+          if (late) await restoreStamp('overdue_notified_at', o.id);
           failed++;
         } else {
           reminded++;
+          if (late === 'error') failed++;
         }
       }
     }

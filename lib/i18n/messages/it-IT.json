@@ -7253,7 +7253,7 @@
   "guardian.couldNotUpdateContactTrust": "Impossibile aggiornare la fiducia del contatto.",
   "guardian.couldNotUpdateTheGuardianContext": "Impossibile aggiornare il contesto Guardian.",
   "guardian.couldNotUpdateTheGuardianRouting": "Impossibile aggiornare la regola di instradamento Guardian.",
-  "guardian.aScanIsAlreadyRunning": "È già in corso un'analisi per la tua famiglia. I consigli compariranno qui tra un momento.",
+  "guardian.aScanIsAlreadyRunning": "È già in corso un'analisi per la tua famiglia. Ricarica questa pagina tra un minuto per vedere i suoi consigli.",
   "guardian.escalations": "escalation",
   "guardian.memberProfiles": "profili dei membri",
   "guardian.recentCallsAndMessages": "chiamate e messaggi recenti",

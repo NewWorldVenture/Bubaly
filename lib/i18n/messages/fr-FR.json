@@ -7253,7 +7253,7 @@
   "guardian.couldNotUpdateContactTrust": "Impossible de mettre à jour la confiance du contact.",
   "guardian.couldNotUpdateTheGuardianContext": "Impossible de mettre à jour le contexte Guardian.",
   "guardian.couldNotUpdateTheGuardianRouting": "Impossible de mettre à jour la règle de routage Guardian.",
-  "guardian.aScanIsAlreadyRunning": "Une analyse est déjà en cours pour votre famille. Ses astuces apparaîtront ici dans un instant.",
+  "guardian.aScanIsAlreadyRunning": "Une analyse est déjà en cours pour votre famille. Rechargez cette page dans une minute pour voir ses astuces.",
   "guardian.escalations": "escalades",
   "guardian.memberProfiles": "profils des membres",
   "guardian.recentCallsAndMessages": "appels et messages récents",

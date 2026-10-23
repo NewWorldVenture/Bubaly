@@ -1,14 +1,14 @@
 import {beforeEach,afterEach,it,expect,vi} from 'vitest';
 import {createClient,type SupabaseClient} from '@supabase/supabase-js';
 import type {Database} from '@/lib/database.types';
-const h=vi.hoisted(()=>({row:null as any,members:[] as any[],prefs:[] as any[],sends:[] as any[],acks:[] as any[],calls:[] as any[],result:{ok:true} as any,failMembership:false,barrier:false,pendingReads:0,pendingReady:null as null|(()=>void),pendingRelease:null as null|Promise<void>,releasePending:null as null|(()=>void),holdProvider:false,providerRelease:null as null|Promise<void>,releaseProvider:null as null|(()=>void),firstSend:null as null|(()=>void),providerCalls:[] as any[],accepted:0,keyStore:new Map<string,any>(),ackRefusal:false,providerThrow:false,extraRows:[] as any[]}));
+const h=vi.hoisted(()=>({row:null as any,members:[] as any[],prefs:[] as any[],sends:[] as any[],acks:[] as any[],calls:[] as any[],result:{ok:true} as any,failMembership:false,barrier:false,pendingReads:0,pendingReady:null as null|(()=>void),pendingRelease:null as null|Promise<void>,releasePending:null as null|(()=>void),holdProvider:false,providerRelease:null as null|Promise<void>,releaseProvider:null as null|(()=>void),firstSend:null as null|(()=>void),secondCall:null as null|(()=>void),providerCalls:[] as any[],accepted:0,keyStore:new Map<string,any>(),ackRefusal:false,providerThrow:false,extraRows:[] as any[]}));
 vi.mock('@/lib/server/list-all-auth-users',()=>({listAllAuthUsers:async()=>({users:[{id:'00000000-0000-4000-8000-000000000100',email:'synthetic@example.invalid',user_metadata:{display_name:'Synthetic adult'}}],error:null})}));
 // The provider model follows documented key replay, in-flight409 and changed-payload409.
 // It is inert: no actual Resend request/render or account lookup runs.
 vi.mock('resend',()=>({Resend:class{
  emails={send:async(...args:any[])=>{
   const [input,options]=args,key=options?.idempotencyKey as string|undefined;
-  h.providerCalls.push({args,input,key});
+  h.providerCalls.push({args,input,key});if(h.providerCalls.length===2)h.secondCall?.();
   const payload=JSON.stringify({from:input.from,to:input.to,subject:input.subject,replyTo:input.replyTo,props:input.react?.props,html:input.html});
   const existing=key?h.keyStore.get(key):null;
   if(existing){
@@ -45,16 +45,26 @@ function db():SupabaseClient<Database>{return createClient<Database>('https://qu
   rows=h.members.filter(m=>ids(q.get('user_id')).includes(m.user_id)&&(!q.has('is_active')||m.is_active===true)&&(!q.has('role')||m.role==='child'));
  }else if(table==='user_preferences'){rows=h.prefs.filter(p=>ids(q.get('user_id')).includes(p.user_id));}
  else if(table==='family_ai_settings'){rows=[];}
+ // The digest's date line reads each family's zone. Refused here, every worker
+ // sat out supabase-js's 7 s of retry backoff on it, timers that drifted apart
+ // under load before either worker reached the provider.
+ else if(table==='families'){rows=[{id:family,timezone:'UTC'},{id:other,timezone:'UTC'}].filter(f=>ids(q.get('id')).includes(f.id));}
  else throw Error('Unexpected table');
  const order=q.get('order');if(order){const keys=order.split(',').map(part=>part.split('.')[0]);rows.sort((a,b)=>{for(const key of keys){const comparison=String(a[key]).localeCompare(String(b[key]));if(comparison)return comparison;}return 0;});}
  const offset=Number(q.get('offset')??0),limit=Number(q.get('limit')??1000);rows=rows.slice(offset,offset+limit);
  const columns=q.get('select')?.split(',')??[];rows=rows.map(r=>Object.fromEntries(columns.map(k=>[k,r[k]])));return response(rows);
 }}});}
-beforeEach(()=>{h.row={id:notice,family_id:family,user_id:user,type:'system',title:'Synthetic household update',body:'Synthetic queue payload',sent_at:null,send_at:'2026-01-01T00:00:00Z',created_at:'2026-01-01T00:00:00Z'};h.members=[{id:'00000000-0000-4000-8000-000000000200',family_id:family,user_id:user,role:'adult',is_active:true}];h.prefs=[];h.sends=[];h.acks=[];h.calls=[];h.result={ok:true};h.failMembership=false;h.barrier=false;h.pendingReads=0;h.pendingReady=null;h.pendingRelease=null;h.releasePending=null;h.holdProvider=false;h.providerRelease=null;h.releaseProvider=null;h.firstSend=null;h.providerCalls=[];h.accepted=0;h.keyStore=new Map();h.ackRefusal=false;h.providerThrow=false;h.extraRows=[];vi.stubEnv('RESEND_API_KEY','re_synthetic_no_network');vi.spyOn(console,'error').mockImplementation(()=>{});});
+beforeEach(()=>{h.row={id:notice,family_id:family,user_id:user,type:'system',title:'Synthetic household update',body:'Synthetic queue payload',sent_at:null,send_at:'2026-01-01T00:00:00Z',created_at:'2026-01-01T00:00:00Z'};h.members=[{id:'00000000-0000-4000-8000-000000000200',family_id:family,user_id:user,role:'adult',is_active:true}];h.prefs=[];h.sends=[];h.acks=[];h.calls=[];h.result={ok:true};h.failMembership=false;h.barrier=false;h.pendingReads=0;h.pendingReady=null;h.pendingRelease=null;h.releasePending=null;h.holdProvider=false;h.providerRelease=null;h.releaseProvider=null;h.firstSend=null;h.secondCall=null;h.providerCalls=[];h.accepted=0;h.keyStore=new Map();h.ackRefusal=false;h.providerThrow=false;h.extraRows=[];vi.stubEnv('RESEND_API_KEY','re_synthetic_no_network');vi.spyOn(console,'error').mockImplementation(()=>{});});
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllEnvs();});
 it('overlapping workers send one pending recipient digest once',async()=>{
- h.barrier=true;h.holdProvider=true;const captured=new Promise<void>(r=>h.pendingReady=r);h.pendingRelease=new Promise<void>(r=>h.releasePending=r);h.providerRelease=new Promise<void>(r=>h.releaseProvider=r);const entered=new Promise<void>(r=>h.firstSend=r);
- const workers=Promise.all([deliverNotificationEmails(db()),deliverNotificationEmails(db())]);await captured;expect(h.pendingReads).toBe(2);expect(h.sends).toHaveLength(0);h.releasePending!();await entered;await new Promise<void>(r=>setImmediate(r));
+ h.barrier=true;h.holdProvider=true;const captured=new Promise<void>(r=>h.pendingReady=r);h.pendingRelease=new Promise<void>(r=>h.releasePending=r);h.providerRelease=new Promise<void>(r=>h.releaseProvider=r);const entered=new Promise<void>(r=>h.firstSend=r);const reached=new Promise<void>(r=>h.secondCall=r);
+ const workers=Promise.all([deliverNotificationEmails(db()),deliverNotificationEmails(db())]);await captured;expect(h.pendingReads).toBe(2);expect(h.sends).toHaveLength(0);h.releasePending!();await entered;
+ // The first send is held inside the provider until the second worker has
+ // reached it too: that worker meets the key in flight on every run. Released
+ // after a fixed setImmediate instead, a loaded machine let the second worker
+ // arrive after the first send had finished and be folded into it, a
+ // different interleaving (the replay cases below), and this case failed.
+ await reached;expect(h.providerCalls).toHaveLength(2);expect(h.sends).toHaveLength(1);
  expect(h.acks).toEqual([]);h.releaseProvider!();const receipts=await workers;
  expect(h.row.sent_at).not.toBeNull();expect(h.sends.every(s=>s.to==='synthetic@example.invalid')).toBe(true);expect(h.sends.every(s=>s.props.items[0].title==='Synthetic household update')).toBe(true);
  expect({providerAcceptances:h.sends.length,reportedSent:receipts.reduce((n,r)=>n+r.sent,0)}).toEqual({providerAcceptances:1,reportedSent:1});
