@@ -57,6 +57,33 @@ function safeJson(value: unknown): Json {
   return (value ?? {}) as Json;
 }
 
+/**
+ * The `content` keys that say whose row a page is: the legacy landing and blog
+ * bridges (lib/marketing/legacy-bridge.ts) and scripts/backfill-marketing-pages.mjs
+ * stamp them on the mirrors they write, and the bridges find their own row by
+ * them before they publish, draft, rename or archive it (admin reach N12-R1,
+ * N12-S1).
+ */
+const PROVENANCE_KEYS = ['source', 'source_id'] as const;
+
+/**
+ * Generated content, with the stored page's provenance keys in place of any the
+ * generator returned. A regeneration replaced `content` whole, so after the
+ * cron ran on a mirror its own bridge read it as another page's row: Unpublish
+ * and Archive left /lp/<slug> serving it, and Publish, edit and a blog
+ * republish were refused 'duplicate'. The generator owns everything else in
+ * `content`, and cannot claim a page for a bridge with a key of its own.
+ */
+function withStoredProvenance(generated: Record<string, unknown>, stored: Json | null): Record<string, unknown> {
+  const content = { ...generated };
+  const kept = jsonObject(stored);
+  for (const key of PROVENANCE_KEYS) {
+    delete content[key];
+    if (kept[key] !== undefined) content[key] = kept[key];
+  }
+  return content;
+}
+
 function contentHash(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
@@ -259,6 +286,7 @@ async function runRegeneration(supabase: MarketingPlatformDb, job: Tables<'marke
   } catch (error) {
     console.error('[marketing-platform] AI generation degraded to deterministic content', error);
   }
+  const content = safeJson(withStoredProvenance(generated.content, page.content));
   // A page deleted since it was read matched nothing here, and the version
   // upsert below then failed on its foreign key — still a throw, but blamed on
   // the wrong write. Reported where it happened. Audit C1-S9-67.
@@ -266,7 +294,7 @@ async function runRegeneration(supabase: MarketingPlatformDb, job: Tables<'marke
     title: generated.title,
     summary: generated.summary,
     body: generated.body,
-    content: safeJson(generated.content),
+    content,
     seo: safeJson(generated.seo),
     aeo: safeJson(generated.aeo),
     updated_by: null,
@@ -279,7 +307,7 @@ async function runRegeneration(supabase: MarketingPlatformDb, job: Tables<'marke
     title: generated.title,
     summary: generated.summary,
     body: generated.body,
-    content: safeJson(generated.content),
+    content,
     seo: safeJson(generated.seo),
     aeo: safeJson(generated.aeo),
     change_source: source,
