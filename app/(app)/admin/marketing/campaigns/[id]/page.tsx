@@ -46,7 +46,9 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
       return <CampaignDetailReadError />;
     }
     const seg = segmentResult.data;
-    const { customers } = customersResult;
+    // The audience a send reaches leaves out a family that closed its account
+    // (lib/marketing/send.ts), so the figure shown here does too.
+    const customers = customersResult.customers.filter((customer) => !customer.closedAt);
     if (seg) {
       segmentName = seg.name;
       audience = evaluateSegment(customers, (seg.rules ?? {}) as SegmentRules).length;

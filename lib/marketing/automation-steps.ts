@@ -185,6 +185,24 @@ export function retryOf(metadata: unknown, current: Step[]): { steps: Step[]; pr
   return { steps: snapshot ?? current, previous: recordedActions(metadata) };
 }
 
+/**
+ * Whether a failed run has anything a retry could change. A run whose only
+ * shortfall is a step no runner executes (`<action>:unsupported`) fails the
+ * same way on every attempt — the scheduled sweep re-claimed such a run every
+ * day, for every subject, counting each pass as a run and a failure, so the
+ * cron answered 502 for good. It stays `failed`, honest about the step it
+ * could not do, and is left alone. Anything else is retried: a step that
+ * failed or was skipped, an attempt that recorded nothing, and a run whose
+ * steps all went but whose outcome could not be recorded (the retry carries
+ * the sends over and completes it).
+ */
+export function worthRetrying(metadata: unknown): boolean {
+  const actions = recordedActions(metadata);
+  const retryable = actions.some((action) => action.includes(':failed') || action.includes(':skipped'));
+  const unsupported = actions.some((action) => action.includes(':unsupported'));
+  return retryable || !unsupported;
+}
+
 /** Emails this attempt actually sent: a send carried over from `previous` was not sent again. */
 export function emailsSent(actions: readonly string[], previous: readonly string[] = []): number {
   return actions.filter((action, i) => action === 'send_email' && previous[i] !== 'send_email').length;

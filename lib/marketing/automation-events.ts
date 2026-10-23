@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { automationSendKey, emailsSent, failedAttempt, recordedActionsJson, retryOf, stepsRecorded, runSteps, type SendAdmission, type Step } from '@/lib/marketing/automation-steps';
+import { automationSendKey, emailsSent, failedAttempt, recordedActionsJson, retryOf, stepsRecorded, runSteps, worthRetrying, type SendAdmission, type Step } from '@/lib/marketing/automation-steps';
 import { EVENT_DEFAULT_COPY, type EventTrigger } from '@/lib/marketing/automation-triggers';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
@@ -90,6 +90,8 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
     }
 
     let runId = reserved?.[0]?.id ?? null;
+    // A run this event reserved, not a retry of an earlier one: only it counts in run_count.
+    const firstRun = runId !== null;
     // What a failed attempt already did, so its retry does not repeat a send.
     let steps = Array.isArray(flow.steps) ? (flow.steps as unknown as Step[]) : [];
     let previous: string[] = [];
@@ -102,6 +104,8 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
         continue;
       }
       if (!existing || existing.status !== 'failed') continue;
+      // A run that can only fail again (a step no runner executes) is left as it is.
+      if (!worthRetrying(existing.metadata)) continue;
       // Claimed only while its receipts are the ones just read: another sweep
       // may have claimed it, delivered an email and recorded that in between
       // (recordedActionsJson).
@@ -143,13 +147,15 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
       .eq('id', runId)
       .select('id');
     if (runError || wroteNoRows(recorded)) throw new Error('Could not record the event-driven automation result.');
-    // Rows deliberately not checked: zero rows is a workflow deleted mid-run,
-    // with no count left to keep. Audit C1-S9-67.
-    const { error: workflowError } = await supabase
-      .from('marketing_automation_workflows')
-      .update({ run_count: (flow.run_count ?? 0) + 1 })
-      .eq('id', flow.id);
-    if (workflowError) throw new Error('Could not update the automation run count.');
+    if (firstRun) {
+      // Rows deliberately not checked: zero rows is a workflow deleted mid-run,
+      // with no count left to keep. Audit C1-S9-67.
+      const { error: workflowError } = await supabase
+        .from('marketing_automation_workflows')
+        .update({ run_count: (flow.run_count ?? 0) + 1 })
+        .eq('id', flow.id);
+      if (workflowError) throw new Error('Could not update the automation run count.');
+    }
 
     result.workflows++;
     result.emails += emailsSent(actions, previous);

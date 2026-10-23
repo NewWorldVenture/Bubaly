@@ -20,7 +20,21 @@ export type MarketingCustomer = {
   lifecycle: Lifecycle;
   estLtvCents: number;
   createdAt: string;
+  /**
+   * families.updated_at: when the family ROW was last edited — a rename, a time
+   * zone, closing. Nothing a family does in the app touches it, so it is not
+   * activity, and no rule about inactivity reads it as one (`activityKnown`).
+   */
   lastActivityAt: string;
+  /**
+   * Whether `lastActivityAt` measures app activity. This view has no such
+   * signal and says so with `false`; the `customer_inactive` trigger and a
+   * segment's `inactiveForDays` rule then match no one, instead of every
+   * family that has not renamed itself lately — paying families who use the
+   * app every day were sent "We miss your family". Absent means the caller
+   * supplied a real activity time.
+   */
+  activityKnown?: boolean;
   /** families.closed_at — set when the family closed its account. */
   closedAt?: string | null;
 };
@@ -161,6 +175,7 @@ export async function getMarketingCustomersWithError(supabase: DB): Promise<{
       estLtvCents,
       createdAt: f.created_at,
       lastActivityAt: f.updated_at,
+      activityKnown: false,
       closedAt: f.closed_at ?? null,
     };
   });
@@ -190,6 +205,7 @@ export function evaluateSegment(customers: MarketingCustomer[], rules: SegmentRu
       if (new Date(c.createdAt).getTime() < now - rules.createdWithinDays * DAY) return false;
     }
     if (typeof rules.inactiveForDays === 'number') {
+      if (c.activityKnown === false) return false;
       if (new Date(c.lastActivityAt).getTime() > now - rules.inactiveForDays * DAY) return false;
     }
     return true;

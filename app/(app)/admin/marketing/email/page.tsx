@@ -64,7 +64,17 @@ export default async function EmailPage() {
                     <p className="mt-1">{e.opens} opens · {e.clicks} clicks</p>
                   </div>
                 ) : (e.status === 'draft' || e.status === 'failed') && providerReady ? (
-                  <SendCampaignButton id={e.id} />
+                  // A failed send that reached part of its audience says how
+                  // much: Send resumes it for the rest (lib/marketing/send.ts),
+                  // it does not mail those families again.
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    {e.status === 'failed' && e.recipients > 0 && (
+                      <p className="text-xs text-muted">{t('adminMarketingEmail.sentBeforeItStopped', { n: e.recipients })}</p>
+                    )}
+                    <SendCampaignButton id={e.id} />
+                  </div>
+                ) : e.status === 'failed' && e.recipients > 0 ? (
+                  <p className="shrink-0 text-xs text-muted">{t('adminMarketingEmail.sentBeforeItStopped', { n: e.recipients })}</p>
                 ) : null}
               </Card>
             ))

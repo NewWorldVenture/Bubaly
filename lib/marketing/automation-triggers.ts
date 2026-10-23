@@ -21,6 +21,37 @@ export function isEventTrigger(trigger: string): trigger is EventTrigger {
   return (EVENT_TRIGGERS as readonly string[]).includes(trigger);
 }
 
+/**
+ * The one step either runner executes (automation-steps.ts runSteps). Every
+ * other action is recorded `<action>:unsupported` and does nothing, so the
+ * console offers only this one.
+ */
+export const RUNNABLE_ACTIONS = ['send_email'] as const;
+
+/**
+ * The triggers the console may build a workflow on, each of which something
+ * fires: the scheduled sweep (automation-runner.ts SCHEDULED_TRIGGERS) or an
+ * app event (EVENT_TRIGGERS above). Not `joins_segment`, which nothing fires,
+ * and not `customer_inactive`, whose rule needs an activity signal the
+ * customer view does not have (lib/marketing/customers.ts `activityKnown`).
+ */
+export const CONSOLE_TRIGGERS = [
+  'customer_created', 'form_submitted', 'payment_completed', 'payment_failed',
+  'email_opened', 'email_clicked', 'checkout_abandoned', 'high_value_detected',
+] as const;
+
+/**
+ * Whether a workflow does everything it says: a trigger something fires and
+ * only steps a runner executes. One that does not is refused activation — it
+ * read `active` in the console while it sent nothing, or never ran at all.
+ */
+export function workflowIsRunnable(trigger: string, steps: unknown): boolean {
+  if (!(CONSOLE_TRIGGERS as readonly string[]).includes(trigger)) return false;
+  if (!Array.isArray(steps) || steps.length === 0) return false;
+  return steps.every((step) => !!step && typeof step === 'object'
+    && (RUNNABLE_ACTIONS as readonly string[]).includes(String((step as { action?: unknown }).action)));
+}
+
 export type Copy = { subject: string; body: string };
 
 /** Fallback email copy when a workflow's send_email step omits its own. */

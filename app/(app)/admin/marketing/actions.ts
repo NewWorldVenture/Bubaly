@@ -9,6 +9,7 @@ import { normalizeSlug } from '@/lib/marketing/landing';
 import type { SegmentRules, Lifecycle } from '@/lib/marketing/customers';
 import type { Json } from '@/lib/database.types';
 import { refuseInput } from '@/lib/actions/refusal';
+import { CONSOLE_TRIGGERS, RUNNABLE_ACTIONS, workflowIsRunnable } from '@/lib/marketing/automation-triggers';
 
 function str(v: FormDataEntryValue | null): string {
   return (v == null ? '' : String(v)).trim();
@@ -19,8 +20,13 @@ const CAMPAIGN_TYPES = ['campaign', 'launch', 're_engagement', 'win_back', 'refe
 const CAMPAIGN_STATUSES = ['draft', 'scheduled', 'active', 'paused', 'completed', 'archived'] as const;
 const SOCIAL_PLATFORMS = ['facebook', 'instagram', 'linkedin', 'tiktok', 'x', 'youtube'] as const;
 const AD_PLATFORMS = ['meta', 'google', 'linkedin', 'tiktok', 'x'] as const;
-const AUTOMATION_TRIGGERS = ['customer_created', 'joins_segment', 'form_submitted', 'payment_completed', 'payment_failed', 'email_opened', 'email_clicked', 'checkout_abandoned', 'customer_inactive', 'high_value_detected'] as const;
-const AUTOMATION_ACTIONS = ['send_email', 'send_sms', 'add_to_segment', 'remove_from_segment', 'apply_tag', 'create_task', 'notify_admin', 'update_lead_score'] as const;
+// Only what a runner executes. The console used to accept seven actions that
+// are recorded `:unsupported` and do nothing (a failed run, re-claimed and
+// failed again on every daily sweep, each pass counted as a run and turning the
+// cron's answer to 502), `joins_segment`, which nothing fires, and
+// `customer_inactive`, which has no activity signal to decide on.
+const AUTOMATION_TRIGGERS = CONSOLE_TRIGGERS;
+const AUTOMATION_ACTIONS = RUNNABLE_ACTIONS;
 const AUTOMATION_STATUSES = ['draft', 'active', 'paused', 'archived'] as const;
 
 function revalidatePublicMarketingPath(path: string | null | undefined) {
@@ -101,13 +107,16 @@ export async function createSegment(formData: FormData) {
   const lifecycle = formData.getAll('lifecycle').map(String) as Lifecycle[];
   const plans = formData.getAll('plans').map(String);
   const minLtvDollars = Number(formData.get('minLtvDollars') || 0);
-  const inactiveForDays = Number(formData.get('inactiveForDays') || 0);
+  // Refused, not stored: the customer view has no activity signal
+  // (lib/marketing/customers.ts `activityKnown`), so an "inactive for N days"
+  // rule held nearly every family — those who use the app daily included,
+  // because the date it read was the family row's last edit.
+  if (Number(formData.get('inactiveForDays') || 0) > 0) refuseInput('Segments cannot filter on inactivity yet.');
 
   const rules: SegmentRules = {
     ...(lifecycle.length ? { lifecycle } : {}),
     ...(plans.length ? { plans } : {}),
     ...(minLtvDollars > 0 ? { minLtvCents: Math.round(minLtvDollars * 100) } : {}),
-    ...(inactiveForDays > 0 ? { inactiveForDays } : {}),
   };
 
   const { data, error } = await supabase.from('marketing_segments')
@@ -492,6 +501,15 @@ export async function setAutomationStatus(formData: FormData) {
   const id = str(formData.get('id'));
   const status = requireChoice(str(formData.get('status')), AUTOMATION_STATUSES, 'automation status');
   if (!id || !status) return;
+  if (status === 'active') {
+    // A workflow made before the console offered only what runs (a trigger
+    // nothing fires, a step that is never executed) is not switched on: it
+    // read `active` and sent nothing, or failed every subject every day.
+    const { data: flow, error: flowError } = await supabase.from('marketing_automation_workflows')
+      .select('trigger, steps').eq('id', id).is('deleted_at', null).maybeSingle();
+    if (flowError || !flow) marketingActionFailure('update the automation workflow', flowError ?? new Error('Automation workflow not found'));
+    if (!workflowIsRunnable(flow.trigger, flow.steps)) refuseInput('This workflow has a trigger or step that automation does not run yet.');
+  }
   const { data, error } = await supabase.from('marketing_automation_workflows')
     .update({ status, updated_by: actorId }).eq('id', id).is('deleted_at', null).select('id').maybeSingle();
   if (error || !data) marketingActionFailure('update the automation workflow', error ?? new Error('Automation workflow not found'));
