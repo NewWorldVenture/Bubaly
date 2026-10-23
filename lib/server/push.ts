@@ -19,7 +19,8 @@ import { isMissingRelationError } from '@/lib/supabase/errors';
 import { readAll } from '@/lib/supabase/read-all';
 import { readAllInChunks } from '@/lib/supabase/chunked-in';
 import {
-  aheadAndBehind, latestCreatedAt, NOTIFICATION_CLOCK_SKEW_MS, readFairBatch, recipientList, type FairExclusion,
+  aheadAndBehind, latestCreatedAt, MARKETPLACE_RELATED_TYPE, NOTIFICATION_CLOCK_SKEW_MS, readFairBatch, recipientList,
+  type FairExclusion,
 } from '@/lib/notifications/fair-batch';
 
 type DB = SupabaseClient<Database>;
@@ -43,15 +44,18 @@ export const PUSH_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
  * The most rows of one dispatch batch a single family takes while another
  * family's rows are waiting, and the most one recipient inside a family takes
  * while anyone else's are (lib/notifications/fair-batch.ts). A family's
- * whole-family rows count as one more of its recipients.
+ * whole-family rows count as one more of its recipients. 0191's price drops
+ * are the marketplace's, wherever they land: it takes a family's share, and
+ * each listing a recipient's.
  *
  * A member's session may still insert notifications addressed to themselves,
  * any number of them, dated whenever they like (0388), and a member can cause
- * whole-family rows by the hundred through 0191's price-drop trigger, so a
- * child's flood ahead of the cursor held back every family's pushes for as
- * many ticks as it took to drain at 200 rows a tick. Now their family takes 40
- * of a batch, the child (or the price drops) 10 of those, and the room left
- * goes to everyone else first.
+ * whole-family rows by the hundred, in every family that saved a listing of
+ * theirs, through 0191's price-drop trigger, so a child's flood ahead of the
+ * cursor held back every family's pushes for as many ticks as it took to
+ * drain at 200 rows a tick. Now their family takes 40 of a batch, the child 10
+ * of those, all price drops 40 and one listing's 10 of those, whichever
+ * families they land in, and the room left goes to everyone else first.
  */
 export const PUSH_ROWS_PER_FAMILY = 40;
 export const PUSH_ROWS_PER_RECIPIENT = 10;
@@ -673,7 +677,9 @@ function parsePushCursor(value: unknown): PushCursor | null {
  * cursor keep their own part of every read (PUSH_RETRY_SHARE); and a row
  * dated after now is not read. A member may plant rows addressed to
  * themselves with any created_at, and cause whole-family rows through 0191's
- * price-drop trigger (lib/notifications/fair-batch.ts). No writer sets
+ * price-drop trigger in every family that saved their listing, which count
+ * against the marketplace and the listing, not the families they land in
+ * (lib/notifications/fair-batch.ts). No writer sets
  * created_at, so the date bound leaves out only planted rows, and the shares
  * hold back only a family's or a recipient's own surplus, only while someone
  * else's rows are waiting.
@@ -721,13 +727,22 @@ export async function dispatchPendingPushes(
       // Strictly validated timestamp/UUID values cannot inject filter syntax.
       q = q.or(`created_at.${wrap ? 'lt' : 'gt'}.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.${wrap ? 'lte' : 'gt'}.${cursor.id})`);
     }
-    // Families, recipients and families' whole-family rows that already hold
-    // their share of this batch. Whole-family rows are shared like any other:
-    // a member causes them through 0191's price-drop trigger. Each `or` ANDs
-    // with the rest; a NULL user_id passes the first and is judged by the second.
+    // Families, recipients, families' whole-family rows, the marketplace and
+    // its listings that already hold their share of this batch, exactly as
+    // isExcluded leaves them out. 0191's price drops (user_id null,
+    // related_type MARKETPLACE_RELATED_TYPE, related_id the listing) count
+    // against the marketplace and their listing, not the family they land in.
+    // Each `or` ANDs with the rest; a NULL user_id passes the recipients' and
+    // is judged by the others.
+    const notMarket = `user_id.not.is.null,related_type.is.null,related_type.neq.${MARKETPLACE_RELATED_TYPE}`;
     if (excluded.families.length) q = q.not('family_id', 'in', recipientList(excluded.families));
     if (excluded.recipients.length) q = q.or(`user_id.is.null,user_id.not.in.${recipientList(excluded.recipients)}`);
-    if (excluded.familyWide.length) q = q.or(`user_id.not.is.null,family_id.not.in.${recipientList(excluded.familyWide)}`);
+    if (excluded.familyWide.length) {
+      q = q.or(`user_id.not.is.null,family_id.not.in.${recipientList(excluded.familyWide)},related_type.eq.${MARKETPLACE_RELATED_TYPE}`);
+    }
+    if (excluded.marketplace) q = q.or(notMarket);
+    if (excluded.listings.length) q = q.or(`${notMarket},related_id.is.null,related_id.not.in.${recipientList(excluded.listings)}`);
+    if (excluded.unlisted) q = q.or(`${notMarket},related_id.not.is.null`);
     const { data, error } = await q;
     if (error) {
       console.error('[push] pending-push read failed', { familyId: opts.familyId ?? null, error });

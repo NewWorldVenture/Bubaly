@@ -15,27 +15,35 @@
 // and hold back every family's pushes and every digest until the flood drained,
 // and plant more the next day.
 //
-// A member can also CAUSE whole-family rows (user_id null) in their own
-// family, and in every family watching a listing of theirs: 0191's
+// A member can also CAUSE whole-family rows (user_id null), in their own
+// family and in every family watching a listing of theirs: 0191's
 // marketplace_log_price_change (SECURITY DEFINER, after update of price_cents)
-// writes one to each family that saved the listing on every price drop, with
-// no dedupe or throttle, and the listing's owner may PATCH its price up and
-// down at will. So "who planted it" is not always the row's recipient. It is
-// always the row's FAMILY: every such row lands in a family the member
-// belongs to or one that chose to watch them.
+// writes one, related_type 'marketplace_listings' and related_id the listing,
+// into EACH family that saved the listing on every price drop, with no dedupe
+// or throttle, and the listing's owner may PATCH its price up and down at
+// will. So the family a price drop lands in is not the one that caused it:
+// counted against its receiving family, one seller's drops across twenty
+// watcher families took twenty family shares, the whole batch, and in the
+// seller's own family they took the family's own whole-family share, so its
+// 'Family dinner at 6' queued behind them.
 //
 // WHAT THIS BOUNDS. A batch is shared by FAMILY first: no family takes more
 // than `perFamily` rows while another family's rows are waiting in the range,
 // whether those rows are addressed to members or to the whole family. Inside
 // a family it is shared by recipient, the family's whole-family rows counting
 // as one more recipient: no one of them takes more than `perRecipient` rows
-// while anyone else's are waiting, so a child's flood (of their own rows, or
-// of price-drop notices) does not hold back a parent's row either. Only when
-// nobody else is waiting does a family's surplus, and then a recipient's,
-// fill the room left: a lone family's backlog still goes out a full batch at
-// a time. An attacker holding several families still takes that many family
-// shares; this bounds the damage, and dropping the policy (and throttling the
-// trigger, both owner actions) is what ends it.
+// while anyone else's are waiting, so a child's flood of their own rows does
+// not hold back a parent's row either. Price drops (isMarketplaceNotice) are
+// no family's: they are shared as one family of their own, the marketplace,
+// whichever family they land in, and inside it by LISTING, a listing's drops
+// into every watcher family counting as one recipient. So while anyone else
+// waits, one seller's drops take at most a recipient's share a listing and a
+// family's share in all, and none of the share of a family they land in.
+// Only when nobody else is waiting does a family's surplus, and then a
+// recipient's, fill the room left: a lone family's backlog still goes out a
+// full batch at a time. An attacker holding several families still takes
+// that many family shares; this bounds the damage, and dropping the policy
+// (and throttling the trigger, both owner actions) is what ends it.
 //
 // Rows dated after now (beyond a clock-skew allowance) are not read at all, by
 // either dispatcher: no writer sets created_at, which defaults to now(), so
@@ -62,17 +70,46 @@ export function recipientList(ids: readonly string[]): string {
   return `(${ids.join(',')})`;
 }
 
-/** A pending notification as the batch shares it out. */
-export type FairRow = { id: string; family_id: string; user_id: string | null };
+/**
+ * A pending notification as the batch shares it out. A reader that reads
+ * whole-family rows (user_id null) selects related_type and related_id too,
+ * so a price drop is told apart (isMarketplaceNotice).
+ */
+export type FairRow = {
+  id: string; family_id: string; user_id: string | null;
+  related_type?: string | null; related_id?: string | null;
+};
+
+/** The related_type of the whole-family rows 0191's price-drop trigger writes, related_id the listing. */
+export const MARKETPLACE_RELATED_TYPE = 'marketplace_listings';
+
+/**
+ * Whether a row is a marketplace notice to a whole family: 0191's price drops
+ * (and an auction's 'reserve not met', which the service role writes). A
+ * member of another family can cause any number of them, so they are shared
+ * as one family of their own and, inside it, by listing, not as rows of the
+ * family that receives them. Those that name no listing (no writer leaves
+ * related_id null) are still the marketplace's, and share one listing's share
+ * between them.
+ */
+export function isMarketplaceNotice(row: FairRow): boolean {
+  return !row.user_id && row.related_type === MARKETPLACE_RELATED_TYPE;
+}
 
 /** What one read of a range leaves out. */
 export type FairExclusion = {
-  /** Every row of these families. */
+  /** Every row of these families, the marketplace notices that land in them included. */
   readonly families: readonly string[];
   /** Rows addressed to these users. */
   readonly recipients: readonly string[];
-  /** The whole-family rows (user_id null) of these families. */
+  /** The whole-family rows (user_id null) of these families, but not their marketplace notices. */
   readonly familyWide: readonly string[];
+  /** Every marketplace notice (isMarketplaceNotice), whichever family it landed in. */
+  readonly marketplace: boolean;
+  /** The marketplace notices about these listings (related_id), whichever family they landed in. */
+  readonly listings: readonly string[];
+  /** The marketplace notices that name no listing (related_id null). */
+  readonly unlisted: boolean;
 };
 
 /** How much of a batch one family, and one recipient inside it, takes while anyone else's rows are waiting. */
@@ -84,28 +121,39 @@ export type FairShares = { readonly perFamily: number; readonly perRecipient: nu
  */
 export type FairRead<T extends FairRow> = (size: number, excluded: FairExclusion) => Promise<T[]>;
 
-const NOTHING: FairExclusion = { families: [], recipients: [], familyWide: [] };
+const NOTHING: FairExclusion = {
+  families: [], recipients: [], familyWide: [], marketplace: false, listings: [], unlisted: false,
+};
 
 /** Whether `excluded` leaves this row out. */
 export function isExcluded(excluded: FairExclusion, row: FairRow): boolean {
   if (excluded.families.includes(row.family_id)) return true;
-  return row.user_id ? excluded.recipients.includes(row.user_id) : excluded.familyWide.includes(row.family_id);
+  if (row.user_id) return excluded.recipients.includes(row.user_id);
+  if (isMarketplaceNotice(row)) {
+    return excluded.marketplace || (row.related_id ? excluded.listings.includes(row.related_id) : excluded.unlisted);
+  }
+  return excluded.familyWide.includes(row.family_id);
 }
 
 function isNothing(excluded: FairExclusion): boolean {
-  return !excluded.families.length && !excluded.recipients.length && !excluded.familyWide.length;
+  return !excluded.families.length && !excluded.recipients.length && !excluded.familyWide.length
+    && !excluded.marketplace && !excluded.listings.length && !excluded.unlisted;
 }
 
 /** Whether every row `narrower` leaves out, `wider` leaves out too. */
 function within(narrower: FairExclusion, wider: FairExclusion): boolean {
   return narrower.families.every((id) => wider.families.includes(id))
     && narrower.recipients.every((id) => wider.recipients.includes(id))
-    && narrower.familyWide.every((id) => wider.familyWide.includes(id));
+    && narrower.familyWide.every((id) => wider.familyWide.includes(id))
+    && (!narrower.marketplace || wider.marketplace)
+    && narrower.listings.every((id) => wider.listings.includes(id))
+    && (!narrower.unlisted || wider.unlisted);
 }
 
 /**
  * Read one batch of up to `size` rows, fairly by family and, inside a family,
- * by recipient (its whole-family rows counting as one recipient).
+ * by recipient (its whole-family rows counting as one recipient). The
+ * marketplace notices are one family more, shared inside it by listing.
  *
  * Rows are taken in the order the reads return them and never given back. In
  * the first pass a row is taken only while its family is under `perFamily`
@@ -118,7 +166,8 @@ function within(narrower: FairExclusion, wider: FairExclusion): boolean {
  * by recipient), then everything (the surplus, in order). A pass whose
  * exclusions are the ones the last short read already used is skipped, so a
  * batch nobody floods is one read. Each round leaves out at least one more
- * family or recipient, each holding a full share of the batch, so the rounds
+ * family or recipient (the marketplace and its listings among them), each
+ * holding a full share of the batch, so the rounds
  * are bounded (size / perFamily + size / perRecipient, plus one a pass) and so
  * is the exclusion list. Every read happens before anything is sent. Rows come
  * back in the order they were taken, not re-sorted: a caller that needs its
@@ -136,7 +185,14 @@ export async function readFairBatch<T extends FairRow>(read: FairRead<T>, size: 
   const fullFamilies = new Set<string>();
   const fullRecipients = new Set<string>();
   const fullFamilyWide = new Set<string>();
-  const recipientOf = (row: T) => (row.user_id ? `user:${row.user_id}` : `family:${row.family_id}`);
+  const fullListings = new Set<string>();
+  let marketplaceFull = false;
+  let unlistedFull = false;
+  // The shares a row counts against, as isExcluded leaves it out: a price
+  // drop against the marketplace and its listing, whichever family it landed in.
+  const familyOf = (row: T) => (isMarketplaceNotice(row) ? 'marketplace' : `family:${row.family_id}`);
+  const recipientOf = (row: T) => (row.user_id ? `user:${row.user_id}`
+    : isMarketplaceNotice(row) ? `listing:${row.related_id ?? ''}` : `family:${row.family_id}`);
   let lastShort: FairExclusion | null = null;
 
   /**
@@ -153,6 +209,9 @@ export async function readFairBatch<T extends FairRow>(read: FairRead<T>, size: 
         families: level === 'family' ? [...fullFamilies] : [],
         recipients: [...fullRecipients],
         familyWide: [...fullFamilyWide],
+        marketplace: level === 'family' && marketplaceFull,
+        listings: [...fullListings],
+        unlisted: unlistedFull,
       };
       if (lastShort && within(excluded, lastShort) && within(lastShort, excluded)) return 'done';
       let again = 0;
@@ -165,18 +224,24 @@ export async function readFairBatch<T extends FairRow>(read: FairRead<T>, size: 
         // A read that ignored the exclusion must not count a row twice.
         if (taken.has(row.id) || isExcluded(excluded, row)) continue;
         if (added >= room) break;
+        const family = familyOf(row);
         const recipient = recipientOf(row);
-        const familyFull = level === 'family' && (byFamily.get(row.family_id) ?? 0) >= perFamily;
+        const familyFull = level === 'family' && (byFamily.get(family) ?? 0) >= perFamily;
         const recipientFull = level !== 'surplus' && (byRecipient.get(recipient) ?? 0) >= perRecipient;
-        if (familyFull) fullFamilies.add(row.family_id);
+        if (familyFull) {
+          if (isMarketplaceNotice(row)) marketplaceFull = true;
+          else fullFamilies.add(row.family_id);
+        }
         if (recipientFull) {
           if (row.user_id) fullRecipients.add(row.user_id);
-          else fullFamilyWide.add(row.family_id);
+          else if (!isMarketplaceNotice(row)) fullFamilyWide.add(row.family_id);
+          else if (row.related_id) fullListings.add(row.related_id);
+          else unlistedFull = true;
         }
         if (familyFull || recipientFull) { reached = true; continue; }
         taken.set(row.id, row);
         added += 1;
-        byFamily.set(row.family_id, (byFamily.get(row.family_id) ?? 0) + 1);
+        byFamily.set(family, (byFamily.get(family) ?? 0) + 1);
         byRecipient.set(recipient, (byRecipient.get(recipient) ?? 0) + 1);
       }
       if (taken.size >= size) return 'full';
