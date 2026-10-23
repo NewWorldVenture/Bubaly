@@ -24,7 +24,8 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { datetimeLocalToInstant, instantToDatetimeLocal } from '@/lib/time/datetime-local';
 import { cn } from '@/lib/utils/cn';
 import {
   EARLY_REMINDER_OPTIONS, parseTags, formatTags, normalizeSubtasks, newSubtask, subtaskProgress, nextRemindAt,
@@ -657,6 +658,11 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
 }) {
   const tr = useTranslations();
   const plural = usePlural();
+  // The time box is a reading on the FAMILY's clock, the one the list shows
+  // (TIME-003). It was filled with the stored UTC reading and saved on the
+  // device's clock, so a New York 9:00 AM opened as 13:00 and an untouched
+  // time came back four hours late from every edit.
+  const clock = useFamilyClock();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [kind, setKind] = useState(reminder?.kind ?? 'time');
@@ -711,6 +717,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
     const form = new FormData(e.currentTarget);
     const g = (k: string) => String(form.get(k) ?? '').trim() || null;
     const remindAtRaw = g('remind_at');
+    const remindAt = remindAtRaw ? datetimeLocalToInstant(remindAtRaw, clock.timeZone) : null;
     const finalTags = commitTags();
     const payload = {
       title: g('title') ?? '',
@@ -719,7 +726,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
       priority: g('priority') ?? 'medium',
       recurrence,
       location_name: kind === 'location' ? g('location_name') : null,
-      remind_at: remindAtRaw ? new Date(remindAtRaw).toISOString() : null,
+      remind_at: remindAt,
       member_id: g('member_id'),
       assigned_to_id: g('assigned_to_id'),
       url: g('url'),
@@ -733,10 +740,13 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
     // ── Validation ──
     if (!payload.title) return toastError(tr('remindersModule.titleIsRequired'));
     if (payload.title.length > 200) return toastError(tr('validation.titleTooLong', { max: 200 }));
+    // A reading the family's clock does not hold (30 February) is refused, not
+    // rolled into March.
+    if (remindAtRaw && !remindAt) return toastError(tr('errors.thatTimeIsNotOnTheFamilysClock'));
     // A brand-new time-based reminder in the past would never fire — block it.
     const timeBased = kind === 'time' || kind === 'medication' || kind === 'bill' || kind === 'school' || kind === 'chore';
-    if (!reminder && timeBased && remindAtRaw) {
-      if (new Date(remindAtRaw).getTime() < Date.now() - 60_000) {
+    if (!reminder && timeBased && remindAt) {
+      if (Date.parse(remindAt) < Date.now() - 60_000) {
         return toastError(tr('remindersModule.pickATimeInThe'));
       }
     }
@@ -817,7 +827,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
         {(kind === 'time' || kind === 'medication' || kind === 'bill' || kind === 'school' || kind === 'chore') && (
           <Field label={tr('reminders.dateTime')}>
             {(id) => <Input id={id} name="remind_at" type="datetime-local"
-              defaultValue={reminder?.remind_at ? reminder.remind_at.slice(0, 16) : ''} />}
+              defaultValue={instantToDatetimeLocal(reminder?.remind_at, clock.timeZone)} />}
           </Field>
         )}
 
