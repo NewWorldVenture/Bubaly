@@ -6627,6 +6627,7 @@
   "feedbackAdmin.syncGithubNow": "GitHub nu synchroniseren",
   "feedbackAdmin.team": "Team",
   "feedbackAdmin.toMirrorBugsAmpIdeasNotifications": "om bugs en ideeën te spiegelen. Meldingen werken nog steeds.",
+  "feedbackAdmin.totalVotes": "Stemmen in totaal",
   "feedbackAttachment.uploadFailedTryAgain": "Uploaden mislukt. Probeer het opnieuw.",
   "feedbackAttachmentUpload.pleaseChooseAJpegPng": "Kies een JPEG-, PNG-, WebP-, GIF- of AVIF-afbeelding.",
   "feedbackAttachmentUpload.thatImageIsOver10": "Die afbeelding is groter dan 10 MB — kies een kleinere.",
