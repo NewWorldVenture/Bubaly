@@ -6,6 +6,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { generateFamilyNotifications, type NotificationGenerationReport } from '@/lib/server/notifications';
 import { dispatchPendingPushes } from '@/lib/server/push';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { claimGenerationLease } from '@/lib/server/notification-generation-lease';
 
 export const runtime = 'nodejs';
 
@@ -37,8 +38,23 @@ export async function POST() {
     // cron does for every family.
     // `incomplete` says some sources could not be checked, so the Scan button
     // does not answer "You're all caught up" about a scan that never looked.
+    // One generator per family at a time (lib/server/notification-generation-
+    // lease.ts): a Scan pressed while a cron is on this family used to insert
+    // every row the cron was inserting a second time. Held means that generator
+    // is writing the same rows now, so there is nothing to add; a lease that
+    // could not be read or written is a refusal, not a licence.
+    const admin = createServiceClient();
+    const lease = await claimGenerationLease(admin, ctx.active.familyId);
+    if (lease.state === 'error') throw new Error('The notification generation lease could not be claimed.');
     const report: NotificationGenerationReport = { failedSources: [] };
-    const created = await generateFamilyNotifications(createServiceClient(), ctx.active.familyId, report);
+    let created = 0;
+    if (lease.state === 'claimed') {
+      try {
+        created = await generateFamilyNotifications(admin, ctx.active.familyId, report);
+      } finally {
+        await lease.release();
+      }
+    }
     const incomplete = report.failedSources.length > 0;
     if (incomplete) console.error('[notifications/generate] some sources could not be checked', { familyId: ctx.active.familyId, failedSources: report.failedSources });
     // Push delivery needs cross-user device reads → service client, family-scoped.
@@ -47,7 +63,7 @@ export async function POST() {
     } catch (e) {
       console.error('Push dispatch failed:', e);
     }
-    return NextResponse.json({ created, incomplete });
+    return NextResponse.json({ created, incomplete, ...(lease.state === 'held' ? { held: true } : {}) });
   } catch (err) {
     console.error('Notification generate error:', err);
     return NextResponse.json({ error: t('generate.couldNotRefreshNotifications') }, { status: 500 });

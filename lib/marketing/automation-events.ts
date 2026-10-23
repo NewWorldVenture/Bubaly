@@ -26,7 +26,18 @@ export type FireEventParams = {
   admitSend?: SendAdmission;
 };
 
-export type FireEventResult = { workflows: number; emails: number; failures: number };
+export type FireEventResult = {
+  workflows: number; emails: number;
+  /** Workflows that ran and recorded a failed, skipped or unsupported step. */
+  failures: number;
+  /**
+   * What could not even be attempted: the workflows read answered an error, or
+   * a run could not be reserved or claimed. Each used to be swallowed (`{ data:
+   * flows }` alone; `if (reserveErr) continue`), so a cron that fired an event
+   * into a database that refused it counted the nudge as sent.
+   */
+  errors: number;
+};
 
 /**
  * Fires every active workflow whose trigger matches `params.trigger`, in real
@@ -39,14 +50,19 @@ export type FireEventResult = { workflows: number; emails: number; failures: num
  * user-facing response on it.
  */
 export async function fireAutomationEvent(supabase: DB, params: FireEventParams): Promise<FireEventResult> {
-  const result: FireEventResult = { workflows: 0, emails: 0, failures: 0 };
+  const result: FireEventResult = { workflows: 0, emails: 0, failures: 0, errors: 0 };
 
-  const { data: flows } = await supabase
+  const { data: flows, error: flowsError } = await supabase
     .from('marketing_automation_workflows')
     .select('id, trigger, steps, run_count')
     .eq('status', 'active')
     .eq('trigger', params.trigger)
     .is('deleted_at', null);
+  if (flowsError) {
+    console.error('[marketing automation] could not read the workflows for an event', { trigger: params.trigger, error: flowsError });
+    result.errors++;
+    return result;
+  }
   if (!flows || flows.length === 0) return result;
 
   const fallback = EVENT_DEFAULT_COPY[params.trigger];
@@ -65,7 +81,13 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
         { onConflict: 'workflow_id,subject_key', ignoreDuplicates: true },
       )
       .select('id');
-    if (reserveErr) continue; // best-effort event path; callers must not block user requests
+    // Best-effort event path — callers must not block user requests — but
+    // counted: a reservation that was refused is a nudge that did not go out.
+    if (reserveErr) {
+      console.error('[marketing automation] could not reserve an event-driven run', { trigger: params.trigger, workflowId: flow.id, error: reserveErr });
+      result.errors++;
+      continue;
+    }
 
     let runId = reserved?.[0]?.id ?? null;
     // What a failed attempt already did, so its retry does not repeat a send.
@@ -74,7 +96,12 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
     if (!runId) {
       const { data: existing, error: existingError } = await supabase.from('marketing_automation_runs')
         .select('id, status, metadata').eq('workflow_id', flow.id).eq('subject_key', params.subjectKey).maybeSingle();
-      if (existingError || !existing || existing.status !== 'failed') continue;
+      if (existingError) {
+        console.error('[marketing automation] could not read the existing event-driven run', { trigger: params.trigger, workflowId: flow.id, error: existingError });
+        result.errors++;
+        continue;
+      }
+      if (!existing || existing.status !== 'failed') continue;
       // Claimed only while its receipts are the ones just read: another sweep
       // may have claimed it, delivered an email and recorded that in between
       // (recordedActionsJson).
@@ -83,7 +110,12 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
       const asRead = receipts === null ? claim.is('metadata->actions', null) : claim.eq('metadata->actions', receipts);
       const fenced = stepsRecorded(existing.metadata) ? asRead : asRead.is('metadata->steps', null);
       const { data: claimed, error: claimError } = await fenced.eq('status', 'failed').select('id').maybeSingle();
-      if (claimError || !claimed) continue;
+      if (claimError) {
+        console.error('[marketing automation] could not claim the failed event-driven run', { trigger: params.trigger, workflowId: flow.id, error: claimError });
+        result.errors++;
+        continue;
+      }
+      if (!claimed) continue;
       runId = claimed.id;
       ({ steps, previous } = retryOf(existing.metadata, steps));
     }

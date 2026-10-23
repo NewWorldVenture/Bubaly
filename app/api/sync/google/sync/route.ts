@@ -3,6 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { runGoogleSync } from '@/lib/sync/engine/google';
+import { runUnderAccountLease } from '@/lib/sync/account-lease';
 import type { Json } from '@/lib/database.types';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { logSyncAudit } from '@/lib/sync/audit';
@@ -38,7 +39,11 @@ export async function POST() {
 
   const results = [];
   for (const account of accounts) {
-    const result = await runGoogleSync(admin, account);
+    // Under the account's lease (lib/sync/account-lease.ts), as /api/sync/run
+    // and the scheduled provider sync are: a press while another sync holds
+    // the account is `busy`, not a second sync of it beside the first, and its
+    // finish no longer releases that sync's lease while it is still running.
+    const result = await runUnderAccountLease(admin, account, () => runGoogleSync(admin, account));
     results.push(result);
     await logSyncAudit(admin, {
       user_id: ctx.user.id, family_id: ctx.active.familyId, provider: 'google', action: 'sync',
@@ -47,5 +52,8 @@ export async function POST() {
   }
   const result = combineRunResults(results);
 
+  // Every account was held by a sync already in flight (the scheduled run, or
+  // another press): nothing was done here, and nothing failed. Said as such.
+  if (result.busy) return NextResponse.json({ ...result, error: t('sync.syncAlreadyRunning') }, { status: 409 });
   return NextResponse.json(result, { status: result.error ? 502 : 200 });
 }

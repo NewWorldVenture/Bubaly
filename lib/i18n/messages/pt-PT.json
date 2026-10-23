@@ -14163,6 +14163,7 @@
   "sync.providerNotConfiguredYet": "A sincronização do {provider} ainda não está configurada.",
   "sync.providerNotConnectedForAccount": "{provider} não está ligado a esta conta.",
   "sync.providerTokensAreAes256": "Os tokens dos fornecedores são cifrados com AES-256-GCM antes de serem guardados. Sem chave, nenhuma ligação OAuth pode ser persistida — é um comportamento fail-closed intencional, não um recuo silencioso para texto simples.",
+  "sync.syncAlreadyRunning": "Já está a decorrer uma sincronização desta conta. Terminará sozinha; tente novamente daqui a um momento.",
   "sync.syncFailed": "A sincronização falhou",
   "sync.tooManySyncRequestsPlease": "Demasiados pedidos de sincronização. Tente novamente em breve.",
   "sync.urlDoesNotAppearTo": "O URL não parece ser um calendário ICS válido",

@@ -29,8 +29,25 @@ type Op = 'select' | 'insert' | 'update' | 'upsert' | 'delete';
 type Predicate = (row: Row) => boolean;
 
 export type InMemoryOptions = {
-  /** Per-table unique column sets; a violating insert answers 23505 like Postgres. */
+  /**
+   * Per-table unique column sets; a violating insert answers 23505 like
+   * Postgres. A key may be a JSON path (`metadata->>occurrence`), read as the
+   * expression index over it would be; a row with a NULL anywhere in the key
+   * is not part of it, as in Postgres.
+   */
   uniques?: Record<string, string[][]>;
+  /**
+   * Per-table columns the schema types `uuid`. Postgres casts every value bound
+   * to such a column — a written row's and a filter's alike — and refuses one
+   * that is not a uuid with 22P02 (`invalid input syntax for type uuid`) before
+   * any row is touched. Without this, the fake stored whatever text it was
+   * handed: a `<rule id>:<day>` key written to wallet_transactions.related_id
+   * (uuid, 0088) read as a landed credit here and was refused in production,
+   * every night, while the schedule had already moved on. Declare the typed
+   * columns and the difference is visible. A seed row that breaks a declared
+   * type throws, since a fixture the real table could not hold proves nothing.
+   */
+  uuidColumns?: Record<string, string[]>;
   /** Per-table column defaults applied on insert when the row leaves the column unset (what the migrations' `default` clauses do). */
   defaults?: Record<string, Row>;
   /** RPC handlers by function name. Unknown functions answer an error. */
@@ -86,6 +103,30 @@ function pgError(code: string, message: string): PostgrestError {
   return { code, message, details: null, hint: null };
 }
 
+/** PostgreSQL's uuid input: 32 hex digits, hyphenated in the canonical groups or not, braces allowed. */
+const UUID_INPUT = /^\{?[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}\}?$/i;
+
+/** 22P02, the answer to a value a uuid column cannot hold (null is not such a value). */
+function uuidRefusal(column: string, value: unknown): PostgrestError | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string' && UUID_INPUT.test(value)) return null;
+  return pgError('22P02', `invalid input syntax for type uuid: "${typeof value === 'object' ? JSON.stringify(value) : String(value)}"`);
+}
+
+/**
+ * A row's value at a plain column or a JSON path (`metadata->>occurrence`,
+ * `payload->nested->>source`), as an expression index over it would read it:
+ * `->>` yields text, a missing member is NULL.
+ */
+function columnValue(row: Row, column: string): unknown {
+  if (!column.includes('->')) return row[column];
+  const [root, ...steps] = column.split(/->>?/);
+  let value: unknown = row[root];
+  for (const step of steps) value = value && typeof value === 'object' && !Array.isArray(value) ? (value as Row)[step] : null;
+  if (value === undefined || value === null) return null;
+  return column.includes('->>') && typeof value === 'object' ? JSON.stringify(value) : value;
+}
+
 function compare(a: unknown, b: unknown): number {
   if (typeof a === 'number' && typeof b === 'number') return a - b;
   if (a instanceof Date || b instanceof Date) return new Date(a as string).getTime() - new Date(b as string).getTime();
@@ -134,6 +175,13 @@ function postgrestLike(column: string, pattern: string, flags: string): Predicat
   return (row) => typeof row[column] === 'string' && re.test(row[column] as string);
 }
 
+/** The members of an `in` filter: an array, or PostgREST's list text `(a,b,"c")`. */
+function inListMembers(wanted: unknown): unknown[] {
+  return Array.isArray(wanted)
+    ? wanted
+    : String(wanted).replace(/^\(/, '').replace(/\)$/, '').split(',').map((v) => parseFilterValue(v.trim().replace(/^"|"$/g, '')));
+}
+
 function operatorPredicate(column: string, op: string, wanted: unknown): Predicate {
   if (column.includes('->')) {
     const path = /^([a-zA-Z_]\w*)((?:->>?[a-zA-Z_]\w*)+)$/.exec(column);
@@ -163,9 +211,7 @@ function operatorPredicate(column: string, op: string, wanted: unknown): Predica
     case 'lt': return (row) => row[column] != null && compare(row[column], wanted) < 0;
     case 'lte': return (row) => row[column] != null && compare(row[column], wanted) <= 0;
     case 'in': {
-      const values = Array.isArray(wanted)
-        ? wanted
-        : String(wanted).replace(/^\(/, '').replace(/\)$/, '').split(',').map((v) => parseFilterValue(v.trim().replace(/^"|"$/g, '')));
+      const values = inListMembers(wanted);
       return (row) => values.some((v) => looseEq(row[column], v));
     }
     case 'imatch': {
@@ -345,6 +391,20 @@ function project(db: InMemorySupabase, row: Row, select: string): Row {
   return out;
 }
 
+/** Operators whose value Postgres casts to the column's type (not the pattern and array operators). */
+const TYPED_OPERATORS = new Set(['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'in']);
+
+/**
+ * The values a filter binds to its column. An `in` given as PostgREST's list
+ * text (`.not(col, 'in', '(a,b)')`, `.filter(col, 'in', '(a,b)')`) binds each
+ * member, as the server does: the whole `(a,b)` is not one uuid, but a list of
+ * valid ones is a valid filter.
+ */
+function typedMembers(op: string, value: unknown): unknown[] {
+  if (op === 'in') return inListMembers(value);
+  return Array.isArray(value) ? value : [value];
+}
+
 class QueryBuilder implements PromiseLike<Reply> {
   private op: Op = 'select';
   private payload: Row[] = [];
@@ -358,8 +418,19 @@ class QueryBuilder implements PromiseLike<Reply> {
   private limitCount: number | null = null;
   private rangeBounds: { from: number; to: number } | null = null;
   private mode: 'many' | 'single' | 'maybeSingle' = 'many';
+  /** The first filter value a typed column refused; answered when the query runs, as Postgres does. */
+  private refused: PostgrestError | null = null;
 
   constructor(private readonly db: InMemorySupabase, private readonly tableName: string) {}
+
+  /** Bind a filter value to its column's declared type (InMemoryOptions.uuidColumns). */
+  private typed(column: string, values: unknown[]): void {
+    if (this.refused || !this.db.isUuidColumn(this.tableName, column)) return;
+    for (const value of values) {
+      const refusal = uuidRefusal(column, value);
+      if (refusal) { this.refused = refusal; return; }
+    }
+  }
 
   select(list = '*', opts?: { count?: 'exact' | 'planned' | 'estimated'; head?: boolean }) {
     this.selectList = list;
@@ -406,13 +477,13 @@ class QueryBuilder implements PromiseLike<Reply> {
       return target !== undefined && inner(target);
     };
   }
-  eq(column: string, value: unknown) { const op = value === null ? 'is' : 'eq'; this.predicates.push(this.embedPredicate(column, op, value) ?? operatorPredicate(column, op, value)); return this; }
-  neq(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'neq', value)); return this; }
-  gt(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'gt', value)); return this; }
-  gte(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'gte', value)); return this; }
-  lt(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'lt', value)); return this; }
-  lte(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'lte', value)); return this; }
-  in(column: string, values: unknown[]) { this.predicates.push(operatorPredicate(column, 'in', values)); return this; }
+  eq(column: string, value: unknown) { this.typed(column, [value]); const op = value === null ? 'is' : 'eq'; this.predicates.push(this.embedPredicate(column, op, value) ?? operatorPredicate(column, op, value)); return this; }
+  neq(column: string, value: unknown) { this.typed(column, [value]); this.predicates.push(operatorPredicate(column, 'neq', value)); return this; }
+  gt(column: string, value: unknown) { this.typed(column, [value]); this.predicates.push(operatorPredicate(column, 'gt', value)); return this; }
+  gte(column: string, value: unknown) { this.typed(column, [value]); this.predicates.push(operatorPredicate(column, 'gte', value)); return this; }
+  lt(column: string, value: unknown) { this.typed(column, [value]); this.predicates.push(operatorPredicate(column, 'lt', value)); return this; }
+  lte(column: string, value: unknown) { this.typed(column, [value]); this.predicates.push(operatorPredicate(column, 'lte', value)); return this; }
+  in(column: string, values: unknown[]) { this.typed(column, values); this.predicates.push(operatorPredicate(column, 'in', values)); return this; }
   is(column: string, value: unknown) { this.predicates.push(this.embedPredicate(column, 'is', value) ?? operatorPredicate(column, 'is', value)); return this; }
   like(column: string, pattern: string) { this.predicates.push(operatorPredicate(column, 'like', pattern)); return this; }
   ilike(column: string, pattern: string) {
@@ -422,13 +493,19 @@ class QueryBuilder implements PromiseLike<Reply> {
   contains(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'contains', value)); return this; }
   overlaps(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'overlaps', value)); return this; }
   not(column: string, op: string, value: unknown) {
-    const wanted = op === 'in' && typeof value === 'string' ? value : value;
-    const predicate = operatorPredicate(column, op, wanted);
+    if (TYPED_OPERATORS.has(op)) this.typed(column, typedMembers(op, value));
+    const predicate = operatorPredicate(column, op, value);
     this.predicates.push((row) => !predicate(row));
     return this;
   }
+  // `or()` is left unbound: its values are parsed from one expression and only
+  // the direct filter methods are typed here.
   or(expression: string) { this.predicates.push(parseOr(expression)); return this; }
-  filter(column: string, op: string, value: unknown) { this.predicates.push(operatorPredicate(column, op, value)); return this; }
+  filter(column: string, op: string, value: unknown) {
+    if (TYPED_OPERATORS.has(op)) this.typed(column, typedMembers(op, value));
+    this.predicates.push(operatorPredicate(column, op, value));
+    return this;
+  }
   match(query: Row) { for (const [k, v] of Object.entries(query)) this.eq(k, v); return this; }
 
   order(column: string, opts?: { ascending?: boolean; nullsFirst?: boolean }) {
@@ -506,15 +583,32 @@ class QueryBuilder implements PromiseLike<Reply> {
 
   private uniqueViolation(row: Row, existing: Row[]): PostgrestError | null {
     for (const columns of this.db.uniquesFor(this.tableName)) {
-      if (columns.some((c) => row[c] === null || row[c] === undefined)) continue;
-      const clash = existing.find((other) => other !== row && columns.every((c) => looseEq(other[c], row[c])));
-      if (clash) return pgError('23505', `duplicate key value violates unique constraint "${this.tableName}_${columns.join('_')}_key"`);
+      if (columns.some((c) => columnValue(row, c) === null || columnValue(row, c) === undefined)) continue;
+      const clash = existing.find((other) => other !== row && columns.every((c) => looseEq(columnValue(other, c), columnValue(row, c))));
+      if (clash) return pgError('23505', `duplicate key value violates unique constraint "${this.tableName}_${columns.map((c) => c.replace(/\W+/g, '_')).join('_')}_key"`);
+    }
+    return null;
+  }
+
+  /** The first value of a written row that its column's declared type refuses. */
+  private typeViolation(rows: Row[]): PostgrestError | null {
+    for (const row of rows) {
+      for (const column of this.db.uuidColumnsFor(this.tableName)) {
+        const refusal = uuidRefusal(column, row[column]);
+        if (refusal) return refusal;
+      }
     }
     return null;
   }
 
   private execute(): Reply {
     const table = this.db.table(this.tableName);
+    // Postgres binds the statement's values before it runs it: one that its
+    // column cannot hold fails the whole statement, and nothing is read or
+    // written. A multi-row insert with one bad row writes no row.
+    const refused = this.refused
+      ?? (this.op === 'insert' || this.op === 'upsert' || this.op === 'update' ? this.typeViolation(this.payload) : null);
+    if (refused) return { data: null, error: refused, count: null, status: 400, statusText: 'Bad Request' };
     switch (this.op) {
       case 'select':
         return this.shape(this.matching());
@@ -602,7 +696,13 @@ export class InMemorySupabase {
   }
 
   seed(name: string, rows: Row[]): void {
-    for (const row of rows) this.table(name).push(this.withDefaults(name, row));
+    for (const row of rows) {
+      for (const column of this.uuidColumnsFor(name)) {
+        const refusal = uuidRefusal(column, row[column]);
+        if (refusal) throw new Error(`[in-memory-supabase] seed ${name}.${column}: ${refusal.message}`);
+      }
+      this.table(name).push(this.withDefaults(name, row));
+    }
   }
 
   replace(name: string, rows: Row[]): void { this.tables.set(name, rows); }
@@ -615,6 +715,8 @@ export class InMemorySupabase {
   reset(): void { this.tables.clear(); this.log.length = 0; }
 
   uniquesFor(name: string): string[][] { return this.options.uniques?.[name] ?? []; }
+  uuidColumnsFor(name: string): string[] { return this.options.uuidColumns?.[name] ?? []; }
+  isUuidColumn(name: string, column: string): boolean { return this.uuidColumnsFor(name).includes(column); }
 
   /** The defaults every migration in this repository gives its tables: a uuid id and timestamps. */
   withDefaults(table: string, raw: Row): Row {

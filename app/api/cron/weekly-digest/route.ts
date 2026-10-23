@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
+import { lastWeeklySlot, WEEKLY_DIGEST_SLOT, weeklyWindow } from '@/lib/server/cron-slot';
 import { readCompleteCalendarOccurrences } from '@/lib/services/calendar/search-occurrences';
 import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from '@/lib/calendar/source-capability';
 import { dayKeyInZone } from '@/lib/schedule/zoned';
@@ -51,8 +53,18 @@ export async function GET(req: NextRequest) {
 
   const supabase = createServiceClient();
 
-  const weekStart = new Date().toISOString();
-  const weekEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  // The occurrence this tick belongs to: the most recent Monday 08:00 UTC slot
+  // at or before now, and the week that starts there (lib/server/cron-slot.ts).
+  // Both schedulers fire this route at that minute, a GitHub tick can land a
+  // few minutes late, and a 502 invites a replay by hand. Derived from the
+  // clock, each tick rendered its own bytes and nothing folded them, so every
+  // family's admin received two digests. Every tick for one slot now reads the
+  // same window, renders the same bytes and sends each recipient under one
+  // idempotency key, which the provider folds (as admin-digest does).
+  const slot = lastWeeklySlot(new Date(), WEEKLY_DIGEST_SLOT);
+  const { start: weekStart, end: weekEnd } = weeklyWindow(slot);
+  const keyFor = (familyId: string, to: string) =>
+    `weekly-digest/${createHash('sha256').update(`${slot.toISOString()}|${familyId}|${to}`).digest('hex')}`;
 
   // Every household, not the first thousand. An unbounded select is capped at
   // PostgREST's db-max-rows and says nothing, so families past that ceiling
@@ -177,6 +189,9 @@ export async function GET(req: NextRequest) {
 
     const { ok, skipped: notSent } = await sendReactEmail({
       to: adminEmail,
+      // One key per family, recipient and slot: a second tick for the same
+      // occurrence is folded by the provider rather than delivered again.
+      idempotencyKey: keyFor(family.id, adminEmail),
       subject: `${family.name} — your week ahead`,
       react: React.createElement(WeeklyDigestEmail, {
         familyName: family.name,

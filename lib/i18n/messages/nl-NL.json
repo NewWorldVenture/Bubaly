@@ -14162,6 +14162,7 @@
   "sync.providerNotConfiguredYet": "{provider}-synchronisatie is nog niet geconfigureerd.",
   "sync.providerNotConnectedForAccount": "{provider} is niet verbonden voor dit account.",
   "sync.providerTokensAreAes256": "Providertokens worden met AES-256-GCM versleuteld voordat ze worden opgeslagen. Zonder sleutel kan geen enkele OAuth-koppeling bewaard blijven — dat is bewust fail-closed gedrag, geen stille terugval op platte tekst.",
+  "sync.syncAlreadyRunning": "Er loopt al een synchronisatie voor dit account. Die rondt zichzelf af; probeer het zo nog eens.",
   "sync.syncFailed": "Synchronisatie mislukt",
   "sync.tooManySyncRequestsPlease": "Te veel synchronisatieverzoeken. Probeer het zo dadelijk opnieuw.",
   "sync.urlDoesNotAppearTo": "De URL lijkt geen geldige ICS-agenda te zijn",
