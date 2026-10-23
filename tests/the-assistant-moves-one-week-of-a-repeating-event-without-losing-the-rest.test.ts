@@ -43,6 +43,29 @@ const tool = (name: string) => {
 const row = (id: string) => db.table('calendar_events').find((r) => r.id === id) as Row;
 const instant = (value: string | null) => (value === null ? null : new Date(value).toISOString());
 
+/**
+ * Every update the tools send to calendar_events from here on. `before` runs
+ * as an update is built, before the database matches it: another member's
+ * change landing between the tool's read and its write.
+ */
+function watchWrites(before?: () => void) {
+  const writes: unknown[] = [];
+  const real = db;
+  scope = { ...scope, db: new Proxy(real, {
+    get(target, property, receiver) {
+      if (property !== 'from') return Reflect.get(target, property, receiver);
+      return (table: string) => {
+        const builder = target.from(table) as unknown as { update: (patch: unknown) => unknown };
+        if (table !== 'calendar_events') return builder;
+        const update = builder.update.bind(builder);
+        builder.update = (patch) => { writes.push(patch); before?.(); return update(patch); };
+        return builder;
+      };
+    },
+  }) };
+  return writes;
+}
+
 beforeEach(() => {
   db = createInMemorySupabase<SupabaseClient<Database>>();
   const base = {
@@ -186,6 +209,40 @@ describe('the move is mapped onto the series on its own clock', () => {
     expect(result.ok, result.ok ? '' : result.error).toBe(true);
     expect(instant(row('market-1').starts_at), 'the all-day series was not moved by one date').toBe('2026-09-06T00:00:00.000Z');
     expect(row('market-1').all_day).toBe(true);
+  });
+});
+
+describe('a week that cannot be read is refused, never written past', () => {
+  // `occurrence_starts_at` passes the schema as any string. Unreadable, it was
+  // dropped and the new time written into the series row as it stood: the
+  // restart this whole change exists to stop.
+  it.each([
+    ['calendar.updateEvent', { starts_at: '2026-11-04T16:00:00', ends_at: '2026-11-04T17:30:00' }],
+    ['calendar.rescheduleEvent', { starts_at: '2026-11-04T16:00:00' }],
+  ])('%s with occurrence_starts_at "not-a-date" writes nothing', async (name, times) => {
+    const writes = watchWrites();
+    const result = await tool(name).execute(scope, { event_id: SWIM, ...times, occurrence_starts_at: 'not-a-date' });
+    expect(result.ok, 'an unreadable week let the new time restart the series').toBe(false);
+    expect(result.ok ? '' : result.error).toMatch(/week/);
+    expect(writes, 'a write was sent').toHaveLength(0);
+    expect(instant(row(SWIM).starts_at)).toBe('2026-09-01T20:00:00.000Z');
+    expect(instant(row(SWIM).ends_at)).toBe('2026-09-01T21:30:00.000Z');
+  });
+
+  it('an unreadable new time with a readable week writes nothing', async () => {
+    const writes = watchWrites();
+    const result = await tool('calendar.updateEvent').execute(scope, { event_id: SWIM, starts_at: 'after lunch', occurrence_starts_at: '2026-11-03T21:00:00.000Z' });
+    expect(result.ok).toBe(false);
+    expect(writes).toHaveLength(0);
+    expect(instant(row(SWIM).starts_at)).toBe('2026-09-01T20:00:00.000Z');
+  });
+
+  it('an unreadable week is refused for a one-off too', async () => {
+    const writes = watchWrites();
+    const result = await tool('calendar.rescheduleEvent').execute(scope, { event_id: DENTIST, starts_at: '2026-11-04T10:00:00', occurrence_starts_at: 'not-a-date' });
+    expect(result.ok).toBe(false);
+    expect(writes).toHaveLength(0);
+    expect(instant(row(DENTIST).starts_at)).toBe('2026-11-03T14:00:00.000Z');
   });
 });
 

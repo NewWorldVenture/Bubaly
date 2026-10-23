@@ -488,6 +488,8 @@ export type OccurrenceEdit = { occurrenceStartsAt: string | null };
 
 /** The refusal a series time change that names no week gets. */
 const SERIES_NEEDS_OCCURRENCE = 'That event repeats. Say which week this new time is for, and every week moves with it.';
+/** A week named but not readable: refused, never dropped (dropped, the new time restarted the series). */
+const UNREADABLE_OCCURRENCE = 'That week could not be understood. Give its start exactly as the calendar search returned it.';
 
 function forSeriesOccurrence(
   stored: EventClockState & Pick<CalendarEvent, 'recurrence'>,
@@ -496,7 +498,7 @@ function forSeriesOccurrence(
   timezone: string,
 ): ServiceResult<UpdateEventPatch> {
   const occurrence = week.occurrenceStartsAt?.trim() ? week.occurrenceStartsAt : null;
-  if (occurrence) return ok(onSeriesClock(stored, patch, occurrence, timezone));
+  if (occurrence) return onSeriesClock(stored, patch, occurrence, timezone);
   return isSeries(stored) && isSeries({ recurrence: patch.recurrence ?? stored.recurrence })
     ? fail(SERIES_NEEDS_OCCURRENCE, { code: SERVICE_CODES.invalidInput })
     : ok(patch);
@@ -515,20 +517,23 @@ function forSeriesOccurrence(
  *
  * An unchanged start is the series' own start, exactly. A one-off row, the
  * first occurrence, and a series turned into a one-off (which stays where the
- * week was) are left as given, and so is anything unreadable, which
- * `applyEventUpdate` refuses in its own words.
+ * week was) are left as given. Anything unreadable, the week included, is
+ * refused: never written as given, which would restart the series there.
  */
 function onSeriesClock(
   stored: EventClockState & Pick<CalendarEvent, 'recurrence'>,
   patch: UpdateEventPatch,
   occurrenceStartsAt: string,
   timezone: string,
-): UpdateEventPatch {
-  if (!isSeries(stored) || !isSeries({ recurrence: patch.recurrence ?? stored.recurrence })) return patch;
+): ServiceResult<UpdateEventPatch> {
   const occurrence = normalizeCalendarWriteInstant(occurrenceStartsAt, timezone);
+  if (!occurrence) return fail(UNREADABLE_OCCURRENCE, { code: SERVICE_CODES.invalidInput });
+  if (!isSeries(stored) || !isSeries({ recurrence: patch.recurrence ?? stored.recurrence })) return ok(patch);
   const start = patch.startsAt === undefined ? occurrence : normalizeCalendarWriteInstant(patch.startsAt, timezone);
   const end = patch.endsAt == null ? null : normalizeCalendarWriteInstant(patch.endsAt, timezone);
-  if (!occurrence || !start || (patch.endsAt != null && !end) || sameCalendarInstant(occurrence, stored.starts_at)) return patch;
+  if (!start) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
+  if (patch.endsAt != null && !end) return fail('That end time could not be understood.', { code: SERVICE_CODES.invalidInput });
+  if (sameCalendarInstant(occurrence, stored.starts_at)) return ok(patch);
   try {
     const zone = stored.all_day ? 'UTC' : isValidTimezone(timezone) ? timezone : 'UTC';
     const seriesStart = sameCalendarInstant(start, occurrence)
@@ -537,8 +542,10 @@ function onSeriesClock(
     const mapped: UpdateEventPatch = { ...patch };
     if (patch.startsAt !== undefined) mapped.startsAt = seriesStart;
     if (end !== null) mapped.endsAt = formatExactInstant(parseExactInstant(seriesStart) + parseExactInstant(end) - parseExactInstant(start));
-    return mapped;
-  } catch { return patch; }
+    return ok(mapped);
+  } catch {
+    return fail('That new time does not exist on this event\'s clock.', { code: SERVICE_CODES.invalidInput });
+  }
 }
 
 const MINUTE_NS = 60_000_000_000n;
