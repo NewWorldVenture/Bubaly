@@ -370,6 +370,12 @@ function MessagesWorkspace() {
     const receive = (message: Message) => {
       if (!alive.current || !owner.current.current(ticket) || message.family_id !== familyId || message.conversation_id !== convId) return;
       liveRows.current.set(message.id, message);
+      setReplyParents((current) => {
+        if (!current.has(message.id)) return current;
+        const next = new Map(current);
+        next.set(message.id, message);
+        return next;
+      });
       if (historyRef.current && !messagesRef.current.some((row) => row.id === message.id)) { void loadSummaries(); return; }
       setMessages((current) => mergeThreadRows(current, [message], convId));
       const scroll = threadRef.current;
@@ -1061,11 +1067,19 @@ function MessagesWorkspace() {
     if (!activeConvId || !ids.length) { setReplyParents(new Map()); return; }
     const ticket = owner.current.begin('reply-parents');
     const controller = new AbortController();
+    const eventBaseline = new Map(liveRows.current);
     void settle(createClient().from('family_messages').select('*').eq('conversation_id', activeConvId).in('id', ids).abortSignal(controller.signal)).then(({ data, error }) => {
-      if (!error && !controller.signal.aborted && owner.current.accepts(ticket)) setReplyParents(new Map((data ?? []).map((message) => [message.id, message])));
+      if (error || controller.signal.aborted || !owner.current.accepts(ticket)) return;
+      const parents = new Map((data ?? []).map((message) => [message.id, message]));
+      for (const id of ids) {
+        if (hardDeleted.current.has(id)) { parents.delete(id); continue; }
+        const live = liveRows.current.get(id);
+        if (live && eventBaseline.get(id) !== live && live.family_id === familyId && live.conversation_id === activeConvId) parents.set(id, live);
+      }
+      setReplyParents(parents);
     });
     return () => controller.abort();
-  }, [activeConvId, messages]);
+  }, [activeConvId, familyId, messages]);
 
   const q = search.trim().toLowerCase();
   const filtered = conversations.filter((c) => {
