@@ -10,7 +10,9 @@
 // parent's own share on the parent's split> and family_id = <family>` got 0;
 // the teen's own share, and the child's share of a split the teen created and
 // paid, each got 1. The toggle now follows that rule; any other share is the
-// read-only chip a caregiver sees.
+// read-only chip a caregiver sees. Each arm has a split of its own here: the
+// teen's share (Groceries), a split the teen created but the parent paid
+// (Taxi), and one the parent created but the teen paid (Cinema).
 //
 // Driven through the REAL ExpensesModule (tests/helpers/module-harness.tsx)
 // against the in-memory database.
@@ -70,6 +72,8 @@ beforeEach(() => {
     { id: 'split-teen', family_id: FAMILY, description: 'Pizza', total_cents: 1200, category: 'Dining', paid_by: 'm-teen', spent_on: '2026-10-21', created_by: 'u-m-teen' },
     // A split the parent created and the teen paid.
     { id: 'split-paid', family_id: FAMILY, description: 'Cinema', total_cents: 2400, category: 'Entertainment', paid_by: 'm-teen', spent_on: '2026-10-22', created_by: 'u-m-parent' },
+    // A split the teen created and the parent paid, with no share of the teen's.
+    { id: 'split-made', family_id: FAMILY, description: 'Taxi', total_cents: 1800, category: 'Transport', paid_by: 'm-parent', spent_on: '2026-10-19', created_by: 'u-m-teen' },
   ]);
   db.seed('expense_split_shares', [
     { id: 'share-gp', family_id: FAMILY, split_id: 'split-parent', member_id: 'm-parent', share_cents: 2000, settled: false, settled_at: null },
@@ -79,6 +83,8 @@ beforeEach(() => {
     { id: 'share-pk', family_id: FAMILY, split_id: 'split-teen', member_id: 'm-kid', share_cents: 600, settled: false, settled_at: null },
     { id: 'share-cp', family_id: FAMILY, split_id: 'split-paid', member_id: 'm-parent', share_cents: 1200, settled: false, settled_at: null },
     { id: 'share-ck', family_id: FAMILY, split_id: 'split-paid', member_id: 'm-kid', share_cents: 1200, settled: false, settled_at: null },
+    { id: 'share-mp', family_id: FAMILY, split_id: 'split-made', member_id: 'm-parent', share_cents: 900, settled: false, settled_at: null },
+    { id: 'share-mk', family_id: FAMILY, split_id: 'split-made', member_id: 'm-kid', share_cents: 900, settled: false, settled_at: null },
   ]);
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -141,6 +147,18 @@ describe('a teen on the Expenses page', () => {
     expect(db.table('expense_split_shares').find((row) => row.id === 'share-pk')?.settled).toBe(true);
     expect(h.toasts.error).toEqual([]);
   });
+
+  it('keeps the toggle on every share of a split they created but someone else paid, and it settles one', async () => {
+    as('m-teen');
+    const tree = mounted();
+    await settle();
+
+    expect(toggles(tree, 'Taxi', ['Ada', 'Kid'])).toEqual(['Ada', 'Kid']);
+    await click(chip(tree, 'Taxi', 'Ada'));
+
+    expect(db.table('expense_split_shares').find((row) => row.id === 'share-mp')?.settled).toBe(true);
+    expect(h.toasts.error).toEqual([]);
+  });
 });
 
 describe('a child on the Expenses page', () => {
@@ -152,6 +170,7 @@ describe('a child on the Expenses page', () => {
     expect(toggles(tree, 'Groceries', ['Ada', 'Teen', 'Kid'])).toEqual(['Kid']);
     expect(toggles(tree, 'Pizza', ['Teen', 'Kid'])).toEqual(['Kid']);
     expect(toggles(tree, 'Cinema', ['Ada', 'Kid'])).toEqual(['Kid']);
+    expect(toggles(tree, 'Taxi', ['Ada', 'Kid'])).toEqual(['Kid']);
   });
 });
 
@@ -164,6 +183,7 @@ describe('control: a manager', () => {
     expect(toggles(tree, 'Groceries', ['Ada', 'Teen', 'Kid'])).toEqual(['Ada', 'Teen', 'Kid']);
     expect(toggles(tree, 'Pizza', ['Teen', 'Kid'])).toEqual(['Teen', 'Kid']);
     expect(toggles(tree, 'Cinema', ['Ada', 'Kid'])).toEqual(['Ada', 'Kid']);
+    expect(toggles(tree, 'Taxi', ['Ada', 'Kid'])).toEqual(['Ada', 'Kid']);
   });
 
   it('an adult settles the teen\'s share of the parent\'s split', async () => {
@@ -187,5 +207,6 @@ describe('control: a caregiver', () => {
     expect(toggles(tree, 'Groceries', ['Ada', 'Teen', 'Kid'])).toEqual([]);
     expect(toggles(tree, 'Pizza', ['Teen', 'Kid'])).toEqual([]);
     expect(toggles(tree, 'Cinema', ['Ada', 'Kid'])).toEqual([]);
+    expect(toggles(tree, 'Taxi', ['Ada', 'Kid'])).toEqual([]);
   });
 });
