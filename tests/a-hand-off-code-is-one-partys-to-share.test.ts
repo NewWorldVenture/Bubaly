@@ -199,6 +199,56 @@ describe('a rent or a borrow starts at its pickup (N6)', () => {
     expect(order().status).toBe('confirmed');
     expect(handoff().status).toBe('cancelled');
   });
+
+  it('two submits of the code racing leave the loan started, not put back to confirmed', async () => {
+    seed({ kind: 'borrow' }, { proposer_role: 'seller' });
+    as('m-seller');
+    // Submit A has read the order and the pickup and is about to claim the
+    // pickup when submit B (the same lender, a second tab) runs start to finish.
+    const realFrom = db.from.bind(db);
+    let second: Promise<unknown> | null = null;
+    db.from = ((table: string) => {
+      const builder = realFrom(table);
+      if (table === 'marketplace_handoffs' && !second) {
+        const update = builder.update.bind(builder);
+        builder.update = (patch: Row) => {
+          if (!second) {
+            second = completeHandoffAction({ orderId: 'order-1', code: CODE });
+            const then = builder.then.bind(builder);
+            (builder as { then: typeof builder.then }).then = ((ok, bad) => (second as Promise<unknown>).then(() => then(ok, bad))) as typeof builder.then;
+          }
+          return update(patch);
+        };
+      }
+      return builder;
+    }) as typeof db.from;
+
+    const first = await completeHandoffAction({ orderId: 'order-1', code: CODE });
+    const other = await second;
+
+    // One of the two started the loan; the other was told the pickup moved on.
+    expect([first, other]).toContainEqual({ ok: true, data: { loanStarted: true } });
+    expect(order().status).toBe('active');
+    expect(handoff().status).toBe('completed');
+  });
+
+  it('a loan cancelled after its pickup was claimed puts the pickup back, and starts nothing', async () => {
+    seed({ kind: 'borrow' }, { proposer_role: 'seller', completed_at: null });
+    as('m-seller');
+    const realFrom = db.from.bind(db);
+    db.from = ((table: string) => {
+      const builder = realFrom(table);
+      if (table === 'marketplace_orders') {
+        const update = builder.update.bind(builder);
+        builder.update = (patch: Row) => { order().status = 'cancelled'; return update(patch); };
+      }
+      return builder;
+    }) as typeof db.from;
+
+    expect(await completeHandoffAction({ orderId: 'order-1', code: CODE })).toEqual({ ok: false, error: t('handoff.pickupChangedRefresh') });
+    expect(order().status).toBe('cancelled');
+    expect(handoff()).toMatchObject({ status: 'confirmed', completed_at: null });
+  });
 });
 
 describe('a confirm agrees to the proposal its screen showed (N9)', () => {

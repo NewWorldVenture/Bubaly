@@ -17163,5 +17163,7 @@
   "handoffPanel.pickedUpLoanStarted": "Récupéré — le prêt a commencé.",
   "marketplace.reviewsAcrossHouseholdsAreNotOpenYet": "Les avis entre deux foyers ne sont pas encore ouverts.",
   "marketplace.anAuctionTakesBidsNotInterest": "Ceci est une enchère : enchérissez plutôt.",
-  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Les questions entre deux foyers ne sont pas encore ouvertes."
+  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Les questions entre deux foyers ne sont pas encore ouvertes.",
+  "assistantActions.couldNotReadTheBoard": "Impossible de lire la place de marché pour le moment. Réessayez dans un instant.",
+  "negotiations.theOtherSideActedAtTheSameMoment": "L’autre partie a agi sur cette offre au même moment. Actualisez la page et réessayez."
 }

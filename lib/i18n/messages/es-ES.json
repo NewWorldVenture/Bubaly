@@ -17163,5 +17163,7 @@
   "handoffPanel.pickedUpLoanStarted": "Recogido: el préstamo ha empezado.",
   "marketplace.reviewsAcrossHouseholdsAreNotOpenYet": "Las reseñas entre dos hogares aún no están disponibles.",
   "marketplace.anAuctionTakesBidsNotInterest": "Esto es una subasta: haz una puja en su lugar.",
-  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Las preguntas entre dos hogares aún no están disponibles."
+  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Las preguntas entre dos hogares aún no están disponibles.",
+  "assistantActions.couldNotReadTheBoard": "No se ha podido leer el mercado ahora mismo. Inténtalo de nuevo en un momento.",
+  "negotiations.theOtherSideActedAtTheSameMoment": "La otra parte ha actuado sobre esta oferta en el mismo momento. Actualiza la página e inténtalo de nuevo."
 }

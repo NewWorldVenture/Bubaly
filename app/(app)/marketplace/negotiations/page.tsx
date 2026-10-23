@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Handshake, ArrowRight } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { PageHeader } from '@/components/app/page-header';
 import { ErrorState } from '@/components/ui/states';
 import { whoseTurn, statusLine, type Party, type NegotiationStatus } from '@/lib/marketplace/negotiation';
@@ -23,6 +24,37 @@ type Row = {
   status: string; current_amount_cents: number; last_actor: string; agreed_amount_cents: number | null; updated_at: string;
 };
 
+/** The threads the inbox shows, most recently updated first. */
+const INBOX_LIMIT = 100;
+
+/**
+ * This member's threads, read as theirs BEFORE the cap: the ones they opened
+ * as the buyer, and the ones on their own listings (an inner embed of the
+ * listing, filtered on its member). The read was every thread RLS shows
+ * (family-wide, on both sides, across every family the user is in), cut at
+ * the 100 most recently updated and filtered to the member afterwards, so an
+ * open thread of theirs older than those 100 vanished from their inbox with a
+ * counter waiting on them.
+ */
+async function readOwnThreads(
+  sb: Awaited<ReturnType<typeof createServer>>, familyId: string, selfId: string,
+): Promise<{ data: Row[] | null; error: unknown }> {
+  const [asBuyer, asSeller] = await settleAll([
+    sb.from('marketplace_negotiations')
+      .select('id, listing_id, family_id, buyer_member_id, buyer_family_id, status, current_amount_cents, last_actor, agreed_amount_cents, updated_at')
+      .eq('buyer_family_id', familyId).eq('buyer_member_id', selfId)
+      .order('updated_at', { ascending: false }).limit(INBOX_LIMIT),
+    sb.from('marketplace_negotiations')
+      .select('id, listing_id, family_id, buyer_member_id, buyer_family_id, status, current_amount_cents, last_actor, agreed_amount_cents, updated_at, listing:marketplace_listings!inner(member_id)')
+      .eq('family_id', familyId).eq('listing.member_id', selfId)
+      .order('updated_at', { ascending: false }).limit(INBOX_LIMIT),
+  ]);
+  if (asBuyer.error || asSeller.error) return { data: null, error: asBuyer.error ?? asSeller.error };
+  const byId = new Map(([...(asBuyer.data ?? []), ...(asSeller.data ?? [])] as Row[]).map((r) => [r.id, r]));
+  const rows = [...byId.values()].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, INBOX_LIMIT);
+  return { data: rows, error: null };
+}
+
 /** The negotiation inbox — every "Make an Offer" thread you're part of, split by
  *  whose move it is. The full thread + accept/counter lives on the item page. */
 export default async function NegotiationsInboxPage() {
@@ -38,11 +70,7 @@ export default async function NegotiationsInboxPage() {
   const familyId = ctx.active.familyId;
   const selfId = ctx.active.member.id;
 
-  const { data: negRows, error: negError } = await sb
-    .from('marketplace_negotiations')
-    .select('id, listing_id, family_id, buyer_member_id, buyer_family_id, status, current_amount_cents, last_actor, agreed_amount_cents, updated_at')
-    .order('updated_at', { ascending: false })
-    .limit(100);
+  const { data: negRows, error: negError } = await readOwnThreads(sb, familyId, selfId);
 
   // The offer inbox is money-relevant: a dropped read error would render "No offers
   // going yet" and a user with live negotiations would think they have none. Surface
@@ -56,7 +84,7 @@ export default async function NegotiationsInboxPage() {
     );
   }
 
-  const rows = (negRows ?? []) as Row[];
+  const rows = negRows ?? [];
   const listingIds = [...new Set(rows.map((r) => r.listing_id))];
   const { data: listings, error: listingsError } = listingIds.length
     ? await sb.from('marketplace_listings').select('id, title, member_id, price_cents').in('id', listingIds)

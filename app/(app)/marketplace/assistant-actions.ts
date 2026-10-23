@@ -10,11 +10,12 @@
 // missing key. History is passed through for multi-turn context (LLM tier).
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import {
   answerMarketQuestion, marketSystemPrompt, routeMarketIntent,
-  type AssistantLink, type MarketSnapshot,
+  type AssistantLink, type MarketSnapshot, type SnapshotListing, type SnapshotOffer,
 } from '@/lib/marketplace/assistant';
 import { isAIConfigured, resolveProvider, type AIMessage } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -55,20 +56,36 @@ export async function askMarketAssistantAction(
   // catalogues — an unresolved key renders as the raw key on screen.
   if (!limited.ok) return { ok: false, error: t('inboxActions.tooManyRequestsRightNow') };
 
-  const [{ data: listings }, { data: offers }] = await settleAll([
-    sb.from('marketplace_listings')
-      .select('id, title, kind, category, condition, price_cents, rent_period, status, member_id')
-      .eq('family_id', ctx.active.familyId)
-      .limit(600),
-    sb.from('marketplace_offers')
-      .select('listing_id, status, member_id')
-      .eq('family_id', ctx.active.familyId)
-      .limit(600),
+  // What the answers count, and all of it, paged on id: the open board and the
+  // open offers. These were 600 rows each in no order, in every status, with
+  // both errors dropped, so a large family's numbers were a sample and a
+  // failed read was answered as an empty board.
+  const familyId = ctx.active.familyId;
+  const [listings, offers] = await settleAll([
+    readAllByIdAsQuery<SnapshotListing>((after, limit) => {
+      let q = sb.from('marketplace_listings')
+        .select('id, title, kind, category, condition, price_cents, rent_period, status, member_id')
+        .eq('family_id', familyId).in('status', ['available', 'pending']);
+      if (after) q = q.gt('id', after);
+      return q.order('id').limit(limit);
+    }, { max: 20_000 }),
+    readAllByIdAsQuery<SnapshotOffer & { id: string }>((after, limit) => {
+      let q = sb.from('marketplace_offers')
+        .select('id, listing_id, status, member_id')
+        .eq('family_id', familyId).eq('status', 'open');
+      if (after) q = q.gt('id', after);
+      return q.order('id').limit(limit);
+    }, { max: 20_000 }),
   ]);
+  const readError = listings.error ?? offers.error;
+  if (readError) {
+    console.error('[marketplace-assistant] market snapshot read failed', readError);
+    return { ok: false, error: t('assistantActions.couldNotReadTheBoard') };
+  }
 
   const snapshot: MarketSnapshot = {
-    listings: listings ?? [],
-    offers: offers ?? [],
+    listings: listings.data ?? [],
+    offers: offers.data ?? [],
     selfMemberId: ctx.active.member?.id ?? null,
   };
 

@@ -17163,5 +17163,7 @@
   "handoffPanel.pickedUpLoanStarted": "Ritirato: il prestito è iniziato.",
   "marketplace.reviewsAcrossHouseholdsAreNotOpenYet": "Le recensioni tra due famiglie non sono ancora disponibili.",
   "marketplace.anAuctionTakesBidsNotInterest": "Questa è un’asta: fai invece un’offerta.",
-  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Le domande tra due famiglie non sono ancora disponibili."
+  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Le domande tra due famiglie non sono ancora disponibili.",
+  "assistantActions.couldNotReadTheBoard": "Impossibile leggere il mercato in questo momento. Riprova tra poco.",
+  "negotiations.theOtherSideActedAtTheSameMoment": "L’altra parte ha agito su questa offerta nello stesso momento. Aggiorna la pagina e riprova."
 }

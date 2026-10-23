@@ -59,8 +59,21 @@ const RESPOND_REASON: Record<string, string> = {
   bad_action: 'actions.thatActionIsnTValid',
 };
 
-function actionFailure(operation: string, message: string, error: unknown): Result {
+/**
+ * The offer RPC locks the listing and then the thread; the respond RPC locks
+ * the thread and then the listing (0483). A buyer's counter crossing the
+ * seller's decline on one thread can therefore deadlock, and Postgres aborts
+ * one of the two with 40P01 (a serialization failure, 40001, is the same
+ * story). Nothing was written and a retry succeeds, so that is what the person
+ * is told, instead of the generic "could not". Ordering the locks the same
+ * way in both functions is the owner's SQL.
+ */
+const CROSSED_ANOTHER_MOVE = new Set(['40P01', '40001']);
+
+function actionFailure(operation: string, message: string, error: unknown, t: (key: string) => string): Result {
   console.error(`[marketplace-negotiations] ${operation} failed`, error);
+  const code = typeof error === 'object' && error !== null ? String((error as { code?: unknown }).code ?? '') : '';
+  if (CROSSED_ANOTHER_MOVE.has(code)) return { ok: false, error: t('negotiations.theOtherSideActedAtTheSameMoment') };
   return { ok: false, error: describeActionError(error, message) };
 }
 
@@ -105,7 +118,7 @@ export async function makeOfferAction(
     p_amount: amount,
     p_message: message,
   });
-  if (error) return actionFailure('send the offer', t('marketplace.couldNotSendTheOffer'), error);
+  if (error) return actionFailure('send the offer', t('marketplace.couldNotSendTheOffer'), error, t);
 
   const res = (data ?? {}) as { ok?: boolean; reason?: string; negotiation_id?: string; countered?: boolean };
   if (!res.ok) return { ok: false, error: t(OFFER_REASON[res.reason ?? ''] ?? 'actions.couldNotSendThatOffer') };
@@ -171,7 +184,7 @@ export async function respondToOfferAction(
     p_amount: amount,
     p_message: message,
   });
-  if (error) return actionFailure('respond to the offer', t('negotiations.couldNotRespondToTheOffer'), error);
+  if (error) return actionFailure('respond to the offer', t('negotiations.couldNotRespondToTheOffer'), error, t);
 
   const res = (data ?? {}) as { ok?: boolean; reason?: string; status?: string; order_id?: string };
   if (!res.ok) return { ok: false, error: t(RESPOND_REASON[res.reason ?? ''] ?? 'actions.couldNotCompleteThatAction') };

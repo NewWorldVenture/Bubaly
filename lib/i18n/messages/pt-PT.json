@@ -17163,5 +17163,7 @@
   "handoffPanel.pickedUpLoanStarted": "Recolhido — o empréstimo começou.",
   "marketplace.reviewsAcrossHouseholdsAreNotOpenYet": "As avaliações entre dois agregados familiares ainda não estão disponíveis.",
   "marketplace.anAuctionTakesBidsNotInterest": "Isto é um leilão: faça antes uma licitação.",
-  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "As perguntas entre dois agregados familiares ainda não estão disponíveis."
+  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "As perguntas entre dois agregados familiares ainda não estão disponíveis.",
+  "assistantActions.couldNotReadTheBoard": "Não foi possível ler o mercado neste momento. Tente novamente daqui a pouco.",
+  "negotiations.theOtherSideActedAtTheSameMoment": "A outra parte agiu sobre esta oferta no mesmo momento. Atualize a página e tente novamente."
 }

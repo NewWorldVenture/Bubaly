@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { createServer } from '@/lib/supabase/server';
 import { Avatar } from '@/components/ui/avatar';
 import { FollowButton } from '@/components/marketplace/follow-button';
@@ -58,16 +59,28 @@ export default async function StorefrontPage({ params }: { params: Promise<{ id:
   const nameOf = (mid: string | null) => members?.find((m) => m.id === mid)?.display_name ?? 'Someone';
   const isOwner = store.member_id === selfId;
 
-  const [reviewsRes, listingsRes, followRes, selfFollowRes, ordersRes, listingCountRes] = await settleAll([
+  const [reviewsRes, ratingsRes, listingsRes, openCountRes, followRes, selfFollowRes, ordersRes, listingCountRes] = await settleAll([
+    // The newest twelve are the reviews SHOWN; the numbers are over every one.
     sb.from('marketplace_reviews').select('id, reviewer_member, rating, comment, created_at').eq('family_id', familyId).eq('reviewee_member', store.member_id).order('created_at', { ascending: false }).limit(12),
+    // The rating, "N reviews" and the trust score are over every review,
+    // paged on id, as /marketplace/creators and /marketplace/store read them:
+    // they were the twelve newest, so the count stopped at 12 and the two
+    // pages disagreed about the same seller.
+    readAllByIdAsQuery<{ id: string; rating: number }>((after, limit) => {
+      let q = sb.from('marketplace_reviews').select('id, rating').eq('family_id', familyId).eq('reviewee_member', store.member_id);
+      if (after) q = q.gt('id', after);
+      return q.order('id').limit(limit);
+    }, { max: 50_000 }),
     sb.from('marketplace_listings').select('id, title, kind, category, price_cents, rent_period, photo_url, location, status').eq('family_id', familyId).eq('member_id', store.member_id).in('status', ['available', 'pending']).order('created_at', { ascending: false }).limit(24),
+    // "Open listings" is a count, not the 24 shown.
+    sb.from('marketplace_listings').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('member_id', store.member_id).in('status', ['available', 'pending']),
     sb.from('marketplace_follows').select('id', { count: 'exact', head: true }).eq('store_id', store.id),
     sb.from('marketplace_follows').select('id').eq('store_id', store.id).eq('member_id', selfId).maybeSingle(),
     sb.from('marketplace_orders').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('seller_member', store.member_id).eq('status', 'completed'),
     sb.from('marketplace_listings').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('member_id', store.member_id),
   ]);
 
-  const ratings = (reviewsRes.data ?? []).map((r) => r.rating);
+  const ratings = (ratingsRes.data ?? []).map((r) => r.rating);
   const rs = ratingSummary(ratings);
   const trust = computeTrustScore({
     ratingsReceived: ratings,
@@ -111,7 +124,7 @@ export default async function StorefrontPage({ params }: { params: Promise<{ id:
           <Stat icon={<ShieldCheck className="h-4 w-4 text-emerald-500" />} value={String(trust.score)} label={t(TRUST_BAND_LABEL_KEYS[trust.band])} />
           <Stat icon={<Star className="h-4 w-4 fill-amber-400 text-amber-400" />} value={rs.count > 0 ? rs.avg.toFixed(1) : '—'} label={rs.count > 0 ? `${rs.count} review${rs.count === 1 ? '' : 's'}` : 'No reviews'} />
           <Stat icon={<Users className="h-4 w-4 text-brand-text" />} value={String(followers)} label={`follower${followers === 1 ? '' : 's'}`} />
-          <Stat icon={<Package className="h-4 w-4 text-muted" />} value={String(listings.length)} label={t('marketplaceCreators.openListings')} />
+          <Stat icon={<Package className="h-4 w-4 text-muted" />} value={String(openCountRes.count ?? listings.length)} label={t('marketplaceCreators.openListings')} />
         </div>
       </div>
 

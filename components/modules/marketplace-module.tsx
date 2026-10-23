@@ -95,6 +95,7 @@ export function MarketplaceModule({
   const [saving, setSaving] = useState(false);
   const [offersFor, setOffersFor] = useState<Listing | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [deciding, setDeciding] = useState(false);
 
   const { data: listings, loading, error } = useRealtimeQuery<Listing>({
     table: 'marketplace_listings', familyId, deps: [familyId],
@@ -225,8 +226,12 @@ export function MarketplaceModule({
       const kind = l.kind === 'sell' || l.kind === 'rent' ? 'interest' : 'claim';
       // Insert the offer; a DB trigger flips an available listing to 'pending', and
       // a partial unique index makes a second open offer a no-op ("already sent").
+      // The interest carries the price on screen: accepting records the order
+      // at the offer's amount when it has one, and at the listing's price by
+      // then when it has none (0315), which the seller could have changed.
       const { error: err } = await sb.from('marketplace_offers').insert({
         family_id: familyId, listing_id: l.id, member_id: selfId, kind, created_by: userId,
+        amount_cents: kind === 'interest' ? l.price_cents : null,
       });
       if (err) {
         if (err.code === '23505') { success(t('marketplaceModule.youAlreadyReachedOutAbout')); return; }
@@ -240,19 +245,37 @@ export function MarketplaceModule({
 
   // Owner accepts an offer → one atomic, ownership-checked RPC claims the listing,
   // accepts this offer, declines the rest, and records the order.
+  //
+  // One decision at a time. Accept, then Decline before the accept answered,
+  // sent two RPCs that crossed: marketplace_accept_offer (0315) writes
+  // 'accepted' with no status predicate, so it could overwrite the decline
+  // this screen had just reported. The offer inbox on the listing page has
+  // always held one at a time; two tabs racing is the owner's SQL.
   async function acceptOffer(l: Listing, offer: Offer) {
-    const sb = createClient();
-    const { error: err } = await sb.rpc('marketplace_accept_offer', { p_offer: offer.id });
-    if (err) { toastError(describeDbError(err)); return; }
-    success(t('marketplace.handedOffTo', { name: memberName(offer.member_id) }));
-    setOffersFor(null);
+    if (deciding) return;
+    setDeciding(true);
+    try {
+      const sb = createClient();
+      const { error: err } = await sb.rpc('marketplace_accept_offer', { p_offer: offer.id });
+      if (err) { toastError(describeDbError(err)); return; }
+      success(t('marketplace.handedOffTo', { name: memberName(offer.member_id) }));
+      setOffersFor(null);
+    } finally {
+      setDeciding(false);
+    }
   }
 
   async function declineOffer(offer: Offer) {
-    const sb = createClient();
-    const { error: err } = await sb.rpc('marketplace_decline_offer', { p_offer: offer.id });
-    if (err) { toastError(describeDbError(err)); return; }
-    success(t('marketplaceModule.offerDeclined'));
+    if (deciding) return;
+    setDeciding(true);
+    try {
+      const sb = createClient();
+      const { error: err } = await sb.rpc('marketplace_decline_offer', { p_offer: offer.id });
+      if (err) { toastError(describeDbError(err)); return; }
+      success(t('marketplaceModule.offerDeclined'));
+    } finally {
+      setDeciding(false);
+    }
   }
 
   if (loading) return <SkeletonList count={5} />;
@@ -492,8 +515,8 @@ export function MarketplaceModule({
                   </div>
                   {o.message && <p className="truncate text-xs text-muted">{o.message}</p>}
                 </div>
-                <Button size="sm" onClick={() => offersFor && acceptOffer(offersFor, o as Offer)} className="h-7 gap-1 text-xs"><Check className="h-3.5 w-3.5" /> {t('marketplace.accept')}</Button>
-                <button onClick={() => declineOffer(o as Offer)} aria-label={t('marketplace.decline')} className="rounded p-1 text-muted hover:text-rose-400"><X className="h-4 w-4" /></button>
+                <Button size="sm" onClick={() => offersFor && acceptOffer(offersFor, o as Offer)} disabled={deciding} aria-busy={deciding} className="h-7 gap-1 text-xs"><Check className="h-3.5 w-3.5" /> {t('marketplace.accept')}</Button>
+                <button onClick={() => declineOffer(o as Offer)} disabled={deciding} aria-label={t('marketplace.decline')} className="rounded p-1 text-muted hover:text-rose-400 disabled:opacity-50"><X className="h-4 w-4" /></button>
               </li>
             ))}
           </ul>
