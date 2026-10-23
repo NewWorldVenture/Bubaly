@@ -2,7 +2,7 @@ import * as React from 'react';
 import { APP_URL } from '@/lib/email';
 
 export function WeeklyDigestEmail({
-  familyName, adminName, events, eventCount = events.length, openChores, mealsPlanned, memberCount, compareLine = null, timeZone,
+  familyName, adminName, events, eventCount = events.length, openChores, mealsPlanned, memberCount, compareLine = null, timeZone, weekOf,
 }: {
   familyName: string;
   adminName: string;
@@ -21,9 +21,19 @@ export function WeeklyDigestEmail({
    * California — and the host's in any other deployment.
    */
   timeZone: string;
+  /**
+   * The DAY KEY (YYYY-MM-DD) the week's counts start on, in the family's zone.
+   * The cron passes the family's Monday, so "Week of …" names the week the
+   * numbers cover, and every tick of one slot renders the same words. Without
+   * it the label is today in `timeZone`.
+   */
+  weekOf?: string;
 }) {
   const today = new Date();
-  const weekLabel = today.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone });
+  // A day key is a calendar date, so it is read at UTC noon and printed in UTC:
+  // no zone moves it. Today's date is printed in the family's zone.
+  const labelled = weekOf ? new Date(`${weekOf}T12:00:00Z`) : today;
+  const weekLabel = labelled.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: weekOf ? 'UTC' : timeZone });
 
   return (
     <html lang="en">

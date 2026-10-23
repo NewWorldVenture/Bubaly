@@ -7242,6 +7242,7 @@
   "guardian.couldNotUpdateContactTrust": "Das Kontaktvertrauen konnte nicht aktualisiert werden.",
   "guardian.couldNotUpdateTheGuardianContext": "Der Guardian-Kontext konnte nicht aktualisiert werden.",
   "guardian.couldNotUpdateTheGuardianRouting": "Die Guardian-Weiterleitungsregel konnte nicht aktualisiert werden.",
+  "guardian.aScanIsAlreadyRunning": "Für Ihre Familie läuft bereits eine Prüfung. Die Tipps erscheinen gleich hier.",
   "guardian.escalations": "Eskalationen",
   "guardian.memberProfiles": "Mitgliederprofile",
   "guardian.recentCallsAndMessages": "letzte Anrufe und Nachrichten",

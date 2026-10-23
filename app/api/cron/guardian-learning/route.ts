@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { runLearningForFamily } from '@/lib/guardian/learning-run';
+import { runUnderLearningLease } from '@/lib/guardian/learning-lease';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { sweepFamilies } from '@/lib/server/cron-family-sweep';
 import { readInChunks } from '@/lib/supabase/chunked-in';
@@ -80,6 +81,10 @@ export async function GET(req: NextRequest) {
 
     let totalCreated = 0;
     let failed = 0;
+    // Families another run was learning for at that moment (a manager's scan,
+    // or the mirrored tick): served by that run, so neither a success nor a
+    // failure of this one.
+    let busy = 0;
     // Rotated, bounded and budgeted (lib/server/cron-family-sweep.ts): the
     // serial loop under maxDuration 60 had no time check, so a kill mid-loop
     // left the same families unlearned each night. `counted.current` is false
@@ -90,8 +95,16 @@ export async function GET(req: NextRequest) {
       budgetMs: BUDGET_MS, itemTimeoutMs: FAMILY_TIMEOUT_MS, concurrency: FAMILY_CONCURRENCY, startedAt, runIndex: Math.floor(startedAt / DAY_MS),
     }, async (familyId, counted) => {
       try {
-        const res = await runLearningForFamily(supabase, familyId);
-        if (counted.current) totalCreated += res.created;
+        // Under the family's learning lease (lib/guardian/learning-lease.ts):
+        // the run's dedupe is a read then an insert with no unique key behind
+        // it, so two runs for one family at once filed every suggestion twice.
+        const leased = await runUnderLearningLease(supabase, familyId, () => runLearningForFamily(supabase, familyId));
+        if (!leased.ran) {
+          if (leased.reason === 'error') throw new Error('Guardian learning lease unavailable');
+          if (counted.current) busy++;
+          return;
+        }
+        if (counted.current) totalCreated += leased.result.created;
       } catch (err) {
         if (counted.current) failed++;
         console.error('Guardian learning failed for family', familyId, err);
@@ -110,7 +123,7 @@ export async function GET(req: NextRequest) {
 
     const ok = failed === 0;
     return NextResponse.json(
-      { ok, families: families.length, suggestionsCreated: totalCreated, failed, unreached, timedOut: swept.timedOut.length },
+      { ok, families: families.length, suggestionsCreated: totalCreated, failed, busy, unreached, timedOut: swept.timedOut.length },
       { status: ok ? 200 : 502 },
     );
   } catch (err) {

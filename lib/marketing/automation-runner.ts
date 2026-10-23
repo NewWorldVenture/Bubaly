@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { emailsSent, failedAttempt, recordedActionsJson, retryOf, stepsRecorded, runSteps, type Step } from '@/lib/marketing/automation-steps';
+import { automationSendKey, emailsSent, failedAttempt, recordedActionsJson, retryOf, stepsRecorded, runSteps, type Step } from '@/lib/marketing/automation-steps';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 import { getMarketingCustomersWithError, type MarketingCustomer } from '@/lib/marketing/customers';
 import { wroteNoRows } from '@/lib/supabase/errors';
@@ -202,7 +202,7 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
 
       let actions: string[];
       try {
-        actions = await runSteps(steps, { email: c.ownerEmail, name: c.name }, fallback, supabase, undefined, previous);
+        actions = await runSteps(steps, { email: c.ownerEmail, name: c.name }, fallback, supabase, undefined, previous, automationSendKey(runId));
       } catch (error) {
         console.error('[marketing automation] scheduled steps failed', error);
         // Keep what the earlier attempt delivered: a bare failure here would

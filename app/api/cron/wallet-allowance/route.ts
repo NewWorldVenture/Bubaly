@@ -10,6 +10,7 @@ import type { Split } from '@/lib/wallet/ledger';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { readAll, readAllAsQuery } from '@/lib/supabase/read-all';
 import { readInChunks } from '@/lib/supabase/chunked-in';
+import { dayKeyInTz } from '@/lib/services/scope';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -25,12 +26,18 @@ export async function GET(req: NextRequest) {
   }
   try {
     const supabase = createServiceClient();
-    // Platform-wide, so this stays the UTC day deliberately: the alternative is
-    // resolving every rule's family zone to decide whether its day has arrived,
-    // and the cost of not doing so is bounded at one day early for families west
-    // of UTC. Recorded rather than left looking overlooked — a per-family run
-    // date is the fix if allowance timing ever needs to be exact to the day.
-    const today = new Date().toISOString().slice(0, 10);
+    // "Due today" is the FAMILY's today. `next_run_on` is written on the
+    // family's day (wallet/actions.ts nextRunDate of dayKeyInTz), and "Run due
+    // now" pays on it, but this run decided on the UTC day: at 07:00 UTC a
+    // Pacific family is still on the evening before, so a rule due on its
+    // Saturday was paid on Friday night and stamped last_run_on Saturday. The
+    // read takes every rule due on the latest calendar day anywhere (UTC+14),
+    // a superset, and each rule is then decided, claimed and stamped on its
+    // own family's day. With one 07:00 UTC tick a rule west of UTC-7 is paid
+    // late on its due day instead of early; paying at its local midnight
+    // would take a later schedule, which is the owner's (vercel.json).
+    const now = new Date();
+    const latestDay = new Date(now.getTime() + 14 * 3_600_000).toISOString().slice(0, 10);
 
     // `.limit(N)` is not a bound — PostgREST caps a response at db-max-rows
     // whatever the client asked for, so this quietly read 1,000. `max` is the
@@ -40,10 +47,10 @@ export async function GET(req: NextRequest) {
     // paid allowances, whatever its subscription row still says.
     const { rows: rules, error } = await readAll((from, to) => supabase
       .from('allowance_rules')
-      .select('id, family_id, child_wallet_id, amount_cents, cadence, split, next_run_on, last_run_on, created_by, family:families!inner(closed_at)')
+      .select('id, family_id, child_wallet_id, amount_cents, cadence, split, next_run_on, last_run_on, created_by, family:families!inner(closed_at, timezone)')
       .is('family.closed_at', null)
       .eq('is_active', true)
-      .lte('next_run_on', today)
+      .lte('next_run_on', latestDay)
       .order('id')
       .range(from, to), { max: 2000 });
     // If the wallet migration hasn't reached this database yet, there's simply
@@ -117,7 +124,14 @@ export async function GET(req: NextRequest) {
     let paid = 0;
     let skippedFree = 0;
     let failed = 0;
+    let due = 0;
     for (const rule of rules ?? []) {
+      // The family's own day: a rule not yet due there is not this run's.
+      const family = rule.family as { timezone?: string | null } | null;
+      const today = dayKeyInTz(now, family?.timezone || 'UTC');
+      if ((rule.next_run_on ?? today) > today) continue;
+      due++;
+
       // A rule with no author predates the column or was written by the service
       // role; those are the seed/migration path and stay payable. A rule that
       // names an author who is not an active manager of that family does not.
@@ -182,8 +196,9 @@ export async function GET(req: NextRequest) {
       // the rule's id — the `<rule>:<day>` text there was refused with 22P02,
       // and the claim above had already moved the schedule on: nobody was paid.
       // The day is the one being PAID (the `next_run_on` this run claimed), not
-      // `today`: this run's day is UTC and "Run due now" counts in the family's
-      // zone, so a run-day key named one payment twice west or east of UTC.
+      // `today`: a run that catches up several missed periods pays the first
+      // one it claimed, and a run-day key (this run's day was once UTC, while
+      // "Run due now" counts in the family's zone) named one payment twice.
       const occurrence = allowanceOccurrenceKey(rule.id, rule.next_run_on ?? today);
       const res = await creditChildWallet(supabase, {
         familyId: rule.family_id,
@@ -279,7 +294,7 @@ export async function GET(req: NextRequest) {
     // active manager is not paid, and says so rather than vanishing).
     const ok = failed === 0;
     return NextResponse.json(
-      { ok, due: (rules ?? []).length, paid, skippedFree, skippedUnauthored, failed },
+      { ok, due, paid, skippedFree, skippedUnauthored, failed },
       { status: ok ? 200 : 502 },
     );
   } catch (err) {

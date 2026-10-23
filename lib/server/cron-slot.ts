@@ -44,3 +44,41 @@ export function lastWeeklySlot(now: Date, slot: WeeklySlot): Date {
 export function weeklyWindow(slot: Date): { start: string; end: string } {
   return { start: slot.toISOString(), end: new Date(slot.getTime() + 7 * DAY_MS).toISOString() };
 }
+
+// The daily form, for a sweep that rotates where it starts
+// (lib/autopilot/cron-rotation.ts rotateForSlot). The dispatcher runs these
+// twice a day and vercel.json once, at the first slot. Numbered by the UTC day
+// alone, both runs of a day started at the same family, so a run the budget cut
+// short was followed by one that re-served its prefix. A run is named by the
+// latest slot at or before the call instead: its day and its place in the day.
+
+/** A cron that fires at fixed UTC times every day (`m h1,h2 * * *`), as minutes past midnight, ascending. */
+export type DailySlots = readonly number[];
+
+/** `/api/cron/autopilot-scan`: `30 6,18 * * *`. */
+export const AUTOPILOT_SCAN_SLOTS: DailySlots = [6 * 60 + 30, 18 * 60 + 30];
+/** `/api/cron/model-refresh`: `0 4,16 * * *`. */
+export const MODEL_REFRESH_SLOTS: DailySlots = [4 * 60, 16 * 60];
+
+/** The cron expression daily slots stand for (they share one minute), to compare with the schedules. */
+export function dailySlotsCron(slots: DailySlots): string {
+  const minutes = new Set(slots.map((m) => m % 60));
+  if (minutes.size !== 1) throw new TypeError('cron slot: daily slots must share a minute');
+  return `${slots[0] % 60} ${slots.map((m) => Math.floor(m / 60)).join(',')} * * *`;
+}
+
+/**
+ * The run a call at `nowMs` belongs to: the latest slot at or before it, as its
+ * UTC day number and its index among the day's slots. A late or caught-up call
+ * is the slot it is catching up, so the 18:30 run the dispatcher catches up
+ * after midnight is still that day's second run, not the next day's first.
+ */
+export function lastDailySlot(nowMs: number, slots: DailySlots): { day: number; slot: number } {
+  if (!Number.isFinite(nowMs) || slots.length === 0) throw new TypeError('cron slot: a valid time and at least one slot');
+  const day = Math.floor(nowMs / DAY_MS);
+  const minute = Math.floor((nowMs - day * DAY_MS) / 60_000);
+  for (let slot = slots.length - 1; slot >= 0; slot--) {
+    if (minute >= slots[slot]) return { day, slot };
+  }
+  return { day: day - 1, slot: slots.length - 1 };
+}
