@@ -181,7 +181,10 @@ export async function GET(req: NextRequest) {
       // rides in `metadata.occurrence`; `related_id` is a uuid column and keeps
       // the rule's id — the `<rule>:<day>` text there was refused with 22P02,
       // and the claim above had already moved the schedule on: nobody was paid.
-      const occurrence = allowanceOccurrenceKey(rule.id, today);
+      // The day is the one being PAID (the `next_run_on` this run claimed), not
+      // `today`: this run's day is UTC and "Run due now" counts in the family's
+      // zone, so a run-day key named one payment twice west or east of UTC.
+      const occurrence = allowanceOccurrenceKey(rule.id, rule.next_run_on ?? today);
       const res = await creditChildWallet(supabase, {
         familyId: rule.family_id,
         childWalletId: rule.child_wallet_id,

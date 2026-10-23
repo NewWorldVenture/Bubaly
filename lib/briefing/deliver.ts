@@ -36,6 +36,7 @@ import type { NeedsReader } from '@/lib/home/needs-sources';
 import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { notify } from '@/lib/services/notifications';
 import { claimLease, releaseLease } from '@/lib/server/app-settings-lease';
+import { sweepFamilies } from '@/lib/server/cron-family-sweep';
 import { readAll } from '@/lib/supabase/read-all';
 import { dayKeyInTz, hourInTz, scopeForSystem, zonedDayBoundsMs, zonedTimeMs } from '@/lib/services/scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
@@ -279,8 +280,23 @@ async function deliverMorningBrief(db: DB, family: { id: string; timezone: strin
   }
 }
 
+/**
+ * The brief pass's share of its cron's time (app/api/cron/notifications). Push
+ * dispatch and the email digests run AFTER this pass, so a pass that awaited
+ * every family in turn, with no clock and no per-family limit, spent the slice
+ * the route keeps for delivering what is already queued — one hung read, or
+ * enough families, and nothing was pushed or emailed that tick. With a budget
+ * the pass stops STARTING families once `budgetMs` has passed since
+ * `startedAt` (the route's own start, so a long generation pass shrinks this
+ * one rather than pushing delivery out), and a family whose brief outlives
+ * `familyTimeoutMs` is that family's failure. Both are counted in `failed`.
+ */
+export type MorningDeliveryBudget = { startedAt: number; budgetMs: number; familyTimeoutMs: number; concurrency: number };
+
+const DAY_MS = 86_400_000;
+
 /** The cron step: one morning brief per family per family-local day. */
-export async function deliverMorningBriefs(db: DB, now: Date = new Date()): Promise<MorningDeliveryResult> {
+export async function deliverMorningBriefs(db: DB, now: Date = new Date(), budget?: MorningDeliveryBudget): Promise<MorningDeliveryResult> {
   const result: MorningDeliveryResult = { delivered: 0, families: 0, skipped: 0, failed: 0 };
   // Every family, not the first 1,000: an unbounded select is capped by
   // PostgREST's db-max-rows and says nothing about it, so family 1,001 onwards
@@ -294,14 +310,35 @@ export async function deliverMorningBriefs(db: DB, now: Date = new Date()): Prom
     result.failed += 1;
     return result;
   }
-  for (const family of families ?? []) {
-    result.families += 1;
+  result.families = (families ?? []).length;
+  // Rotated by the day (lib/server/cron-family-sweep.ts), so a pass the budget
+  // cuts short does not leave the same tail without a brief every morning.
+  // Without a budget, one family may take as long as its claim stands: past
+  // that the claim has expired and another tick may compose the same brief.
+  const swept = await sweepFamilies(families ?? [], {
+    budgetMs: budget?.budgetMs ?? Number.POSITIVE_INFINITY,
+    itemTimeoutMs: budget?.familyTimeoutMs ?? MORNING_BRIEF_CLAIM_MS,
+    concurrency: budget?.concurrency ?? 1,
+    startedAt: budget?.startedAt,
+    runIndex: Math.floor(now.getTime() / DAY_MS),
+  }, async (family, counted) => {
+    let outcome: Outcome;
     try {
-      result[await deliverMorningBrief(db, family, now)] += 1;
+      outcome = await deliverMorningBrief(db, family, now);
     } catch (e) {
       console.error('[briefing] morning brief delivery failed', { familyId: family.id, error: e });
-      result.failed += 1;
+      outcome = 'failed';
     }
+    // A brief that answers after its timeout was already counted as failed.
+    if (counted.current) result[outcome] += 1;
+  });
+  for (const family of swept.timedOut) {
+    result.failed += 1;
+    console.error('[briefing] morning brief gave up waiting for a family', { familyId: family.id });
+  }
+  if (swept.unreached.length > 0) {
+    result.failed += swept.unreached.length;
+    console.error(`[briefing] budget reached with ${swept.unreached.length} families without a brief`, swept.unreached.slice(0, 50).map((f) => f.id));
   }
   return result;
 }

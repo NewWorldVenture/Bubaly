@@ -25,7 +25,7 @@
 // rather than inside it, so the engine's item-level claims (the adoption
 // fences in lib/sync/persistence.ts) keep covering the case this lease cannot:
 // a stale takeover while the sync that died turns out to be alive.
-import type { Database } from '@/lib/database.types';
+import type { Database, SyncStatusEnum } from '@/lib/database.types';
 import type { SyncProviderAdapter } from '@/lib/sync/adapter';
 import { runProviderSync, type RunResult } from '@/lib/sync/engine/generic';
 import type { createServiceClient } from '@/lib/supabase/server';
@@ -47,15 +47,32 @@ export type LeasedRunResult = RunResult & {
  */
 export const ACCOUNT_SYNC_STALE_MS = 20 * 60_000;
 
-export async function claimAccountLease(admin: Admin, account: Account, now: Date = new Date()): Promise<'claimed' | 'busy'> {
+/**
+ * A claim taken, and the stamp it replaced when that is known: the account's
+ * own status before this sync, which a sync the policy refuses before it
+ * starts gives back (releaseAccountLease). Null after a stale takeover, or when
+ * the stamp could not be read: there is no state of the account's own to give back.
+ */
+export type AccountClaim = { prior: Exclude<SyncStatusEnum, 'syncing'> | null };
+
+export async function claimAccountLease(admin: Admin, account: Account, now: Date = new Date()): Promise<AccountClaim | 'busy'> {
   // `updated_at` is a stamp the table's trigger keeps, so the typed Update
   // leaves it out; written here too so the claim's age is explicit.
   const mark = { sync_status: 'syncing', updated_at: now.toISOString() } as unknown as Database['public']['Tables']['sync_accounts']['Update'];
   const claim = () => admin.from('sync_accounts').update(mark)
     .eq('id', account.id).eq('family_id', account.family_id).neq('sync_status', 'syncing').select('id');
+  // What the claim is about to replace. The dashboards show this stamp
+  // verbatim ("Connected synced"), and a sync the account's policy refuses
+  // never runs, so it should leave the stamp as it found it. Read for that
+  // alone: a read that fails costs only that (the release then stamps
+  // `error`, as before), never the sync.
+  const { data: before, error: beforeError } = await admin.from('sync_accounts').select('sync_status')
+    .eq('id', account.id).eq('family_id', account.family_id);
+  const seen = beforeError ? undefined : (before as { sync_status?: SyncStatusEnum }[] | null)?.[0]?.sync_status;
+  const prior = seen && seen !== 'syncing' ? seen : null;
   const idle = await claim();
   if (idle.error) throw new Error('Sync account lease failed');
-  if (!wroteNoRows(idle.data)) return 'claimed';
+  if (!wroteNoRows(idle.data)) return { prior };
 
   const { data: held, error: readError } = await admin.from('sync_accounts')
     .select('sync_status, updated_at').eq('id', account.id).eq('family_id', account.family_id).maybeSingle();
@@ -65,7 +82,7 @@ export async function claimAccountLease(admin: Admin, account: Account, now: Dat
     // an idle row is a row this client may not update.
     const again = await claim();
     if (again.error || wroteNoRows(again.data)) throw new Error('Sync account lease was refused');
-    return 'claimed';
+    return { prior: held.sync_status };
   }
   const heldSince = Date.parse(String(held.updated_at ?? ''));
   if (Number.isFinite(heldSince) && now.getTime() - heldSince < ACCOUNT_SYNC_STALE_MS) return 'busy';
@@ -73,14 +90,14 @@ export async function claimAccountLease(admin: Admin, account: Account, now: Dat
   const stale = await admin.from('sync_accounts').update(mark)
     .eq('id', account.id).eq('family_id', account.family_id).eq('sync_status', 'syncing').lt('updated_at', cutoff).select('id');
   if (stale.error) throw new Error('Sync account stale-lease takeover failed');
-  return wroteNoRows(stale.data) ? 'busy' : 'claimed';
+  return wroteNoRows(stale.data) ? 'busy' : { prior: null };
 }
 
 /**
  * Give the account back. The engine's finalization normally has already:
  * zero rows here is the ordinary case, and only an error is reported.
  */
-export async function releaseAccountLease(admin: Admin, account: Account, outcome: 'synced' | 'error'): Promise<void> {
+export async function releaseAccountLease(admin: Admin, account: Account, outcome: Exclude<SyncStatusEnum, 'syncing'>): Promise<void> {
   const { error } = await admin.from('sync_accounts')
     .update({ sync_status: outcome })
     .eq('id', account.id).eq('family_id', account.family_id).eq('sync_status', 'syncing').select('id');
@@ -89,12 +106,19 @@ export async function releaseAccountLease(admin: Admin, account: Account, outcom
 
 /** `runProviderSync` under the account's lease; `busy` when another sync holds it. */
 export async function runLeasedProviderSync(admin: Admin, account: Account, adapter: SyncProviderAdapter): Promise<LeasedRunResult> {
-  if (await claimAccountLease(admin, account) === 'busy') {
+  const lease = await claimAccountLease(admin, account);
+  if (lease === 'busy') {
     return { imported: 0, exported: 0, skipped: 0, conflicts: 0, busy: true };
   }
   try {
     const result = await runProviderSync(admin, account, adapter);
-    await releaseAccountLease(admin, account, result.error ? 'error' : 'synced');
+    // A sync the account's policy refused (turned off, an import still to be
+    // finished, an owner no longer in the family) never started: it gives the
+    // account back as it found it. Stamping it `error` told the dashboards
+    // "Connected error" about a sync a parent had switched off. A sync that ran
+    // and failed is the account's error state, as before.
+    const outcome = result.refused && lease.prior ? lease.prior : result.error ? 'error' : 'synced';
+    await releaseAccountLease(admin, account, outcome);
     return result;
   } catch (e) {
     await releaseAccountLease(admin, account, 'error');

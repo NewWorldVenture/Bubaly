@@ -511,16 +511,58 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
     if (!advancedRule) continue; // another run claimed this rule — do not double-pay
 
     if (runs > 0) {
+      // The same occurrence key the nightly cron writes, so the two paths
+      // share one ledger identity per payment (lib/wallet/allowance.ts). It
+      // rides in metadata.occurrence: related_id is uuid and stays the rule's.
+      // Keyed by the date being PAID (the claimed next_run_on), not `today`:
+      // this run's day is the family's and the cron's is UTC, so a run-day key
+      // gave one payment two identities whenever the two days differ.
+      const occurrence = allowanceOccurrenceKey(rule.id, rule.next_run_on ?? today);
       const res = await creditChildWallet(supabase, {
         familyId, childWalletId: rule.child_wallet_id, amountCents: rule.amount_cents, type: 'allowance',
         description: 'Allowance (manual run)', createdBy: ctx.user.id,
-        // The same occurrence key the nightly cron writes, so the two paths
-        // share one ledger identity per payment (lib/wallet/allowance.ts). It
-        // rides in metadata.occurrence: related_id is uuid and stays the rule's.
-        relatedType: 'allowance_rules', relatedId: rule.id, occurrence: allowanceOccurrenceKey(rule.id, today),
+        relatedType: 'allowance_rules', relatedId: rule.id, occurrence,
         splitOverride: rule.split as Partial<Split> | null,
       });
       if (!res.ok) {
+        // The cron's handling (app/api/cron/wallet-allowance/route.ts). The
+        // ledger already holds this occurrence: the cron, another click, or a
+        // retry after a lost answer paid it. Paid, and the claim stands —
+        // rolling it back left the rule due and answered the parent with an
+        // error for an allowance the child has.
+        if (res.duplicate) {
+          ranCount++;
+          paidCents += rule.amount_cents;
+          continue;
+        }
+        if (res.insertFailed) {
+          // The insert answered an error, but the ledger may hold the credit
+          // anyway (the server committed, the connection dropped). Rolling the
+          // claim back on that answer made the rule due again, and the next
+          // click, or the cron, paid the child a second time. Ask the ledger
+          // first, under the occurrence key.
+          const { data: landed, error: landedError } = await supabase.from('wallet_transactions')
+            .select('id')
+            .eq('family_id', familyId)
+            .eq('related_type', 'allowance_rules')
+            .eq('related_id', rule.id)
+            .eq('metadata->>occurrence', occurrence)
+            .limit(1);
+          if (landedError) {
+            // Unknown outcome: the claim stays, so the rule is not due again
+            // until its next date. Paid or not, the child is not paid twice.
+            console.error('[wallet allowances] credit outcome unknown and the ledger could not be read; leaving the schedule advanced', {
+              ruleId: rule.id, familyId, occurrence, error: landedError.message,
+            });
+            return { ok: false, error: res.error, ranCount, paidCents };
+          }
+          if (landed?.length) {
+            console.error('[wallet allowances] credit answered an error after it landed; counted as paid', { ruleId: rule.id, familyId, occurrence });
+            ranCount++;
+            paidCents += rule.amount_cents;
+            continue;
+          }
+        }
         // Undoing the claim above after the credit failed. If this matched no
         // rows the schedule stays advanced, so the child simply never receives
         // that run — the money is not double-paid, it is not paid at all, and

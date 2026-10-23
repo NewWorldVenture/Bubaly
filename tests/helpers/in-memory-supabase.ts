@@ -175,6 +175,13 @@ function postgrestLike(column: string, pattern: string, flags: string): Predicat
   return (row) => typeof row[column] === 'string' && re.test(row[column] as string);
 }
 
+/** The members of an `in` filter: an array, or PostgREST's list text `(a,b,"c")`. */
+function inListMembers(wanted: unknown): unknown[] {
+  return Array.isArray(wanted)
+    ? wanted
+    : String(wanted).replace(/^\(/, '').replace(/\)$/, '').split(',').map((v) => parseFilterValue(v.trim().replace(/^"|"$/g, '')));
+}
+
 function operatorPredicate(column: string, op: string, wanted: unknown): Predicate {
   if (column.includes('->')) {
     const path = /^([a-zA-Z_]\w*)((?:->>?[a-zA-Z_]\w*)+)$/.exec(column);
@@ -204,9 +211,7 @@ function operatorPredicate(column: string, op: string, wanted: unknown): Predica
     case 'lt': return (row) => row[column] != null && compare(row[column], wanted) < 0;
     case 'lte': return (row) => row[column] != null && compare(row[column], wanted) <= 0;
     case 'in': {
-      const values = Array.isArray(wanted)
-        ? wanted
-        : String(wanted).replace(/^\(/, '').replace(/\)$/, '').split(',').map((v) => parseFilterValue(v.trim().replace(/^"|"$/g, '')));
+      const values = inListMembers(wanted);
       return (row) => values.some((v) => looseEq(row[column], v));
     }
     case 'imatch': {
@@ -382,6 +387,17 @@ function project(db: InMemorySupabase, row: Row, select: string): Row {
 /** Operators whose value Postgres casts to the column's type (not the pattern and array operators). */
 const TYPED_OPERATORS = new Set(['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'in']);
 
+/**
+ * The values a filter binds to its column. An `in` given as PostgREST's list
+ * text (`.not(col, 'in', '(a,b)')`, `.filter(col, 'in', '(a,b)')`) binds each
+ * member, as the server does: the whole `(a,b)` is not one uuid, but a list of
+ * valid ones is a valid filter.
+ */
+function typedMembers(op: string, value: unknown): unknown[] {
+  if (op === 'in') return inListMembers(value);
+  return Array.isArray(value) ? value : [value];
+}
+
 class QueryBuilder implements PromiseLike<Reply> {
   private op: Op = 'select';
   private payload: Row[] = [];
@@ -470,9 +486,8 @@ class QueryBuilder implements PromiseLike<Reply> {
   contains(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'contains', value)); return this; }
   overlaps(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'overlaps', value)); return this; }
   not(column: string, op: string, value: unknown) {
-    const wanted = op === 'in' && typeof value === 'string' ? value : value;
-    if (TYPED_OPERATORS.has(op)) this.typed(column, Array.isArray(wanted) ? wanted : [wanted]);
-    const predicate = operatorPredicate(column, op, wanted);
+    if (TYPED_OPERATORS.has(op)) this.typed(column, typedMembers(op, value));
+    const predicate = operatorPredicate(column, op, value);
     this.predicates.push((row) => !predicate(row));
     return this;
   }
@@ -480,7 +495,7 @@ class QueryBuilder implements PromiseLike<Reply> {
   // the direct filter methods are typed here.
   or(expression: string) { this.predicates.push(parseOr(expression)); return this; }
   filter(column: string, op: string, value: unknown) {
-    if (TYPED_OPERATORS.has(op)) this.typed(column, Array.isArray(value) ? value : [value]);
+    if (TYPED_OPERATORS.has(op)) this.typed(column, typedMembers(op, value));
     this.predicates.push(operatorPredicate(column, op, value));
     return this;
   }

@@ -81,6 +81,28 @@ describe('a uuid column (InMemoryOptions.uuidColumns)', () => {
     expect(db.table('ledger')).toHaveLength(1);
   });
 
+  it('binds each member of PostgREST\'s list text, not the whole `(a,b)`: a list of uuids is a valid filter', async () => {
+    const db = typed();
+    const THIRD = '70000000-0000-4000-8000-000000000003';
+    db.seed('ledger', [{ id: 'r1', related_id: RULE }, { id: 'r2', related_id: OTHER }, { id: 'r3', related_id: THIRD }]);
+    const notIn = await db.from('ledger').select('id').not('related_id', 'in', `(${RULE},${OTHER})`);
+    expect(notIn.error, 'a list of valid uuids was refused as one bad uuid').toBeNull();
+    expect(notIn.data).toEqual([{ id: 'r3' }]);
+    const filterIn = await db.from('ledger').select('id').filter('related_id', 'in', `("${RULE}",${OTHER})`).order('id');
+    expect(filterIn.error).toBeNull();
+    expect(filterIn.data).toEqual([{ id: 'r1' }, { id: 'r2' }]);
+
+    // One bad member refuses the statement, named as the server names it.
+    for (const query of [
+      db.from('ledger').select('id').not('related_id', 'in', `(${RULE},${KEY})`),
+      db.from('ledger').select('id').filter('related_id', 'in', `(${KEY},${OTHER})`),
+    ]) {
+      const reply = await query;
+      expect(reply.data).toBeNull();
+      expect(reply.error).toMatchObject(REFUSED);
+    }
+  });
+
   it('answers a uuid filter from the table, and leaves undeclared columns untyped', async () => {
     const db = typed();
     db.seed('ledger', [{ id: OTHER, related_id: RULE, note: 'a:b' }]);
