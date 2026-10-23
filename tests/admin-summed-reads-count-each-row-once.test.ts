@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { GrowthChart } from '@/components/admin/growth-chart';
 import { SOURCE_MESSAGES } from '@/lib/i18n/messages';
 import { translate } from '@/lib/i18n/translate';
 import { PLUS_MONTHLY_CENTS } from '@/lib/constants/plans';
@@ -70,6 +72,9 @@ vi.mock('@/lib/metric/strategy-server', () => ({
   loadStrategyMetrics: async () => ({ rework: null, compression: null, compressionRead: 'failed' as const, conversion: null, referrals: null }),
 }));
 vi.mock('@/components/admin/strategy-metric-tiles', () => ({ StrategyMetricTiles: () => null }));
+vi.mock('@/app/(app)/admin/marketing/experiments/actions', () => ({
+  createExperiment: async () => {}, setExperimentStatus: async () => {}, setExperimentWinner: async () => {},
+}));
 
 let db: InMemorySupabase;
 
@@ -92,6 +97,25 @@ function writeBetweenPages(...writes: Write[]): () => string[] {
     if (!nextPage) return null;
     db.seed(table, [write.row]);
     done.push(table);
+    return null;
+  });
+  return () => done;
+}
+
+/**
+ * Serve the pages a client that DELETES the row `id` from `table` just before
+ * the second page of its read — an abandoned checkout cleared mid-read. On
+ * offsets every later row moves up one, and the row that crosses the boundary
+ * is skipped.
+ */
+function deleteBetweenPages(table: string, id: string): () => boolean {
+  let done = false;
+  h.db = withFaults(db, (name, calls) => {
+    if (done || name !== table) return null;
+    const nextPage = calls.some((c) => (c.method === 'gt' && c.args[0] === 'id') || (c.method === 'range' && Number(c.args[0]) > 0));
+    if (!nextPage) return null;
+    db.replace(table, db.table(table).filter((row) => row.id !== id));
+    done = true;
     return null;
   });
   return () => done;
@@ -410,5 +434,142 @@ describe('the other summed admin reads count each row once', () => {
 
     expect(wrote()).toEqual(['marketing_email_campaigns']);
     expect(statCardValue(html, 'Email Open Rate')).toBe('12%');
+  });
+});
+
+// The event tables the PUBLIC writes to — a session and a touchpoint on every
+// visit (app/api/mkt/track), an exposure on every experiment render
+// (app/api/ab/track), a usage event on every generation and publish — still
+// paged their sums on offsets (review R3-OFFSET-SUMS-REMAINING). Each one pages
+// on the id now; each test writes one row between the first and second page.
+describe('the event tables the public writes to are counted once per row', () => {
+  it('/admin/marketing/intelligence: sessions per channel, and Touchpoints', async () => {
+    db.seed('mkt_visitors', []);
+    db.seed('mkt_sessions', Array.from({ length: ROWS }, (_, i) => ({ id: `ses-${pad(i)}`, visitor_id: `vis-${pad(i)}`, source: 'newsletter' })));
+    db.seed('mkt_touchpoints', Array.from({ length: ROWS }, (_, i) => ({
+      id: `tp-${pad(i)}`, visitor_id: `vis-${pad(i)}`, source: 'newsletter', kind: 'visit',
+      occurred_at: new Date(Date.UTC(2026, 9, 1) + i * 60_000).toISOString(),
+    })));
+    const wrote = writeBetweenPages(
+      { table: 'mkt_sessions', read: (columns) => columns.includes('source'), row: { id: early('ses'), visitor_id: 'vis-new', source: 'newsletter' } },
+      { table: 'mkt_touchpoints', read: (columns) => columns.includes('kind'), row: { id: early('tp'), visitor_id: 'vis-new', source: 'newsletter', kind: 'visit', occurred_at: '2026-10-22T11:59:00Z' } },
+    );
+    const { default: IntelligencePage } = await import('@/app/(app)/admin/marketing/intelligence/page');
+    const html = await renderServerPage(await IntelligencePage());
+
+    expect(wrote()).toEqual(expect.arrayContaining(['mkt_sessions', 'mkt_touchpoints']));
+    expect(statCardValue(html, 'Touchpoints')).toBe(String(ROWS));
+    expect(html).toContain('newsletter</span><div class="h-2.5 flex-1 overflow-hidden rounded-full bg-elevated">');
+    expect(html).toContain(`<span class="w-12 shrink-0 text-right text-sm text-muted">${ROWS}</span>`);
+  });
+
+  it('/admin/marketing/experiments: a variant\'s exposures', async () => {
+    db.seed('ab_experiments', [{
+      id: 'exp-1', key: 'hero', name: 'Hero copy', status: 'running', metric: 'signup', hypothesis: null, winner: null, deleted_at: null,
+      variants: [{ key: 'control', label: 'Control', weight: 50 }, { key: 'bold', label: 'Bold', weight: 50 }], created_at: '2026-09-01T00:00:00Z',
+    }]);
+    db.seed('ab_events', Array.from({ length: ROWS }, (_, i) => ({ id: `abe-${pad(i)}`, experiment_key: 'hero', variant_key: 'control', kind: 'exposure', visitor_id: `vis-${pad(i)}` })));
+    const wrote = writeBetweenPages({
+      table: 'ab_events', read: () => true,
+      row: { id: early('abe'), experiment_key: 'hero', variant_key: 'control', kind: 'exposure', visitor_id: 'vis-new' },
+    });
+    const { default: ABTestingPage } = await import('@/app/(app)/admin/marketing/experiments/page');
+    const html = await renderServerPage(await ABTestingPage());
+
+    expect(wrote()).toEqual(['ab_events']);
+    expect(html).toContain(`<td class="py-2 text-right tabular-nums">${ROWS.toLocaleString()}</td>`);
+    expect(html).not.toContain(`<td class="py-2 text-right tabular-nums">${(ROWS + 1).toLocaleString()}</td>`);
+  });
+
+  it('/admin/social/usage: the total per event', async () => {
+    db.seed('social_usage_events', Array.from({ length: ROWS }, (_, i) => ({ id: `use-${pad(i)}`, kind: 'ai_generation', quantity: 1 })));
+    const wrote = writeBetweenPages({ table: 'social_usage_events', read: () => true, row: { id: early('use'), kind: 'ai_generation', quantity: 1 } });
+    const { default: AdminUsagePage } = await import('@/app/(app)/admin/social/usage/page');
+    const html = await renderServerPage(await AdminUsagePage());
+
+    expect(wrote()).toEqual(['social_usage_events']);
+    expect(html).toContain(`<td class="px-2 py-1.5 font-medium">${ROWS.toLocaleString()}</td>`);
+  });
+
+  /** 1,200 accounts from last year and 1,300 that joined inside the chart; their creation times. */
+  function seedAccounts(): string[] {
+    db.seed('profiles', [
+      ...Array.from({ length: 1200 }, (_, i) => ({ id: `usr-a-${pad(i)}`, created_at: new Date(Date.UTC(2025, 0, 1) + i * 3_600_000).toISOString() })),
+      ...Array.from({ length: ROWS }, (_, i) => ({ id: `usr-b-${pad(i)}`, created_at: new Date(Date.UTC(2026, 8, 25) + i * 1_800_000).toISOString() })),
+    ]);
+    for (const table of ['families', 'subscriptions', 'documents']) db.seed(table, []);
+    return db.table('profiles').map((p) => String(p.created_at));
+  }
+
+  it('/admin/system: new users and the growth chart past 2,000 accounts, with no banner', async () => {
+    const timestamps = seedAccounts();
+    const { default: AdminSystemPage } = await import('@/app/(app)/admin/system/page');
+    const html = await renderServerPage(await AdminSystemPage());
+
+    expect(html).toContain(`>${ROWS.toLocaleString()}</p><p class="text-xs text-muted">${SOURCE_MESSAGES['adminSystem.newUsersInTheLast30']}`);
+    // The chart every one of the 2,500 accounts draws.
+    expect(html).toContain(renderToStaticMarkup(createElement(GrowthChart, { timestamps })));
+    expect(html).not.toContain('System overview is incomplete');
+  });
+
+  it('/admin/system: a sign-up between two pages of the chart is not drawn twice', async () => {
+    const timestamps = seedAccounts();
+    const wrote = writeBetweenPages({ table: 'profiles', read: (columns) => columns.includes('created_at'), row: { id: 'usr-b-000000a', created_at: '2026-10-22T11:59:00Z' } });
+    const { default: AdminSystemPage } = await import('@/app/(app)/admin/system/page');
+    const html = await renderServerPage(await AdminSystemPage());
+
+    expect(wrote()).toEqual(['profiles']);
+    expect(html).toContain(renderToStaticMarkup(createElement(GrowthChart, { timestamps })));
+  });
+});
+
+// lib/marketing/customers.ts joined its subscriptions, members and profiles
+// onto the families on offset pages (review R3-CUSTOMERS-OFFSET-LOOKUPS). A
+// member joining mid-read repeated a member, and one household counted a
+// member twice; a subscription removed mid-read skipped the next one, and a
+// paying family read as free. Each lookup pages on the id now.
+describe('the customer view joins each row once', () => {
+  it('/admin/marketing/customers: a member joining mid-read does not count twice', async () => {
+    db.seed('families', Array.from({ length: 5 }, (_, f) => ({
+      id: `fam-${pad(f)}`, name: `Family ${f}`, created_at: '2025-01-01T00:00:00Z', updated_at: '2025-06-01T00:00:00Z', closed_at: null,
+    })));
+    db.seed('subscriptions', []);
+    db.seed('profiles', []);
+    db.seed('family_members', Array.from({ length: ROWS }, (_, i) => ({
+      id: `mem-${pad(i)}`, family_id: `fam-${pad(i % 5)}`, user_id: `usr-${pad(i)}`, role: 'parent', is_active: true,
+    })));
+    const wrote = writeBetweenPages({
+      table: 'family_members', read: () => true,
+      row: { id: early('mem'), family_id: 'fam-000000', user_id: 'usr-000000a', role: 'child', is_active: true },
+    });
+    const { default: MarketingCustomersPage } = await import('@/app/(app)/admin/marketing/customers/page');
+    const html = await renderServerPage(await MarketingCustomersPage({ searchParams: Promise.resolve({}) }));
+
+    expect(wrote()).toEqual(['family_members']);
+    expect(occurrences(html, ` · ${ROWS / 5} members · `)).toBe(5);
+    expect(html).not.toContain(` · ${ROWS / 5 + 1} members · `);
+  });
+
+  it('/admin/marketing/analytics: a subscription removed mid-read does not make a paying family free', async () => {
+    db.seed('families', Array.from({ length: ROWS }, (_, i) => {
+      const createdAt = new Date(Date.UTC(2024, 0, 1) + i * 60_000).toISOString();
+      return { id: `fam-${pad(i)}`, name: `Family ${i}`, created_at: createdAt, updated_at: createdAt, closed_at: null };
+    }));
+    // 1,300 paying families, and an abandoned checkout that sorts first by
+    // family and second by id: it is cleared between the two pages.
+    db.seed('subscriptions', [
+      ...Array.from({ length: ROWS }, (_, i) => ({
+        id: `sub-${pad(i)}`, family_id: `fam-${pad(i)}`, plan: 'plus', status: 'active', current_period_end: null,
+        created_at: new Date(Date.UTC(2024, 0, 1) + i * 60_000).toISOString(),
+      })),
+      { id: early('sub'), family_id: 'fam-00000', plan: 'plus', status: 'incomplete', current_period_end: null, created_at: '2026-10-22T11:00:00Z' },
+    ]);
+    for (const table of ['family_members', 'profiles', 'marketing_campaigns', 'marketing_email_campaigns']) db.seed(table, []);
+    const deleted = deleteBetweenPages('subscriptions', early('sub'));
+    const { default: AnalyticsPage } = await import('@/app/(app)/admin/marketing/analytics/page');
+    const html = await renderServerPage(await AnalyticsPage());
+
+    expect(deleted()).toBe(true);
+    expect(html).toContain(`${SOURCE_MESSAGES['adminMarketingAnalytics.estMrr']}</p><p class="text-2xl font-bold">${fmtMoney(ROWS * PLUS_MONTHLY_CENTS)}</p>`);
   });
 });

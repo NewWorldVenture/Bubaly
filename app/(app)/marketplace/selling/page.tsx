@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { LayoutDashboard, ArrowRight, Plus } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
+import { readInChunks } from '@/lib/supabase/chunked-in';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { ListingImage } from '@/components/marketplace/listing-image';
@@ -21,6 +23,9 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: `${t('marketplaceSelling.selling')} · ${t('navLabel.marketplace')}` };
 }
 export const dynamic = 'force-dynamic';
+
+/** Signal rows one chunk of listings may page through before the read is reported as a prefix. */
+const SIGNAL_ROW_CEILING = 25_000;
 
 const CHIP_TONE: Record<AttentionTone, string> = {
   danger: 'bg-rose-500/15 text-rose-600 dark:text-rose-400',
@@ -69,15 +74,49 @@ export default async function SellingPage() {
     return m;
   };
 
+  // Every signal is COUNTED, so each is read whole: a hundred listings a
+  // request, and each chunk paged on the id to a real ceiling (reaching it is
+  // the read failure). One `.in()` over up to 200 listings stopped at 1,000
+  // rows with no error, so a seller past a thousand watchers saw a thousand;
+  // and buyers save, offer and ask WHILE this reads, which on offsets would
+  // count a row twice. A chunk is `chunk`, its cursor `after`, its page `limit`.
+  const signal = <Row extends { id: string }>(
+    page: (chunk: string[], after: string | null, limit: number) => PromiseLike<{ data: Row[] | null; error: { message: string } | null }>,
+  ) => readInChunks(ids, (chunk) => readAllByIdAsQuery((after, limit) => page(chunk, after, limit), { max: SIGNAL_ROW_CEILING }));
+
   const signalResults = ids.length
     ? await settleAll([
-        sb.from('marketplace_saves').select('listing_id').in('listing_id', ids),
-        sb.from('marketplace_offers').select('listing_id').eq('status', 'open').in('listing_id', ids),
-        sb.from('marketplace_negotiations').select('listing_id, last_actor').eq('status', 'open').in('listing_id', ids),
-        sb.from('marketplace_questions').select('listing_id').is('answer', null).in('listing_id', ids),
-        sb.from('marketplace_handoffs').select('listing_id').eq('status', 'proposed').eq('proposer_role', 'buyer').in('listing_id', ids),
-        sb.from('marketplace_orders').select('listing_id, ends_on, returned_at, status, kind')
-          .eq('seller_member', selfId).in('kind', ['rent', 'borrow']).in('status', ['confirmed', 'active']).in('listing_id', ids),
+        signal((chunk, after, limit) => {
+          let query = sb.from('marketplace_saves').select('id, listing_id').in('listing_id', chunk);
+          if (after) query = query.gt('id', after);
+          return query.order('id').limit(limit);
+        }),
+        signal((chunk, after, limit) => {
+          let query = sb.from('marketplace_offers').select('id, listing_id').eq('status', 'open').in('listing_id', chunk);
+          if (after) query = query.gt('id', after);
+          return query.order('id').limit(limit);
+        }),
+        signal((chunk, after, limit) => {
+          let query = sb.from('marketplace_negotiations').select('id, listing_id, last_actor').eq('status', 'open').in('listing_id', chunk);
+          if (after) query = query.gt('id', after);
+          return query.order('id').limit(limit);
+        }),
+        signal((chunk, after, limit) => {
+          let query = sb.from('marketplace_questions').select('id, listing_id').is('answer', null).in('listing_id', chunk);
+          if (after) query = query.gt('id', after);
+          return query.order('id').limit(limit);
+        }),
+        signal((chunk, after, limit) => {
+          let query = sb.from('marketplace_handoffs').select('id, listing_id').eq('status', 'proposed').eq('proposer_role', 'buyer').in('listing_id', chunk);
+          if (after) query = query.gt('id', after);
+          return query.order('id').limit(limit);
+        }),
+        signal((chunk, after, limit) => {
+          let query = sb.from('marketplace_orders').select('id, listing_id, ends_on, returned_at, status, kind')
+            .eq('seller_member', selfId).in('kind', ['rent', 'borrow']).in('status', ['confirmed', 'active']).in('listing_id', chunk);
+          if (after) query = query.gt('id', after);
+          return query.order('id').limit(limit);
+        }),
       ])
     : [];
   const signalError = signalResults.find((result) => result.error)?.error;

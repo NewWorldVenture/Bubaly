@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { LifeBuoy, Inbox, Clock, CheckCircle2, Archive } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/filter-bar';
@@ -22,18 +23,34 @@ export default async function AdminSupportPage({ searchParams }: Params) {
   const sp = await searchParams;
   const supabase = createServiceClient();
 
-  const { data: tickets, error: ticketsError } = await supabase
-    .from('support_tickets')
-    .select('*')
-    .order('created_at', { ascending: false });
-  if (ticketsError) {
-    console.error('[admin-support] ticket read failed', ticketsError);
+  // The tiles are exact counts. Tallied from the list read, they counted at
+  // most the 1,000 newest tickets — PostgREST answers an unbounded select with
+  // db-max-rows and no error — so every older ticket fell out of them.
+  const byStatus = (status: 'open' | 'pending' | 'resolved' | 'closed') =>
+    supabase.from('support_tickets').select('id', { count: 'exact', head: true }).eq('status', status);
+  const [{ data: tickets, error: ticketsError }, openResult, pendingResult, resolvedResult, closedResult] = await settleAll([
+    supabase
+      .from('support_tickets')
+      .select('*')
+      .order('created_at', { ascending: false }),
+    byStatus('open'),
+    byStatus('pending'),
+    byStatus('resolved'),
+    byStatus('closed'),
+  ]);
+  const countError = openResult.error ?? pendingResult.error ?? resolvedResult.error ?? closedResult.error;
+  if (ticketsError || countError) {
+    console.error('[admin-support] ticket read failed', ticketsError ?? countError);
     return <AdminReadError />;
   }
 
   const rows = tickets ?? [];
-  const counts = { open: 0, pending: 0, resolved: 0, closed: 0 };
-  for (const t of rows) if (t.status in counts) counts[t.status as keyof typeof counts]++;
+  const counts = {
+    open: openResult.count ?? 0,
+    pending: pendingResult.count ?? 0,
+    resolved: resolvedResult.count ?? 0,
+    closed: closedResult.count ?? 0,
+  };
 
   const q = (sp.q ?? '').trim().toLowerCase();
   const statusFilter = sp.status ?? '';

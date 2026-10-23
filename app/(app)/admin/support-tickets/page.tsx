@@ -4,6 +4,8 @@ import {
   Plus, TicketCheck, XCircle,
 } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -22,6 +24,8 @@ export async function generateMetadata(): Promise<Metadata> {
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 10;
+/** Rows the category tally may page through before it is reported as a prefix (one round trip per 1,000). */
+const SUM_ROW_CEILING = 25_000;
 
 // `labelKey`, not `label`: 'supportTickets.unassigned' was a catalogue key in a
 // field rendered verbatim, so that tab read back its own key.
@@ -81,24 +85,48 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key as TabKey) ?? 'all';
   const supabase = createServiceClient();
 
-  const { data: allTickets, error: ticketsError } = await supabase
-    .from('support_tickets')
-    .select('*')
-    .order('updated_at', { ascending: false });
-  if (ticketsError) {
-    console.error('[admin-support-tickets] ticket read failed', ticketsError);
+  // The overview, the donut and the categories are the whole queue: exact
+  // counts, and a category tally paged on the id (the contact form files
+  // tickets while it reads). Tallied from the list read, they counted at most
+  // the 1,000 most recently updated tickets — PostgREST answers an unbounded
+  // select with db-max-rows and no error.
+  const counted = () => supabase.from('support_tickets').select('id', { count: 'exact', head: true });
+  const [
+    { data: allTickets, error: ticketsError },
+    totalResult, openResult, inProgressResult, pendingResult, resolvedResult, closedResult, categoriesResult,
+  ] = await settleAll([
+    supabase
+      .from('support_tickets')
+      .select('*')
+      .order('updated_at', { ascending: false }),
+    counted(),
+    counted().eq('status', 'open'),
+    counted().eq('status', 'in_progress'),
+    counted().eq('status', 'pending'),
+    counted().eq('status', 'resolved'),
+    counted().eq('status', 'closed'),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('support_tickets').select('id, category');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
+  ]);
+  const statsError = totalResult.error ?? openResult.error ?? inProgressResult.error ?? pendingResult.error
+    ?? resolvedResult.error ?? closedResult.error ?? categoriesResult.error;
+  if (ticketsError || statsError) {
+    console.error('[admin-support-tickets] ticket read failed', ticketsError ?? statsError);
     return <AdminReadError />;
   }
 
   const tickets = allTickets ?? [];
 
   // ── Stats ─────────────────────────────────────────────────────────
-  const total      = tickets.length;
-  const openCount  = tickets.filter((t) => t.status === 'open').length;
-  const inProgress = tickets.filter((t) => t.status === 'in_progress').length;
-  const pending    = tickets.filter((t) => t.status === 'pending').length;
-  const resolved   = tickets.filter((t) => t.status === 'resolved').length;
-  const closed     = tickets.filter((t) => t.status === 'closed').length;
+  const total      = totalResult.count ?? 0;
+  const openCount  = openResult.count ?? 0;
+  const inProgress = inProgressResult.count ?? 0;
+  const pending    = pendingResult.count ?? 0;
+  const resolved   = resolvedResult.count ?? 0;
+  const closed     = closedResult.count ?? 0;
 
   // Unique agents
   const agentNames = [...new Set(
@@ -107,7 +135,7 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
 
   // Top categories
   const categoryCounts = new Map<string, number>();
-  for (const t of tickets) categoryCounts.set(t.category, (categoryCounts.get(t.category) ?? 0) + 1);
+  for (const t of categoriesResult.data ?? []) categoryCounts.set(t.category, (categoryCounts.get(t.category) ?? 0) + 1);
   const topCategories = [...categoryCounts.entries()].sort((a, b) => b[1] - a[1]);
 
   // ── Filter & paginate ─────────────────────────────────────────────

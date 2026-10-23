@@ -8,7 +8,7 @@ import {
 } from '@/lib/marketing/attribution';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -36,9 +36,20 @@ export default async function IntelligencePage() {
       supabase.from('mkt_visitors').select('*', { count: 'exact', head: true }),
       supabase.from('mkt_sessions').select('*', { count: 'exact', head: true }),
       // `.limit(N)` above 1,000 is not a bound — PostgREST caps at db-max-rows,
-      // so these attribution totals were computed from 1,000 rows apiece.
-      readAllAsQuery((from, to) => supabase.from('mkt_sessions').select('source').order('id').range(from, to), { max: 5000 }),
-      readAllAsQuery((from, to) => supabase.from('mkt_touchpoints').select('visitor_id, source, kind, occurred_at').order('id').range(from, to), { max: 10000 }),
+      // so these attribution totals were computed from 1,000 rows apiece. Both
+      // tables take a row on every public visit (/api/mkt/track) WHILE this
+      // reads, so they page on the id: on offsets, a visit landing between two
+      // pages pushed a row onto the next one and it was counted twice.
+      readAllByIdAsQuery((after, limit) => {
+        let query = supabase.from('mkt_sessions').select('id, source');
+        if (after) query = query.gt('id', after);
+        return query.order('id').limit(limit);
+      }, { max: 5000 }),
+      readAllByIdAsQuery((after, limit) => {
+        let query = supabase.from('mkt_touchpoints').select('id, visitor_id, source, kind, occurred_at');
+        if (after) query = query.gt('id', after);
+        return query.order('id').limit(limit);
+      }, { max: 10000 }),
     ]);
   } catch {
     return <ReadFailure />;

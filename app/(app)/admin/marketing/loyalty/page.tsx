@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { Gift, Trophy, Coins, Settings2, Users, Sparkles } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -18,19 +20,41 @@ export const dynamic = 'force-dynamic';
 
 const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring';
 const TIER_TONE: Record<Tier, 'neutral' | 'brand' | 'warning'> = { bronze: 'neutral', silver: 'brand', gold: 'warning' };
+/** Rows a summed read may page through before it is reported as a prefix (one round trip per 1,000). */
+const SUM_ROW_CEILING = 25_000;
 
 export default async function LoyaltyPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
 
-  const [settingsResult, rewardsResult, accountsResult, redemptionsResult, familiesResult] = await settleAll([
+  // The lists below are the top 100 members and the newest 100 redemptions;
+  // the tiles above them are the whole program. Members and Pending
+  // redemptions are exact counts, and Points outstanding pages every account
+  // on the id: counted from the lists, they stopped at 100 apiece, and every
+  // balance below the hundredth was left out of what the program owes.
+  const [
+    settingsResult, rewardsResult, accountsResult, redemptionsResult, familiesResult,
+    memberCountResult, pendingCountResult, balancesResult,
+  ] = await settleAll([
     supabase.from('loyalty_settings').select('*').eq('singleton', true).maybeSingle(),
     supabase.from('loyalty_rewards').select('*').is('deleted_at', null).order('sort', { ascending: true }).limit(200),
     supabase.from('loyalty_accounts').select('*').order('lifetime_points', { ascending: false }).limit(100),
     supabase.from('loyalty_redemptions').select('*').order('created_at', { ascending: false }).limit(100),
+    // The award form's family picker. The rows above are labelled from their
+    // own families, read below, not from this list.
     supabase.from('families').select('id, name').limit(1000),
+    supabase.from('loyalty_accounts').select('id', { count: 'exact', head: true }),
+    supabase.from('loyalty_redemptions').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    // Summed while families earn and spend, so paged on the id: an offset read
+    // counts a balance twice when an account is opened between two pages.
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('loyalty_accounts').select('id, points_balance');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
   ]);
-  const readError = settingsResult.error ?? rewardsResult.error ?? accountsResult.error ?? redemptionsResult.error ?? familiesResult.error;
+  const readError = settingsResult.error ?? rewardsResult.error ?? accountsResult.error ?? redemptionsResult.error ?? familiesResult.error
+    ?? memberCountResult.error ?? pendingCountResult.error ?? balancesResult.error;
   if (readError) {
     console.error('[admin-marketing-loyalty] loyalty read failed', readError);
     return <AdminLoyaltyReadError />;
@@ -45,10 +69,21 @@ export default async function LoyaltyPage() {
   const rewardRows = (rewards ?? []) as Reward[];
   const accountRows = accounts ?? [];
   const redemptionRows = redemptions ?? [];
-  const nameById = new Map((families ?? []).map((f) => [f.id, f.name]));
 
-  const totalOutstanding = accountRows.reduce((sum, a) => sum + a.points_balance, 0);
-  const pendingCount = redemptionRows.filter((r) => r.status === 'pending').length;
+  // Name each listed row from ITS family. A thousand families from an
+  // unordered read named whichever thousand came back, and every member or
+  // redemption from a family past them read "Unknown family".
+  const listedFamilyIds = [...new Set([...accountRows.map((a) => a.family_id), ...redemptionRows.map((r) => r.family_id)])];
+  const labelsResult = await readInChunks(listedFamilyIds, (chunk) => supabase.from('families').select('id, name').in('id', chunk));
+  if (labelsResult.error) {
+    console.error('[admin-marketing-loyalty] loyalty read failed', labelsResult.error);
+    return <AdminLoyaltyReadError />;
+  }
+  const nameById = new Map(labelsResult.data.map((f) => [f.id, f.name]));
+
+  const totalOutstanding = (balancesResult.data ?? []).reduce((sum, a) => sum + a.points_balance, 0);
+  const memberCount = memberCountResult.count ?? 0;
+  const pendingCount = pendingCountResult.count ?? 0;
   const thresholds = { silverAt: set?.tier_silver_at ?? DEFAULT_LOYALTY.tier_silver_at, goldAt: set?.tier_gold_at ?? DEFAULT_LOYALTY.tier_gold_at };
 
   const redemptionView: Redemption[] = redemptionRows.map((r) => ({
@@ -70,7 +105,7 @@ export default async function LoyaltyPage() {
 
       {/* Stats */}
       <div className="grid gap-3 sm:grid-cols-4">
-        <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.members')}</p><p className="mt-1 text-3xl font-bold leading-none">{accountRows.length}</p></Card>
+        <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.members')}</p><p className="mt-1 text-3xl font-bold leading-none">{memberCount}</p></Card>
         <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.pointsOutstanding')}</p><p className="mt-1 text-3xl font-bold leading-none">{totalOutstanding.toLocaleString()}</p></Card>
         <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.activeRewards')}</p><p className="mt-1 text-3xl font-bold leading-none">{rewardRows.filter((r) => r.is_active).length}</p></Card>
         <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.pendingRedemptions')}</p><p className="mt-1 text-3xl font-bold leading-none">{pendingCount}</p></Card>

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { ScrollText, ShieldAlert, Activity, Building2 } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar } from '@/components/ui/avatar';
@@ -26,18 +27,22 @@ export default async function AdminAuditPage({ searchParams }: Params) {
 
   // Pull a bounded recent window; admin-scale auditing would page server-side,
   // flagged here rather than hidden.
-  const [{ data: logs, error: logsError }, { data: families, error: familiesError }] = await settleAll([
-    supabase.from('audit_logs').select('id, family_id, actor_id, action, resource, metadata, created_at')
-      .order('created_at', { ascending: false }).limit(1000),
-    supabase.from('families').select('id, name'),
-  ]);
+  const { data: logs, error: logsError } = await supabase.from('audit_logs').select('id, family_id, actor_id, action, resource, metadata, created_at')
+    .order('created_at', { ascending: false }).limit(1000);
 
   const rows = logs ?? [];
-  const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
+  // Name only the families and actors these rows name, a hundred ids a
+  // request. An unbounded families select answered with the first 1,000
+  // families and no error, so a row from any family past them had no name to
+  // show or search by; one `.in()` over every actor of a thousand rows built a
+  // request line past the gateway's limit.
+  const familyIds = [...new Set(rows.map((l) => l.family_id).filter((x): x is string => !!x))];
   const actorIds = [...new Set(rows.map((l) => l.actor_id).filter((x): x is string => !!x))];
-  const { data: actors, error: actorsError } = actorIds.length
-    ? await supabase.from('profiles').select('id, full_name, email').in('id', actorIds)
-    : { data: [] as { id: string; full_name: string | null; email: string | null }[], error: null };
+  const [{ data: families, error: familiesError }, { data: actors, error: actorsError }] = await settleAll([
+    readInChunks(familyIds, (chunk) => supabase.from('families').select('id, name').in('id', chunk)),
+    readInChunks(actorIds, (chunk) => supabase.from('profiles').select('id, full_name, email').in('id', chunk)),
+  ]);
+  const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
   const readError = logsError ?? familiesError ?? actorsError;
   if (readError) {
     console.error('[admin-audit] audit read failed', readError);

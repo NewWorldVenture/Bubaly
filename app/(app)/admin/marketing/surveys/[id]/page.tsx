@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -19,6 +21,10 @@ export const metadata: Metadata = { title: 'Survey · Marketing', robots: { inde
 export const dynamic = 'force-dynamic';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
+/** Responses the score may page through before it is reported as a prefix (one round trip per 1,000). */
+const SUM_ROW_CEILING = 25_000;
+/** The newest responses listed under the score. */
+const LISTED_RESPONSES = 100;
 
 export default async function SurveyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const t = await getTranslations();
@@ -34,14 +40,26 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
   }
   if (!survey) return <AppNotFound backHref="/admin/marketing/surveys" />;
 
-  const { data: responses, error: responsesError } = await supabase
-    .from('survey_responses').select('*').eq('survey_id', id).order('submitted_at', { ascending: false });
+  // The score, its summary and the distribution are every response, paged on
+  // the id while the public keeps answering; the list is the newest hundred.
+  // One unbounded select fed both and stopped at 1,000 responses with no
+  // error, so a survey past that was scored from its newest thousand.
+  const [responsesResult, scoresResult] = await settleAll([
+    supabase.from('survey_responses').select('*').eq('survey_id', id)
+      .order('submitted_at', { ascending: false }).order('id').limit(LISTED_RESPONSES),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('survey_responses').select('id, score').eq('survey_id', id);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
+  ]);
+  const responsesError = responsesResult.error ?? scoresResult.error;
   if (responsesError) {
     console.error('[admin-marketing-survey-detail] response read failed', responsesError);
     return <SurveyDetailReadError />;
   }
-  const rows = responses ?? [];
-  const scores = rows.map((r) => r.score);
+  const rows = responsesResult.data ?? [];
+  const scores = (scoresResult.data ?? []).map((r) => r.score);
   const type = isSurveyType(survey.type) ? survey.type : 'custom';
   const summary = summarize(type, scores, survey.scale_max);
   const dist = distribution(scores, survey.scale_min, survey.scale_max);
@@ -115,7 +133,7 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
           <EmptyState icon={MessagesSquare} title={t('adminMarketingSurveys.noResponsesYet')} description={t('surveys.shareTheLinkAboveTo')} />
         ) : (
           <div className="space-y-2">
-            {rows.slice(0, 100).map((r) => (
+            {rows.map((r) => (
               <div key={r.id} className="flex items-start gap-3 rounded-lg border border-border px-3 py-2 text-sm">
                 <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-elevated text-sm font-bold">{r.score ?? '–'}</span>
                 <div className="min-w-0 flex-1">

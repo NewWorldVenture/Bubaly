@@ -3,7 +3,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { planMonthlyCents, planName } from '@/lib/constants/plans';
-import { readAllAsQuery, readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 
 type DB = SupabaseClient<Database>;
 
@@ -55,14 +55,26 @@ export async function getMarketingCustomersWithError(supabase: DB): Promise<{ cu
     // db-max-rows does not shorten the table — it silently mislabels customers
     // whose rows fell off the end (no subscription found reads as 'free', no
     // members reads as a household of zero, no profile as an unknown owner).
-    // Each sort ends on the primary key. Without a total order a tie split
-    // across a page boundary drops one row and repeats another WITHIN one
-    // sweep — the same mislabelling the comment above describes, from a
-    // different cause. `subscriptions.family_id` is unique only via 0285,
-    // which is pending production, so it cannot be the tiebreaker.
-    readAllAsQuery((from, to) => supabase.from('subscriptions').select('family_id, plan, status, created_at, current_period_end').order('family_id').order('id').range(from, to), { max: 2000 }),
-    readAllAsQuery((from, to) => supabase.from('family_members').select('family_id, user_id, role, is_active').order('family_id').order('user_id').order('id').range(from, to), { max: 20000 }),
-    readAllAsQuery((from, to) => supabase.from('profiles').select('id, email').order('id').range(from, to), { max: 20000 }),
+    // And each pages on the id, not on offsets, because families check out,
+    // join and leave WHILE it reads: a member added ahead of the next offset
+    // repeated the last member of a page and one household counted a member
+    // twice; a subscription removed ahead of it skipped the next one, and a
+    // family that pays read as free in Est. MRR. The id is the total order.
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('subscriptions').select('id, family_id, plan, status, created_at, current_period_end');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: 2000 }),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('family_members').select('id, family_id, user_id, role, is_active');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: 20000 }),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('profiles').select('id, email');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: 20000 }),
   ]);
 
   const error = familiesResult.error ?? subsResult.error ?? membersResult.error ?? profilesResult.error;
@@ -74,10 +86,19 @@ export async function getMarketingCustomersWithError(supabase: DB): Promise<{ cu
   const { data: profiles } = profilesResult;
 
   const emailByUser = new Map((profiles ?? []).map((p) => [p.id, p.email]));
+  // In id order the LAST subscription a family has wins, as it did when the
+  // read was sorted by family and then id.
   const subByFamily = new Map((subs ?? []).map((s) => [s.family_id, s]));
 
+  // The owner is the first parent with an account in (user_id, id) order —
+  // the order the members were read in before they paged on the id alone.
+  const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+  const byUserThenId = [...(members ?? [])].sort((a, b) =>
+    (a.user_id === null ? 1 : 0) - (b.user_id === null ? 1 : 0)
+    || cmp(a.user_id ?? '', b.user_id ?? '')
+    || cmp(a.id, b.id));
   const membersByFamily = new Map<string, typeof members>();
-  for (const m of members ?? []) {
+  for (const m of byUserThenId) {
     if (!membersByFamily.has(m.family_id)) membersByFamily.set(m.family_id, [] as never);
     membersByFamily.get(m.family_id)!.push(m);
   }

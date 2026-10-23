@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Gauge, Plus, MessagesSquare } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -16,13 +17,23 @@ export const dynamic = 'force-dynamic';
 
 const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring';
 const STATUS_TONE = { draft: 'neutral', active: 'success', closed: 'warning' } as const;
+/** Responses the scores may page through before they are reported as a prefix (one round trip per 1,000). */
+const SUM_ROW_CEILING = 25_000;
 
 export default async function SurveysPage() {
   const tr = await getTranslations();
   const supabase = createServiceClient();
   const [surveysResult, responsesResult] = await settleAll([
     supabase.from('surveys').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
-    supabase.from('survey_responses').select('survey_id, score'),
+    // Every survey's score is summed from these, and the public answers while
+    // the page reads: paged on the id, to a real ceiling. An unbounded select
+    // stopped at 1,000 responses across ALL surveys with no error, so a
+    // survey's NPS was scored from whatever share of its answers came back.
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('survey_responses').select('id, survey_id, score');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
   ]);
   const readError = surveysResult.error ?? responsesResult.error;
   if (readError) {
