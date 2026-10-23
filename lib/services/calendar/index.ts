@@ -18,6 +18,7 @@ import 'server-only';
 import { detectConflicts, type ConflictEvent, type EventConflict } from '@/lib/home/conflicts';
 import { isSeries, readCalendarOccurrences, readCalendarBusySource, readCountedRows } from '@/lib/calendar/occurrences';
 import { readCalendarAvailability } from '@/lib/calendar/availability';
+import { expandEventsInZone } from '@/lib/calendar/recurrence';
 import { buildConflictAdvisories, conflictSubject, type CalendarConflictAdvisory, type CalendarConflictSubject } from '@/lib/calendar/conflict-advisories';
 import { addDays } from '@/lib/calendar/day';
 import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from '@/lib/calendar/source-capability';
@@ -446,7 +447,11 @@ export async function deleteEvents(scope: ServiceScope, eventIds: string[]): Pro
 
 export type UpdateEventPatch = Partial<Omit<CreateEventInput, 'title'>> & { title?: string };
 
-type EventClockState = Pick<CalendarEvent, 'id' | 'title' | 'starts_at' | 'ends_at' | 'all_day'> & { updated_at?: string };
+type EventClockState = Pick<CalendarEvent, 'id' | 'title' | 'starts_at' | 'ends_at' | 'all_day'> & {
+  updated_at?: string;
+  /** The repeat rule a week's change was mapped against (`OccurrenceEdit`): the write lands only on that rule. */
+  rule?: Pick<CalendarEvent, 'recurrence' | 'recurrence_until'>;
+};
 /**
  * `expected` is the clock the caller already holds for the row (the conflicts
  * page's quick fix, computed from a render): the time change is written only
@@ -462,14 +467,23 @@ export async function updateEvent(
     return applyEventUpdate(scope, eventId, patch, expected);
   }
   const { data, error } = await scope.db.from('calendar_events')
-    .select('id,title,starts_at,ends_at,all_day,recurrence').eq('id', eventId).eq('family_id', scope.familyId).maybeSingle();
+    .select('id,title,starts_at,ends_at,all_day,recurrence,recurrence_until').eq('id', eventId).eq('family_id', scope.familyId).maybeSingle();
   if (error) return fail(describeDbError(error, 'Could not load that event.'), { code: SERVICE_CODES.db });
   if (!data) return fail('That event could not be found.', { code: SERVICE_CODES.notFound });
-  const { recurrence, ...clock } = data;
-  const mapped = forSeriesOccurrence({ ...clock, recurrence }, patch, week, scope.tz);
+  const { recurrence, recurrence_until, ...clock } = data;
+  const mapped = forSeriesOccurrence(data, patch, week, scope.tz);
   if (!mapped.ok) return mapped;
-  // The row just read is the compare-and-set state, as in `rescheduleAfter`.
-  return applyEventUpdate(scope, eventId, mapped.data, expected ?? clock);
+  // The row just read, rule included, is the compare-and-set state, as in `rescheduleAfter`.
+  return applyWeekUpdate(scope, eventId, mapped.data, { ...(expected ?? clock), rule: { recurrence, recurrence_until } });
+}
+
+/** The refusal a week's change gets when its row changed between the read it was mapped on and the write. */
+const SERIES_CHANGED = 'That event changed while it was being moved. Read the calendar again and say which week.';
+
+/** `applyEventUpdate` for a change mapped from a week: a write that matched no row met a changed one. */
+async function applyWeekUpdate(scope: ServiceScope, eventId: string, patch: UpdateEventPatch, state: EventClockState): Promise<ServiceResult<CalendarEvent>> {
+  const result = await applyEventUpdate(scope, eventId, patch, state);
+  return !result.ok && result.code === SERVICE_CODES.notFound ? fail(SERIES_CHANGED, { code: SERVICE_CODES.notFound }) : result;
 }
 
 /**
@@ -490,9 +504,26 @@ export type OccurrenceEdit = { occurrenceStartsAt: string | null };
 const SERIES_NEEDS_OCCURRENCE = 'That event repeats. Say which week this new time is for, and every week moves with it.';
 /** A week named but not readable: refused, never dropped (dropped, the new time restarted the series). */
 const UNREADABLE_OCCURRENCE = 'That week could not be understood. Give its start exactly as the calendar search returned it.';
+/** A week the series does not have now: read before someone moved or ended it. */
+const STALE_OCCURRENCE = 'That week is not on this event\'s calendar any more; it may have been moved. Read the calendar again and say which week.';
+
+type SeriesState = EventClockState & Pick<CalendarEvent, 'recurrence' | 'recurrence_until'>;
+
+/** The clock a series is stepped on: the family's zone for a timed one, dates for an all-day one (lib/calendar/occurrences.ts). */
+const seriesZone = (row: Pick<CalendarEvent, 'all_day'>, timezone: string) => (row.all_day ? 'UTC' : isValidTimezone(timezone) ? timezone : 'UTC');
+
+/** Whether `instant` is one of `row`'s occurrences, as the calendar expands it. */
+function occursAt(row: SeriesState, instant: string, zone: string): boolean {
+  try {
+    const at = parseExactInstant(instant);
+    const ms = exactInstantMilliseconds(at);
+    return expandEventsInZone([row], new Date(ms - 86_400_000), new Date(ms + 86_400_000), zone)
+      .some((occurrence) => parseExactInstant(occurrence.starts_at) === at);
+  } catch { return false; }
+}
 
 function forSeriesOccurrence(
-  stored: EventClockState & Pick<CalendarEvent, 'recurrence'>,
+  stored: SeriesState,
   patch: UpdateEventPatch,
   week: OccurrenceEdit,
   timezone: string,
@@ -521,7 +552,7 @@ function forSeriesOccurrence(
  * refused: never written as given, which would restart the series there.
  */
 function onSeriesClock(
-  stored: EventClockState & Pick<CalendarEvent, 'recurrence'>,
+  stored: SeriesState,
   patch: UpdateEventPatch,
   occurrenceStartsAt: string,
   timezone: string,
@@ -529,13 +560,16 @@ function onSeriesClock(
   const occurrence = normalizeCalendarWriteInstant(occurrenceStartsAt, timezone);
   if (!occurrence) return fail(UNREADABLE_OCCURRENCE, { code: SERVICE_CODES.invalidInput });
   if (!isSeries(stored) || !isSeries({ recurrence: patch.recurrence ?? stored.recurrence })) return ok(patch);
+  // The week must be one the series has NOW, from the row just read: a week
+  // read before the series moved, mapped onto where it is, moved it again.
+  const zone = seriesZone(stored, timezone);
+  if (!occursAt(stored, occurrence, zone)) return fail(STALE_OCCURRENCE, { code: SERVICE_CODES.invalidInput });
   const start = patch.startsAt === undefined ? occurrence : normalizeCalendarWriteInstant(patch.startsAt, timezone);
   const end = patch.endsAt == null ? null : normalizeCalendarWriteInstant(patch.endsAt, timezone);
   if (!start) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
   if (patch.endsAt != null && !end) return fail('That end time could not be understood.', { code: SERVICE_CODES.invalidInput });
   if (sameCalendarInstant(occurrence, stored.starts_at)) return ok(patch);
   try {
-    const zone = stored.all_day ? 'UTC' : isValidTimezone(timezone) ? timezone : 'UTC';
     const seriesStart = sameCalendarInstant(start, occurrence)
       ? stored.starts_at
       : movedOnWallClock(stored.starts_at, occurrence, start, zone);
@@ -643,6 +677,10 @@ async function applyEventUpdate(scope: ServiceScope, eventId: string, patch: Upd
     mutation = mutation.eq('starts_at', clockState.starts_at).eq('all_day', clockState.all_day);
     mutation = clockState.ends_at === null ? mutation.is('ends_at', null) : mutation.eq('ends_at', clockState.ends_at);
     if (clockState.updated_at) mutation = mutation.eq('updated_at', clockState.updated_at);
+    if (clockState.rule) {
+      mutation = mutation.eq('recurrence', clockState.rule.recurrence);
+      mutation = clockState.rule.recurrence_until === null ? mutation.is('recurrence_until', null) : mutation.eq('recurrence_until', clockState.rule.recurrence_until);
+    }
   }
   const { data, error } = await mutation.select('*').maybeSingle();
 
@@ -1062,7 +1100,7 @@ export async function rescheduleAfter(
 
   const { data: existing, error: readError } = await scope.db
     .from('calendar_events')
-    .select('id, title, starts_at, ends_at, all_day, recurrence')
+    .select('id, title, starts_at, ends_at, all_day, recurrence, recurrence_until')
     .eq('id', eventId)
     .eq('family_id', scope.familyId)
     .maybeSingle();
@@ -1080,9 +1118,10 @@ export async function rescheduleAfter(
     startsAt: input.startsAt,
     endsAt: duration === null ? null : formatExactInstant(parseExactInstant(startsAt) + duration),
   };
-  const mapped = week ? forSeriesOccurrence(existing, patch, week, scope.tz) : ok(patch);
+  if (!week) return applyEventUpdate(scope, eventId, patch, existing);
+  const mapped = forSeriesOccurrence(existing, patch, week, scope.tz);
   if (!mapped.ok) return mapped;
-  return applyEventUpdate(scope, eventId, mapped.data, existing);
+  return applyWeekUpdate(scope, eventId, mapped.data, { ...existing, rule: { recurrence: existing.recurrence, recurrence_until: existing.recurrence_until } });
 }
 
 // ─── RSVPs ──────────────────────────────────────────────────────────────────
