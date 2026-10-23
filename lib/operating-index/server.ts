@@ -119,7 +119,11 @@ export async function buildSnapshot(supabase: DB, familyId: string, tz: string, 
     supabase.from('bills').select('id, status, autopay, due_date').eq('family_id', familyId).neq('status', 'paid').lte('due_date', in14date).limit(200),
     supabase.from('approval_requests').select('id').eq('family_id', familyId).eq('status', 'pending').limit(200),
     supabase.from('meal_votes').select('id').eq('family_id', familyId).eq('status', 'open').limit(100),
-    supabase.from('family_polls').select('id, status').eq('family_id', familyId).eq('status', 'open').limit(100),
+    // Open = not closed by hand AND not past its deadline: nothing flips
+    // `status` when `closes_at` goes by, and the voting page, its vote check
+    // and the insights all read a poll past it as closed (isPollClosed).
+    supabase.from('family_polls').select('id, status').eq('family_id', familyId).eq('status', 'open')
+      .or(`closes_at.is.null,closes_at.gt.${nowIso}`).limit(100),
     supabase.from('goals').select('id, progress, target_date').eq('family_id', familyId).eq('is_complete', false).limit(200),
     // `id` and `created_at` pick the budget the family keeps per category (budgetByCategory).
     supabase.from('budgets').select('id, category, amount, period, created_at').eq('family_id', familyId).limit(200),
