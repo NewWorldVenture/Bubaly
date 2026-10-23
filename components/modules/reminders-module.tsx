@@ -131,6 +131,11 @@ export function RemindersModule() {
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<Reminder | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  // A guest views the family's reminders; it does not add, tick, snooze, edit
+  // or remove them. The actions and services refuse it too
+  // (app/(app)/dashboard/reminders/actions.ts, lib/services/reminders); this
+  // page offers none of those controls, as the to-dos page does.
+  const readOnly = role === 'guest';
 
   const { data: lists, loading: listsLoading, error: listsError, refresh: refreshLists } = useRealtimeQuery<Tables<'reminder_lists'>>({
     table: 'reminder_lists', familyId, deps: [familyId],
@@ -335,10 +340,14 @@ export function RemindersModule() {
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="reminders" iconOnly />
-            <Button variant="outline" onClick={() => setShowSuggestions(!showSuggestions)}>
-              <Sparkles className="h-4 w-4 text-brand-text" /> {tr('reminders.quickAdd')}
-            </Button>
-            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('reminders.newReminder')}</Button>
+            {!readOnly && (
+              <>
+                <Button variant="outline" onClick={() => setShowSuggestions(!showSuggestions)}>
+                  <Sparkles className="h-4 w-4 text-brand-text" /> {tr('reminders.quickAdd')}
+                </Button>
+                <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('reminders.newReminder')}</Button>
+              </>
+            )}
           </div>
         }
       />
@@ -446,7 +455,7 @@ export function RemindersModule() {
                 {(lists ?? []).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 <option value="none">{tr('reminders.noList')}</option>
               </select>
-              {filterList !== 'all' && filterList !== 'none' && (
+              {!readOnly && filterList !== 'all' && filterList !== 'none' && (
                 <button onClick={() => deleteList(filterList)} aria-label={tr('reminders.deleteList')} className="rounded-lg p-1.5 text-muted hover:text-danger">
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -484,7 +493,7 @@ export function RemindersModule() {
         ) : (
           <EmptyState icon={Bell} title={tr('reminders.noReminders')}
             description={tr('remindersModule.setTimeBasedLocationMedication')}
-            action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('reminders.addReminder')}</Button>} />
+            action={readOnly ? undefined : <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('reminders.addReminder')}</Button>} />
         )
       ) : (
         <div className="space-y-2">
@@ -503,7 +512,13 @@ export function RemindersModule() {
                   overdue && !completed ? 'border-danger/30 bg-danger/5' : 'border-border bg-surface/30 hover:bg-surface/50',
                   snoozed && 'border-warning/30 bg-warning/5',
                 )}>
-                {/* Complete button */}
+                {/* Complete button (a plain status mark for a guest) */}
+                {readOnly ? (
+                  <span aria-hidden className={cn('mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2',
+                    completed ? 'border-success bg-success text-success-fg' : 'border-border')}>
+                    {completed && <Check className="h-3.5 w-3.5" />}
+                  </span>
+                ) : (
                 <button onClick={() => !completed && complete(reminder)} disabled={completed || isPending(`complete:${reminder.id}`)}
                   aria-label={completed ? tr('remindersModule.stat.completed') : tr('remindersModule.markComplete')}
                   className={cn(
@@ -516,6 +531,7 @@ export function RemindersModule() {
                     ? <Loader2 className="h-3.5 w-3.5 animate-spin text-success" />
                     : completed && <Check className="h-3.5 w-3.5" />}
                 </button>
+                )}
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
@@ -598,7 +614,7 @@ export function RemindersModule() {
                       {normalizeSubtasks(reminder.subtasks).map((s) => {
                         const busy = isPending(`subtask:${reminder.id}:${s.id}`);
                         return (
-                          <button key={s.id} type="button" onClick={() => toggleSubtask(reminder, s.id)} disabled={busy}
+                          <button key={s.id} type="button" onClick={() => toggleSubtask(reminder, s.id)} disabled={busy || readOnly}
                             className="flex w-full items-center gap-2 text-left text-xs disabled:opacity-50">
                             <span className={cn('grid h-4 w-4 shrink-0 place-items-center rounded-full border', s.done ? 'border-success bg-success text-success-fg' : 'border-border')}>
                               {busy ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : s.done && <Check className="h-2.5 w-2.5" />}
@@ -616,7 +632,7 @@ export function RemindersModule() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-1 opacity-100 sm:opacity-0 transition-opacity sm:group-hover:opacity-100 focus-within:opacity-100 coarse:opacity-100">
+                {!readOnly && <div className="flex items-center gap-1 opacity-100 sm:opacity-0 transition-opacity sm:group-hover:opacity-100 focus-within:opacity-100 coarse:opacity-100">
                   {!completed && (
                     <div className="relative">
                       <details className="group/snooze">
@@ -642,7 +658,7 @@ export function RemindersModule() {
                     className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-danger disabled:opacity-50">
                     {isPending(`delete:${reminder.id}`) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                   </button>
-                </div>
+                </div>}
               </div>
             );
           })}

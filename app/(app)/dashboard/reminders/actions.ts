@@ -99,11 +99,23 @@ function submissionKey(familyId: string, submissionId: unknown): string | null {
   return isSubmissionId(submissionId) ? makeKey(['reminders.createReminder', familyId, submissionId]) : null;
 }
 
+/**
+ * A guest views the family's reminders; it does not add or move them. The
+ * permission matrix gives a guest no create or update on reminders, and the
+ * services refuse it too (lib/services/reminders), so the approval and replay
+ * paths agree; this answers before any read, as the to-do actions do.
+ * `deleteReminderAction` refuses a guest through `canDeleteReminder`.
+ */
+function refusesGuest(role: string): boolean {
+  return role === 'guest';
+}
+
 export async function createReminderAction(input: CreateReminderActionInput): Promise<ReminderActionResult> {
   const t = await getTranslations();
   // Outside the try: `requireUserContext` redirects a signed-out caller by
   // throwing, and catching that would show them a toast instead.
   const ctx = await requireUserContext();
+  if (refusesGuest(ctx.active.role)) return { ok: false, error: t('actionRefusal.notAllowed') };
   const supabase = await createServer();
   const scope = scopeFromUserContext(ctx, supabase, {
     idempotencyKey: submissionKey(ctx.active.familyId, input.submissionId),
@@ -203,6 +215,7 @@ export async function snoozeReminderAction(reminderId: string, minutes: number):
   const t = await getTranslations();
   if (!reminderId) return { ok: false, error: t('actions.thatReminderCouldNotBe') };
   const ctx = await requireUserContext();
+  if (refusesGuest(ctx.active.role)) return { ok: false, error: t('actionRefusal.notAllowed') };
   const supabase = await createServer();
   const scope = scopeFromUserContext(ctx, supabase);
 
