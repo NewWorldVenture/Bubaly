@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { BellRing, Send, AlertTriangle } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { Badge } from '@/components/ui/badge';
@@ -26,14 +28,32 @@ const STATUS_TONE: Record<string, 'neutral' | 'success' | 'warning' | 'danger'> 
   draft: 'neutral', sending: 'warning', sent: 'success', failed: 'danger',
 };
 
+/** The newest campaigns the list holds. */
+const LISTED = 200;
+/** Campaigns the summary may page through before it says it is not shown (one round trip per 1,000). */
+const SUM_ROW_CEILING = 10_000;
+
 export default async function PushPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const [campaignsResult, devicesResult] = await settleAll([
-    supabase.from('marketing_push_campaigns').select('*').is('deleted_at', null).order('created_at', { ascending: false }).limit(200),
+  // Campaigns, Accepted and Review were summed from the list, the newest 200,
+  // so past them each was the list's total presented as the program's
+  // (coverage sweep round 9, class B). Campaigns is a head:true count now, and
+  // the other two are summed over every campaign, paged on the id (a send
+  // updates its row while this reads) to a ceiling past which they say they
+  // are not shown. The list says when it holds part of the campaigns.
+  const [campaignsResult, devicesResult, campaignCountResult, summaryResult] = await settleAll([
+    supabase.from('marketing_push_campaigns').select('*').is('deleted_at', null).order('created_at', { ascending: false }).limit(LISTED),
     supabase.from('push_devices').select('id', { count: 'exact', head: true }).eq('enabled', true),
+    supabase.from('marketing_push_campaigns').select('id', { count: 'exact', head: true }).is('deleted_at', null),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('marketing_push_campaigns').select('id, status, sent, recipients, metadata').is('deleted_at', null);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
   ]);
-  const readError = campaignsResult.error ?? devicesResult.error;
+  const summaryCeiling = 'truncated' in summaryResult && summaryResult.truncated;
+  const readError = campaignsResult.error ?? devicesResult.error ?? campaignCountResult.error ?? (summaryCeiling ? null : summaryResult.error);
   if (readError) {
     console.error('[admin-marketing-push] push read failed', readError);
     return <AdminPushReadError />;
@@ -41,7 +61,9 @@ export default async function PushPage() {
   const { data } = campaignsResult;
   const { count: deviceCount } = devicesResult;
   const campaigns = (data ?? []) as Campaign[];
-  const stats = summarizePush(campaigns);
+  const stats = summarizePush((summaryResult.data ?? []) as Campaign[]);
+  const campaignCount = campaignCountResult.count ?? 0;
+  const unavailable = t('strategyMetrics.unavailable');
   const cfg = pushConfigured();
 
   return (
@@ -49,6 +71,11 @@ export default async function PushPage() {
       <p className="text-sm text-muted">
         {t('adminMarketingPush.broadcastAPushToAllOpted')}
       </p>
+
+      <PartialReadBanner
+        title={t('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
+        failures={summaryCeiling ? [t('marketingPush.accepted'), t('marketingPush.review')] : []}
+      />
 
       {!cfg.web && !cfg.native && (
         <Card className="flex items-start gap-2 border-amber-500/30 bg-amber-500/5 text-sm">
@@ -60,9 +87,9 @@ export default async function PushPage() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           [t('marketingPush.enabledDevices'), deviceCount ?? 0],
-          ['Campaigns', stats.campaigns],
-          [t('marketingPush.accepted'), stats.totalSent],
-          [t('marketingPush.review'), stats.reviewCampaigns],
+          ['Campaigns', campaignCount],
+          [t('marketingPush.accepted'), summaryCeiling ? unavailable : stats.totalSent],
+          [t('marketingPush.review'), summaryCeiling ? unavailable : stats.reviewCampaigns],
         ].map(([label, val]) => (
           <Card key={String(label)} className="py-3">
             <p className="text-xs text-muted">{label}</p>
@@ -81,6 +108,9 @@ export default async function PushPage() {
         </form>
       </Card>
 
+      {campaignCount > campaigns.length && (
+        <p className="text-xs text-muted">{t('adminCeiling.listShowsTheNewest', { shown: campaigns.length.toLocaleString(), total: campaignCount.toLocaleString() })}</p>
+      )}
       {campaigns.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted">{t('adminMarketingPush.noPushCampaignsYet')}</p>
       ) : (

@@ -44,7 +44,10 @@ export default async function ProposalsPage() {
   // is an exact `head: true` count; the other three are summed from the quotes
   // paged on the id to a real ceiling, and past it they say they are not shown
   // rather than adding up part of them.
-  const [quotesResult, contactsResult, quoteCountResult, summaryResult] = await settleAll([
+  // Neither said it was part: the table now says when it lists part of the
+  // quotes, and the picker, against a head:true count of the contacts, when it
+  // offers part of them (coverage sweep round 9).
+  const [quotesResult, contactsResult, quoteCountResult, summaryResult, contactCountResult] = await settleAll([
     supabase.from('crm_quotes').select('*').order('created_at', { ascending: false }).limit(500),
     supabase.from('crm_contacts').select('id, first_name, last_name, email').order('created_at', { ascending: false }).limit(500),
     supabase.from('crm_quotes').select('id', { count: 'exact', head: true }),
@@ -53,9 +56,11 @@ export default async function ProposalsPage() {
       if (after) query = query.gt('id', after);
       return query.order('id').limit(limit);
     }, { max: SUM_ROW_CEILING }),
+    supabase.from('crm_contacts').select('id', { count: 'exact', head: true }),
   ]);
   const summaryCeiling = 'truncated' in summaryResult && summaryResult.truncated;
-  const readError = quotesResult.error ?? contactsResult.error ?? quoteCountResult.error ?? (summaryCeiling ? null : summaryResult.error);
+  const readError = quotesResult.error ?? contactsResult.error ?? quoteCountResult.error ?? (summaryCeiling ? null : summaryResult.error)
+    ?? contactCountResult.error;
   if (readError) {
     console.error('[admin-marketing-proposals] proposal read failed', readError);
     return <AdminProposalsReadError />;
@@ -117,10 +122,16 @@ export default async function ProposalsPage() {
           <input name="valid_until" type="date" aria-label={t('adminMarketingProposals.validUntil')} className={inputCls} />
           <SubmitButton className={btnCls}>{t('adminMarketingProposals.createQuote')}</SubmitButton>
         </form>
+        {(contactCountResult.count ?? 0) > contactList.length && (
+          <p className="mt-2 text-xs text-muted">{t('adminCeiling.pickerOffersTheNewest', { picker: t('adminMarketingProposals.contact'), shown: contactList.length.toLocaleString(), total: (contactCountResult.count ?? 0).toLocaleString() })}</p>
+        )}
       </Card>
 
       <Card>
         <h2 className="mb-4 text-base font-semibold">{t('adminMarketingProposals.proposals')}</h2>
+        {(quoteCountResult.count ?? 0) > list.length && (
+          <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsTheNewest', { shown: list.length.toLocaleString(), total: (quoteCountResult.count ?? 0).toLocaleString() })}</p>
+        )}
         {list.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">{t('adminMarketingProposals.noProposalsYet')}</p>
         ) : (

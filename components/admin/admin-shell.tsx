@@ -47,6 +47,7 @@ export function AdminShell({
   adminName,
   adminEmail,
   pendingInviteCount,
+  unreadCount = 0,
   notifications = [],
   dataWarnings = [],
   credentialFault = null,
@@ -54,8 +55,12 @@ export function AdminShell({
   children: React.ReactNode;
   adminName: string;
   adminEmail: string | null;
-  pendingInviteCount: number;
-  notifications?: AdminNotificationRow[];
+  /** null when its read failed: the bell says so instead of counting it as 0. */
+  pendingInviteCount: number | null;
+  /** Every unread notification, counted; null when the count failed. */
+  unreadCount?: number | null;
+  /** The newest few, listed; null when the read failed. */
+  notifications?: AdminNotificationRow[] | null;
   dataWarnings?: string[];
   credentialFault?: string | null;
 }) {
@@ -123,7 +128,7 @@ export function AdminShell({
           </form>
           <div className="flex-1 md:hidden" />
           <ThemeToggle />
-          <AdminNotificationBell notifications={notifications} pendingInviteCount={pendingInviteCount} />
+          <AdminNotificationBell notifications={notifications} pendingInviteCount={pendingInviteCount} unreadCount={unreadCount} />
           <div className="relative">
             <button
               onClick={() => setMenuOpen((v) => !v)}

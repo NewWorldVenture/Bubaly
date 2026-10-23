@@ -56,7 +56,8 @@ type EnrichedUser = {
   family: Tables<'families'> | null;
   role: MemberRole;
   plan: string | null;
-  hasAccount: boolean;
+  /** null when the member has a login whose profile could not be read. */
+  hasAccount: boolean | null;
   name: string;
   email: string | null;
   joinedAt: string;
@@ -120,10 +121,16 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   //     once to the ceiling as a prefix (failOnMax: false). Past it the picker
   //     offers the first families by id and says so, and the Families tab is
   //     its own error state;
-  //   - a listed member's or invite's family, and each listed family's plan,
-  //     are read by the ids the tab names (readInChunks), not from a sweep;
+  //   - every member's family and each listed invite's family, and the plan of
+  //     every member's family (filtered on and exported from every tab) and of
+  //     each family the Families tab lists, are read by those ids
+  //     (readInChunks), not from a sweep. A failed plan read is no plan, not
+  //     Free: the plan reads Unavailable and the Families tab offers no
+  //     SetPlanControl to change it from (review R7A-USERS-FAILED-SUBSCRIPTIONS-READ-READS-FREE);
   //   - invites: the All tab's rail is the five newest; the Invitations tab
-  //     lists every invite, so its ceiling is that tab's own error state.
+  //     lists every invite, so its ceiling is that tab's own error state. A
+  //     failed read is the rail's, and the Invitations tab's, error state, as a
+  //     failed roles or permissions read is the Roles tab's.
   //
   // The counts and the paged reads settle in two batches so each keeps its own
   // tuple type. "This month" starts in the admin zone, not the host's
@@ -200,8 +207,9 @@ export default async function AdminUsersPage({ searchParams }: Params) {
 
   // Only `family_members` is load-bearing here: `enriched` maps over it, so
   // without it there is genuinely nothing to render. Every other dataset is
-  // enrichment and already carries a `?? []` / `?? null` / `?? 'free'` default
-  // at its use site, so losing one costs a column, not the page.
+  // enrichment and already carries a `?? []` / `?? null` default, or its own
+  // error state, at its use site, so losing one costs a column or a list, not
+  // the page.
   //
   // Bailing on ANY error made the in-page banner below unreachable and blanked
   // a working admin surface whenever a single optional table was unavailable.
@@ -239,6 +247,23 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   const familyById = new Map(familyLabelsRes.data.map((f) => [f.id, f]));
   // In id order the last subscription a family has wins, as it did when every subscription was read by id.
   const subByFamily = new Map([...subscriptionsRes.data].sort((a, b) => a.id.localeCompare(b.id)).map((s) => [s.family_id, s]));
+  // A failed plan read leaves every plan unknown, not Free: which families'
+  // chunk failed is not known, and a family absent from the rows is Free only
+  // when the read succeeded.
+  const plansUnread = !!subscriptionsRes.error;
+  // The same for the other reads a row is enriched from (review
+  // R7C-USERS-FAILED-PROFILES-OR-SUPER-ADMINS-READ-IS-A-VALUE). A failed
+  // profiles read is not "No account" for a member who has a login: that
+  // member's email and status are unknown, so they read Unavailable and offer
+  // no super-admin toggle. A member without a login (`user_id` null) is "No
+  // account" whatever that read did. A failed super_admins read is not "not an
+  // admin": the toggle, which would offer to grant access to someone who may
+  // already hold it, reads Unavailable, and only the code allowlist, which
+  // needs no read, stays. A failed family name read is not "no family".
+  const profilesUnread = !!profilesRes.error;
+  const superAdminsUnread = !!superAdminsRes.error;
+  const familyLabelsUnread = !!familyLabelsRes.error;
+  const unavailable = tr('strategyMetrics.unavailable');
   const profileByUserId = new Map(profiles.map((p) => [p.id, p]));
   // Site super-admins: the DB-backed `super_admins` table (toggleable here) plus
   // the immutable code/env allowlist (shown locked).
@@ -254,13 +279,16 @@ export default async function AdminUsersPage({ searchParams }: Params) {
     const profile = member.user_id ? profileByUserId.get(member.user_id) ?? null : null;
     const family = familyById.get(member.family_id) ?? null;
     const sub = subByFamily.get(member.family_id);
+    // Whether this member's login is known: always without one, and with one
+    // only when the profiles read succeeded.
+    const accountKnown = !member.user_id || !profilesUnread;
     return {
       member,
       profile,
       family,
       role: member.role,
-      plan: sub?.plan ?? 'free',
-      hasAccount: !!profile,
+      plan: plansUnread ? null : sub?.plan ?? 'free',
+      hasAccount: accountKnown ? !!profile : null,
       name: profile?.full_name || member.display_name,
       email: profile?.email ?? null,
       joinedAt: member.created_at,
@@ -269,18 +297,25 @@ export default async function AdminUsersPage({ searchParams }: Params) {
 
   // Stats: exact counts over the whole table, not over the rows in hand and not
   // over the filtered/paginated view. "With account" is a member with a login
-  // (`user_id` set); "No account" is the remainder.
-  const totalUsers = memberCountRes.count ?? 0;
-  const activeUsers = withAccountCountRes.count ?? 0;
-  const newThisMonth = newThisMonthCountRes.count ?? 0;
-  const noAccountUsers = Math.max(0, totalUsers - activeUsers);
+  // (`user_id` set); "No account" is the remainder, so it is known only when
+  // both counts are. A count that failed is no figure, not 0 (review
+  // R7C-USERS-FAILED-COUNT-READS-ZERO): its tile reads Unavailable, and the
+  // role donut, whose arcs are shares of the total, is not drawn when any of
+  // its counts failed.
+  const counted = (res: { count: number | null; error: unknown }) => (res.error ? null : res.count ?? 0);
+  const totalUsers = counted(memberCountRes);
+  const activeUsers = counted(withAccountCountRes);
+  const newThisMonth = counted(newThisMonthCountRes);
+  const noAccountUsers = totalUsers === null || activeUsers === null ? null : Math.max(0, totalUsers - activeUsers);
 
   const roleCounts = new Map<MemberRole, number>();
   ROLE_ORDER.forEach((role, i) => {
     const count = roleCountResults[i].count ?? 0;
     if (count > 0) roleCounts.set(role, count);
   });
-  const adminCount = roleCounts.get('parent') ?? 0;
+  const adminCount = counted(roleCountResults[ROLE_ORDER.indexOf('parent')]);
+  const roleDonutUnread = totalUsers === null || roleCountResults.some((res) => res.error);
+  const figure = (n: number | null) => (n === null ? unavailable : n.toLocaleString());
 
   // Filters (applied in-memory; q/role/status/plan all derived from joined data).
   const q = (sp.q ?? '').trim().toLowerCase();
@@ -288,8 +323,16 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   const statusFilter = sp.status ?? '';
   const planFilter = sp.plan ?? '';
   const page = Math.max(1, Number(sp.page ?? '1') || 1);
+  // A filter over a column whose read failed matches nobody for a reason that
+  // is not the filter: with the subscriptions read failed every plan is
+  // unknown, so ?plan= listed no member, "No members match these filters",
+  // and an empty Export (review R7C-USERS-PLAN-FILTER-OVER-UNREAD-PLAN-IS-NO-MATCH).
+  // The status filter reads the profiles, and the search the profiles' names
+  // and emails and the families' names. Such a list is the read-error state.
+  const filterUnread = (!!planFilter && plansUnread) || (!!statusFilter && profilesUnread)
+    || (!!q && (profilesUnread || familyLabelsUnread));
 
-  const filtered = enriched.filter((u) => {
+  const filtered = filterUnread ? [] : enriched.filter((u) => {
     if (q) {
       const hay = `${u.name} ${u.email ?? ''} ${u.member.display_name} ${u.family?.name ?? ''}`.toLowerCase();
       if (!hay.includes(q)) return false;
@@ -317,7 +360,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
         </div>
         <UsersToolbar families={(families ?? []).map((f) => ({ id: f.id, name: f.name }))} exportRows={pageRows.map((u) => ({
           name: u.name, email: u.email ?? '', family: u.family?.name ?? '',
-          role: u.role ?? '', plan: u.plan ?? '', status: u.hasAccount ? 'active' : 'no_account', joined: u.joinedAt,
+          role: u.role ?? '', plan: u.plan ?? '', status: u.hasAccount === null ? '' : u.hasAccount ? 'active' : 'no_account', joined: u.joinedAt,
         }))} />
       </div>
 
@@ -358,11 +401,11 @@ export default async function AdminUsersPage({ searchParams }: Params) {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-5">
             <div className="grid-stats">
-              <StatCard icon={UsersRound} label={tr('adminUsers.totalMembers')} value={totalUsers} tone="bg-brand/10 text-brand-text" />
-              <StatCard icon={UserCheck} label={tr('adminUsers.withAccount')} value={activeUsers} tone="bg-success/10 text-success" />
-              <StatCard icon={UserPlus} label={tr('adminUsers.newThisMonth')} value={newThisMonth} tone="bg-accent/10 text-accent" />
-              <StatCard icon={UserX} label={tr('adminUsers.noAccount')} value={noAccountUsers} tone="bg-warning/10 text-warning" />
-              <StatCard icon={ShieldCheck} label={tr('adminUsers.parents')} value={adminCount} tone="bg-danger/10 text-danger" />
+              <StatCard icon={UsersRound} label={tr('adminUsers.totalMembers')} value={figure(totalUsers)} tone="bg-brand/10 text-brand-text" />
+              <StatCard icon={UserCheck} label={tr('adminUsers.withAccount')} value={figure(activeUsers)} tone="bg-success/10 text-success" />
+              <StatCard icon={UserPlus} label={tr('adminUsers.newThisMonth')} value={figure(newThisMonth)} tone="bg-accent/10 text-accent" />
+              <StatCard icon={UserX} label={tr('adminUsers.noAccount')} value={figure(noAccountUsers)} tone="bg-warning/10 text-warning" />
+              <StatCard icon={ShieldCheck} label={tr('adminUsers.parents')} value={figure(adminCount)} tone="bg-danger/10 text-danger" />
             </div>
 
             <Card>
@@ -383,10 +426,11 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                 ]} />
               </FilterForm>
 
-              {membersCeiling ? (
+              {membersCeiling || filterUnread ? (
                 // Past the ceiling the list is its own read-error state, not a
                 // prefix: it is searched, filtered and paged in memory, and the
-                // first members by id are no useful part of it.
+                // first members by id are no useful part of it. So is a list
+                // filtered on a column that could not be read.
                 <div className="mt-4"><ErrorState message={tr('users.couldNotLoadUsersAnd')} /></div>
               ) : pageRows.length === 0 ? (
                 totalUsers === 0 && loadErrors.length === 0 ? (
@@ -418,21 +462,23 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                         <tr key={u.member.id}>
                           <td className="px-3 py-2.5">
                             <p className="font-medium">{u.name || '—'}</p>
-                            <p className="text-xs text-muted">{u.email ?? <span className="italic">{tr('users.noLoginAccount')}</span>}</p>
+                            <p className="text-xs text-muted">{u.email ?? (u.hasAccount === null ? unavailable : <span className="italic">{tr('users.noLoginAccount')}</span>)}</p>
                           </td>
-                          <td className="px-3 py-2.5 text-muted">{u.family ? u.family.name : '—'}</td>
+                          <td className="px-3 py-2.5 text-muted">{u.family ? u.family.name : familyLabelsUnread ? unavailable : '—'}</td>
                           <td className="px-3 py-2.5">{u.role ? <Badge tone="brand">{roleLabel(tr, u.role)}</Badge> : '—'}</td>
-                          <td className="px-3 py-2.5 text-muted">{u.plan ? PLANS.find((p) => p.id === u.plan)?.name ?? u.plan : '—'}</td>
+                          <td className="px-3 py-2.5 text-muted">{plansUnread ? unavailable : u.plan ? PLANS.find((p) => p.id === u.plan)?.name ?? u.plan : '—'}</td>
                           <td className="px-3 py-2.5">
-                            <Badge tone={u.hasAccount ? 'success' : 'neutral'}>{u.hasAccount ? 'Active' : 'No account'}</Badge>
+                            {u.hasAccount === null
+                              ? <span className="text-xs text-muted">{unavailable}</span>
+                              : <Badge tone={u.hasAccount ? 'success' : 'neutral'}>{u.hasAccount ? 'Active' : 'No account'}</Badge>}
                           </td>
                           <td className="px-3 py-2.5">
-                            {u.email ? (
-                              <SuperAdminToggle
-                                email={u.email}
-                                isAdmin={superAdminDbEmails.has(u.email.toLowerCase()) || codeAdminEmails.has(u.email.toLowerCase())}
-                                locked={codeAdminEmails.has(u.email.toLowerCase())}
-                              />
+                            {u.email && codeAdminEmails.has(u.email.toLowerCase()) ? (
+                              <SuperAdminToggle email={u.email} isAdmin locked />
+                            ) : u.email && !superAdminsUnread ? (
+                              <SuperAdminToggle email={u.email} isAdmin={superAdminDbEmails.has(u.email.toLowerCase())} locked={false} />
+                            ) : u.email || u.hasAccount === null ? (
+                              <span className="text-xs text-muted">{unavailable}</span>
                             ) : '—'}
                           </td>
                           <td className="px-3 py-2.5 text-muted">{fmtDate(u.joinedAt, 'MMM d, yyyy')}</td>
@@ -446,7 +492,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                 </div>
               )}
 
-              {!membersCeiling && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
+              {!membersCeiling && !filterUnread && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
                 <span>{tr('adminUsers.showing')} {pageRows.length === 0 ? 0 : (pageSafe - 1) * PAGE_SIZE + 1} to {(pageSafe - 1) * PAGE_SIZE + pageRows.length} of {filtered.length} members</span>
                 <div className="flex gap-1">
                   {Array.from({ length: totalPages }, (_, i) => i + 1).slice(0, 7).map((p) => (
@@ -463,19 +509,25 @@ export default async function AdminUsersPage({ searchParams }: Params) {
           <div className="space-y-5">
             <Card>
               <h2 className="mb-3 text-base font-semibold">{tr('adminUsers.usersByRole')}</h2>
-              <RoleDonut counts={roleCounts} total={totalUsers} />
+              {roleDonutUnread || totalUsers === null
+                ? <p className="text-sm text-muted">{unavailable}</p>
+                : <RoleDonut counts={roleCounts} total={totalUsers} />}
             </Card>
             <Card>
               <h2 className="mb-3 text-base font-semibold">{tr('adminUsers.recentInvites')}</h2>
-              {!invites || invites.length === 0 ? (
+              {recentInvitesRes.error ? (
+                // A failed read is not "No invites yet".
+                <ErrorState message={tr('users.couldNotLoadUsersAnd')} />
+              ) : !invites || invites.length === 0 ? (
                 <p className="text-sm text-muted">{tr('adminUsers.noInvitesYet')}</p>
               ) : (
                 <ul className="space-y-2.5">
                   {invites.slice(0, RECENT_INVITES).map((inv) => (
                     <li key={inv.id} className="text-sm">
                       <p className="truncate font-medium">{inv.email}</p>
+                      {/* A failed family-name read is Unavailable, as on the Invitations tab, not "a family". */}
                       <p className="text-xs text-muted">
-                        Invited to {familyById.get(inv.family_id)?.name ?? 'a family'} · {fmtDate(inv.created_at, 'MMM d')}
+                        Invited to {familyById.get(inv.family_id)?.name ?? (familyLabelsUnread ? unavailable : 'a family')} · {fmtDate(inv.created_at, 'MMM d')}
                       </p>
                       <Badge tone={inv.status === 'pending' ? 'warning' : inv.status === 'accepted' ? 'success' : 'neutral'}>{inv.status}</Badge>
                     </li>
@@ -514,8 +566,12 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                       <tr key={f.id}>
                         <td className="px-3 py-2.5 font-medium">{f.name}</td>
                         <td className="px-3 py-2.5 text-muted">{membersCeiling ? tr('strategyMetrics.unavailable') : memberCountByFamily.get(f.id) ?? 0}</td>
-                        <td className="px-3 py-2.5"><SetPlanControl familyId={f.id} familyName={f.name} currentPlan={sub?.plan ?? 'free'} /></td>
-                        <td className="px-3 py-2.5">{sub ? <Badge tone={sub.status === 'active' ? 'success' : 'neutral'}>{sub.status}</Badge> : '—'}</td>
+                        <td className="px-3 py-2.5">{plansUnread
+                          ? <span className="text-xs text-muted">{unavailable}</span>
+                          : <SetPlanControl familyId={f.id} familyName={f.name} currentPlan={sub?.plan ?? 'free'} />}</td>
+                        <td className="px-3 py-2.5">{plansUnread
+                          ? <span className="text-xs text-muted">{unavailable}</span>
+                          : sub ? <Badge tone={sub.status === 'active' ? 'success' : 'neutral'}>{sub.status}</Badge> : '—'}</td>
                         <td className="px-3 py-2.5 text-muted">{fmtDate(f.created_at, 'MMM d, yyyy')}</td>
                       </tr>
                     );
@@ -553,7 +609,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                   {invites.map((inv) => (
                     <tr key={inv.id}>
                       <td className="px-3 py-2.5 font-medium">{inv.email}</td>
-                      <td className="px-3 py-2.5 text-muted">{familyById.get(inv.family_id)?.name ?? '—'}</td>
+                      <td className="px-3 py-2.5 text-muted">{familyById.get(inv.family_id)?.name ?? (familyLabelsUnread ? unavailable : '—')}</td>
                       <td className="px-3 py-2.5"><Badge tone="brand">{roleLabel(tr, inv.role)}</Badge></td>
                       <td className="px-3 py-2.5">
                         <Badge tone={inv.status === 'pending' ? 'warning' : inv.status === 'accepted' ? 'success' : inv.status === 'revoked' ? 'danger' : 'neutral'}>
@@ -576,44 +632,50 @@ export default async function AdminUsersPage({ searchParams }: Params) {
         <Card>
           <h2 className="mb-1 text-base font-semibold">{tr('adminUsers.roleDefinitions')}</h2>
           <p className="mb-4 text-sm text-muted">{tr('adminUsers.theRealPermissionMatrixEnforcedBy')}</p>
-          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {(roles ?? []).map((r) => (
-              <div key={r.role} className="rounded-xl border border-border bg-surface/40 p-3">
-                <Badge tone="brand">{r.label}</Badge>
-                <p className="mt-2 text-xs text-muted">{r.description}</p>
-              </div>
-            ))}
-          </div>
-          {permissions && permissions.length > 0 ? (
-            <div className="table-responsive">
-              <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs text-muted">
-                    <th className="px-3 py-2 font-medium">{tr('adminUsers.resource')}</th>
-                    {(roles ?? []).map((r) => <th key={r.role} className="px-3 py-2 text-center font-medium">{r.label.split(' / ')[0]}</th>)}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/60">
-                  {[...new Set(permissions.map((p) => p.resource))].map((resource) => (
-                    <tr key={resource}>
-                      <td className="px-3 py-2.5 font-medium">{resource}</td>
-                      {(roles ?? []).map((r) => {
-                        const perm = permissions.find((p) => p.resource === resource && p.role === r.role);
-                        const letters = [perm?.can_create && 'C', perm?.can_read && 'R', perm?.can_update && 'U', perm?.can_delete && 'D'].filter(Boolean);
-                        return (
-                          <td key={r.role} className="px-3 py-2.5 text-center text-xs text-muted">
-                            {letters.length ? letters.join('') : '—'}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table></div>
+          {rolesRes.error || permissionsRes.error ? (
+            // The matrix's columns are the roles: a failed read of either is this
+            // tab's read-error state, not half a grid or "not seeded".
+            <ErrorState message={tr('users.couldNotLoadUsersAnd')} />
+          ) : (<>
+            <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {(roles ?? []).map((r) => (
+                <div key={r.role} className="rounded-xl border border-border bg-surface/40 p-3">
+                  <Badge tone="brand">{r.label}</Badge>
+                  <p className="mt-2 text-xs text-muted">{r.description}</p>
+                </div>
+              ))}
             </div>
-          ) : (
-            <EmptyState icon={ShieldCheck} title={tr('adminUsers.permissionMatrixNotSeeded')} description={tr('users.runSupabaseSeedSqlAgainst')} />
-          )}
+            {permissions && permissions.length > 0 ? (
+              <div className="table-responsive">
+                <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs text-muted">
+                      <th className="px-3 py-2 font-medium">{tr('adminUsers.resource')}</th>
+                      {(roles ?? []).map((r) => <th key={r.role} className="px-3 py-2 text-center font-medium">{r.label.split(' / ')[0]}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {[...new Set(permissions.map((p) => p.resource))].map((resource) => (
+                      <tr key={resource}>
+                        <td className="px-3 py-2.5 font-medium">{resource}</td>
+                        {(roles ?? []).map((r) => {
+                          const perm = permissions.find((p) => p.resource === resource && p.role === r.role);
+                          const letters = [perm?.can_create && 'C', perm?.can_read && 'R', perm?.can_update && 'U', perm?.can_delete && 'D'].filter(Boolean);
+                          return (
+                            <td key={r.role} className="px-3 py-2.5 text-center text-xs text-muted">
+                              {letters.length ? letters.join('') : '—'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table></div>
+              </div>
+            ) : (
+              <EmptyState icon={ShieldCheck} title={tr('adminUsers.permissionMatrixNotSeeded')} description={tr('users.runSupabaseSeedSqlAgainst')} />
+            )}
+          </>)}
         </Card>
       )}
     </div>
@@ -635,7 +697,7 @@ async function AdminUsersReadError() {
 }
 
 function StatCard({ icon: Icon, label, value, tone }: {
-  icon: React.ComponentType<{ className?: string }>; label: string; value: number; tone: string;
+  icon: React.ComponentType<{ className?: string }>; label: string; value: string; tone: string;
 }) {
   return (
     <div className="stat-card">
@@ -643,7 +705,7 @@ function StatCard({ icon: Icon, label, value, tone }: {
         <Icon className="h-5 w-5" />
       </div>
       <div>
-        <p className="text-xl font-bold leading-none">{value.toLocaleString()}</p>
+        <p className="text-xl font-bold leading-none">{value}</p>
         <p className="mt-1 text-xs text-muted">{label}</p>
       </div>
     </div>

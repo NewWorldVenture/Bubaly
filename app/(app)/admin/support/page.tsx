@@ -26,19 +26,26 @@ export default async function AdminSupportPage({ searchParams }: Params) {
   // The tiles are exact counts. Tallied from the list read, they counted at
   // most the 1,000 newest tickets — PostgREST answers an unbounded select with
   // db-max-rows and no error — so every older ticket fell out of them.
-  const byStatus = (status: 'open' | 'pending' | 'resolved' | 'closed') =>
+  //
+  // The list is the same capped read, and the status filter narrowed it, so
+  // past 1,000 tickets a tile could promise tickets the filter did not list
+  // (coverage sweep round 9, class B). The status filter is read with the
+  // server now, the list is counted, and it says when it holds only part.
+  const STATUSES = ['open', 'pending', 'resolved', 'closed'] as const;
+  const statusParam = (STATUSES as readonly string[]).includes(sp.status ?? '') ? sp.status as (typeof STATUSES)[number] : null;
+  const byStatus = (status: (typeof STATUSES)[number]) =>
     supabase.from('support_tickets').select('id', { count: 'exact', head: true }).eq('status', status);
-  const [{ data: tickets, error: ticketsError }, openResult, pendingResult, resolvedResult, closedResult] = await settleAll([
-    supabase
-      .from('support_tickets')
-      .select('*')
-      .order('created_at', { ascending: false }),
+  let listed = supabase.from('support_tickets').select('*');
+  if (statusParam) listed = listed.eq('status', statusParam);
+  const [{ data: tickets, error: ticketsError }, openResult, pendingResult, resolvedResult, closedResult, totalResult] = await settleAll([
+    listed.order('created_at', { ascending: false }),
     byStatus('open'),
     byStatus('pending'),
     byStatus('resolved'),
     byStatus('closed'),
+    supabase.from('support_tickets').select('id', { count: 'exact', head: true }),
   ]);
-  const countError = openResult.error ?? pendingResult.error ?? resolvedResult.error ?? closedResult.error;
+  const countError = openResult.error ?? pendingResult.error ?? resolvedResult.error ?? closedResult.error ?? totalResult.error;
   if (ticketsError || countError) {
     console.error('[admin-support] ticket read failed', ticketsError ?? countError);
     return <AdminReadError />;
@@ -54,6 +61,8 @@ export default async function AdminSupportPage({ searchParams }: Params) {
 
   const q = (sp.q ?? '').trim().toLowerCase();
   const statusFilter = sp.status ?? '';
+  // Every ticket the list could have held: those of its status, or all of them.
+  const listable = statusParam ? counts[statusParam] : totalResult.count ?? 0;
   const filtered = rows.filter((t) => {
     if (statusFilter && t.status !== statusFilter) return false;
     if (q && !`${t.requester_name ?? ''} ${t.requester_email} ${t.subject} ${t.description ?? ''}`.toLowerCase().includes(q)) return false;
@@ -85,6 +94,9 @@ export default async function AdminSupportPage({ searchParams }: Params) {
             { value: 'closed', label: 'Closed' },
           ]} />
         </FilterForm>
+        {listable > rows.length && (
+          <p className="mt-3 text-xs text-muted">{tr('adminCeiling.listAndFiltersShowTheNewest', { shown: rows.length.toLocaleString(), total: listable.toLocaleString() })}</p>
+        )}
 
         {filtered.length === 0 ? (
           <EmptyState icon={LifeBuoy} title={rows.length === 0 ? 'No support tickets yet' : 'No tickets match these filters'} description={rows.length === 0 ? 'Messages sent through the contact form will appear here.' : undefined} />

@@ -764,24 +764,35 @@ export function withFaults<T extends object>(
       return (table: string) => {
         const builder = (target as unknown as InMemorySupabase).from(table);
         const calls: FaultCall[] = [];
+        const faultingThen = (settle: () => PromiseLike<unknown>) =>
+          (resolve?: (value: unknown) => unknown, reject?: (error: unknown) => unknown) => {
+            const failure = fault(table, calls);
+            if (failure) {
+              return Promise.resolve({
+                data: null, count: null, status: 400, statusText: 'Bad Request',
+                error: pgError(failure.code ?? 'XX000', failure.message),
+              }).then(resolve, reject);
+            }
+            return Promise.resolve(settle()).then(resolve, reject);
+          };
         const proxy: object = new Proxy(builder, {
           get(object, key) {
-            if (key === 'then') {
-              return (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) => {
-                const failure = fault(table, calls);
-                if (failure) {
-                  return Promise.resolve({
-                    data: null, count: null, status: 400, statusText: 'Bad Request',
-                    error: pgError(failure.code ?? 'XX000', failure.message),
-                  }).then(resolve, reject);
-                }
-                return object.then(resolve as never, reject);
-              };
-            }
+            if (key === 'then') return faultingThen(() => object as unknown as PromiseLike<unknown>);
             const value = Reflect.get(object, key);
             if (typeof value !== 'function') return value;
             return (...args: unknown[]) => {
               calls.push({ method: String(key), args });
+              // `.maybeSingle()` and `.single()` return a promise, not the
+              // builder. Passing that through let a query ending in either skip
+              // the fault entirely and answer from the database, so a test that
+              // faulted one never saw it fire (review
+              // R9-AI-CONFIG-VIEW-FAILED-READ-IS-A-VALUE). Its await now
+              // consults the fault like the builder's own, with the call in
+              // `calls`, and the query runs only when the fault lets it, as a
+              // faulted write must not land.
+              if (key === 'single' || key === 'maybeSingle') {
+                return { then: faultingThen(() => Reflect.apply(value, object, args) as PromiseLike<unknown>) };
+              }
               const result = Reflect.apply(value, object, args);
               return result === object ? proxy : result;
             };

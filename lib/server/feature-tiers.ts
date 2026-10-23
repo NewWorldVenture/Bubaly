@@ -72,12 +72,16 @@ export class FeatureTiersUnavailableError extends Error {
 /**
  * What a caller gets when the settings cannot be read:
  *
- *   'catalog-defaults' (the default) — for DISPLAY: /pricing, the nav, the
- *     admin listing. The catalog stays readable through a settings outage.
+ *   'catalog-defaults' (the default) — for DISPLAY: /pricing and the nav. The
+ *     catalog stays readable through a settings outage.
  *   'throw' — for an ACCESS decision. A failed lookup must never grant a
  *     feature: an admin can make a feature stricter than its catalog default
  *     (free → Plus, or Off), and the default would open what the admin closed.
  *     The caller answers "could not confirm", as it does for an unreadable plan.
+ *     Also the admin listing (/admin/tier-features): it offers a tier button on
+ *     every row and a Reset, and a choice made over the defaults is a choice
+ *     made from a state nobody read, so it shows its read-error state instead
+ *     (review R9-2-TIER-FEATURES-FAILED-READ-IS-CATALOG-DEFAULTS).
  */
 export type FeatureTierReadOptions = { onUnavailable?: 'catalog-defaults' | 'throw' };
 

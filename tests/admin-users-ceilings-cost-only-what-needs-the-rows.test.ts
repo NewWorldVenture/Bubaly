@@ -4,6 +4,7 @@ import { SOURCE_MESSAGES } from '@/lib/i18n/messages';
 import { translate } from '@/lib/i18n/translate';
 import { createInMemorySupabase, withFaults, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { renderServerPage, statCardValue, textOf } from './helpers/render-server-page';
+import { at, bodyOf } from './helpers/source-order';
 
 // /admin/users read every family, every subscription, every invite and every
 // member on every tab, each paged to a 25,000-row ceiling with reaching it an
@@ -272,13 +273,19 @@ describe('/admin/users past 25,000 subscriptions, invites and members', () => {
     }
   });
 
-  it('a member read that FAILS is still the read-error state', async () => {
+  // Both tabs that list members, not the All tab alone: the Families tab's
+  // member counts are read from the same rows, and a failed read counted every
+  // family's members as 0 (review R7A-USERS-FAMILIES-MEMBER-FAIL-GATE-UNPINNED).
+  it.each(['all', 'families'])('a member read that FAILS is still the read-error state on the %s tab', async (tab) => {
     seedFamilies();
     seedOwner();
     h.db = withFaults(db, (table, calls) => (table === 'family_members' && calls.some((c) => c.method === 'select' && c.args[0] === '*') ? { message: 'family_members unavailable' } : null));
-    const html = await render();
+    const html = await render({ tab });
     expect(html).toContain(readError);
+    expect(html).toContain(SOURCE_MESSAGES['users.refreshUsers']);
     expect(html).not.toContain(SOURCE_MESSAGES['adminUsers.totalMembers']);
+    expect(familiesHeading(html)).toBeNull();
+    expect(html).not.toContain('<td class="px-3 py-2.5 font-medium">Owner family</td>');
   });
 });
 
@@ -317,5 +324,146 @@ describe('/admin/users: Export holds the members\' first page on every tab', () 
       expect(textOf(html)).toContain('Could not load “family_members”: family_members unavailable');
     }
     expect(await render({ tab: 'invitations' })).toContain('guest@example.com');
+  });
+});
+
+// The Invitations and Families tabs became their own read-error state when
+// their read failed (R6-USERS-FAMILIES-TAB-FAILED-READ-IS-EMPTY-STATE); the
+// All tab's Recent invites rail and the Roles tab still said "No invites yet"
+// and "Permission matrix not seeded", with its instruction to run the seed,
+// while the banner named the failed read (review R7A-USERS-SIBLING-FAILED-READ-EMPTY-STATES).
+describe('/admin/users: a list whose read FAILS is the read-error state, not its empty state', () => {
+  function seedFamilies() {
+    db.seed('families', [{ id: OWNER, name: 'Owner family', created_at: '2025-01-01T00:00:00Z' }]);
+  }
+  function seedRoles() {
+    db.seed('roles', [
+      { role: 'parent', label: 'Parent / Guardian', description: 'Runs the household' },
+      { role: 'child', label: 'Child', description: 'Helps with chores' },
+    ]);
+    db.seed('permissions', [
+      { id: 'perm-1', role: 'parent', resource: 'chores', can_create: true, can_read: true, can_update: true, can_delete: true },
+      { id: 'perm-2', role: 'child', resource: 'chores', can_create: false, can_read: true, can_update: false, can_delete: false },
+    ]);
+  }
+  /** The All tab's Recent invites card: the last thing on that tab. */
+  const railOf = (html: string) => html.slice(at(html, `>${SOURCE_MESSAGES['adminUsers.recentInvites']}</h2>`));
+  /** The Roles tab's card, from its heading on. */
+  const rolesTabOf = (html: string) => textOf(html.slice(at(html, `>${SOURCE_MESSAGES['adminUsers.roleDefinitions']}</h2>`)));
+
+  it('the All tab\'s Recent invites rail, when its read FAILS', async () => {
+    seedFamilies();
+    seedOwner();
+    h.db = withFaults(db, (table) => (table === 'invites' ? { message: 'invites unavailable' } : null));
+    const html = await render();
+    expect(railOf(html)).toContain(readError);
+    expect(railOf(html)).not.toContain(SOURCE_MESSAGES['adminUsers.noInvitesYet']);
+    // The rail alone: the members are still listed, and the banner names the read.
+    expect(html).toContain('<p class="font-medium">Member 0</p>');
+    expect(textOf(html)).toContain('Could not load “invites (recent)”: invites unavailable');
+  });
+
+  it('the control: a Recent invites read that succeeds lists the newest invites, or says there are none', async () => {
+    seedFamilies();
+    seedOwner();
+    const listed = railOf(await render());
+    expect(listed).toContain('guest@example.com');
+    expect(listed).not.toContain(readError);
+    db.replace('invites', []);
+    const none = railOf(await render());
+    expect(none).toContain(SOURCE_MESSAGES['adminUsers.noInvitesYet']);
+    expect(none).not.toContain(readError);
+  });
+
+  it.each(['roles', 'permissions'])('the Roles tab, when its %s read FAILS', async (failing) => {
+    seedFamilies();
+    seedOwner();
+    seedRoles();
+    h.db = withFaults(db, (table) => (table === failing ? { message: `${failing} unavailable` } : null));
+    const html = await render({ tab: 'roles' });
+    const rolesTab = rolesTabOf(html);
+    expect(rolesTab).toContain(readError);
+    expect(rolesTab).not.toContain(SOURCE_MESSAGES['adminUsers.permissionMatrixNotSeeded']);
+    expect(rolesTab).not.toContain(SOURCE_MESSAGES['users.runSupabaseSeedSqlAgainst']);
+    // Neither half of the grid and the matrix: one is read against the other.
+    expect(rolesTab).not.toContain('Runs the household');
+    expect(rolesTab).not.toContain('chores');
+    expect(textOf(html)).toContain(`Could not load “${failing}”: ${failing} unavailable`);
+  });
+
+  it('the control: roles and permissions read are the grid and the matrix, and none seeded still says so', async () => {
+    seedFamilies();
+    seedOwner();
+    seedRoles();
+    const seeded = rolesTabOf(await render({ tab: 'roles' }));
+    expect(seeded).not.toContain(readError);
+    expect(seeded).toContain('Runs the household');
+    expect(seeded).toContain('chores CRUD R');
+    db.replace('roles', []);
+    db.replace('permissions', []);
+    const unseeded = rolesTabOf(await render({ tab: 'roles' }));
+    expect(unseeded).not.toContain(readError);
+    expect(unseeded).toContain(SOURCE_MESSAGES['adminUsers.permissionMatrixNotSeeded']);
+  });
+});
+
+// A failed subscriptions read was every member's and every family's plan read
+// as Free: the All tab's Plan column, the Families tab's SetPlanControl (its
+// current plan, which an operator then changes from) and the Export, while the
+// banner named the failed read (review R7A-USERS-FAILED-SUBSCRIPTIONS-READ-READS-FREE).
+describe('/admin/users: a subscriptions read that FAILS reads no plan, not Free', () => {
+  const SECOND = 'fam-zz-000001';
+  function seedFamilies() {
+    db.seed('families', [
+      { id: OWNER, name: 'Owner family', created_at: '2025-01-01T00:00:00Z' },
+      { id: SECOND, name: 'Second family', created_at: '2025-01-01T00:00:00Z' },
+    ]);
+    // A family without a subscription: Free when the read succeeds.
+    db.seed('family_members', [{
+      id: 'mem-zz-000000', family_id: SECOND, user_id: null, role: 'parent', display_name: 'Second parent',
+      is_active: true, created_at: '2026-02-01T00:00:00Z',
+    }]);
+  }
+  const planCell = (plan: string) => `<td class="px-3 py-2.5 text-muted">${plan}</td>`;
+  const familyRow = (html: string, name: string) => textOf(bodyOf(html, `<td class="px-3 py-2.5 font-medium">${name}</td>`, '</tr>'));
+  const unavailable = SOURCE_MESSAGES['strategyMetrics.unavailable'];
+  const failSubscriptions = () => {
+    h.db = withFaults(db, (table) => (table === 'subscriptions' ? { message: 'subscriptions unavailable' } : null));
+  };
+
+  it('the All tab\'s Plan column and the Export', async () => {
+    seedFamilies();
+    seedOwner();
+    failSubscriptions();
+    const html = await render();
+    expect(html.split(planCell(unavailable))).toHaveLength(10 + 1);
+    for (const plan of ['Bubaly Free', 'Family+']) expect(html).not.toContain(planCell(plan));
+    expect(h.exported?.map((row) => row.plan)).toEqual(Array(10).fill(''));
+    expect(textOf(html)).toContain('Could not load “subscriptions”: subscriptions unavailable');
+  });
+
+  it('the Families tab offers no plan control to change from a plan it could not read', async () => {
+    seedFamilies();
+    seedOwner();
+    failSubscriptions();
+    const html = await render({ tab: 'families' });
+    expect(html).not.toContain('data-plan-of=');
+    expect(familyRow(html, 'Owner family')).toContain(`Owner family ${MEMBERS} ${unavailable} ${unavailable}`);
+    expect(familyRow(html, 'Second family')).toContain(`Second family 1 ${unavailable} ${unavailable}`);
+    expect(h.exported?.every((row) => row.plan === '')).toBe(true);
+  });
+
+  it('the control: a subscriptions read that succeeds is each family\'s plan, and Free where it has none', async () => {
+    seedFamilies();
+    seedOwner();
+    const all = await render();
+    expect(all).toContain(planCell('Family+'));
+    expect(all).not.toContain(planCell(unavailable));
+    expect(h.exported?.[0]?.plan).toBe('plus');
+    const families = await render({ tab: 'families' });
+    expect(families).toContain('<span data-plan-of="Owner family">plus</span>');
+    expect(families).toContain('<span data-plan-of="Second family">free</span>');
+    expect(familyRow(families, 'Owner family')).toContain('active');
+    expect(families).not.toContain(unavailable);
   });
 });
