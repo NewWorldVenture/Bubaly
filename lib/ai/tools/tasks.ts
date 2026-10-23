@@ -78,7 +78,7 @@ export const taskTools: ToolDefinition[] = [
       const title = (input.title ?? input.task ?? '').trim();
       if (!title) return fail('A task needs a title.', { code: SERVICE_CODES.invalidInput });
 
-      const assignee = await resolveAssigneeId(scope, input);
+      const assignee = await resolveAssigneeId(scope, input, { requireActive: true });
       if (!assignee.ok) return assignee;
 
       const res = await createTodo(scope, {
@@ -164,7 +164,7 @@ export const taskTools: ToolDefinition[] = [
     summarize: (_input, output) => (output.assigned_to_id ? `Assigned ${output.title}` : `Unassigned ${output.title}`),
     resource: (output) => ({ table: 'todo_items', id: output.id }),
     execute: async (scope, input) => {
-      const assignee = await resolveAssigneeId(scope, input);
+      const assignee = await resolveAssigneeId(scope, input, { requireActive: true });
       if (!assignee.ok) return assignee;
 
       const res = await assignTodo(scope, input.todo_id, assignee.data);
@@ -260,7 +260,7 @@ export const taskTools: ToolDefinition[] = [
       const title = (input.title ?? input.task ?? '').trim();
       if (!title) return fail('A chore needs a title.', { code: SERVICE_CODES.invalidInput });
 
-      const assignee = await resolveAssigneeId(scope, input);
+      const assignee = await resolveAssigneeId(scope, input, { requireActive: true });
       if (!assignee.ok) return assignee;
 
       const res = await createChore(scope, {
@@ -307,7 +307,7 @@ export const taskTools: ToolDefinition[] = [
     summarize: (_input, output) => `Assigned that chore${output.due_at ? `, due ${output.due_at}` : ''}`,
     resource: (output) => ({ table: 'chore_assignments', id: output.id }),
     execute: async (scope, input) => {
-      const assignee = await resolveAssigneeId(scope, input);
+      const assignee = await resolveAssigneeId(scope, input, { requireActive: true });
       if (!assignee.ok) return assignee;
       // chore_assignments.member_id is NOT NULL: a chore with nobody on it is a
       // chore nobody does, so this is refused rather than written half-formed.

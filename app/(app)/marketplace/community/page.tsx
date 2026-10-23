@@ -4,6 +4,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingRelationError } from '@/lib/supabase/errors';
+import { isManager } from '@/lib/constants/roles';
 import { CommunityModule } from '@/components/marketplace/community-module';
 import { readSharedListings } from '@/lib/marketplace/circle-reads';
 import type { CircleLite, CircleMemberLite, ShareLite, SharedListingLite } from '@/lib/marketplace/community';
@@ -80,6 +81,7 @@ export default async function CommunityPage() {
     <CommunityModule
       migrated={migrated}
       familyId={familyId}
+      canManage={isManager(ctx.active.role)}
       circles={circles}
       members={members}
       shares={shares}

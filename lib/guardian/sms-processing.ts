@@ -14,6 +14,7 @@ import { smsStep } from './sms-deadline';
 import { escalateGuardianEmergency } from './escalate';
 import { guardianEscalationDescription } from './escalation';
 import { GUARDIAN_INBOUND_CAP_REASON, GUARDIAN_INBOUND_FAMILY_CAP, GUARDIAN_INBOUND_SENDER_CAP, GUARDIAN_INBOUND_WINDOW_MS } from './inbound-caps';
+import { runUnderLearningLease } from './learning-lease';
 
 type Client = SupabaseClient<Database>;
 type Options = { signal?: AbortSignal };
@@ -297,17 +298,39 @@ async function processOwned(client: Client, input: GuardianSmsReceiptInput, leas
           // maybeSingle fail). A dismissed suggestion for this sender is
           // remembered for the same window the learning run looks back over.
           const remembered = new Date(Date.now() - SUGGESTION_MEMORY_MS).toISOString();
-          const existing = resultEnvelope(await smsStep(signal, current => table(client, 'guardian_suggestions').select('id')
-            .eq('family_id', input.familyId).eq('suggestion_type', 'update_trust').eq('evidence->>phone', input.from!)
-            .or(`status.eq.pending,created_at.gte.${remembered}`).limit(1).retry(false).abortSignal(current)));
-          if (!existing.error && Array.isArray(existing.data) && existing.data.length === 0) {
-            await fence();
-            await exactDecision();
-            await smsStep(signal, current => table(client, 'guardian_suggestions').insert({
-              family_id: input.familyId, suggestion_type: 'update_trust', title: `Add ${formatPhone(input.from)} to your contacts?`,
-              reasoning: `${formatPhone(input.from)} has contacted you ${messageCount + 1} times but isn't in your trust graph. Adding them would let you customize how Bubaly handles their messages.`,
-              evidence: { phone: input.from, message_count: messageCount }, proposed_trust_level: 'known_contact',
-            }).retry(false).abortSignal(current));
+          const unsuggested = async (parent: AbortSignal) => {
+            const existing = resultEnvelope(await smsStep(parent, current => table(client, 'guardian_suggestions').select('id')
+              .eq('family_id', input.familyId).eq('suggestion_type', 'update_trust').eq('evidence->>phone', input.from!)
+              .or(`status.eq.pending,created_at.gte.${remembered}`).limit(1).retry(false).abortSignal(current)));
+            return !existing.error && Array.isArray(existing.data) && existing.data.length === 0;
+          };
+          // The learning run files this same suggestion (trust:<phone>:known_contact),
+          // and both dedupe by reading and then inserting. So the read that
+          // decides is taken again under the family's learning lease
+          // (lib/guardian/learning-lease.ts): a text inside a learning run's
+          // read-to-insert span, or two texts from this sender at once, no longer
+          // both insert, and the one that finds the lease held leaves it to the
+          // holder or to the sender's next text. The first read keeps a sender
+          // who is already suggested from taking the lease on every text; the
+          // leased steps stop with the lease's own deadline, not after it.
+          if (await unsuggested(signal)) {
+            await smsStep(signal, leased => runUnderLearningLease(client, input.familyId, async () => {
+              if (!await unsuggested(leased)) return;
+              await fence();
+              await exactDecision();
+              const filed = resultEnvelope(await smsStep(leased, current => table(client, 'guardian_suggestions').insert({
+                family_id: input.familyId, suggestion_type: 'update_trust', title: `Add ${formatPhone(input.from)} to your contacts?`,
+                reasoning: `${formatPhone(input.from)} has contacted you ${messageCount + 1} times but isn't in your trust graph. Adding them would let you customize how Bubaly handles their messages.`,
+                evidence: { phone: input.from, message_count: messageCount }, proposed_trust_level: 'known_contact',
+              }).select('id').retry(false).abortSignal(current)));
+              // 23505 is the pending suggestion's unique key (the owner's index)
+              // refusing a second copy: it is already suggested, not a failure.
+              // Anything else is said; neither one decides the message.
+              const code = (filed.error as { code?: unknown } | null)?.code;
+              if (filed.error ? code !== '23505' : !Array.isArray(filed.data) || filed.data.length !== 1) {
+                console.error('[guardian-sms] the "add to contacts?" suggestion was not filed', { familyId: input.familyId, code: code ?? null });
+              }
+            }), 15_000);
           }
         }
       } catch { /* Optional suggestions never establish receipt or completion. */ }

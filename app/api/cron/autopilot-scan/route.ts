@@ -4,7 +4,8 @@ import type { LocaleCode } from '@/lib/i18n/locales';
 import { getMessages, translate } from '@/lib/i18n/messages';
 import { createServiceClient } from '@/lib/supabase/server';
 import { runAutopilotScan } from '@/lib/autopilot/scan';
-import { rotateForRun } from '@/lib/autopilot/cron-rotation';
+import { rotateForSlot } from '@/lib/autopilot/cron-rotation';
+import { AUTOPILOT_SCAN_SLOTS, lastDailySlot } from '@/lib/server/cron-slot';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { readAll } from '@/lib/supabase/read-all';
 import { getFeatureTiersByHref, resolveFeatureEntitlement } from '@/lib/server/feature-entitlement';
@@ -29,8 +30,6 @@ const TIME_BUDGET_MS = 40_000;
 const FAMILY_TIMEOUT_MS = 12_000;
 /** Families scanned at once. Bounded: each scan is a burst of reads and writes. */
 const FAMILY_CONCURRENCY = 4;
-/** The cron runs once a day (vercel.json), so a run is numbered by its day. */
-const DAY_MS = 86_400_000;
 
 // The scan STORES suggestion titles, and the subscription ones carry money
 // ("$15.99 charge: Netflix tomorrow"). This cron has no reader to word them for:
@@ -98,8 +97,16 @@ export async function GET(req: NextRequest) {
     // one-family-a-day rotation left them waiting years. No per-family "last
     // scanned" signal exists to order by, so every family is reached within
     // ceil(N / stride) runs instead.
+    //
+    // A run is named by its slot, not only its day: vercel.json fires 06:30 and
+    // the dispatcher 06:30 and 18:30 (lib/server/cron-slot.ts). Numbered by the
+    // UTC day alone, the 18:30 run started at the same family as the 06:30 one
+    // and, cut off by the same budget, re-scanned that run's prefix instead of a
+    // new slice. The day still picks the start, so the 06:30 run walks the whole
+    // sequence by itself; the 18:30 run starts half the ring further on.
     const all = families ?? [];
-    const queue = rotateForRun(all, Math.floor(started / DAY_MS));
+    const run = lastDailySlot(started, AUTOPILOT_SCAN_SLOTS);
+    const queue = rotateForSlot(all, run, AUTOPILOT_SCAN_SLOTS.length);
     const unreached: string[] = [];
     let cursor = 0;
     // `counted` goes false once the pass stops waiting for this family, so a scan

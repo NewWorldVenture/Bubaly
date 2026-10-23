@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { CreditCard, Landmark, ShieldCheck, AlertTriangle, Radio, ToggleLeft, ToggleRight } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
-import { settleAll } from '@/lib/supabase/settle';
+import { settle, settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { readMoneyFlagsWithError, readStripeEnv, resolveCapabilities, type MoneyCapabilities } from '@/lib/stripe/capabilities';
@@ -42,24 +42,36 @@ export default async function AdminStripeMoneyPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
   const { flags: moneyFlags, error: moneyFlagsError } = await readMoneyFlagsWithError(supabase);
-  const stripeCfgResult = await supabase.from('stripe_settings').select('*').eq('id', 'singleton').maybeSingle();
+  // Settled: a transport failure REJECTS the query rather than resolving
+  // { data, error }, and unsettled it took the route's error boundary in place
+  // of this page's own read-error state.
+  const stripeCfgResult = await settle(supabase.from('stripe_settings').select('*').eq('id', 'singleton').maybeSingle());
 
+  // Every tile here is a COUNT, asked for as one (`head: true`, exact), the way
+  // the financial-accounts tile always was. Reading a table's `status` column
+  // and counting in memory was answered with at most `db-max-rows` (1,000) and
+  // no error, so once stripe_webhook_events — which grows with every Stripe
+  // event — passed a thousand rows, "Webhook errors" stopped counting and an
+  // error burst was invisible on the console. A count is not rows; it is not
+  // capped.
   const [
-    flagsResult, accountsResult, financialCountResult,
+    flagsResult, accountsResult, enabledAccountsResult, financialCountResult,
     cardsResult, authsResult, webhooksResult,
   ] = await settleAll([
     supabase.from('feature_flags').select('key, enabled').in('key', MONEY_FLAG_KEYS),
-    supabase.from('stripe_connected_accounts').select('status'),
+    supabase.from('stripe_connected_accounts').select('id', { count: 'exact', head: true }),
+    supabase.from('stripe_connected_accounts').select('id', { count: 'exact', head: true }).eq('status', 'enabled'),
     supabase.from('stripe_financial_accounts').select('id', { count: 'exact', head: true }),
-    supabase.from('stripe_issuing_cards').select('status'),
+    supabase.from('stripe_issuing_cards').select('id', { count: 'exact', head: true }).eq('status', 'active'),
     supabase.from('stripe_authorizations').select('outcome, decline_reason, merchant_name, amount_cents, created_at').order('created_at', { ascending: false }).limit(20),
-    supabase.from('stripe_webhook_events').select('status'),
+    supabase.from('stripe_webhook_events').select('id', { count: 'exact', head: true }).eq('status', 'error'),
   ]);
 
   const readError = moneyFlagsError
     ?? stripeCfgResult.error
     ?? flagsResult.error
     ?? accountsResult.error
+    ?? enabledAccountsResult.error
     ?? financialCountResult.error
     ?? cardsResult.error
     ?? authsResult.error
@@ -72,20 +84,20 @@ export default async function AdminStripeMoneyPage() {
   const caps: MoneyCapabilities = resolveCapabilities(readStripeEnv(), moneyFlags);
   const { data: stripeCfg } = stripeCfgResult;
   const { data: flags } = flagsResult;
-  const { data: accounts } = accountsResult;
+  const { count: accountCount } = accountsResult;
+  const { count: enabledAccountCount } = enabledAccountsResult;
   const { count: financialCount } = financialCountResult;
-  const { data: cards } = cardsResult;
+  const { count: activeCardCount } = cardsResult;
   const { data: auths } = authsResult;
-  const { data: webhooks } = webhooksResult;
+  const { count: webhookErrorCount } = webhooksResult;
 
   const flagOn = new Map((flags ?? []).map((f) => [f.key, f.enabled]));
-  const acctRows = accounts ?? [];
-  const enabledAccounts = acctRows.filter((a) => a.status === 'enabled').length;
-  const cardRows = cards ?? [];
-  const activeCards = cardRows.filter((c) => c.status === 'active').length;
+  const totalAccounts = accountCount ?? 0;
+  const enabledAccounts = enabledAccountCount ?? 0;
+  const activeCards = activeCardCount ?? 0;
   const authRows = auths ?? [];
   const declined = authRows.filter((a) => a.outcome === 'declined');
-  const webhookErrors = (webhooks ?? []).filter((w) => w.status === 'error').length;
+  const webhookErrors = webhookErrorCount ?? 0;
 
   return (
     <div className="space-y-6">
@@ -136,7 +148,7 @@ export default async function AdminStripeMoneyPage() {
 
       {/* Aggregate stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <Stat label={t('adminStripe.onboardedFamilies')} value={`${enabledAccounts}/${acctRows.length}`} icon={ShieldCheck} tone="success" />
+        <Stat label={t('adminStripe.onboardedFamilies')} value={`${enabledAccounts}/${totalAccounts}`} icon={ShieldCheck} tone="success" />
         <Stat label={t('adminStripe.financialAccounts')} value={financialCount ?? 0} icon={Landmark} />
         <Stat label={t('adminStripe.activeCards')} value={activeCards} icon={CreditCard} />
         <Stat label={t('adminStripe.declinesRecent')} value={declined.length} icon={AlertTriangle} tone={declined.length ? 'warning' : 'neutral'} />

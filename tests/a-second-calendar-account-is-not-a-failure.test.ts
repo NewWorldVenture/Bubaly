@@ -22,16 +22,23 @@ vi.mock('@/lib/supabase/auth', () => ({
   requireUserContext: async () => ({ user: { id: 'u-1' }, active: { familyId: 'f-1' } }),
 }));
 vi.mock('@/lib/supabase/server', () => ({
-  createServiceClient: () => {
-    const chain: Record<string, unknown> = {};
-    let eqs = 0;
-    Object.assign(chain, {
-      from: () => chain, select: () => chain,
-      eq: () => { eqs += 1; return eqs >= 3 ? Promise.resolve({ data: state.accounts, error: null }) : chain; },
-      maybeSingle: () => Promise.reject(new Error('maybeSingle must not be used here: JSON object requested, multiple (or no) rows returned')),
-    });
-    return chain;
-  },
+  createServiceClient: () => ({
+    from: (table: string) => {
+      const chain: Record<string, unknown> = {};
+      let writing = false;
+      Object.assign(chain, {
+        select: () => chain, eq: () => chain, neq: () => chain,
+        // The account lease (lib/sync/account-lease.ts) claims and releases
+        // each account with a confirmed update; the fake grants every claim.
+        update: () => { writing = true; return chain; },
+        maybeSingle: () => Promise.reject(new Error('maybeSingle must not be used here: JSON object requested, multiple (or no) rows returned')),
+        then: (resolve: (value: unknown) => unknown) => resolve(
+          writing && table === 'sync_accounts' ? { data: [{ id: 'claimed' }], error: null } : { data: state.accounts, error: null },
+        ),
+      });
+      return chain;
+    },
+  }),
 }));
 vi.mock('@/lib/sync/registry', () => ({ getAdapter: () => ({ label: 'Outlook', isConfigured: () => true }) }));
 vi.mock('@/lib/sync/engine/generic', () => ({

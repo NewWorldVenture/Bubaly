@@ -30,6 +30,7 @@ import { listPracticesBetween, listTeams } from '@/lib/services/sports';
 import { searchTodos } from '@/lib/services/tasks';
 import { listTrips } from '@/lib/services/trips';
 import { fail, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
+import { EXPORT_NOT_INCLUDED } from './export-coverage';
 
 export const EXPORT_FORMAT_VERSION = 1;
 
@@ -105,6 +106,12 @@ export type ExportSection = {
    * in it, and `truncated` is true when the family has any such row.
    */
   window?: { from: string; to: string };
+  /**
+   * The members section only: whether removed (`isActive: false`) members are
+   * in it. True for a parent or adult, who manage removals; every other role's
+   * roster hides removed members in the app, so their file does too.
+   */
+  includesRemovedMembers?: boolean;
   data: unknown;
 };
 
@@ -116,6 +123,13 @@ export type FamilyExport = {
   exportedBy: { userId: string | null; memberId: string | null; role: string };
   /** Sections the caller's role does not receive, named so the file says what it omits. */
   withheld: ExportSectionKey[];
+  /**
+   * The modules the export does not read at all, for any role (health, journal,
+   * locations, credentials, wallet, ...): lib/privacy/export-coverage.ts. The
+   * file is presented as a copy of the family's data and recommended before a
+   * deletion request, so what it leaves out is written in it.
+   */
+  notIncluded: string[];
   sections: ExportSection[];
 };
 
@@ -130,7 +144,7 @@ function dayKey(scope: ServiceScope, offsetDays: number): string {
   return dayKeyInTz(new Date(now.getTime() + offsetDays * 86_400_000), scope.tz);
 }
 
-type SectionRead = ServiceResult<{ data: unknown; count: number; window?: { from: string; to: string }; beyondWindow?: boolean; capped?: boolean }>;
+type SectionRead = ServiceResult<{ data: unknown; count: number; window?: { from: string; to: string }; beyondWindow?: boolean; capped?: boolean; includesRemovedMembers?: boolean }>;
 
 /** The instants a school or sports read between two family dates spans: the first day's midnight to the last day's last millisecond. */
 function familyDayWindow(scope: ServiceScope, window: { from: string; to: string }): { from: string; to: string } {
@@ -186,8 +200,14 @@ async function readSection(scope: ServiceScope, key: ExportSectionKey): Promise<
       return r.ok ? { ok: true, data: { data: r.data, count: 1 } } : r;
     }
     case 'members': {
-      const r = await getMembers(scope, { includeInactive: true });
-      return r.ok ? { ok: true, data: { data: r.data, count: r.data.length } } : r;
+      // Removed members for a parent or adult only. Every in-app roster hides
+      // `is_active = false` rows, and this read used to include them for every
+      // role, so a child's or guest's file carried the birthday, auth user id
+      // and avatar of an ex-partner or former caregiver the roster never showed
+      // them. The file says which it holds (includesRemovedMembers).
+      const includeInactive = isManager(scope.role);
+      const r = await getMembers(scope, { includeInactive });
+      return r.ok ? { ok: true, data: { data: r.data, count: r.data.length, includesRemovedMembers: includeInactive } } : r;
     }
     case 'calendar': {
       const window = { from: dayKey(scope, -365), to: dayKey(scope, 365) };
@@ -297,6 +317,7 @@ export async function buildFamilyExport(scope: ServiceScope): Promise<ExportBuil
       limit,
       truncated: (limit !== null && read.data.count >= limit) || read.data.beyondWindow === true || read.data.capped === true,
       ...(read.data.window ? { window: read.data.window } : {}),
+      ...(read.data.includesRemovedMembers !== undefined ? { includesRemovedMembers: read.data.includesRemovedMembers } : {}),
       data: read.data.data,
     });
   }
@@ -312,6 +333,7 @@ export async function buildFamilyExport(scope: ServiceScope): Promise<ExportBuil
       family: { id: scope.familyId, name: family?.familyName ?? '', timezone: family?.timezone ?? scope.tz },
       exportedBy: { userId: scope.userId, memberId: scope.memberId, role: scope.role },
       withheld,
+      notIncluded: [...EXPORT_NOT_INCLUDED],
       sections,
     },
   };

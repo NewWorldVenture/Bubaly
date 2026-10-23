@@ -1,11 +1,19 @@
-// lib/marketplace/rental-lifecycle.ts — the rental/borrow transaction state
-// machine + deposit settlement (pure, unit-tested). Encodes the spec's statuses
-// (requested → approved → active → picked_up → returned/late/damaged →
-// completed, with declined/disputed branches) and the hard rule "never release
-// deposits without the configured workflow": a deposit can only be settled once
-// the item has actually come back (or a dispute concludes). Also computes late
-// fees and damage deductions. Backs marketplace_rentals / _borrowing_agreements /
-// _deposits.
+// lib/marketplace/rental-lifecycle.ts — a SPECIFICATION, not a live engine.
+//
+// NOT WIRED. No table backs it: no migration creates the rentals, borrowing
+// agreements or deposits it was written for, and no code outside its own test
+// imports it (tests/an-order-step-is-one-the-database-knows.test.ts holds both).
+// A rent or a borrow the app makes is a row in marketplace_orders, whose
+// statuses and transitions are ORDER_TRANSITIONS in ./order-lifecycle.ts — do
+// not validate an order write against the statuses below, which the database's
+// check constraint would refuse. Deposits, late fees and damage are not a
+// product feature; wiring this means creating its tables first.
+//
+// What it encodes: the spec's rental statuses (requested → approved → active →
+// picked_up → returned/late/damaged → completed, with declined/disputed
+// branches), the rule "never release deposits without the configured
+// workflow" (a deposit settles only once the item is back or a dispute
+// concludes), and late-fee and damage arithmetic.
 
 export type RentalStatus =
   | 'requested' | 'approved' | 'declined' | 'active' | 'picked_up'

@@ -7,12 +7,14 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { createServer } from '@/lib/supabase/server';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { readFamilyOrders } from '@/lib/marketplace/schema-compat';
 import { cancelOrderPickup } from '@/lib/marketplace/pickup-server';
-import { SELLER_ONLY_ORDER_STEPS } from '@/lib/marketplace/order-lifecycle';
+import { ORDER_TRANSITIONS, SELLER_ONLY_ORDER_STEPS } from '@/lib/marketplace/order-lifecycle';
+import { readSellerStanding } from '@/lib/marketplace/seller-standing';
 
 type Failure = { ok: false; error: string };
 type Result = { ok: true } | Failure;
@@ -23,6 +25,14 @@ function actionFailure(operation: string, message: string, error: unknown): Fail
   console.error(`[marketplace-action] ${operation} failed`, error);
   return { ok: false, error: describeActionError(error, message) };
 }
+
+/**
+ * A guest views the household (lib/constants/roles.ts: "View the shared
+ * calendar, lists and plans"). Opening a storefront, reaching out about a
+ * listing and rating an exchange act in the family's name, so they are not a
+ * guest's; the screens do not offer them either.
+ */
+const isGuest = (role: string | null | undefined) => role === 'guest';
 
 /** Set a match's status: dismissed (hide) or actioned (they connected). */
 export async function setMatchStatusAction(id: string, status: 'dismissed' | 'actioned'): Promise<Result> {
@@ -115,6 +125,7 @@ export async function upsertStoreAction(input: { name: string; tagline?: string;
   const name = input.name?.trim();
   if (!name) return { ok: false, error: t('actions.giveYourStoreAName') };
   const ctx = await requireUserContext();
+  if (isGuest(ctx.active.role)) return { ok: false, error: t('actionRefusal.notAllowed') };
   const supabase = await createServer();
   const { error } = await supabase.from('marketplace_stores').upsert({
     family_id: ctx.active.familyId,
@@ -132,12 +143,10 @@ export async function upsertStoreAction(input: { name: string; tagline?: string;
   return { ok: true };
 }
 
-const ORDER_FLOW: Record<string, string[]> = {
-  requested: ['confirmed', 'cancelled'],
-  confirmed: ['active', 'cancelled'],
-  active: ['returned', 'completed'],
-  returned: ['completed'],
-};
+// The order state machine, in the database's own vocabulary (0151's check on
+// marketplace_orders.status). One table: the Orders page offers exactly these
+// steps (components/marketplace/order-controls.tsx).
+const ORDER_FLOW: Readonly<Record<string, readonly string[]>> = ORDER_TRANSITIONS;
 
 /** Advance an order along its lifecycle (requested→confirmed→active→…). */
 export async function setOrderStatusAction(orderId: string, status: string): Promise<Result> {
@@ -151,7 +160,7 @@ export async function setOrderStatusAction(orderId: string, status: string): Pro
   // buyer's as buyer_family_id.
   const { data: order, error: orderError } = await readFamilyOrders(ctx.active.familyId, (scope) => scope(supabase
     .from('marketplace_orders')
-    .select('id, status, family_id, seller_member')
+    .select('id, status, family_id, seller_member, kind')
     .eq('id', orderId))
     .maybeSingle());
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
@@ -196,8 +205,9 @@ export async function setOrderStatusAction(orderId: string, status: string): Pro
   // take it — or its family-calendar event — down.
   // The pickup row is the order's family's; a calendar event is in the
   // family of whoever confirmed it, which the caller can only remove from
-  // their own (see cancelOrderPickup).
-  if (status === 'cancelled') await cancelOrderPickup(supabase, orderId, order.family_id, ctx.active.familyId);
+  // their own (see cancelOrderPickup). `kind` tells a loan's completed pickup,
+  // a start that never finished, which goes too, from a sale's, which never does.
+  if (status === 'cancelled') await cancelOrderPickup(supabase, orderId, order.family_id, ctx.active.familyId, order.kind);
   revalidatePath(`${MARKETPLACE}/orders`);
   return { ok: true };
 }
@@ -208,12 +218,13 @@ export async function leaveReviewAction(input: { orderId: string; rating: number
   const rating = Math.round(input.rating);
   if (!input.orderId || rating < 1 || rating > 5) return { ok: false, error: t('actions.pickARatingFrom1') };
   const ctx = await requireUserContext();
+  if (isGuest(ctx.active.role)) return { ok: false, error: t('actionRefusal.notAllowed') };
   const supabase = await createServer();
   const memberId = ctx.active.member.id;
 
   const { data: order, error: orderError } = await readFamilyOrders(ctx.active.familyId, (scope) => scope(supabase
     .from('marketplace_orders')
-    .select('id, listing_id, buyer_member, seller_member, status')
+    .select('id, family_id, listing_id, buyer_member, seller_member, status')
     .eq('id', input.orderId))
     .maybeSingle());
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
@@ -222,9 +233,17 @@ export async function leaveReviewAction(input: { orderId: string; rating: number
   const isBuyer = order.buyer_member === memberId;
   const isSeller = order.seller_member === memberId;
   if (!isBuyer && !isSeller) return { ok: false, error: t('actions.onlyTheTwoPartiesCan') };
+  // A review lives in the ORDER's family: marketplace_reviews_insert (0359)
+  // requires o.family_id = the review's family_id and the reviewer to be that
+  // family's member. An order won at auction, bought outright or agreed in a
+  // negotiation is the SELLER's family's, so the buyer from another household
+  // can file no review the database will take (they were told "Could not save
+  // the review" every time). Said so here, and the Orders page does not offer
+  // them the form; accepting their review is the owner's SQL.
+  if (order.family_id !== ctx.active.familyId) return { ok: false, error: t('marketplace.reviewsAcrossHouseholdsAreNotOpenYet') };
 
   const { error } = await supabase.from('marketplace_reviews').insert({
-    family_id: ctx.active.familyId,
+    family_id: order.family_id,
     order_id: order.id,
     listing_id: order.listing_id,
     reviewer_member: memberId,
@@ -255,21 +274,33 @@ export async function makeOfferAction(listingId: string): Promise<Result> {
   const t = await getTranslations();
   if (!listingId) return { ok: false, error: t('actions.invalidListing') };
   const ctx = await requireUserContext();
+  if (isGuest(ctx.active.role)) return { ok: false, error: t('actionRefusal.notAllowed') };
   const supabase = await createServer();
   const memberId = ctx.active.member.id;
 
   const { data: listing, error: listingError } = await supabase
     .from('marketplace_listings')
-    .select('id, kind, status, member_id')
+    .select('id, kind, status, member_id, sale_format, price_cents')
     .eq('id', listingId)
     .eq('family_id', ctx.active.familyId)
     .maybeSingle();
   if (listingError) return actionFailure('load the listing', t('marketplace.couldNotLoadTheListing'), listingError);
   if (!listing) return { ok: false, error: t('actions.listingNotFound') };
   if (listing.member_id === memberId) return { ok: false, error: t('actions.thisIsYourOwnListing') };
+  // An auction takes bids, not interest. The offer's trigger (0154) flips an
+  // available listing to 'pending', which every bid, Buy-It-Now and the close
+  // then refuse: one "I'm interested" froze the auction, with no way back from
+  // the board, and accepting it sold the item at its price under live bids.
+  if (listing.sale_format === 'auction') return { ok: false, error: t('marketplace.anAuctionTakesBidsNotInterest') };
   if (listing.status !== 'available' && listing.status !== 'pending') {
     return { ok: false, error: t('actions.thisListingIsNoLonger') };
   }
+  // Not with a family that closed its account: it cannot see the offer, and
+  // every delivery cron skips its notices (lib/marketplace/seller-standing.ts).
+  // The read above already proved the listing is the caller's to see.
+  const seller = await readSellerStanding(createServiceClient(), listingId);
+  if (seller === 'unknown') return { ok: false, error: t('marketplace.couldNotSendTheOffer') };
+  if (seller === 'closed') return { ok: false, error: t('actions.thisFamilyHasClosedItsAccount') };
 
   const { data: existing, error: offerError } = await supabase
     .from('marketplace_offers')
@@ -285,8 +316,13 @@ export async function makeOfferAction(listingId: string): Promise<Result> {
   // unique index (listing_id, member_id where status='open') makes a racing
   // duplicate a caught 23505 rather than a second open offer.
   const kind = listing.kind === 'sell' || listing.kind === 'rent' ? 'interest' : 'claim';
+  // An interest carries the price it was given at. Accepting records the order
+  // at `coalesce(offer.amount_cents, listing.price_cents)` (0315), so an offer
+  // with no amount was accepted at whatever the listing said by then: a price
+  // the seller changed after the interest, and the buyer never saw.
   const { error } = await supabase.from('marketplace_offers').insert({
     family_id: ctx.active.familyId, listing_id: listingId, member_id: memberId, kind, created_by: ctx.user.id,
+    amount_cents: kind === 'interest' ? listing.price_cents : null,
   });
   if (error) {
     if (error.code === '23505') return { ok: false, error: t('actions.youAlreadyReachedOutAbout') };
@@ -326,10 +362,27 @@ export async function readTrustScoreInputsAction(): Promise<TrustScoreInputsResu
   const memberId = ctx.active.member.id;
 
   const [reviews, orders, listings] = await settleAll([
-    supabase.from('marketplace_reviews').select('rating').eq('family_id', familyId).eq('reviewee_member', memberId),
+    // Every rating, paged on id: an unbounded read stops at db-max-rows (1,000)
+    // and says nothing, so the score was over a sample of them.
+    readAllByIdAsQuery<{ id: string; rating: number }>((after, limit) => {
+      let q = supabase.from('marketplace_reviews').select('id, rating').eq('family_id', familyId).eq('reviewee_member', memberId);
+      if (after) q = q.gt('id', after);
+      return q.order('id').limit(limit);
+    }, { max: 50_000 }),
     // Either party's family, so an exchange this member won from another
-    // household counts too (lib/marketplace/schema-compat.ts).
-    readFamilyOrders(familyId, (scope) => scope(supabase.from('marketplace_orders').select('status, buyer_member, seller_member'))),
+    // household counts too (lib/marketplace/schema-compat.ts). Counted by the
+    // database, on this member's side of each order: the family's whole order
+    // list, filtered here, was the first 1,000 of them.
+    //
+    // A GET with one row, not a HEAD. A HEAD answer has no body, so the 400 a
+    // database without buyer_family_id sends reaches postgrest-js as
+    // `{ message: '' }` with no 42703 in it, readFamilyOrders cannot tell it
+    // is the missing column, and the rail failed on every marketplace page
+    // instead of falling back. Only the count is read.
+    readFamilyOrders(familyId, (scope) => scope(supabase.from('marketplace_orders').select('id', { count: 'exact' }))
+      .eq('status', 'completed')
+      .or(`buyer_member.eq.${memberId},seller_member.eq.${memberId}`)
+      .limit(1)),
     supabase.from('marketplace_listings').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('member_id', memberId),
   ]);
   // A failed read is said, not scored: a zero baseline is a real-looking number
@@ -341,9 +394,7 @@ export async function readTrustScoreInputsAction(): Promise<TrustScoreInputsResu
     ok: true,
     memberId,
     ratingsReceived: (reviews.data ?? []).map((r) => r.rating),
-    ordersCompleted: (orders.data ?? []).filter(
-      (o) => o.status === 'completed' && (o.buyer_member === memberId || o.seller_member === memberId),
-    ).length,
+    ordersCompleted: orders.count ?? 0,
     listingsPosted: listings.count ?? 0,
   };
 }

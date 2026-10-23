@@ -2,6 +2,8 @@ import 'server-only';
 import { createServiceClient } from '@/lib/supabase/server';
 import { joinName, normalizePhone } from '@/lib/onboarding/profile';
 import { describeActionError } from '@/lib/supabase/errors';
+import { AVATAR_BUCKET, avatarObjectPathFor } from '@/lib/storage/avatars';
+import { removeConfirmed } from '@/lib/storage/confirm-removal';
 
 /**
  * Writes the signed-in user's own profile (name + phone, optionally email) and
@@ -33,10 +35,36 @@ export async function saveUserProfile(
   if (input.email) row.email = input.email;
   if (input.avatarUrl !== undefined) row.avatar_url = input.avatarUrl || null;
 
+  // The photo being replaced or removed, read before it is overwritten. The
+  // picker uploads every avatar as a NEW object in the public `avatars` bucket
+  // and "Remove" only blanks the field, so each superseded face photo stayed
+  // fetchable by anyone who ever held its URL (rendered app-wide, so cached
+  // and logged) for ever. A failed read leaves the old object where it is and
+  // is logged; the profile write below still stands.
+  let previousAvatar: string | null = null;
+  if (input.avatarUrl !== undefined) {
+    const { data: current, error: readError } = await svc.from('profiles').select('avatar_url').eq('id', userId).maybeSingle();
+    if (readError) console.error('[profile-action] previous avatar read failed; the old photo stays in the bucket', readError);
+    else previousAvatar = current?.avatar_url ?? null;
+  }
+
   const { error } = await svc.from('profiles').upsert(row, { onConflict: 'id' });
   if (error) {
     console.error('[profile-action] profile update failed', error);
     return { ok: false, error: describeActionError(error, 'Could not update your profile.') };
+  }
+
+  // The row no longer names the old photo, so it leaves the bucket — only when
+  // it is this user's own object (avatarObjectPathFor refuses any other folder
+  // or an external URL), and only confirmed gone (removeConfirmed). A removal
+  // that fails is logged with its path and the profile write stands: the
+  // family's change is saved either way.
+  if (input.avatarUrl !== undefined && previousAvatar && previousAvatar !== (input.avatarUrl || null)) {
+    const path = avatarObjectPathFor(userId, previousAvatar);
+    if (path) {
+      const removed = await removeConfirmed(svc.storage.from(AVATAR_BUCKET), path);
+      if (removed.error) console.error('[profile-action] the previous avatar was not removed from the bucket', { path, error: removed.error });
+    }
   }
 
   // Keep the user's family display name(s) in sync with their first name.

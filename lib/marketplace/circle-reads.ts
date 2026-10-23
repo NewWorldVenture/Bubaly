@@ -148,16 +148,86 @@ export async function readBidTarget(sb: Client, listingId: string): Promise<Read
 // ── Titles on the orders page ────────────────────────────────────────────────
 
 /**
- * Titles for listings the table did not return: on an order the family WON,
- * the listing is the seller family's. From the view when it exists; without
- * it there is nothing more to read (the table read already had the old
- * policy's reach).
+ * Rows for listings the table did not return: on an order the family WON, or
+ * an offer it made, the listing is another family's. From the view when it
+ * exists, asking only for `columns` it exposes; without it there is nothing
+ * more to read (the table read already had the old policy's reach).
  */
-export async function readCircleTitles(sb: Client, ids: readonly string[]): Promise<ReadResult<{ id: string; title: string }[]>> {
+export async function readCircleListingsById<T extends { id: string }>(
+  sb: Client, ids: readonly string[], columns: string,
+): Promise<ReadResult<T[]>> {
   if (!ids.length) return { data: [], error: null };
-  const shared = await readCircleOrLegacy<{ id: string; title: string }[]>(
-    () => fromCircleView(sb).select(circleColumns('id, title')).in('id', [...ids]),
+  const shared = await readCircleOrLegacy<T[]>(
+    () => fromCircleView(sb).select(circleColumns(columns)).in('id', [...ids]) as unknown as PromiseLike<ReadResult<T[]>>,
     async () => ({ data: [], error: null }),
   );
   return { data: shared.data, error: shared.error };
+}
+
+/** Titles for listings the table did not return (readCircleListingsById). */
+export async function readCircleTitles(sb: Client, ids: readonly string[]): Promise<ReadResult<{ id: string; title: string }[]>> {
+  return readCircleListingsById<{ id: string; title: string }>(sb, ids, 'id, title');
+}
+
+// ── One listing's page ───────────────────────────────────────────────────────
+
+/** What the listing page reads of a listing in the viewer's own family. */
+export const LISTING_DETAIL_COLUMNS = `id, family_id, member_id, title, description, kind, category, condition, price_cents, rent_period, photo_url, location, status, created_at, sale_format, auction_starts_at, auction_ends_at, starting_bid_cents, ${RESERVE_VIEW_COLUMNS}, buy_now_cents, current_bid_cents, bid_count, highest_bidder_family_id`;
+
+/** The same, of another family's listing: the view has no member_id or location, and names the family. */
+export const CIRCLE_LISTING_DETAIL_COLUMNS = `id, family_id, family_name, title, description, kind, category, condition, price_cents, rent_period, photo_url, status, created_at, sale_format, auction_starts_at, auction_ends_at, starting_bid_cents, ${RESERVE_VIEW_COLUMNS}, buy_now_cents, current_bid_cents, bid_count, highest_bidder_family_id`;
+
+export type ListingDetailRow = {
+  id: string; family_id: string; member_id: string | null; family_name: string | null;
+  title: string; description: string | null; kind: string; category: string; condition: string | null;
+  price_cents: number; rent_period: string | null; photo_url: string | null; location: string | null;
+  status: string; created_at: string; sale_format: string; auction_starts_at: string | null; auction_ends_at: string | null;
+  starting_bid_cents: number; has_reserve: boolean; reserve_met: boolean; buy_now_cents: number | null;
+  current_bid_cents: number; bid_count: number; highest_bidder_family_id: string | null;
+};
+
+/**
+ * The listing behind /marketplace/item/[id], whichever family it is: the
+ * viewer's own from the table, another family's from the circle view (or, on a
+ * database without the view, the table read the old circle policy answered).
+ * `ownFamily` says which, so the page treats the viewer of another family's
+ * listing as a shopper. That listing comes back without its seller member and
+ * its pickup location on either schema: the view does not carry them, and the
+ * page does not show one family's pickup spot to another.
+ */
+export async function readListingDetail(
+  sb: Client, listingId: string, familyId: string,
+): Promise<ReadResult<ListingDetailRow> & { ownFamily: boolean }> {
+  const own = await readWithReserveView<ListingDetailRow>(LISTING_DETAIL_COLUMNS, (columns) => sb
+    .from('marketplace_listings').select(columns).eq('id', listingId).eq('family_id', familyId).maybeSingle());
+  if (own.error) return { data: null, error: own.error, ownFamily: false };
+  if (own.data) return { data: { ...own.data, family_name: null }, error: null, ownFamily: true };
+
+  const other = await readCircleOrLegacy<ListingDetailRow>(
+    () => readWithReserveView(circleColumns(CIRCLE_LISTING_DETAIL_COLUMNS), (columns) => fromCircleView(sb)
+      .select(columns).eq('id', listingId).neq('family_id', familyId).maybeSingle()),
+    () => readWithReserveView(LISTING_DETAIL_COLUMNS, (columns) => sb
+      .from('marketplace_listings').select(columns).eq('id', listingId).neq('family_id', familyId).maybeSingle()),
+  );
+  if (other.error || !other.data) return { data: null, error: other.error, ownFamily: false };
+  return {
+    data: { ...other.data, member_id: null, location: null, family_name: other.data.family_name ?? null },
+    error: null,
+    ownFamily: false,
+  };
+}
+
+/**
+ * The listing a report names, and its seller member when the caller's family
+ * can see it (its own). Another family's listing comes from the view, which
+ * has no member_id: the caller cannot be its seller, so null is the answer.
+ */
+export async function readReportTarget(sb: Client, listingId: string): Promise<ReadResult<{ id: string; member_id: string | null }>> {
+  return readListingAnyFamily<{ id: string; member_id: string | null }>(
+    () => sb.from('marketplace_listings').select('id, member_id').eq('id', listingId).maybeSingle(),
+    async () => {
+      const shared = await fromCircleView(sb).select(circleColumns('id')).eq('id', listingId).maybeSingle();
+      return { data: shared.data ? { id: shared.data.id, member_id: null } : null, error: shared.error };
+    },
+  );
 }

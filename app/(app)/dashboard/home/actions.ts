@@ -106,7 +106,10 @@ export async function deleteWarrantyAction(id: string) {
   const { familyId, userId, supabase } = await ctx();
   // A soft delete is an update, so it carries the zero-rows hazard — and the
   // caller has already told the family the record is gone. Audit C1-S9-47.
-  const { data: removed, error } = await supabase.from('home_warranties').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId).select('id');
+  // The policy number leaves with the delete: nothing purges a `deleted_at`
+  // row and the select policy serves it, so a "deleted" warranty kept its
+  // number for good (the same rule as dashboard/auto's SCRUBBED_ON_DELETE).
+  const { data: removed, error } = await supabase.from('home_warranties').update({ policy_number: null, notes: null, deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId).select('id');
   if (error) throw refusalError(describeActionError(error, tr('actions.couldNotDeleteThatWarranty')), refusalForError(error));
   if (wroteNoRows(removed)) throw new Error(tr('actions.couldNotDeleteThatWarranty'));
   revalidatePath('/dashboard/home/warranties');
@@ -145,7 +148,10 @@ export async function deleteContractorAction(id: string) {
   const { familyId, userId, supabase } = await ctx();
   // A soft delete is an update, so it carries the zero-rows hazard — and the
   // caller has already told the family the record is gone. Audit C1-S9-47.
-  const { data: removed, error } = await supabase.from('home_contractors').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId).select('id');
+  // A contractor is a third party: their phone and email leave with the
+  // delete rather than staying readable by direct REST on a row every screen
+  // hides (the same rule as dashboard/auto's SCRUBBED_ON_DELETE).
+  const { data: removed, error } = await supabase.from('home_contractors').update({ phone: null, email: null, notes: null, deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId).select('id');
   if (error) throw refusalError(describeActionError(error, tr('actions.couldNotDeleteThatContractor')), refusalForError(error));
   if (wroteNoRows(removed)) throw new Error(tr('actions.couldNotDeleteThatContractor'));
   revalidatePath('/dashboard/home/pros');
@@ -205,7 +211,7 @@ export async function deleteServiceRecordAction(id: string) {
   const { familyId, userId, supabase } = await ctx();
   // A soft delete is an update, so it carries the zero-rows hazard — and the
   // caller has already told the family the record is gone. Audit C1-S9-47.
-  const { data: removed, error } = await supabase.from('home_service_records').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId).select('id, asset_id, service_date');
+  const { data: removed, error } = await supabase.from('home_service_records').update({ provider: null, description: null, deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId).select('id, asset_id, service_date');
   if (error) throw refusalError(describeActionError(error, tr('actions.couldNotDeleteThatService')), refusalForError(error));
   if (wroteNoRows(removed)) throw new Error(tr('actions.couldNotDeleteThatService'));
   const gone = removed?.[0];

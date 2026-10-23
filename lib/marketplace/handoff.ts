@@ -76,6 +76,24 @@ export function canComplete(status: HandoffStatus): boolean {
   return status === 'confirmed';
 }
 
+/**
+ * The hand-off code is one party's secret. Confirming mints it, so the
+ * CONFIRMER (the party who did not propose) holds it and shares it when they
+ * meet; the PROPOSER enters it to finish. A code both parties can read and
+ * either can enter proves nothing: either one alone could "complete in person".
+ */
+export function holdsHandoffCode(viewer: HandoffRole, proposerRole: HandoffRole): boolean {
+  return viewer !== proposerRole;
+}
+export function canEnterHandoffCode(status: HandoffStatus, viewer: HandoffRole, proposerRole: HandoffRole): boolean {
+  return canComplete(status) && viewer === proposerRole;
+}
+
+/** A rent or a borrow: the pickup starts a loan, which ends when the item comes back. */
+export function isLoanKind(kind: string | null | undefined): boolean {
+  return kind === 'rent' || kind === 'borrow';
+}
+
 export function statusLabel(status: HandoffStatus): string {
   switch (status) {
     case 'proposed':  return 'Pickup proposed';

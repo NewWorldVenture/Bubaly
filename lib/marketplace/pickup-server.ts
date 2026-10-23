@@ -4,6 +4,7 @@
 import 'server-only';
 import type { createServer } from '@/lib/supabase/server';
 import { wroteNoRows } from '@/lib/supabase/errors';
+import { isLoanKind } from '@/lib/marketplace/handoff';
 
 type Db = Awaited<ReturnType<typeof createServer>>;
 
@@ -31,6 +32,15 @@ export async function removePickupFromCalendar(sb: Db, familyId: string, eventId
  * calendar: the order it was arranged for is off. No open pickup is the
  * ordinary case and does nothing.
  *
+ * On a rent or a borrow (`kind`) a COMPLETED pickup goes too, its completed_at
+ * cleared. A loan's start claims the pickup before it starts the order
+ * (startLoanAtPickup), so an order just cancelled from requested or confirmed
+ * has a completed pickup only while that start is in flight, or after one
+ * whose order write failed. Left completed, its event stayed on the calendar
+ * of an order that is off; between two households only a canceller who
+ * confirmed it can take that copy down. A sale's pickup completes with its
+ * order in one RPC, so a completed sale is never this one's to touch.
+ *
  * Two families, because an order between two households has two: the pickup
  * row carries the ORDER's family (`orderFamilyId`), while its calendar event is
  * in the family of whoever confirmed it, and the caller can only remove one
@@ -39,9 +49,12 @@ export async function removePickupFromCalendar(sb: Db, familyId: string, eventId
  * Called after the order's own cancel landed, which is the answer the person
  * gets; a pickup that cannot be cancelled is logged, not returned.
  */
-export async function cancelOrderPickup(sb: Db, orderId: string, orderFamilyId: string, actorFamilyId: string): Promise<void> {
-  const { data: cancelled, error } = await sb.from('marketplace_handoffs').update({ status: 'cancelled' })
-    .eq('order_id', orderId).eq('family_id', orderFamilyId).in('status', ['proposed', 'confirmed'])
+export async function cancelOrderPickup(
+  sb: Db, orderId: string, orderFamilyId: string, actorFamilyId: string, kind: string | null | undefined,
+): Promise<void> {
+  const open = isLoanKind(kind) ? ['proposed', 'confirmed', 'completed'] : ['proposed', 'confirmed'];
+  const { data: cancelled, error } = await sb.from('marketplace_handoffs').update({ status: 'cancelled', completed_at: null })
+    .eq('order_id', orderId).eq('family_id', orderFamilyId).in('status', open)
     .select('id, calendar_event_id');
   if (error) {
     console.error('[marketplace-handoff] the cancelled order kept its pickup', error);

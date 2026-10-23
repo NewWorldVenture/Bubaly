@@ -245,7 +245,7 @@ describe('respawnMissingChoreAssignments — the durable retry (audit 2026-10-04
     expect(src).toContain('await respawnMissingChoreAssignments(scope)');
     expect(at(src, 'await generateFamilyNotifications(supabase, f.id, report)')).toBeLessThan(at(src, 'respawnMissingChoreAssignments(scope)'));
     expect(src).toContain('const failed = generationFailures + respawnFailures + pushDispatchFailures');
-    expect(src).toContain('{ ok, families: families?.length ?? 0, created, respawned, pushed, failed }');
+    expect(src).toContain('{ ok, families: families?.length ?? 0, created, generationHeld, unserved, respawned, pushed, failed }');
   });
 });
 

@@ -5,14 +5,39 @@
 // and pick up exactly where they left off. Parent-only.
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireUserContext, type UserContext } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
+import { aal2Verdict } from '@/lib/auth/require-aal2';
 import { isAdmin } from '@/lib/constants/roles';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { stripeFromKey } from '@/lib/stripe';
 import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 
-type Result = { ok: true; notice?: string } | { ok: false; error: string };
+type Result =
+  | { ok: true; notice?: string }
+  /** `stepUp` is the /auth/step-up path when the refusal was an assurance one (reportRefusal acts on it). */
+  | { ok: false; error: string; stepUp?: string };
+
+const BILLING = '/dashboard/billing';
+
+/**
+ * The step-up every other billing cancel path demands. Closing sets every
+ * billable Stripe subscription to end and reopening resumes it — the same
+ * Stripe call app/api/billing/cancel/route.ts refuses an `aal1` session of a
+ * parent who enrolled an authenticator (refuseWithoutBillingStepUp), and the
+ * same gate the money server actions keep (moneyScope in
+ * app/(app)/dashboard/billing/actions.ts). These two actions had only the role
+ * check: CloseAccountCard sits behind requireAal2 on /dashboard/billing, but the
+ * paywall gate renders for any locked family with no step-up, and a Next-Action
+ * POST needs no page at all, so a password-only session could schedule the
+ * cancellation and lock every member out. Answered with the failure union, not
+ * a redirect: every caller awaits the action and checks `ok`.
+ */
+async function needsCodeFirst(ctx: UserContext, t: (key: string) => string): Promise<Result | null> {
+  const verdict = await aal2Verdict(ctx, 'money', BILLING);
+  if (verdict.action !== 'step_up') return null;
+  return { ok: false, error: t('actions.moneyNeedsYourCodeAgain'), stepUp: verdict.to };
+}
 
 /** Statuses Stripe can still bill. A canceled or expired subscription has nothing left to stop. */
 const BILLABLE_STATUSES = new Set(['trialing', 'active', 'past_due', 'incomplete', 'unpaid']);
@@ -35,6 +60,8 @@ export async function closeAccountAction(): Promise<Result> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isAdmin(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentCanClose') };
+  const code = await needsCodeFirst(ctx, t);
+  if (code) return code;
   const admin = createServiceClient();
   const familyId = ctx.active.familyId;
 
@@ -116,6 +143,8 @@ export async function reopenAccountAction(): Promise<Result> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isAdmin(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentCanReopen') };
+  const code = await needsCodeFirst(ctx, t);
+  if (code) return code;
   const admin = createServiceClient();
   const familyId = ctx.active.familyId;
   // When it closed: the window that tells the close's own cancels apart from a

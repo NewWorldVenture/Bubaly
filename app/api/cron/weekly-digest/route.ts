@@ -1,8 +1,11 @@
+import { createHash } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
+import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
+import { lastWeeklySlot, WEEKLY_DIGEST_SLOT, weeklyWindow } from '@/lib/server/cron-slot';
 import { readCompleteCalendarOccurrences } from '@/lib/services/calendar/search-occurrences';
 import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from '@/lib/calendar/source-capability';
 import { dayKeyInZone } from '@/lib/schedule/zoned';
+import { addDaysToDayKey, weekStartDayKey } from '@/lib/services/scope';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { listAllAuthUsers } from '@/lib/server/list-all-auth-users';
@@ -51,8 +54,18 @@ export async function GET(req: NextRequest) {
 
   const supabase = createServiceClient();
 
-  const weekStart = new Date().toISOString();
-  const weekEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  // The occurrence this tick belongs to: the most recent Monday 08:00 UTC slot
+  // at or before now, and the week that starts there (lib/server/cron-slot.ts).
+  // Both schedulers fire this route at that minute, a GitHub tick can land a
+  // few minutes late, and a 502 invites a replay by hand. Derived from the
+  // clock, each tick rendered its own bytes and nothing folded them, so every
+  // family's admin received two digests. Every tick for one slot now reads the
+  // same window, renders the same bytes and sends each recipient under one
+  // idempotency key, which the provider folds (as admin-digest does).
+  const slot = lastWeeklySlot(new Date(), WEEKLY_DIGEST_SLOT);
+  const { start: weekStart } = weeklyWindow(slot);
+  const keyFor = (familyId: string, to: string) =>
+    `weekly-digest/${createHash('sha256').update(`${slot.toISOString()}|${familyId}|${to}`).digest('hex')}`;
 
   // Every household, not the first thousand. An unbounded select is capped at
   // PostgREST's db-max-rows and says nothing, so families past that ceiling
@@ -97,12 +110,19 @@ export async function GET(req: NextRequest) {
   const startedAt = Date.now();
 
   const digestFor = async (family: (typeof families)[number]) => {
-    // The family's own week. `weekStart`/`weekEnd` stay instants — a rolling
-    // seven days is the right bound for `starts_at`, which IS an instant — but
-    // `plan_date` is a DATE column holding the day on their wall, and the dates
-    // rendered into the email are days too.
+    // The family's own week: Monday to Sunday on their wall, the Monday on or
+    // after the slot's day there. It was the seven days after the Monday 08:00
+    // UTC instant, which is no family's week: Tokyo's ran Monday 17:00 to the
+    // next Monday 17:00 (this Monday's morning out, next Monday's in), Honolulu's
+    // began on Sunday, and the day-keyed parts (meals, all-day events) were read
+    // inclusive at both ends, eight days for everyone. Every bound below is the
+    // family's, end-exclusive, and depends on the slot alone, so every tick of
+    // one occurrence still reads, renders and keys the same week.
     const tz = family.timezone || 'UTC';
     const dayIn = (iso: string) => dayKeyInZone(Date.parse(iso), tz) ?? iso.slice(0, 10);
+    // The Monday on or after a day is the Monday on or before the day six later.
+    const weekFrom = weekStartDayKey(addDaysToDayKey(dayIn(weekStart), 6));
+    const weekTo = addDaysToDayKey(weekFrom, 7);
     // An open chore is an ASSIGNMENT that is still todo/in_progress. `chores` is
     // the definition table — it carries neither `status` nor `assignee_id`, so
     // reading those from it errors and skipped every family's digest. Counts,
@@ -113,11 +133,14 @@ export async function GET(req: NextRequest) {
       (async () => {
         const unavailable = (message: string) => ({ data: null, count: null, error: { message } });
         if (CALENDAR_SOURCE_ARCHIVE_ENABLED) return unavailable('Weekly digest imported-source calendars are not supported yet.');
-        const result = await readCompleteCalendarOccurrences({ db: supabase, familyId: family.id, tz, userId: null, memberId: null, role: 'system', actorKind: 'system' }, { from: weekStart, to: weekEnd });
+        // Timed rows from the family's Monday midnight to the next Monday's,
+        // all-day rows by their DATE over the same seven days. The read takes
+        // the closed span, a superset; the filter below is end-exclusive.
+        const bounds = briefingCalendarBounds(weekFrom, tz, 0, 7);
+        const result = await readCompleteCalendarOccurrences({ db: supabase, familyId: family.id, tz, userId: null, memberId: null, role: 'system', actorKind: 'system' }, { from: bounds.timedFrom, to: bounds.timedTo });
         if (!result.ok) return unavailable(result.error);
         const native = result.data.occurrences.filter(row => row.kind === 'native');
         if (native.length !== result.data.occurrences.length) return unavailable('Weekly digest requires a native calendar domain.');
-        const bounds = instantCalendarBounds(weekStart, weekEnd, tz);
         // Preserve this digest's upcoming-start selection. Qualification also
         // covers ongoing rows, without adding them to the existing list.
         const upcoming = native.filter(row => row.all_day
@@ -130,7 +153,7 @@ export async function GET(req: NextRequest) {
         .eq('family_id', family.id).in('status', ['todo', 'in_progress']),
       supabase.from('meal_plans').select('id', { count: 'exact', head: true })
         .eq('family_id', family.id)
-        .gte('plan_date', dayIn(weekStart)).lte('plan_date', dayIn(weekEnd)),
+        .gte('plan_date', weekFrom).lt('plan_date', weekTo),
       supabase.from('family_members').select('user_id, display_name').eq('family_id', family.id).eq('is_active', true),
     ]);
 
@@ -177,6 +200,9 @@ export async function GET(req: NextRequest) {
 
     const { ok, skipped: notSent } = await sendReactEmail({
       to: adminEmail,
+      // One key per family, recipient and slot: a second tick for the same
+      // occurrence is folded by the provider rather than delivered again.
+      idempotencyKey: keyFor(family.id, adminEmail),
       subject: `${family.name} — your week ahead`,
       react: React.createElement(WeeklyDigestEmail, {
         familyName: family.name,
@@ -186,8 +212,10 @@ export async function GET(req: NextRequest) {
         openChores: openChores ?? 0,
         mealsPlanned: mealsPlanned ?? 0,
         memberCount: members?.length ?? 0,
-        // The "Week of …" date is the family's, not the UTC host's.
+        // The "Week of …" date is the family's, not the UTC host's: the Monday
+        // the counts above start on, the same on every tick of the slot.
         timeZone: tz,
+        weekOf: weekFrom,
         // One "families like yours" line, only for families opted into benchmarks
         // and only from the k-anonymized rows the nightly aggregation persisted.
         compareLine: renderCompareLine(await loadCompareLine(supabase, family.id), t),

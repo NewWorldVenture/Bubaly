@@ -48,7 +48,24 @@ export default async function PublicGiftPage({ params }: { params: Promise<{ tok
     return <Unavailable t={t} />;
   }
 
-  const active = !!link && link.is_active;
+  // A link whose family closed its account is dead as well: the pledge would
+  // sit pending with nobody told (every delivery cron skips a closed family),
+  // and submitGiftPledgeAction refuses it, so the page says so up front rather
+  // than taking a giver through the form to a refusal. Only the standing is
+  // read here — the family's NAME stays behind the active check below. A
+  // failed read is retryable, like the link read above, never "no longer
+  // active".
+  let familyClosed = false;
+  if (link?.is_active && link.family_id) {
+    const { data: standing, error: standingError } = await supabase
+      .from('families').select('closed_at').eq('id', link.family_id).maybeSingle();
+    if (standingError) {
+      console.error('[gift/token] family standing read failed', standingError);
+      return <Unavailable t={t} />;
+    }
+    familyClosed = !!standing?.closed_at;
+  }
+  const active = !!link && link.is_active && !familyClosed;
   // A dead link says so and nothing else. It used to keep the live page's
   // header — "Send a gift to a child · Gift · a family" — above the "no longer
   // active" note, so a made-up or retired token read like a gift page with

@@ -107,7 +107,7 @@ export const memoryTools: ToolDefinition[] = [
         return fail(SENSITIVE_REFUSAL, { code: SERVICE_CODES.denied });
       }
 
-      const member = await resolveAssigneeId(scope, { assignee_id: input.member_id, assignee: input.member });
+      const member = await resolveAssigneeId(scope, { assignee_id: input.member_id, assignee: input.member }, { requireActive: true });
       if (!member.ok) return member;
 
       const category = input.category ?? (/dislike|doesn'?t eat|favou?rite|go-to|likes?|loves?|diet|prefers?/i.test(`${key} ${content}`) ? 'preference' : 'other');

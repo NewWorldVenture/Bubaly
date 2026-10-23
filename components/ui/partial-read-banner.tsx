@@ -62,11 +62,12 @@ export function PartialReadBanner({
       <p className="text-sm font-semibold text-danger">{title}</p>
       {hint ? <p className="mt-1.5 text-xs font-medium text-danger">{hint}</p> : null}
       <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-danger/90">
-        {failures.map((failure) =>
+        {/* Keyed by position too: two lines may read alike (two surveys of one name). */}
+        {failures.map((failure, i) =>
           typeof failure === 'string' ? (
-            <li key={failure}>{failure}</li>
+            <li key={`${i}:${failure}`}>{failure}</li>
           ) : (
-            <li key={failure.label}>
+            <li key={`${i}:${failure.label}`}>
               {failure.label}{' '}
               <code className="break-all font-mono text-[0.95em]">{failure.detail}</code>
             </li>
