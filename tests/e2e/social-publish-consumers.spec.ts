@@ -83,7 +83,11 @@ async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US') {
     '@/components/i18n/locale-provider': { useTranslations: () => (key: string) => catalogue[key] ?? key },
     // The context carries the active family as the app does: the detail page
     // renders its dates in the family's zone, not the host's.
-    '@/lib/supabase/auth': { requireUserContext: async () => ({ active: { familyId: 'family', family: { timezone: 'UTC' } }, user: { id: 'user' } }) },
+    '@/lib/supabase/auth': {
+      requireUserContext: async () => ({ active: { familyId: 'family', family: { timezone: 'UTC' } }, user: { id: 'user' } }),
+      // The actions ask it only for a family without Social, which this fixture is not.
+      isSuperAdmin: async () => false,
+    },
     '@/lib/supabase/server': { createServer: async () => sdk },
     // The plan (the actions' feature check) and the page's social-role guard
     // are controlled boundaries here, like the permission check beside them.

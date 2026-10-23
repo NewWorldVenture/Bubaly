@@ -13779,6 +13779,7 @@
   "socialSchedule.noPermissionToDraft": "Non hai il permesso di creare bozze di post.",
   "socialSchedule.noPermissionToPublish": "Non hai il permesso di pubblicare post.",
   "socialSchedule.noPermissionToSchedule": "Non hai il permesso di programmare post.",
+  "socialSchedule.notInPlan": "Questo post non è stato pubblicato: all’ora prevista, gli strumenti social non facevano parte del piano della tua famiglia. Controllalo prima di pubblicarlo ora.",
   "socialSchedule.pastTime": "Scegli un orario futuro.",
   "socialSchedule.permissionDenied": "Non hai il permesso di pubblicare questo post programmato.",
   "socialSchedule.queued": "Pubblicazione programmata",

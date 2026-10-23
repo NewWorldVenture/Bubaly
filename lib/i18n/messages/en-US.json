@@ -13975,6 +13975,7 @@
   "socialSchedule.noPermissionToDraft": "You do not have permission to draft posts.",
   "socialSchedule.noPermissionToPublish": "You do not have permission to publish posts.",
   "socialSchedule.noPermissionToSchedule": "You do not have permission to schedule posts.",
+  "socialSchedule.notInPlan": "This post was not published: when it came due, social media tools weren't part of your family's plan. Review it before publishing it now.",
   "socialSchedule.pastTime": "Choose a time in the future.",
   "socialSchedule.permissionDenied": "You do not have permission to publish this scheduled post.",
   "socialSchedule.queued": "Scheduled for publishing",

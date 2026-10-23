@@ -11,6 +11,8 @@ import { ScopedLocaleProvider } from '@/components/i18n/scoped-locale-provider';
 import { FamilyTimeZoneProvider } from '@/components/i18n/locale-provider';
 import { activeFamilyTimeZone } from '@/lib/server/family-time-zone';
 import { ConfirmProvider } from '@/components/ui/confirm';
+import { AccountsLeftConnected } from '@/components/social/accounts-left-connected';
+import { accountsLeftConnectedBehindTheGate, type LeftConnected } from '@/lib/social/left-connected';
 
 // Shared layout for ALL authenticated (app) routes — dashboard, wallet, economy,
 // admin, family, missions, etc. It does two things: mounts the SessionKeeper so
@@ -73,14 +75,25 @@ async function GatedShell({
   // grandfathered existing free families pass; resolveEntitlement fails open).
   if (!superAdmin) {
     const ent = await resolveEntitlement(supabase, user.id, { isSuperAdmin: false });
-    if (ent.closed) {
-      // The gate replaces every route below, switcher included, so a member of
-      // two households is handed their open ones here, and a non-parent is not
-      // offered a reopen the action would refuse (closedFamilyStanding).
-      const standing = await closedFamilyStanding(supabase, user.id, ent.familyId);
-      return <AccountClosedGate canReopen={standing.canReopen} otherFamilies={standing.openFamilies} />;
+    if (ent.closed || ent.locked) {
+      // Either gate replaces every route below, the social layout's list of
+      // accounts still connected included, so a family whose trial ran out
+      // unpaid (every family since 0164 that dropped its plan) or whose account
+      // is closed had nothing left that could disconnect X, and Bubaly kept its
+      // tokens (household-roles N2-R1). Whoever may disconnect is shown those
+      // accounts inside the gate, each with its Disconnect, and nothing else of
+      // Social; everyone else sees the gate as before.
+      const left = await accountsBehindTheGate(ent.familyId);
+      const disconnect = left ? <AccountsLeftConnected {...left} /> : null;
+      if (ent.closed) {
+        // The gate replaces every route below, switcher included, so a member of
+        // two households is handed their open ones here, and a non-parent is not
+        // offered a reopen the action would refuse (closedFamilyStanding).
+        const standing = await closedFamilyStanding(supabase, user.id, ent.familyId);
+        return <AccountClosedGate canReopen={standing.canReopen} otherFamilies={standing.openFamilies}>{disconnect}</AccountClosedGate>;
+      }
+      return <TrialPaywallGate trialEndsAt={ent.trialEndsAt}>{disconnect}</TrialPaywallGate>;
     }
-    if (ent.locked) return <TrialPaywallGate trialEndsAt={ent.trialEndsAt} />;
   }
 
   // This read decides whether App Lock is applied, and it FAILED OPEN.
@@ -134,6 +147,22 @@ async function GatedShell({
         : children}
     </>
   );
+}
+
+/**
+ * The social accounts the signed-in member may still disconnect, for the gate
+ * that replaces every (app) route (lib/social/left-connected.ts). It never
+ * stands between the family and its gate: a read that fails shows the gate
+ * without them, as it was before, and says so in the log.
+ */
+async function accountsBehindTheGate(familyId: string | null): Promise<LeftConnected | null> {
+  if (!familyId) return null;
+  try {
+    return await accountsLeftConnectedBehindTheGate(familyId);
+  } catch (error) {
+    console.error('[app-layout] social accounts behind the gate could not be read', { familyId, error });
+    return null;
+  }
 }
 
 /**

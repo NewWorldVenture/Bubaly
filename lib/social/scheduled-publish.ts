@@ -249,9 +249,20 @@ export async function runScheduledPublishDrain(options: { now?: Date; signal?: A
   // The plan and the feature switch, as the pages and the actions check them.
   // The drain published for every family with a queued post, so a family below
   // Social's tier, or every family once Social was switched off, still had its
-  // scheduled posts sent. Such a receipt is left queued and untouched, like a
-  // closed family's. Asked once per family per drain; the tiers once per drain.
-  // An unreadable plan throws into the receipt's own catch: failed, retryable.
+  // scheduled posts sent. Asked once per family per drain; the tiers once per
+  // drain. An unreadable plan throws into the receipt's own catch: counted as
+  // failed, left queued, retried on the next tick.
+  //
+  // A post that comes due while its family is without Social is HELD, with the
+  // reason, not left queued (household-roles N2-R2). Left queued, it went out on
+  // the first tick after the family was entitled again, however late: a "this
+  // Saturday" post weeks after Saturday, on a public account, with nobody asked.
+  // As for a changed post or revoked authority, an ordinary future tick cannot
+  // invent the consent; whoever may publish sees why it was held and sends it
+  // by hand (retryPublishAction). This is the family's own plan, decided as a
+  // pipeline decides it (no super administrator in a cron), so a super
+  // administrator's schedule for a family without Social is held at its time
+  // the same way rather than staying queued with nothing said.
   const entitled = new Map<string, boolean>();
   let tiers: Record<string, FeatureTier> | null = null;
   const familyMayPublish = async (familyId: string): Promise<boolean> => {
@@ -287,7 +298,7 @@ export async function runScheduledPublishDrain(options: { now?: Date; signal?: A
         if (receipt.outputs.reconcile && (receipt.outputs.phase !== 'dispatching' || heldPresentation)) await reconcileScheduledPost(db, receipt, signal);
         if (receipt.outputs.phase !== 'queued' || Date.parse(receipt.inputs.scheduledFor) > now.getTime()
           || (receipt.outputs.retryAt && Date.parse(receipt.outputs.retryAt) > now.getTime())) continue;
-        if (!(await familyMayPublish(receipt.family_id))) continue;
+        if (!(await familyMayPublish(receipt.family_id))) scheduleFailure('notInPlan');
         const refreshed = await readSchedule(db, receipt.id, signal);
         if (!refreshed) continue;
         summary.attempted++;
@@ -303,7 +314,8 @@ export async function runScheduledPublishDrain(options: { now?: Date; signal?: A
         const current = await readSchedule(db, row.id, completionSignal).catch(() => null);
         if (current?.outputs.phase === 'queued') {
           const key = error instanceof ScheduledPublishError ? error.key : 'socialSchedule.storageUnavailable';
-          const held = key === 'socialSchedule.changed' || key === 'socialSchedule.permissionDenied' || key === 'socialSchedule.reconnectRequired';
+          const held = key === 'socialSchedule.changed' || key === 'socialSchedule.permissionDenied' || key === 'socialSchedule.reconnectRequired'
+            || key === 'socialSchedule.notInPlan';
           const errorKey = held ? key : key === 'socialSchedule.accessUnavailable' ? key : 'socialSchedule.storageUnavailable';
           const t = await getTranslations();
           const saved = await changeSchedule(db, current, { ...current.outputs, phase: held ? 'failed' : 'queued', reconcile: true },

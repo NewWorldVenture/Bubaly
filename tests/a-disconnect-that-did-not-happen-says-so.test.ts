@@ -58,7 +58,7 @@ function household(): InMemorySupabase {
 }
 
 const row = () => render(h.hooks, createElement(AccountRow, {
-  id: X_ACCOUNT, platform: 'x', name: 'Rivera fair on X', status: 'connected', lastError: null, lastSyncedAt: null,
+  id: X_ACCOUNT, platform: 'x', name: 'Rivera fair on X', status: 'connected', lastError: null, lastSyncedAt: null, canDisconnect: true,
 }));
 const token = (db: InMemorySupabase) => db.table('social_account_tokens').find((r) => r.id === X_ACCOUNT)!;
 

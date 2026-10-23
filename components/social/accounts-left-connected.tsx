@@ -8,7 +8,8 @@ import { getTranslations } from '@/lib/i18n/server';
 /**
  * A family without Social, and the accounts it still has connected: each with
  * its Disconnect, and the plans when a plan would bring Social back. The social
- * layout renders this in place of the console (lib/social/left-connected.ts).
+ * layout renders this in place of the console, and the (app) shell inside its
+ * paywall and closed-account gate (lib/social/left-connected.ts).
  */
 export async function AccountsLeftConnected({ accounts, plansHref }: LeftConnected) {
   const t = await getTranslations();
@@ -26,6 +27,8 @@ export async function AccountsLeftConnected({ accounts, plansHref }: LeftConnect
             status={a.status}
             lastError={a.last_error}
             lastSyncedAt={a.last_synced_at}
+            // Only a member who holds connect_accounts is shown this list.
+            canDisconnect
           />
         ))}
       </div>

@@ -13779,6 +13779,7 @@
   "socialSchedule.noPermissionToDraft": "Vous n’avez pas l’autorisation de rédiger des publications.",
   "socialSchedule.noPermissionToPublish": "Vous n’avez pas l’autorisation de publier.",
   "socialSchedule.noPermissionToSchedule": "Vous n’avez pas l’autorisation de programmer des publications.",
+  "socialSchedule.notInPlan": "Cette publication n’a pas été publiée : à l’heure prévue, les outils de réseaux sociaux ne faisaient pas partie du forfait de votre famille. Vérifiez-la avant de la publier maintenant.",
   "socialSchedule.pastTime": "Choisissez une heure future.",
   "socialSchedule.permissionDenied": "Vous n’avez pas l’autorisation de publier cette publication programmée.",
   "socialSchedule.queued": "Publication programmée",

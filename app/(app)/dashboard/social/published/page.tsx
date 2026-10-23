@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireSocialPage } from '@/lib/social/access';
-import { SOCIAL_SURFACES } from '@/lib/social/roles';
+import { SOCIAL_SURFACES, canAnySocial } from '@/lib/social/roles';
 import { getPosts } from '@/lib/social/queries';
 import { PostsList, PostTabs } from '@/components/social/posts-list';
 
@@ -14,12 +14,16 @@ export const dynamic = 'force-dynamic';
 export default async function PublishedPage() {
   const t = await getTranslations();
   // What went out is the pipeline's, and an analyst's too.
-  const { ctx } = await requireSocialPage(SOCIAL_SURFACES.published);
+  const { ctx, access } = await requireSocialPage(SOCIAL_SURFACES.published);
   const posts = await getPosts(ctx.active.familyId, ['published', 'partially_published']);
+  // The other tabs (All, Scheduled, Failed) and each post's detail are the
+  // pipeline's: an analyst who opens this page is not offered links that would
+  // send them to the feed (household-roles N1-R1).
+  const pipeline = canAnySocial(access.can, SOCIAL_SURFACES.pipeline);
   return (
     <div className="space-y-4">
-      <PostTabs active="/dashboard/social/published" />
-      <PostsList posts={posts} emptyLabel={t('published.nothingPublishedYet')} />
+      {pipeline && <PostTabs active="/dashboard/social/published" />}
+      <PostsList posts={posts} emptyLabel={t('published.nothingPublishedYet')} linkToDetail={pipeline} />
     </div>
   );
 }

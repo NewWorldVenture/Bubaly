@@ -13777,6 +13777,7 @@
   "socialSchedule.noPermissionToDraft": "Je hebt geen toestemming om conceptberichten te maken.",
   "socialSchedule.noPermissionToPublish": "Je hebt geen toestemming om berichten te publiceren.",
   "socialSchedule.noPermissionToSchedule": "Je hebt geen toestemming om berichten in te plannen.",
+  "socialSchedule.notInPlan": "Dit bericht is niet gepubliceerd: toen het gepland stond, hoorden de socialemediatools niet bij het abonnement van je gezin. Controleer het voordat je het nu publiceert.",
   "socialSchedule.pastTime": "Kies een tijdstip in de toekomst.",
   "socialSchedule.permissionDenied": "Je hebt geen toestemming om dit geplande bericht te publiceren.",
   "socialSchedule.queued": "Gepland voor publicatie",

@@ -136,6 +136,42 @@ describe('the play-date actions', () => {
     expect(db.table('play_dates')).toEqual([]);
   });
 
+  // N10-R1: only calling a play date off was held back, so a child undid a
+  // parent's cancellation by setting it back to planned or confirmed.
+  it.each(['planned', 'confirmed', 'completed'])('do not let a child call a parent\'s cancelled play date back on as %s', async (status) => {
+    db.seed('play_dates', [playDate('pd-1', 'user-parent', 'cancelled')]);
+    as('child');
+    expect(await setPlayDateStatusAction('pd-1', status)).toEqual({ ok: false, error: NOT_SAVED });
+    expect(row('pd-1')?.status).toBe('cancelled');
+  });
+
+  it('do not let a child move a parent\'s play date backwards or skip a step', async () => {
+    db.seed('play_dates', [playDate('pd-done', 'user-parent', 'completed'), playDate('pd-new', 'user-parent', 'planned')]);
+    as('child');
+    expect(await setPlayDateStatusAction('pd-done', 'planned')).toEqual({ ok: false, error: NOT_SAVED });
+    expect(await setPlayDateStatusAction('pd-new', 'completed')).toEqual({ ok: false, error: NOT_SAVED });
+    expect(row('pd-done')?.status).toBe('completed');
+    expect(row('pd-new')?.status).toBe('planned');
+  });
+
+  it('let the author, and a parent, call a cancelled play date back on (control)', async () => {
+    db.seed('play_dates', [playDate('pd-child', 'user-child', 'cancelled'), playDate('pd-teen', 'user-teen', 'cancelled')]);
+    as('child');
+    expect(await setPlayDateStatusAction('pd-child', 'planned')).toEqual({ ok: true });
+    expect(row('pd-child')?.status).toBe('planned');
+    as('parent');
+    expect(await setPlayDateStatusAction('pd-teen', 'confirmed')).toEqual({ ok: true });
+    expect(row('pd-teen')?.status).toBe('confirmed');
+  });
+
+  it('let anyone take each forward step on a play date someone else arranged (control)', async () => {
+    db.seed('play_dates', [playDate('pd-1', 'user-parent')]);
+    as('child');
+    expect(await setPlayDateStatusAction('pd-1', 'confirmed')).toEqual({ ok: true });
+    expect(await setPlayDateStatusAction('pd-1', 'completed')).toEqual({ ok: true });
+    expect(row('pd-1')?.status).toBe('completed');
+  });
+
   it('refuse a status that is not a play date\'s', async () => {
     db.seed('play_dates', [playDate('pd-1', 'user-parent')]);
     expect(await setPlayDateStatusAction('pd-1', 'deleted')).toEqual({ ok: false, error: NOT_SAVED });

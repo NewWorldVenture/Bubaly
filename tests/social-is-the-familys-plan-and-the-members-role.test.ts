@@ -53,6 +53,9 @@ const h = vi.hoisted(() => ({
   ctx: null as unknown as { user: { id: string; email: string | null }; memberships: unknown[]; active: Record<string, unknown> & { familyId: string } },
   featureChecks: [] as string[],
   aiGenerationSelects: [] as string[],
+  /** Whether the database's super-admin allowlist (rpc is_super_admin) lists the signed-in user. */
+  superAdmin: false,
+  locale: 'en-US' as 'en-US' | 'de-DE',
 }));
 
 vi.mock('next/navigation', () => ({
@@ -64,13 +67,18 @@ vi.mock('next/navigation', () => ({
 vi.mock('next/cache', () => ({ revalidatePath() {} }));
 vi.mock('next/headers', () => ({ cookies: async () => ({ set() {} }) }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db, createServiceClient: () => h.db }));
-vi.mock('@/lib/supabase/auth', async () => {
+vi.mock('@/lib/supabase/auth', async (importOriginal) => {
   const { resolveFeatureEntitlement } = await import('@/lib/server/feature-entitlement');
+  // The real super-admin check: the email list, then the database's allowlist.
+  const { isSuperAdmin } = await importOriginal<typeof import('@/lib/supabase/auth')>();
   return {
+    isSuperAdmin,
     requireUserContext: async () => h.ctx,
     // requireFeature's decision, by the resolver it wraps: allowed, or refused.
+    // A super administrator passes, as requireFeature lets them through.
     requireFeature: async (key: string) => {
       h.featureChecks.push(key);
+      if (await isSuperAdmin()) return h.ctx;
       const entitlement = await resolveFeatureEntitlement(h.db as never, h.ctx.active.familyId, key);
       if (!entitlement.allowed) throw new Error(`FEATURE_REFUSED ${key}`);
       return h.ctx;
@@ -78,10 +86,10 @@ vi.mock('@/lib/supabase/auth', async () => {
   };
 });
 vi.mock('@/lib/i18n/server', async () => {
-  const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
+  const { SOURCE_MESSAGES, getMessages, translate } = await import('@/lib/i18n/messages');
   const { localeOrDefault } = await import('@/lib/i18n/locales');
   return {
-    getTranslations: async () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params),
+    getTranslations: async () => (key: string, params?: Record<string, string | number>) => translate(getMessages(h.locale), key, params),
     getLocaleContext: async () => ({ locale: localeOrDefault('en-US'), source: 'default', messages: SOURCE_MESSAGES }),
   };
 });
@@ -100,7 +108,10 @@ const pages = {
   media: (await import('@/app/(app)/dashboard/social/media-library/page')).default,
   connect: (await import('@/app/(app)/dashboard/social/accounts/connect/page')).default,
   accounts: (await import('@/app/(app)/dashboard/social/accounts/page')).default,
+  inbox: (await import('@/app/(app)/dashboard/social/inbox/page')).default,
+  settings: (await import('@/app/(app)/dashboard/social/settings/page')).default,
 };
+const { default: FeedPage } = await import('@/app/(app)/dashboard/social/feed/page');
 const { default: PostDetailPage } = await import('@/app/(app)/dashboard/social/posts/[id]/page');
 const { connectAccountAction, createPostAction, createMediaAction, disconnectAccountAction } = await import('@/app/(app)/dashboard/social/actions');
 const { ToastProvider } = await import('@/components/ui/toast');
@@ -109,7 +120,7 @@ const stamps = { created_at: '2026-10-01T00:00:00.000Z', updated_at: '2026-10-01
 
 /** The household, signed in as `who`, on `plan` (null: no subscription, the Free tier). */
 function household(who: Who, plan: 'basic' | 'plus' | null = 'basic'): InMemorySupabase {
-  const db = createInMemorySupabase({ userId: USERS[who], maxRows: 1000 });
+  const db = createInMemorySupabase({ userId: USERS[who], maxRows: 1000, rpc: { is_super_admin: () => h.superAdmin } });
   db.seed('families', [{ id: FAMILY, name: 'Rivera household', trial_ends_at: null, closed_at: null }]);
   if (plan) db.seed('subscriptions', [{ id: 's-1', family_id: FAMILY, plan, status: 'active', current_period_end: null }]);
   db.seed('family_members', (Object.keys(USERS) as Who[]).map((member, i) => ({
@@ -167,6 +178,8 @@ const TO_FEED = 'REDIRECT /dashboard/social/feed';
 beforeEach(() => {
   h.featureChecks = [];
   h.aiGenerationSelects = [];
+  h.superAdmin = false;
+  h.locale = 'en-US';
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
@@ -333,31 +346,36 @@ describe('Social is the family\'s plan, on every page and every action (N2)', ()
   });
 });
 
-describe('a family that lost Social can still disconnect what it connected (N2-R1)', () => {
-  const X_ACCOUNT = 'e0000000-0000-4000-8000-000000000001';
-  const OFF = { key: 'feature_tiers', value: { 'social-circle': 'off' } };
-  const PAGE_BELOW = 'The page below the layout';
+const X_ACCOUNT = 'e0000000-0000-4000-8000-000000000001';
+const PAGE_BELOW = 'The page below the layout';
 
-  /** An X account the family connected while it had Social, and the tokens Bubaly keeps for it. */
-  function withConnectedX(db: InMemorySupabase): InMemorySupabase {
-    db.seed('social_accounts', [{
-      id: X_ACCOUNT, family_id: FAMILY, user_id: USERS.parent, platform: 'x', status: 'connected', display_name: 'Rivera fair on X',
-      handle: 'riverafair', provider_account_id: '123456789', scopes: [], last_error: null, last_synced_at: null, deleted_at: null,
-      created_by: USERS.parent, updated_by: null, metadata: {}, ...stamps,
-    }]);
-    db.seed('social_account_tokens', [{
-      id: X_ACCOUNT, account_id: X_ACCOUNT, family_id: FAMILY, platform: 'x', provider_account_id: '123456789',
-      access_token_enc: 'sealed-access-token', refresh_token_enc: 'sealed-refresh-token', expires_at: null,
-      created_by: USERS.parent, updated_by: null, metadata: { x_state: 'connected' }, ...stamps,
-    }]);
-    return db;
-  }
+/** An X account the family connected while it had Social, and the tokens Bubaly keeps for it. */
+function withConnectedX(db: InMemorySupabase): InMemorySupabase {
+  db.seed('social_accounts', [{
+    id: X_ACCOUNT, family_id: FAMILY, user_id: USERS.parent, platform: 'x', status: 'connected', display_name: 'Rivera fair on X',
+    handle: 'riverafair', provider_account_id: '123456789', scopes: [], last_error: null, last_synced_at: null, deleted_at: null,
+    created_by: USERS.parent, updated_by: null, metadata: {}, ...stamps,
+  }]);
+  db.seed('social_account_tokens', [{
+    id: X_ACCOUNT, account_id: X_ACCOUNT, family_id: FAMILY, platform: 'x', provider_account_id: '123456789',
+    access_token_enc: 'sealed-access-token', refresh_token_enc: 'sealed-refresh-token', expires_at: null,
+    created_by: USERS.parent, updated_by: null, metadata: { x_state: 'connected' }, ...stamps,
+  }]);
+  return db;
+}
+// Inside the toast provider app/layout.tsx puts around every page: each
+// account's Disconnect reports a failure through it.
+const layout = async () => html(createElement(ToastProvider, null, await SocialLayout({ children: createElement('main', null, PAGE_BELOW) })));
+const hrefs = (markup: string) => [...markup.matchAll(/href="([^"]+)"/g)].map((m) => m[1].replace(/&amp;/g, '&'));
+const feed = async () => html(await FeedPage({ searchParams: Promise.resolve({}) }));
+// Each account's row reports a failed Disconnect through the toast provider.
+const accountsPage = async () => html(createElement(ToastProvider, null, await pages.accounts()));
+
+describe('a family that lost Social can still disconnect what it connected (N2-R1)', () => {
+  const OFF = { key: 'feature_tiers', value: { 'social-circle': 'off' } };
   const account = (db: InMemorySupabase) => db.table('social_accounts').find((row) => row.id === X_ACCOUNT)!;
   const token = (db: InMemorySupabase) => db.table('social_account_tokens').find((row) => row.id === X_ACCOUNT)!;
-  // Inside the toast provider app/layout.tsx puts around every page: each
-  // account's Disconnect reports a failure through it.
-  const layout = async () => html(createElement(ToastProvider, null, await SocialLayout({ children: createElement('main', null, PAGE_BELOW) })));
-  const linksIn = (markup: string) => [...markup.matchAll(/href="([^"]+)"/g)].map((m) => m[1].replace(/&amp;/g, '&'));
+  const linksIn = hrefs;
 
   it('a Free family\'s parent disconnects their X account, and Bubaly no longer holds its tokens', async () => {
     const db = withConnectedX(household('parent', null));
@@ -414,5 +432,151 @@ describe('a family that lost Social can still disconnect what it connected (N2-R
     expect(textOf(markup)).toContain(PAGE_BELOW);
     expect(linksIn(markup)).toContain('/dashboard/social/posts');
     expect(h.featureChecks).toEqual(['/dashboard/social']);
+  });
+});
+
+describe('a page below the layout ships nothing for a family without Social (N2-R1-payload)', () => {
+  // A page renders beside its layout, not inside it: the layout showing the
+  // accounts left connected in place of `children` kept these pages off the
+  // screen, and their data still went out in the response.
+  const SECRET = {
+    feed: 'A neighbour’s post in the family feed',
+    comment: 'A comment on the bake sale post',
+    message: 'A direct message to the family',
+    tone: 'A tone the family set for its posts',
+  };
+  function withFeedAndInbox(db: InMemorySupabase): InMemorySupabase {
+    db.seed('social_feed_items', [{
+      id: 'fi-1', family_id: FAMILY, platform: 'x', body: SECRET.feed, author_name: 'Neighbour', author_handle: null, media_type: null,
+      posted_at: '2026-10-01T00:00:00.000Z', permalink_url: null, metadata: {}, metrics: {}, deleted_at: null, ...stamps,
+    }]);
+    db.seed('social_comments', [{
+      id: 'sc-1', family_id: FAMILY, platform: 'x', kind: 'comment', body: SECRET.comment, status: 'open', author_name: 'Neighbour',
+      author_handle: null, posted_at: '2026-10-01T00:00:00.000Z', permalink_url: null, deleted_at: null, ...stamps,
+    }]);
+    db.seed('social_messages', [{
+      id: 'sm-1', family_id: FAMILY, platform: 'x', body: SECRET.message, author_name: 'Neighbour', author_handle: null,
+      posted_at: '2026-10-01T00:00:00.000Z', deleted_at: null, ...stamps,
+    }]);
+    db.seed('social_settings', [{
+      id: 'ss-1', family_id: FAMILY, default_timezone: 'Europe/Lisbon', ai_tone: SECRET.tone, signature: null,
+      default_platforms: [], require_approval: false, auto_hashtags: true, ...stamps,
+    }]);
+    return db;
+  }
+  const readers = {
+    feed,
+    inbox: async () => html(await pages.inbox()),
+    settings: async () => html(await pages.settings()),
+    accounts: accountsPage,
+  };
+
+  it.each(Object.keys(readers) as (keyof typeof readers)[])('%s refuses a Free family\'s parent who still has X connected, reading nothing', async (name) => {
+    withFeedAndInbox(withConnectedX(household('parent', null)));
+    await expect(readers[name]()).rejects.toThrow('FEATURE_REFUSED /dashboard/social');
+    expect(h.featureChecks).toEqual(['/dashboard/social']);
+  });
+
+  it('the layout still shows that parent the accounts left connected (control)', async () => {
+    withFeedAndInbox(withConnectedX(household('parent', null)));
+    expect(textOf(await layout())).toContain('Rivera fair on X');
+  });
+
+  it('a Family Basic household reads its feed, inbox, settings and accounts as before (control)', async () => {
+    withFeedAndInbox(withConnectedX(household('parent', 'basic')));
+    expect(textOf(await readers.feed())).toContain(SECRET.feed);
+    const inbox = textOf(await readers.inbox());
+    expect(inbox).toContain(SECRET.comment);
+    expect(inbox).toContain(SECRET.message);
+    expect(await readers.settings()).toContain(SECRET.tone);
+    expect(textOf(await readers.accounts())).toContain('Rivera fair on X');
+  });
+});
+
+describe('no link or control leads where the viewer would be sent back (N1-R1)', () => {
+  const CONNECT = '/dashboard/social/accounts/connect';
+
+  it('the empty feed offers Connect only to whoever may connect', async () => {
+    household('child');
+    const child = await feed();
+    expect(textOf(child)).toContain('No connected accounts');
+    expect(hrefs(child)).not.toContain(CONNECT);
+    household('parent');
+    expect(hrefs(await feed())).toContain(CONNECT);
+  });
+
+  it('an analyst reads what was published without the pipeline\'s tabs or a link into a post', async () => {
+    household('analyst');
+    const markup = await html(await pages.published());
+    expect(textOf(markup)).toContain('Thank you neighbours');
+    const pipeline = hrefs(markup).filter((href) => href.startsWith('/dashboard/social/posts')
+      || href === '/dashboard/social/scheduled' || href === '/dashboard/social/failed');
+    expect(pipeline).toEqual([]);
+  });
+
+  it('a parent, who holds the pipeline, keeps the tabs and each post\'s link (control)', async () => {
+    household('parent');
+    const links = hrefs(await html(await pages.published()));
+    expect(links).toContain(`/dashboard/social/posts/${POSTS.published}`);
+    expect(links).toEqual(expect.arrayContaining(['/dashboard/social/posts', '/dashboard/social/scheduled', '/dashboard/social/failed']));
+  });
+
+  it('the accounts page offers Disconnect only to whoever may disconnect', async () => {
+    withConnectedX(household('child'));
+    const child = textOf(await accountsPage());
+    expect(child).toContain('Rivera fair on X');
+    expect(child).not.toContain('Disconnect');
+    withConnectedX(household('parent'));
+    expect(textOf(await accountsPage())).toContain('Disconnect');
+  });
+});
+
+describe('a super administrator is decided the way the pages decide one (N2-R2)', () => {
+  const draft = () => { const fd = new FormData(); fd.set('intent', 'draft'); fd.set('body', 'An administrator’s preview'); return createPostAction(fd); };
+
+  it('one on the database\'s allowlist (not the email list) drafts in a Free family, as they open its pages', async () => {
+    const db = household('parent', null);
+    h.superAdmin = true;
+    expect(await draft()).toMatchObject({ ok: true, action: 'draft' });
+    expect(db.table('social_posts')).toHaveLength(5);
+  });
+
+  it('and is given the console there, not the accounts left connected', async () => {
+    withConnectedX(household('parent', null));
+    h.superAdmin = true;
+    const text = textOf(await layout());
+    expect(text).toContain(PAGE_BELOW);
+    expect(text).not.toContain('Social media tools aren’t available to your family right now');
+  });
+
+  it('anyone not on it is still refused (control)', async () => {
+    const db = household('parent', null);
+    expect(await draft()).toEqual({ ok: false, error: "Social media tools aren't part of your family's plan." });
+    expect(db.table('social_posts')).toHaveLength(4);
+  });
+});
+
+describe('a German family reads its plan in the catalogue\'s formal register (I18N-R1)', () => {
+  const INFORMAL = /\b(du|dich|dir|dein\w*|versuche)\b/i;
+  const connect = () => { const fd = new FormData(); fd.set('platform', 'facebook'); return connectAccountAction(fd); };
+
+  it('a Free family\'s parent is refused in the Sie-form, and told so when the plan could not be read', async () => {
+    h.locale = 'de-DE';
+    const db = household('parent', null);
+    const refused = await connect();
+    expect(refused).toEqual({ ok: false, error: 'Die Social-Media-Tools sind nicht Teil des Tarifs Ihrer Familie.' });
+    db.replace('families', []);
+    const unread = await connect();
+    expect(unread).toEqual({ ok: false, error: 'Bubaly konnte Ihren Tarif gerade nicht bestätigen. Versuchen Sie es gleich noch einmal.' });
+    for (const result of [refused, unread]) expect(result.error).not.toMatch(INFORMAL);
+  });
+
+  it('the accounts left connected are introduced the same way', async () => {
+    h.locale = 'de-DE';
+    withConnectedX(household('parent', null));
+    const text = textOf(await layout());
+    expect(text).toContain('Die Social-Media-Tools sind für Ihre Familie gerade nicht verfügbar');
+    expect(text).toContain('Sie können sie unabhängig von Ihrem Tarif trennen');
+    expect(text).not.toMatch(INFORMAL);
   });
 });

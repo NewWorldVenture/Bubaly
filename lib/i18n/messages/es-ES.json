@@ -13779,6 +13779,7 @@
   "socialSchedule.noPermissionToDraft": "No tienes permiso para crear borradores de publicaciones.",
   "socialSchedule.noPermissionToPublish": "No tienes permiso para publicar.",
   "socialSchedule.noPermissionToSchedule": "No tienes permiso para programar publicaciones.",
+  "socialSchedule.notInPlan": "Esta publicación no se publicó: cuando llegó la hora, las herramientas de redes sociales no formaban parte del plan de tu familia. Revísala antes de publicarla ahora.",
   "socialSchedule.pastTime": "Elige una hora futura.",
   "socialSchedule.permissionDenied": "No tienes permiso para publicar esta publicación programada.",
   "socialSchedule.queued": "Programada para publicarse",

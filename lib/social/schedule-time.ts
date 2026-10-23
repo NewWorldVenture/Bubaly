@@ -86,7 +86,7 @@ export function scheduleStatusKey(metadata: unknown): string {
   if (fields.schedule_phase === 'dispatching' || fields.schedule_phase === 'unknown') return 'socialSchedule.awaitingConfirmation';
   if (fields.schedule_phase === 'approval_required') return 'socialSchedule.approvalRequired';
   const allowedErrors = ['invalid', 'unsupported', 'accessUnavailable', 'permissionDenied', 'storageUnavailable',
-    'approvalRequired', 'changed', 'reconnectRequired', 'awaitingConfirmation', 'legacyUnverified', 'saveUnconfirmed'];
+    'approvalRequired', 'changed', 'reconnectRequired', 'awaitingConfirmation', 'legacyUnverified', 'saveUnconfirmed', 'notInPlan'];
   if (typeof fields.schedule_error === 'string' && allowedErrors.some(key => fields.schedule_error === `socialSchedule.${key}`)) return fields.schedule_error;
   switch (fields.schedule_phase) {
     case 'queued': return 'socialSchedule.queued';

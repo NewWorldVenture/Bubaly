@@ -13778,6 +13778,7 @@
   "socialSchedule.noPermissionToDraft": "Não tem permissão para criar rascunhos de publicações.",
   "socialSchedule.noPermissionToPublish": "Não tem permissão para publicar.",
   "socialSchedule.noPermissionToSchedule": "Não tem permissão para agendar publicações.",
+  "socialSchedule.notInPlan": "Esta publicação não foi publicada: na hora agendada, as ferramentas de redes sociais não faziam parte do plano da sua família. Verifique-a antes de a publicar agora.",
   "socialSchedule.pastTime": "Escolha uma hora futura.",
   "socialSchedule.permissionDenied": "Não tem permissão para publicar esta publicação agendada.",
   "socialSchedule.queued": "Publicação agendada",

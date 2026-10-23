@@ -378,24 +378,44 @@ describe('scheduled X publishing through the installed SDK and private authority
   // household-roles N2: the drain published for every family with a queued
   // post, so a family that dropped below Social's tier (or every family, once
   // Social was switched off) still had its scheduled posts sent.
+  //
+  // N2-R2: such a post was then left queued, and went out on the first tick
+  // after the family was entitled again, however late, with nobody asked. It
+  // is now held when it comes due, with the reason, like revoked authority.
   it.each([
     ['dropped to Free', () => { state.db.table('subscriptions')[0].status = 'canceled'; }],
     ['Social switched off', () => { state.db.seed('app_settings', [{ key: 'feature_tiers', value: { 'social-circle': 'off' } }]); }],
-  ] as const)('leaves a family\'s queued post queued and unsent once it is %s', async (_case, lose) => {
+  ] as const)('holds a family\'s post that comes due once it is %s, unsent and with the reason', async (_case, lose) => {
     await schedule();
     lose();
     state.requestAuth = false;
     expect(await due()).toMatchObject({ attempted: 0, published: 0 });
     expect(provider).not.toHaveBeenCalled();
-    expect(receipt().outputs.phase).toBe('queued');
-    expect(state.db.table('social_posts')[0].status).toBe('scheduled');
+    expect(receipt().outputs).toMatchObject({ phase: 'failed', errorKey: 'socialSchedule.notInPlan' });
+    expect(state.db.table('social_posts')[0]).toMatchObject({ status: 'scheduled', metadata: { schedule_phase: 'failed', schedule_error: 'socialSchedule.notInPlan' } });
+    expect(state.db.table('social_schedules')[0]).toMatchObject({ status: 'failed', metadata: { schedule_error: 'socialSchedule.notInPlan' } });
   });
-  it('a family that may use Social again is published on the next tick', async () => {
+  it('a post not yet due is left queued while the family is without Social, and sent on time once it has Social again (control)', async () => {
     await schedule();
+    state.db.table('subscriptions')[0].status = 'canceled';
+    state.requestAuth = false;
+    expect(await runScheduledPublishDrain()).toMatchObject({ attempted: 0, failed: 0 });
+    expect(receipt().outputs).toMatchObject({ phase: 'queued', errorKey: null });
+    state.db.table('subscriptions')[0].status = 'active';
+    expect(await due()).toMatchObject({ attempted: 1, published: 1 }); expect(provider).toHaveBeenCalledOnce();
+  });
+  it('a family that may use Social again is not sent a post that came due without it; whoever may publish sends it by hand', async () => {
+    const postId = await schedule();
     state.db.table('subscriptions')[0].status = 'canceled';
     expect(await due()).toMatchObject({ attempted: 0 }); expect(provider).not.toHaveBeenCalled();
     state.db.table('subscriptions')[0].status = 'active';
-    expect(await runScheduledPublishDrain()).toMatchObject({ attempted: 1, published: 1 }); expect(provider).toHaveBeenCalledOnce();
+    // Later the same day (within the synthetic X token's life).
+    vi.setSystemTime(new Date(Date.parse(DUE) + 6 * 3_600_000));
+    expect(await runScheduledPublishDrain()).toMatchObject({ attempted: 0, published: 0 }); expect(provider).not.toHaveBeenCalled();
+    expect(receipt().outputs.phase).toBe('failed');
+    expect(await retryPublishAction(postId)).toMatchObject({ ok: true, outcome: { status: 'published' } });
+    expect(provider).toHaveBeenCalledOnce();
+    expect(state.db.table('social_posts')[0].status).toBe('published');
   });
   it.each([400, 500])('reports an unsuccessful provider HTTP%s attempt through the actual cron', async status => {
     await schedule(); vi.setSystemTime(new Date(DUE)); provider.mockResolvedValueOnce(Response.json({}, { status }));

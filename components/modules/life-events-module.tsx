@@ -118,6 +118,9 @@ export function LifeEventsModule({
     return m;
   }, [items]);
   const activePlans = (plans ?? []).filter((p) => p.status !== 'archived');
+  // A guest views the household and does not plan in it: launchLifeEventAction
+  // refuses one, so Start is not offered (household-roles N4-R1).
+  const canStart = role !== 'guest';
 
   async function launch(eventDate: string | null) {
     if (!startTemplate) return;
@@ -247,7 +250,7 @@ export function LifeEventsModule({
                       <span className="text-sm font-semibold">{template?.title ?? s.title}</span>
                     </div>
                     <p className="text-xs text-muted">{tr(s.reasonKey, s.reasonParams)}</p>
-                    <Button
+                    {canStart && <Button
                       size="sm"
                       variant="secondary"
                       className="self-start"
@@ -257,7 +260,7 @@ export function LifeEventsModule({
                       }}
                     >
                       {tr('lifeEvents.startPlaybook')}
-                    </Button>
+                    </Button>}
                   </div>
                 );
               })}
@@ -267,7 +270,7 @@ export function LifeEventsModule({
       )}
 
       {/* ── Life-event playbooks ────────────────────────────────────────────── */}
-      <section className="space-y-3">
+      {canStart && <section className="space-y-3">
         <h2 className="text-sm font-semibold">{tr('lifeEvents.startALifeEventPlaybook')}</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {LIFE_EVENT_TEMPLATES.map((t) => {
@@ -286,7 +289,7 @@ export function LifeEventsModule({
             );
           })}
         </div>
-      </section>
+      </section>}
 
       {/* ── Active plans ────────────────────────────────────────────────────── */}
       {activePlans.length > 0 && (

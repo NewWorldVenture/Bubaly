@@ -58,4 +58,9 @@ describe('explicit social schedule time', () => {
     expect(scheduleStatusKey({ schedule_phase: 'failed', schedule_error: 'socialSchedule.reconnectRequired' })).toBe('socialSchedule.reconnectRequired');
     expect(scheduleStatusKey({ schedule_phase: 'failed', schedule_error: 'private error details' })).toBe('socialSchedule.changed');
   });
+  // household-roles N2-R2: the drain holds a post that comes due while its
+  // family is without Social. Its page says that, not "this post changed".
+  it('names the plan as the reason a post that came due without Social was held', () => {
+    expect(scheduleStatusKey({ schedule_phase: 'failed', schedule_error: 'socialSchedule.notInPlan' })).toBe('socialSchedule.notInPlan');
+  });
 });

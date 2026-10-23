@@ -15,10 +15,17 @@ const STATUS_TONE: Record<string, 'success' | 'neutral' | 'danger' | 'warning'> 
   error: 'danger', expired: 'warning', disconnected: 'neutral', revoked: 'danger',
 };
 
+/**
+ * One connected account. `canDisconnect` is whether the viewer's social role
+ * holds connect_accounts: disconnectAccountAction refuses anyone else, and a
+ * read_only member's press landed on the section's error page (household-roles
+ * N1-R1), so the button is not drawn for them.
+ */
 export function AccountRow({
-  id, platform, name, status, lastError, lastSyncedAt,
+  id, platform, name, status, lastError, lastSyncedAt, canDisconnect,
 }: {
   id: string; platform: SocialPlatform; name: string; status: string; lastError: string | null; lastSyncedAt: string | null;
+  canDisconnect: boolean;
 }) {
   const t = useTranslations();
   const { fmtDateTime } = useHydrationSafeFormat();
@@ -34,7 +41,7 @@ export function AccountRow({
         </p>
       </div>
       <Badge tone={STATUS_TONE[status] ?? 'neutral'}>{status.replace(/_/g, ' ')}</Badge>
-      <button
+      {canDisconnect && <button
         type="button"
         disabled={pending}
         onClick={() => start(async () => {
@@ -51,7 +58,7 @@ export function AccountRow({
         className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2 text-xs text-muted hover:text-danger disabled:opacity-60"
       >
         {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unplug className="h-3.5 w-3.5" />} {t('accountRow.disconnect')}
-      </button>
+      </button>}
     </div>
   );
 }

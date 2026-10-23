@@ -30,7 +30,13 @@ type Plan = 'basic_annual' | 'plus_annual';
 /** The click that was refused for want of the code, retried once it is entered. */
 type AwaitingCode = Plan | 'close';
 
-export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null }) {
+/**
+ * `children`: what the (app) layout puts inside the paywall beside the plans,
+ * which is the social accounts a member may still disconnect (household-roles
+ * N2-R1). The paywall replaces every (app) route, so nothing else could reach
+ * them.
+ */
+export function TrialPaywallGate({ trialEndsAt, children }: { trialEndsAt?: string | null; children?: React.ReactNode }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   useDialogBehavior(dialogRef, true, { lockScroll: false });
   const t = useTranslations();
@@ -139,6 +145,7 @@ export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null 
               {t('trialPaywallGate.closeAccount')}
             </button>
           </div>
+          {children && <div className="mt-6 text-left">{children}</div>}
         </div>
       )}
     </div>

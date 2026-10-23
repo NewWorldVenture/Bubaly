@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import { getTranslations } from '@/lib/i18n/server';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { isSuperAdmin, requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { requireSocialPermission } from '@/lib/social/access';
 import { describeActionError } from '@/lib/supabase/errors';
@@ -23,7 +23,6 @@ import { resolveScheduleTime, validateScheduleInstant } from '@/lib/social/sched
 import { armScheduledPublishReceipt, createScheduledPublishReceipt, publishScheduledPostNow, ScheduledPublishError } from '@/lib/social/scheduled-publish';
 import { safeSocialLink } from '@/lib/social/links';
 import { resolveFeatureEntitlement } from '@/lib/server/feature-entitlement';
-import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 
 type SocialSupabase = Awaited<ReturnType<typeof createServer>>;
 const SOCIAL_SAVE_FAILURE = 'Social publishing could not be saved completely. Review the post status before retrying.';
@@ -59,9 +58,17 @@ async function signedIn() {
  * Free family's parent, or any family after Social was switched off, could
  * still start X's OAuth, draft, schedule and publish by posting them. The same
  * resolver as requireFeature, so a page and its actions cannot disagree; a
- * super administrator passes, as on the pages. A plan that could not be read
- * is not an answer either way. Each action reports `refused` in its own shape.
- * Every action but disconnectAccountAction, which removes, asks it.
+ * super administrator passes, as on the pages, and is asked the way
+ * requireFeature asks (isSuperAdmin: the email list AND the database's). By
+ * email alone, one listed only in the database opened every page and was
+ * refused every action on it (household-roles N2-R2). Asked only once the
+ * family is known to be without Social. A plan, or an administrator, that could
+ * not be read is not an answer either way. Each action reports `refused` in its
+ * own shape. Every action but disconnectAccountAction, which removes, asks it.
+ *
+ * A super administrator's scheduled post in such a family is not sent: the
+ * publish drain decides by the family's own plan, as every pipeline behind a
+ * page does (lib/social/scheduled-publish.ts), and holds it when it comes due.
  */
 async function familyId(): Promise<{ familyId: string; userId: string; refused: SocialRefusal | null }> {
   const { ctx, familyId: fid } = await signedIn();
@@ -69,7 +76,7 @@ async function familyId(): Promise<{ familyId: string; userId: string; refused: 
   let refused: SocialRefusal | null = null;
   try {
     const entitlement = await resolveFeatureEntitlement(await createServer(), fid, SOCIAL_FEATURE);
-    if (!entitlement.allowed && !isSuperAdminEmail(ctx.user.email)) refused = { message: tr('socialActions.notInYourPlan'), refusal: 'notAllowed' };
+    if (!entitlement.allowed && !(await isSuperAdmin())) refused = { message: tr('socialActions.notInYourPlan'), refusal: 'notAllowed' };
   } catch (error) {
     console.error('[social-action] plan read failed', error);
     refused = { message: tr('socialActions.couldNotConfirmYourPlan'), refusal: 'notSaved' };

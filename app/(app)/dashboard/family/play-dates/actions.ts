@@ -8,8 +8,9 @@
 // insert carried whatever `created_by` the browser sent.
 //
 // Here the family comes from the session, `created_by` is the session's user,
-// a guest is refused, and cancelling or deleting a play date someone else
-// arranged is a manager's: a parent or adult, or the play date's own author.
+// a guest is refused, and cancelling, reinstating or deleting a play date
+// someone else arranged is a manager's: a parent or adult, or the play date's
+// own author.
 // The author is a filter on the write itself, so a play date the caller may not
 // touch matches no row and is reported as not saved.
 'use server';
@@ -23,6 +24,9 @@ import { isManager } from '@/lib/constants/roles';
 import { PLAY_DATE_STATUS } from '@/lib/family/safety';
 
 const PATH = '/dashboard/family/play-dates';
+
+/** The status each forward step starts from: the moves anyone in the household may make (the view's STATUS_FLOW). */
+const STEP_FROM: Record<string, string> = { confirmed: 'planned', completed: 'confirmed' };
 
 export type PlayDateActionResult = { ok: true } | { ok: false; error: string };
 
@@ -75,11 +79,19 @@ export async function setPlayDateStatusAction(id: string, status: string): Promi
   if (typeof id !== 'string' || !id || typeof status !== 'string' || !Object.prototype.hasOwnProperty.call(PLAY_DATE_STATUS, status)) {
     return { ok: false, error: tr('errors.thatChangeWasNotSaved') };
   }
-  // Moving a play date along (planned → confirmed → completed) is anyone's in
-  // the household; calling it off is its author's or a manager's.
-  const ownOnly = status === 'cancelled' && !isManager(ctx.active.role) ? { created_by: ctx.user.id } : {};
-  const { data: updated, error } = await supabase.from('play_dates').update({ status })
-    .eq('id', id).eq('family_id', familyId).match(ownOnly).select('id');
+  // Moving a play date one step along (planned → confirmed → completed) is
+  // anyone's in the household. Any other move (calling it off, calling it back
+  // on, or moving it back) is its author's or a manager's. Only calling it off
+  // was held back, so a child undid a parent's cancellation by setting
+  // 'planned' (household-roles N10-R1). The step is a filter on the row's
+  // CURRENT status, in the same write: a play date that is not where the step
+  // starts, and not the caller's, matches no row and is reported as not saved.
+  let write = supabase.from('play_dates').update({ status }).eq('id', id).eq('family_id', familyId);
+  if (!isManager(ctx.active.role)) {
+    const stepFrom = STEP_FROM[status];
+    write = stepFrom ? write.or(`created_by.eq.${ctx.user.id},status.eq.${stepFrom}`) : write.eq('created_by', ctx.user.id);
+  }
+  const { data: updated, error } = await write.select('id');
   if (error) return { ok: false, error: describeActionError(error, tr('errors.thatChangeWasNotSaved')) };
   if (wroteNoRows(updated)) return { ok: false, error: tr('errors.thatChangeWasNotSaved') };
   revalidatePath(PATH);

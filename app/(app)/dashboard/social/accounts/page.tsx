@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Plug } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { getSocialAccess } from '@/lib/social/access';
 import { getAccounts } from '@/lib/social/queries';
 import { PROVIDERS, PLATFORMS, type SocialPlatform } from '@/lib/social/capabilities';
@@ -24,9 +24,14 @@ function cap(ok: boolean, limitation?: string) {
 
 export default async function AccountsPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  // The plan, here as well as in the layout (household-roles N2-R1-payload).
+  // The layout shows a family without Social only the accounts it may still
+  // disconnect, but a page renders beside its layout, not inside it: the
+  // page's own data went out in the response all the same. A refusal here
+  // ships nothing of it; for a family with Social nothing changes.
+  const ctx = await requireFeature('/dashboard/social');
   const [accounts, access] = await Promise.all([getAccounts(ctx.active.familyId), getSocialAccess(ctx.active.familyId)]);
-  // Connecting is connect_accounts' (the action refuses anyone else).
+  // Connecting and disconnecting are connect_accounts' (the actions refuse anyone else).
   const canConnect = access?.can('connect_accounts') ?? false;
 
   return (
@@ -58,6 +63,7 @@ export default async function AccountsPage() {
               status={a.status}
               lastError={a.last_error}
               lastSyncedAt={a.last_synced_at}
+              canDisconnect={canConnect}
             />
           ))}
         </div>
