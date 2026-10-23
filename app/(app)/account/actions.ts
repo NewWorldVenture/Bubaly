@@ -168,7 +168,7 @@ export async function reopenAccountAction(): Promise<Result> {
   // post that came due before it rather than send it late, and no other trace
   // says when (lib/family/account-reopened.ts). A family that was open already
   // reopened nothing, and records nothing.
-  if (family?.closed_at) await recordAccountReopened(admin, { familyId, actorId: ctx.user.id, closedAt: family.closed_at });
+  if (family?.closed_at) await recordAccountReopened(admin, { familyId, reopenedBy: ctx.user.id, closedAt: family.closed_at });
   revalidatePath('/', 'layout');
   // The account is open either way; billing is resumed second and reported, so
   // a Stripe hiccup cannot keep the family locked out of their own data.

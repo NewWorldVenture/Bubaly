@@ -534,7 +534,10 @@ describe('scheduled X publishing through the installed SDK and private authority
     expect(await runScheduledPublishDrain()).toMatchObject({ attempted: 1, published: 1, failed: 0, held: 0 });
     expect(provider).toHaveBeenCalledOnce();
   });
-  it('the reopen is what is recorded: once, by the parent who reopened, with the close it ended', async () => {
+  // household-roles N4-R1-REOPEN-ROW-FORGEABLE, round 5: the entry is the
+  // server's, with no actor (a member's own entry must name the member, 0380),
+  // and the parent who reopened is kept in its metadata.
+  it('the reopen is what is recorded: once, by the server, naming the parent who reopened, with the close it ended', async () => {
     await schedule();
     signedInAsAParent();
     expect(await closeAccountAction()).toEqual({ ok: true });
@@ -543,8 +546,8 @@ describe('scheduled X publishing through the installed SDK and private authority
     vi.setSystemTime(new Date(Date.parse(DUE) + 3 * 3_600_000));
     expect(await reopenAccountAction()).toEqual({ ok: true });
     expect(state.db.table('audit_logs')).toEqual([expect.objectContaining({
-      family_id: state.familyId, actor_id: USER, action: 'update', resource: 'family', resource_id: state.familyId,
-      metadata: { change: 'reopened', closed_at: closedAt }, created_at: new Date(Date.parse(DUE) + 3 * 3_600_000).toISOString(),
+      family_id: state.familyId, actor_id: null, action: 'update', resource: 'family', resource_id: state.familyId,
+      metadata: { change: 'reopened', closed_at: closedAt, reopened_by: USER }, created_at: new Date(Date.parse(DUE) + 3 * 3_600_000).toISOString(),
     })]);
     // A reopen of a family that is open already (a stale gate in another tab) reopens nothing and records nothing.
     expect(await reopenAccountAction()).toEqual({ ok: true });
@@ -553,6 +556,48 @@ describe('scheduled X publishing through the installed SDK and private authority
     await renameTheFamily();
     state.requestAuth = false;
     expect(await runScheduledPublishDrain()).toMatchObject({ attempted: 0, published: 0, held: 1 });
+    expect(receipt().outputs).toMatchObject({ phase: 'failed', errorKey: 'socialSchedule.cameDueWhileClosed' });
+    expect(provider).not.toHaveBeenCalled();
+  });
+  // household-roles N4-R1-REOPEN-ROW-FORGEABLE, round 5: any member may
+  // append to the family's trail as themselves (audit_insert, 0380), with any
+  // action, resource, metadata and created_at. So a child or a guest could
+  // write the reopen entry, dated 2100, and every later post of a family that
+  // never closed was held whenever a manager edited the family row. Only an
+  // entry with no actor (which a member's insert cannot be) and not dated
+  // after the drain's read counts now.
+  const CHILD = '44444444-4444-4444-8444-444444444444';
+  /** An entry shaped like the reopen, appended to the trail by whoever `actor_id` says, at `created_at`. */
+  function aReopenEntry(actorId: string | null, createdAt: string) {
+    state.db.seed('audit_logs', [{ id: randomUUID(), family_id: state.familyId, actor_id: actorId, action: 'update', resource: 'family',
+      resource_id: state.familyId, metadata: { change: 'reopened', closed_at: NOW.toISOString(), reopened_by: USER }, created_at: createdAt }]);
+  }
+  it.each([
+    ['a child, dated 2100', CHILD, '2100-01-01T00:00:00.000Z'],
+    ['a child, half a minute after the post came due', CHILD, new Date(Date.parse(DUE) + 30_000).toISOString()],
+    ['the parent, in their own session, half a minute after the post came due', USER, new Date(Date.parse(DUE) + 30_000).toISOString()],
+    ['no one, dated 2100, which no reopen writes (the database dates the server\'s entry)', null, '2100-01-01T00:00:00.000Z'],
+  ])('a reopen entry written by %s does not hold the post of a family that never closed', async (_who, actorId, createdAt) => {
+    await schedule();
+    state.db.seed('family_members', [{ id: randomUUID(), family_id: state.familyId, user_id: CHILD, role: 'child', is_active: true }]);
+    state.requestAuth = false;
+    aReopenEntry(actorId, createdAt);
+    vi.setSystemTime(new Date(Date.parse(DUE) + 60_000));
+    await renameTheFamily();
+    vi.setSystemTime(new Date(Date.parse(DUE) + 2 * 60_000));
+    expect(await runScheduledPublishDrain()).toMatchObject({ inspected: 1, attempted: 1, published: 1, failed: 0, held: 0 });
+    expect(provider).toHaveBeenCalledOnce();
+    expect(receipt().outputs).toMatchObject({ phase: 'completed', errorKey: null });
+  });
+  it('a real reopen still holds the post when a member has also planted a reopen entry', async () => {
+    await schedule();
+    signedInAsAParent();
+    aReopenEntry(CHILD, '2100-01-01T00:00:00.000Z');
+    expect(await closeAccountAction()).toEqual({ ok: true });
+    vi.setSystemTime(new Date(Date.parse(DUE) + 3 * 3_600_000));
+    expect(await reopenAccountAction()).toEqual({ ok: true });
+    state.requestAuth = false;
+    expect(await runScheduledPublishDrain()).toMatchObject({ attempted: 0, published: 0, failed: 0, held: 1 });
     expect(receipt().outputs).toMatchObject({ phase: 'failed', errorKey: 'socialSchedule.cameDueWhileClosed' });
     expect(provider).not.toHaveBeenCalled();
   });

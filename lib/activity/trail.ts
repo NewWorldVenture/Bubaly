@@ -94,6 +94,21 @@ function titleOf(metadata: unknown): string | null {
 }
 
 /**
+ * The person a row is by: its actor, or, on a row with no actor, the parent
+ * the server recorded as reopening the account (lib/family/account-reopened.ts
+ * writes that entry with no actor and keeps them in metadata.reopened_by). A
+ * member's own row must name the member (0380), so only the server writes a
+ * row without one; the key is read only there, and a member who writes it on
+ * their own row is still the one named.
+ */
+function personOf(row: TrailRow): string | null {
+  if (row.actor_id) return row.actor_id;
+  if (!row.metadata || typeof row.metadata !== 'object') return null;
+  const reopenedBy = (row.metadata as { reopened_by?: unknown }).reopened_by;
+  return typeof reopenedBy === 'string' && reopenedBy ? reopenedBy : null;
+}
+
+/**
  * Turn one stored row into a line.
  *
  * `nameByUserId` maps `auth.users` ids to member display names; a row whose
@@ -102,7 +117,8 @@ function titleOf(metadata: unknown): string | null {
  */
 export function describeTrailRow(row: TrailRow, nameByUserId: Map<string, string>): TrailLine {
   const byAssistant = byAssistantOf(row.metadata);
-  const named = row.actor_id ? nameByUserId.get(row.actor_id) : undefined;
+  const person = personOf(row);
+  const named = person ? nameByUserId.get(person) : undefined;
 
   return {
     id: row.id,
