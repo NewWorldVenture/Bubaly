@@ -120,10 +120,16 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   //     once to the ceiling as a prefix (failOnMax: false). Past it the picker
   //     offers the first families by id and says so, and the Families tab is
   //     its own error state;
-  //   - a listed member's or invite's family, and each listed family's plan,
-  //     are read by the ids the tab names (readInChunks), not from a sweep;
+  //   - every member's family and each listed invite's family, and the plan of
+  //     every member's family (filtered on and exported from every tab) and of
+  //     each family the Families tab lists, are read by those ids
+  //     (readInChunks), not from a sweep. A failed plan read is no plan, not
+  //     Free: the plan reads Unavailable and the Families tab offers no
+  //     SetPlanControl to change it from (review R7A-USERS-FAILED-SUBSCRIPTIONS-READ-READS-FREE);
   //   - invites: the All tab's rail is the five newest; the Invitations tab
-  //     lists every invite, so its ceiling is that tab's own error state.
+  //     lists every invite, so its ceiling is that tab's own error state. A
+  //     failed read is the rail's, and the Invitations tab's, error state, as a
+  //     failed roles or permissions read is the Roles tab's.
   //
   // The counts and the paged reads settle in two batches so each keeps its own
   // tuple type. "This month" starts in the admin zone, not the host's
@@ -200,8 +206,9 @@ export default async function AdminUsersPage({ searchParams }: Params) {
 
   // Only `family_members` is load-bearing here: `enriched` maps over it, so
   // without it there is genuinely nothing to render. Every other dataset is
-  // enrichment and already carries a `?? []` / `?? null` / `?? 'free'` default
-  // at its use site, so losing one costs a column, not the page.
+  // enrichment and already carries a `?? []` / `?? null` default, or its own
+  // error state, at its use site, so losing one costs a column or a list, not
+  // the page.
   //
   // Bailing on ANY error made the in-page banner below unreachable and blanked
   // a working admin surface whenever a single optional table was unavailable.
@@ -239,6 +246,11 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   const familyById = new Map(familyLabelsRes.data.map((f) => [f.id, f]));
   // In id order the last subscription a family has wins, as it did when every subscription was read by id.
   const subByFamily = new Map([...subscriptionsRes.data].sort((a, b) => a.id.localeCompare(b.id)).map((s) => [s.family_id, s]));
+  // A failed plan read leaves every plan unknown, not Free: which families'
+  // chunk failed is not known, and a family absent from the rows is Free only
+  // when the read succeeded.
+  const plansUnread = !!subscriptionsRes.error;
+  const unavailable = tr('strategyMetrics.unavailable');
   const profileByUserId = new Map(profiles.map((p) => [p.id, p]));
   // Site super-admins: the DB-backed `super_admins` table (toggleable here) plus
   // the immutable code/env allowlist (shown locked).
@@ -259,7 +271,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
       profile,
       family,
       role: member.role,
-      plan: sub?.plan ?? 'free',
+      plan: plansUnread ? null : sub?.plan ?? 'free',
       hasAccount: !!profile,
       name: profile?.full_name || member.display_name,
       email: profile?.email ?? null,
@@ -422,7 +434,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                           </td>
                           <td className="px-3 py-2.5 text-muted">{u.family ? u.family.name : '—'}</td>
                           <td className="px-3 py-2.5">{u.role ? <Badge tone="brand">{roleLabel(tr, u.role)}</Badge> : '—'}</td>
-                          <td className="px-3 py-2.5 text-muted">{u.plan ? PLANS.find((p) => p.id === u.plan)?.name ?? u.plan : '—'}</td>
+                          <td className="px-3 py-2.5 text-muted">{plansUnread ? unavailable : u.plan ? PLANS.find((p) => p.id === u.plan)?.name ?? u.plan : '—'}</td>
                           <td className="px-3 py-2.5">
                             <Badge tone={u.hasAccount ? 'success' : 'neutral'}>{u.hasAccount ? 'Active' : 'No account'}</Badge>
                           </td>
@@ -467,7 +479,10 @@ export default async function AdminUsersPage({ searchParams }: Params) {
             </Card>
             <Card>
               <h2 className="mb-3 text-base font-semibold">{tr('adminUsers.recentInvites')}</h2>
-              {!invites || invites.length === 0 ? (
+              {recentInvitesRes.error ? (
+                // A failed read is not "No invites yet".
+                <ErrorState message={tr('users.couldNotLoadUsersAnd')} />
+              ) : !invites || invites.length === 0 ? (
                 <p className="text-sm text-muted">{tr('adminUsers.noInvitesYet')}</p>
               ) : (
                 <ul className="space-y-2.5">
@@ -514,8 +529,12 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                       <tr key={f.id}>
                         <td className="px-3 py-2.5 font-medium">{f.name}</td>
                         <td className="px-3 py-2.5 text-muted">{membersCeiling ? tr('strategyMetrics.unavailable') : memberCountByFamily.get(f.id) ?? 0}</td>
-                        <td className="px-3 py-2.5"><SetPlanControl familyId={f.id} familyName={f.name} currentPlan={sub?.plan ?? 'free'} /></td>
-                        <td className="px-3 py-2.5">{sub ? <Badge tone={sub.status === 'active' ? 'success' : 'neutral'}>{sub.status}</Badge> : '—'}</td>
+                        <td className="px-3 py-2.5">{plansUnread
+                          ? <span className="text-xs text-muted">{unavailable}</span>
+                          : <SetPlanControl familyId={f.id} familyName={f.name} currentPlan={sub?.plan ?? 'free'} />}</td>
+                        <td className="px-3 py-2.5">{plansUnread
+                          ? <span className="text-xs text-muted">{unavailable}</span>
+                          : sub ? <Badge tone={sub.status === 'active' ? 'success' : 'neutral'}>{sub.status}</Badge> : '—'}</td>
                         <td className="px-3 py-2.5 text-muted">{fmtDate(f.created_at, 'MMM d, yyyy')}</td>
                       </tr>
                     );
@@ -576,44 +595,50 @@ export default async function AdminUsersPage({ searchParams }: Params) {
         <Card>
           <h2 className="mb-1 text-base font-semibold">{tr('adminUsers.roleDefinitions')}</h2>
           <p className="mb-4 text-sm text-muted">{tr('adminUsers.theRealPermissionMatrixEnforcedBy')}</p>
-          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {(roles ?? []).map((r) => (
-              <div key={r.role} className="rounded-xl border border-border bg-surface/40 p-3">
-                <Badge tone="brand">{r.label}</Badge>
-                <p className="mt-2 text-xs text-muted">{r.description}</p>
-              </div>
-            ))}
-          </div>
-          {permissions && permissions.length > 0 ? (
-            <div className="table-responsive">
-              <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs text-muted">
-                    <th className="px-3 py-2 font-medium">{tr('adminUsers.resource')}</th>
-                    {(roles ?? []).map((r) => <th key={r.role} className="px-3 py-2 text-center font-medium">{r.label.split(' / ')[0]}</th>)}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/60">
-                  {[...new Set(permissions.map((p) => p.resource))].map((resource) => (
-                    <tr key={resource}>
-                      <td className="px-3 py-2.5 font-medium">{resource}</td>
-                      {(roles ?? []).map((r) => {
-                        const perm = permissions.find((p) => p.resource === resource && p.role === r.role);
-                        const letters = [perm?.can_create && 'C', perm?.can_read && 'R', perm?.can_update && 'U', perm?.can_delete && 'D'].filter(Boolean);
-                        return (
-                          <td key={r.role} className="px-3 py-2.5 text-center text-xs text-muted">
-                            {letters.length ? letters.join('') : '—'}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table></div>
+          {rolesRes.error || permissionsRes.error ? (
+            // The matrix's columns are the roles: a failed read of either is this
+            // tab's read-error state, not half a grid or "not seeded".
+            <ErrorState message={tr('users.couldNotLoadUsersAnd')} />
+          ) : (<>
+            <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {(roles ?? []).map((r) => (
+                <div key={r.role} className="rounded-xl border border-border bg-surface/40 p-3">
+                  <Badge tone="brand">{r.label}</Badge>
+                  <p className="mt-2 text-xs text-muted">{r.description}</p>
+                </div>
+              ))}
             </div>
-          ) : (
-            <EmptyState icon={ShieldCheck} title={tr('adminUsers.permissionMatrixNotSeeded')} description={tr('users.runSupabaseSeedSqlAgainst')} />
-          )}
+            {permissions && permissions.length > 0 ? (
+              <div className="table-responsive">
+                <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs text-muted">
+                      <th className="px-3 py-2 font-medium">{tr('adminUsers.resource')}</th>
+                      {(roles ?? []).map((r) => <th key={r.role} className="px-3 py-2 text-center font-medium">{r.label.split(' / ')[0]}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {[...new Set(permissions.map((p) => p.resource))].map((resource) => (
+                      <tr key={resource}>
+                        <td className="px-3 py-2.5 font-medium">{resource}</td>
+                        {(roles ?? []).map((r) => {
+                          const perm = permissions.find((p) => p.resource === resource && p.role === r.role);
+                          const letters = [perm?.can_create && 'C', perm?.can_read && 'R', perm?.can_update && 'U', perm?.can_delete && 'D'].filter(Boolean);
+                          return (
+                            <td key={r.role} className="px-3 py-2.5 text-center text-xs text-muted">
+                              {letters.length ? letters.join('') : '—'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table></div>
+              </div>
+            ) : (
+              <EmptyState icon={ShieldCheck} title={tr('adminUsers.permissionMatrixNotSeeded')} description={tr('users.runSupabaseSeedSqlAgainst')} />
+            )}
+          </>)}
         </Card>
       )}
     </div>
