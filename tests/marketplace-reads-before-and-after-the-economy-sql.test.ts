@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { createClient } from '@supabase/supabase-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpers/in-memory-supabase';
 
@@ -65,16 +66,29 @@ function missingRelation(error: unknown): object {
   return builder;
 }
 
+/**
+ * What a HEAD read (`{ head: true }`) gets back for the same 400. A HEAD
+ * response has no body, so the 42703 never reaches the client: postgrest-js
+ * 2.108.2 parses the empty body, fails, and returns the error as
+ * `{ message: '' }` with no code (lib/supabase/settle.ts, describeReadError).
+ * Answering a HEAD with the full 42703 is what let a count fall back here and
+ * nowhere real; the real-SDK case below pins this shape.
+ */
+const HEAD_FAILURE = { message: '' };
+
 /** The real builder, except that a filter naming `column` makes the read answer `error`. */
 function missingColumn(real: object, column: string, error: unknown): object {
   let failing = false;
+  let head = false;
   const builder: object = new Proxy(real, {
     get(target, prop) {
-      if (failing && prop === 'then') return (ok?: (v: unknown) => unknown, bad?: (e: unknown) => unknown) => Promise.resolve(reply(error)).then(ok, bad);
-      if (failing && (prop === 'maybeSingle' || prop === 'single')) return () => Promise.resolve(reply(error));
+      const answer = () => reply(head ? HEAD_FAILURE : error);
+      if (failing && prop === 'then') return (ok?: (v: unknown) => unknown, bad?: (e: unknown) => unknown) => Promise.resolve(answer()).then(ok, bad);
+      if (failing && (prop === 'maybeSingle' || prop === 'single')) return () => Promise.resolve(answer());
       const value = Reflect.get(target, prop, target) as unknown;
       if (typeof value !== 'function') return value;
       return (...args: unknown[]) => {
+        if (prop === 'select' && (args[1] as { head?: boolean } | undefined)?.head) head = true;
         if (typeof args[0] === 'string' && args[0].includes(column) && ['or', 'eq', 'select'].includes(String(prop))) failing = true;
         const out = (value as (...a: unknown[]) => unknown).apply(target, args);
         return out === target ? builder : out;
@@ -179,6 +193,9 @@ describe('orders are read by the family on either side (buyer_family_id)', () =>
       expect(source, file).toContain('readFamilyOrders(');
       // No order read in these files narrows itself to family_id alone.
       expect(source, file).not.toMatch(/from\('marketplace_orders'\)(?:(?!\.from\()[^;])*?\.select\((?:(?!\.from\()[^;])*?\.eq\('family_id'/);
+      // And none is a HEAD: its 400 has no body, so the 42703 never arrives and
+      // the read cannot fall back (the real-SDK case below).
+      expect(source, file).not.toMatch(/readFamilyOrders\([^;]*?\.from\('marketplace_orders'\)\s*\.select\([^)]*\bhead:\s*true/);
     }
   });
 });
@@ -247,6 +264,56 @@ describe('the rail\'s Trust Score card is read on the server', () => {
     expect(db.log.map((l) => l.table)).toEqual(schema === 'after'
       ? ['marketplace_reviews', 'marketplace_orders', 'marketplace_listings', 'marketplace_reviews']
       : ['marketplace_reviews', 'marketplace_orders', 'marketplace_listings', 'marketplace_reviews', 'marketplace_orders']);
+  });
+
+  it('before the SQL, through the real SDK: the order count falls back, so the rail loads', async () => {
+    // PostgREST on a database without marketplace_orders.buyer_family_id: any
+    // filter naming it is a 400 with the 42703 in the body — and, as HTTP
+    // has it, no body at all when the request was a HEAD.
+    const requests: { table: string; method: string; askedForBuyerFamily: boolean }[] = [];
+    harness.db = createClient('https://synthetic-economy-sql.invalid', 'synthetic-not-a-secret', {
+      accessToken: async () => null,
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      global: {
+        fetch: async (input, init) => {
+          const url = new URL(String(input));
+          const table = url.pathname.replace('/rest/v1/', '');
+          const method = (init?.method ?? 'GET').toUpperCase();
+          const askedForBuyerFamily = [...url.searchParams.values()].some((v) => v.includes('buyer_family_id'));
+          requests.push({ table, method, askedForBuyerFamily });
+          const answer = (status: number, body: unknown, total?: number) => new Response(method === 'HEAD' ? null : JSON.stringify(body), {
+            status,
+            headers: { 'content-type': 'application/json', ...(total === undefined ? {} : { 'content-range': `*/${total}` }) },
+          });
+          if (table === 'marketplace_orders' && askedForBuyerFamily) return answer(400, MISSING_COLUMN);
+          if (table === 'marketplace_orders') {
+            // The fallback is exactly the seller-family read, on the member's side.
+            expect(url.searchParams.get('family_id')).toBe('eq.fam-buyer');
+            expect(url.searchParams.get('status')).toBe('eq.completed');
+            expect(url.searchParams.getAll('or')).toEqual(['(buyer_member.eq.m-self,seller_member.eq.m-self)']);
+            return answer(200, [{ id: 'order-1' }], 7);
+          }
+          if (table === 'marketplace_reviews') return answer(200, url.searchParams.has('id') ? [] : [{ id: 'rev-1', rating: 4 }]);
+          if (table === 'marketplace_listings') return answer(200, [], 3);
+          throw new Error(`unexpected request to ${table}`);
+        },
+      },
+    });
+
+    expect(await readTrustScoreInputsAction()).toEqual({ ok: true, memberId: 'm-self', ratingsReceived: [4], ordersCompleted: 7, listingsPosted: 3 });
+    expect(warned('marketplace_orders.buyer_family_id')).toBe(true);
+    // Tried with buyer_family_id, then without, and both times as a GET: only
+    // a GET carries the 42703 that readFamilyOrders falls back on.
+    expect(requests.filter((r) => r.table === 'marketplace_orders')).toEqual([
+      { table: 'marketplace_orders', method: 'GET', askedForBuyerFamily: true },
+      { table: 'marketplace_orders', method: 'GET', askedForBuyerFamily: false },
+    ]);
+
+    // The fixture above answers a HEAD with what this SDK really returns for it.
+    const head = await (harness.db as ReturnType<typeof createClient>).from('marketplace_orders')
+      .select('id', { count: 'exact', head: true }).or('family_id.eq.fam-buyer,buyer_family_id.eq.fam-buyer');
+    expect(head.error).toEqual(HEAD_FAILURE);
+    expect(head.count).toBeNull();
   });
 
   it('a read that fails is reported, not scored as a baseline', async () => {

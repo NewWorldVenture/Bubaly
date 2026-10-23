@@ -365,9 +365,16 @@ export async function readTrustScoreInputsAction(): Promise<TrustScoreInputsResu
     // household counts too (lib/marketplace/schema-compat.ts). Counted by the
     // database, on this member's side of each order: the family's whole order
     // list, filtered here, was the first 1,000 of them.
-    readFamilyOrders(familyId, (scope) => scope(supabase.from('marketplace_orders').select('id', { count: 'exact', head: true }))
+    //
+    // A GET with one row, not a HEAD. A HEAD answer has no body, so the 400 a
+    // database without buyer_family_id sends reaches postgrest-js as
+    // `{ message: '' }` with no 42703 in it, readFamilyOrders cannot tell it
+    // is the missing column, and the rail failed on every marketplace page
+    // instead of falling back. Only the count is read.
+    readFamilyOrders(familyId, (scope) => scope(supabase.from('marketplace_orders').select('id', { count: 'exact' }))
       .eq('status', 'completed')
-      .or(`buyer_member.eq.${memberId},seller_member.eq.${memberId}`)),
+      .or(`buyer_member.eq.${memberId},seller_member.eq.${memberId}`)
+      .limit(1)),
     supabase.from('marketplace_listings').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('member_id', memberId),
   ]);
   // A failed read is said, not scored: a zero baseline is a real-looking number
