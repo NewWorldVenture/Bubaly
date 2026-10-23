@@ -22,7 +22,7 @@ const CAP = 1000;
 const CEILING = 25_000;
 const pad = (i: number) => String(i).padStart(6, '0');
 
-const h = vi.hoisted(() => ({ db: null as unknown }));
+const h = vi.hoisted(() => ({ db: null as unknown, exported: null as Record<string, string>[] | null }));
 vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: () => h.db,
   describeConfiguredServiceKey: () => null,
@@ -32,15 +32,18 @@ vi.mock('@/lib/i18n/server', () => ({
   getLocaleContext: async () => ({ locale: { code: 'en-US' } }),
 }));
 // The toolbar is a client component that reaches for the router; it stands in
-// as a marker of the families its Add-user picker is handed.
+// as a marker of the families its Add-user picker is handed, and keeps the rows
+// its Export is handed: the CSV holds exactly those (downloadCsv(exportRows)).
 vi.mock('@/components/admin/users-toolbar', () => ({
-  UsersToolbar: ({ families }: { families: { id: string; name: string }[] }) =>
-    createElement('div', {
+  UsersToolbar: ({ families, exportRows }: { families: { id: string; name: string }[]; exportRows: Record<string, string>[] }) => {
+    h.exported = exportRows;
+    return createElement('div', {
       'data-picker-count': families.length,
       'data-picker-first': families[0]?.id ?? '',
       'data-picker-last': families.at(-1)?.id ?? '',
       'data-picker-has-owner': String(families.some((f) => f.id === 'fam-zz-000000')),
-    }),
+    });
+  },
 }));
 vi.mock('@/components/admin/member-row-actions', () => ({ MemberRowActions: () => null }));
 vi.mock('@/components/admin/invite-row-actions', () => ({ InviteRowActions: () => null }));
@@ -100,10 +103,21 @@ const offeredTitle = () => translate(SOURCE_MESSAGES, 'adminCeiling.offeredInPar
 const notShownTitle = () => translate(SOURCE_MESSAGES, 'adminCeiling.figuresNotShown', { n: CEILING.toLocaleString() });
 const familyCell = (name: string) => `<td class="px-3 py-2.5 text-muted">${name}</td>`;
 const readError = SOURCE_MESSAGES['users.couldNotLoadUsersAnd'];
+/** The words of the Families tab's heading, its count included when it shows one. */
+const familiesHeading = (html: string): string | null => {
+  const match = new RegExp(`<h2 class="mb-4 text-base font-semibold">${SOURCE_MESSAGES['adminUsers.allFamilies']}[^]*?</h2>`).exec(html);
+  return match ? textOf(match[0]) : null;
+};
+/** Page one of the All tab's list, oldest first, as its Export writes it. */
+const exportedFirstPage = Array.from({ length: 10 }, (_, i) => ({
+  name: `Member ${i}`, email: '', family: 'Owner family', role: 'parent', plan: 'plus', status: 'no_account',
+  joined: new Date(Date.UTC(2026, 0, 1) + i * 60_000).toISOString(),
+}));
 
 beforeEach(() => {
   db = createInMemorySupabase({ maxRows: CAP });
   h.db = db;
+  h.exported = null;
   vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'sb_secret_test');
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://example.supabase.co');
   vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -151,6 +165,28 @@ describe('/admin/users past 25,000 families', () => {
     expect(html).not.toContain('Empty family 0<');
     expect(picker(html).count).toBe(CEILING);
     expect(textOf(html)).toContain(`there are more than ${CEILING.toLocaleString()}, and the Families tab lists none rather than part of them`);
+  });
+
+  it('a families read that FAILS is the Families tab\'s read-error state too, not "No families yet" (review R6-USERS-FAMILIES-TAB-FAILED-READ-IS-EMPTY-STATE)', async () => {
+    db.seed('families', [{ id: OWNER, name: 'Owner family', created_at: '2025-01-01T00:00:00Z' }]);
+    seedOwner();
+    // The listed read fails; the names read by the listed rows' ids does not.
+    h.db = withFaults(db, (table, calls) => (table === 'families' && !calls.some((c) => c.method === 'in') ? { message: 'families unavailable' } : null));
+    const html = await render({ tab: 'families' });
+    expect(html).toContain(readError);
+    expect(html).not.toContain(SOURCE_MESSAGES['adminUsers.noFamiliesYet']);
+    // No count of none beside it, as on the Invitations tab.
+    expect(familiesHeading(html)).toBe(SOURCE_MESSAGES['adminUsers.allFamilies']);
+    expect(textOf(html)).toContain('Could not load “families”: families unavailable');
+  });
+
+  it('the control: a families read that succeeds lists the families and counts them', async () => {
+    db.seed('families', [{ id: OWNER, name: 'Owner family', created_at: '2025-01-01T00:00:00Z' }]);
+    seedOwner();
+    const html = await render({ tab: 'families' });
+    expect(html).not.toContain(readError);
+    expect(familiesHeading(html)).toBe(`${SOURCE_MESSAGES['adminUsers.allFamilies']} (1)`);
+    expect(html).toContain('<td class="px-3 py-2.5 font-medium">Owner family</td>');
   });
 
   it('a family name read that FAILS is still named in the banner, not passed off as "—"', async () => {
@@ -227,7 +263,13 @@ describe('/admin/users past 25,000 subscriptions, invites and members', () => {
     expect(families).toContain(`<td class="px-3 py-2.5 font-medium">Owner family</td><td class="px-3 py-2.5 text-muted">${SOURCE_MESSAGES['strategyMetrics.unavailable']}</td>`);
     expect(bannerTitled(families, notShownTitle())).toEqual([SOURCE_MESSAGES['adminUsers.members']]);
 
-    for (const tab of ['invitations', 'roles']) expect(await render({ tab })).not.toContain(readError);
+    for (const tab of ['invitations', 'roles']) {
+      const html = await render({ tab });
+      expect(html).not.toContain(readError);
+      // Their Export has no member rows past the ceiling, and the banner names the read that is why.
+      expect(h.exported).toEqual([]);
+      expect(textOf(html)).toContain('Could not load “family_members”: readAllById reached the caller’s max of 25000 rows');
+    }
   });
 
   it('a member read that FAILS is still the read-error state', async () => {
@@ -237,5 +279,43 @@ describe('/admin/users past 25,000 subscriptions, invites and members', () => {
     const html = await render();
     expect(html).toContain(readError);
     expect(html).not.toContain(SOURCE_MESSAGES['adminUsers.totalMembers']);
+  });
+});
+
+// Round 6 read the members only on the All and Families tabs, while the
+// toolbar, whose Export writes the first page of them, is on every tab: on the
+// Invitations and Roles tabs the CSV was its header row alone, and nothing said
+// so (review R6-USERS-EXPORT-EMPTY-OFF-MEMBER-TABS). Each tab's Export holds the
+// same first page again, with each member's family and plan.
+describe('/admin/users: Export holds the members\' first page on every tab', () => {
+  function seedFamilies() {
+    db.seed('families', [{ id: OWNER, name: 'Owner family', created_at: '2025-01-01T00:00:00Z' }]);
+  }
+
+  it.each(['all', 'families', 'invitations', 'roles'])('the %s tab', async (tab) => {
+    seedFamilies();
+    seedOwner();
+    const html = await render({ tab });
+    expect(h.exported).toEqual(exportedFirstPage);
+    expect(html).not.toContain(SOURCE_MESSAGES['adminUsers.someDataCouldntBeLoadedFrom']);
+  });
+
+  it('past 25,000 families the Families tab\'s Export still reads each member\'s family and plan', async () => {
+    seedPastTheFamilyCeiling();
+    await render({ tab: 'families' });
+    expect(h.exported).toEqual(exportedFirstPage);
+  });
+
+  it('a member read that FAILS costs the Invitations and Roles tabs their Export alone, and the banner names it', async () => {
+    seedFamilies();
+    seedOwner();
+    h.db = withFaults(db, (table, calls) => (table === 'family_members' && calls.some((c) => c.method === 'select' && c.args[0] === '*') ? { message: 'family_members unavailable' } : null));
+    for (const tab of ['invitations', 'roles']) {
+      const html = await render({ tab });
+      expect(html).not.toContain(readError);
+      expect(h.exported).toEqual([]);
+      expect(textOf(html)).toContain('Could not load “family_members”: family_members unavailable');
+    }
+    expect(await render({ tab: 'invitations' })).toContain('guest@example.com');
   });
 });
