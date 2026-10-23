@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { ClipboardList, Shield, User, Folder, Calendar, Settings } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -15,6 +16,8 @@ export async function generateMetadata(): Promise<Metadata> {
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 25;
+/** The newest logs the list holds. */
+const LISTED = 500;
 
 const ACTION_TONE: Record<string, 'success' | 'danger' | 'warning' | 'neutral' | 'brand'> = {
   create: 'success', insert: 'success',
@@ -30,15 +33,27 @@ export default async function AuditLogsPage({ searchParams }: Params) {
   const sp = await searchParams;
   const supabase = createServiceClient();
 
-  const { data: logs, error: logsError } = await supabase
-    .from('audit_logs')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(500);
+  // The list is the newest 500, and "of N logs" counted them, so past 500 the
+  // "complete audit trail" read 500 logs with nothing to say so (coverage
+  // sweep round 9, class B). The log is counted now, and the list says when it
+  // holds only part of it.
+  const [{ data: logs, error: logsError }, totalResult] = await settleAll([
+    supabase
+      .from('audit_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(LISTED),
+    supabase.from('audit_logs').select('id', { count: 'exact', head: true }),
+  ]);
   if (logsError) {
     console.error('[admin-audit-logs] audit read failed', logsError);
     return <AdminAuditLogsReadError />;
   }
+  if (totalResult.error) {
+    console.error('[admin-audit-logs] audit count read failed', totalResult.error);
+    return <AdminAuditLogsReadError />;
+  }
+  const totalLogs = totalResult.count ?? 0;
 
   const allLogs = logs ?? [];
   const actions = [...new Set(allLogs.map((l) => l.action))].sort();
@@ -77,6 +92,9 @@ export default async function AuditLogsPage({ searchParams }: Params) {
             ...actions.map((a) => ({ value: a, label: a })),
           ]} />
         </FilterForm>
+        {totalLogs > allLogs.length && (
+          <p className="mt-3 text-xs text-muted">{t('adminCeiling.listAndFiltersShowTheNewest', { shown: allLogs.length.toLocaleString(), total: totalLogs.toLocaleString() })}</p>
+        )}
 
         {pageRows.length === 0 ? (
           <div className="mt-6"><EmptyState icon={ClipboardList} title={t('adminAuditLogs.noAuditLogsFound')} /></div>

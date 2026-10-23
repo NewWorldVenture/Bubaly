@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Sparkles, Eye, EyeOff } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settle, settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { Badge } from '@/components/ui/badge';
@@ -65,6 +66,25 @@ export default async function PersonalizationPage() {
   const bySlot = new Map<string, Rule[]>();
   for (const r of rules) { const a = bySlot.get(r.slot) ?? []; a.push(r); bySlot.set(r.slot, a); }
 
+  // Each slot's "(N)" counted its listed rules, and the list is the first 300
+  // by slot then priority, so past them the last slot listed counted part of
+  // its rules and the slots after it were missing (coverage sweep round 9,
+  // class B). Every rule and each listed slot's rules are head:true counts now;
+  // any that fails is the read-error state, and the list says when it is part.
+  const counted = () => supabase.from('marketing_personalization_rules').select('id', { count: 'exact', head: true }).is('deleted_at', null);
+  const slots = [...bySlot.keys()];
+  const [totalResult, slotResults] = await Promise.all([
+    settle(counted()),
+    settleAll(slots.map((slot) => counted().eq('slot', slot))),
+  ]);
+  const countError = totalResult.error ?? slotResults.find((r) => r.error)?.error;
+  if (countError) {
+    console.error('[admin-marketing-personalization] rule count read failed', countError);
+    return <ReadFailure />;
+  }
+  const totalRules = totalResult.count ?? 0;
+  const countBySlot = new Map(slots.map((slot, i) => [slot, slotResults[i]?.count ?? 0]));
+
   return (
     <div className="space-y-5">
       <p className="text-sm text-muted">
@@ -112,12 +132,15 @@ export default async function PersonalizationPage() {
         </form>
       </Card>
 
+      {totalRules > rules.length && (
+        <p className="text-xs text-muted">{t('adminCeiling.listShowsPart', { shown: rules.length.toLocaleString(), total: totalRules.toLocaleString() })}</p>
+      )}
       {rules.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted">{t('adminMarketingPersonalization.noPersonalizationRulesYet')}</p>
       ) : (
         [...bySlot.entries()].map(([slot, slotRules]) => (
           <Card key={slot}>
-            <h2 className="mb-3 text-base font-semibold"><code className="rounded bg-elevated px-1.5 py-0.5 text-sm">{slot}</code> <span className="text-xs font-normal text-muted">({slotRules.length})</span></h2>
+            <h2 className="mb-3 text-base font-semibold"><code className="rounded bg-elevated px-1.5 py-0.5 text-sm">{slot}</code> <span className="text-xs font-normal text-muted">({(countBySlot.get(slot) ?? slotRules.length).toLocaleString()})</span></h2>
             <div className="space-y-2">
               {slotRules.map((r) => {
                 const m = (r.match ?? {}) as AudienceMatch;

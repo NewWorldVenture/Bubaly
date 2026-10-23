@@ -134,6 +134,10 @@ export default async function CompetitivePage() {
           <input name="ranking" type="number" min="1" placeholder={t('adminMarketingCompetitive.rank1Top')} className={inputCls} />
           <SubmitButton className={btnCls}>{t('adminMarketingCompetitive.addCompetitor')}</SubmitButton>
         </form>
+        {/* The list is the first 200 by ranking, and the count above is every competitor (coverage sweep round 9). */}
+        {(competitorCountResult.count ?? 0) > comps.length && (
+          <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsPart', { shown: comps.length.toLocaleString(), total: (competitorCountResult.count ?? 0).toLocaleString() })}</p>
+        )}
         {comps.length === 0 ? <p className="py-3 text-center text-sm text-muted">{t('adminMarketingCompetitive.noCompetitorsTracked')}</p> : (
           <div className="space-y-1.5">
             {comps.map((c) => (
@@ -187,6 +191,14 @@ export default async function CompetitivePage() {
           <select name="status" defaultValue="active" aria-label={t('adminMarketingCompetitive.status')} className={inputCls}><option value="active">{t('adminMarketingCompetitive.active')}</option><option value="lost">{t('adminMarketingCompetitive.lost')}</option><option value="toxic">{t('adminMarketingCompetitive.toxic')}</option></select>
           <SubmitButton className={`${btnCls} lg:col-span-5`}>{t('adminMarketingCompetitive.addBacklink')}</SubmitButton>
         </form>
+        {/* The list is the newest 500; the tiles add up every backlink. */}
+        {!backlinksCeiling && (backlinkSummaryResult.data ?? []).length > links.length && (
+          <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsTheNewest', { shown: links.length.toLocaleString(), total: (backlinkSummaryResult.data ?? []).length.toLocaleString() })}</p>
+        )}
+        {/* Past the ceiling the list is certainly part of the backlinks, with no total to name. */}
+        {backlinksCeiling && (
+          <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsTheNewestTotalNotShown', { shown: links.length.toLocaleString() })}</p>
+        )}
         {links.length === 0 ? <p className="py-3 text-center text-sm text-muted">{t('adminMarketingCompetitive.noBacklinksTracked')}</p> : (
           <div className="space-y-1.5">
             {links.map((l) => (

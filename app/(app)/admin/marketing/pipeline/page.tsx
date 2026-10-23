@@ -47,7 +47,9 @@ export default async function PipelinePage() {
   // pipeline, Weighted, Won and Win rate left out every older deal, so the
   // deals are paged on the id to a real ceiling, and past it the tiles say
   // they are not shown rather than adding up part of the pipeline.
-  const [dealsResult, contactsResult, pipelineResult] = await settleAll([
+  // The picker said nothing of that: against a head:true count of the
+  // contacts it says when it offers part of them (coverage sweep round 9).
+  const [dealsResult, contactsResult, pipelineResult, contactCountResult] = await settleAll([
     supabase.from('crm_deals').select('*').order('created_at', { ascending: false }).order('id', { ascending: false }).limit(BOARD_SHOWN),
     supabase.from('crm_contacts').select('id, first_name, last_name, email').order('created_at', { ascending: false }).limit(500),
     readAllByIdAsQuery((after, limit) => {
@@ -55,9 +57,10 @@ export default async function PipelinePage() {
       if (after) query = query.gt('id', after);
       return query.order('id').limit(limit);
     }, { max: SUM_ROW_CEILING }),
+    supabase.from('crm_contacts').select('id', { count: 'exact', head: true }),
   ]);
   const pipelineCeiling = 'truncated' in pipelineResult && pipelineResult.truncated;
-  const readError = dealsResult.error ?? contactsResult.error ?? (pipelineCeiling ? null : pipelineResult.error);
+  const readError = dealsResult.error ?? contactsResult.error ?? (pipelineCeiling ? null : pipelineResult.error) ?? contactCountResult.error;
   if (readError) {
     console.error('[admin-marketing-pipeline] pipeline read failed', readError);
     return <AdminPipelineReadError />;
@@ -130,6 +133,9 @@ export default async function PipelinePage() {
           <input name="close_date" type="date" aria-label={t('adminMarketingPipeline.closeDate')} className={inputCls} />
           <SubmitButton className={btnCls}>{t('adminMarketingPipeline.addDeal')}</SubmitButton>
         </form>
+        {(contactCountResult.count ?? 0) > contactList.length && (
+          <p className="mt-2 text-xs text-muted">{t('adminCeiling.pickerOffersTheNewest', { picker: t('adminMarketingPipeline.contact'), shown: contactList.length.toLocaleString(), total: (contactCountResult.count ?? 0).toLocaleString() })}</p>
+        )}
       </Card>
 
       {/* Pipeline board */}

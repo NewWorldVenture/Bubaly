@@ -149,6 +149,11 @@ export default async function AdminSystemPage() {
 
   const storageBytes = (documents ?? []).reduce((sum, d) => sum + (d.size_bytes ?? 0), 0);
   const newUsers30d = newUsersResult.count ?? 0;
+  // A read that failed is named in the banner, and its own figure says so: it
+  // used to default to 0, $0.00 or 0 B beside the banner, each looking like
+  // the real thing. A read past its ceiling has an error too, so one test
+  // covers both.
+  const failed = (res: { error: unknown }) => !!res.error;
 
   const allHealthy = healthResults.every((h) => h.ok);
   const environment = process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? 'development';
@@ -168,9 +173,9 @@ export default async function AdminSystemPage() {
 
       <div className="grid-stats">
         <StatCard icon={allHealthy ? CheckCircle2 : XCircle} label={t('adminSystem.overallStatus')} value={allHealthy ? 'All systems go' : 'Degraded'} tone={allHealthy ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'} />
-        <StatCard icon={Users} label={t('adminSystem.totalUsers')} value={(userCount ?? 0).toLocaleString()} tone="bg-brand/10 text-brand-text" />
-        <StatCard icon={Home} label={t('adminSystem.activeFamilies')} value={(familyCount ?? 0).toLocaleString()} tone="bg-accent/10 text-accent" />
-        <StatCard icon={DollarSign} label={t('adminSystem.monthlyRevenue')} value={revenueCeiling ? unavailable : fmtMoney(mrr)} tone="bg-success/10 text-success" />
+        <StatCard icon={Users} label={t('adminSystem.totalUsers')} value={failed(userCountResult) ? unavailable : (userCount ?? 0).toLocaleString()} tone="bg-brand/10 text-brand-text" />
+        <StatCard icon={Home} label={t('adminSystem.activeFamilies')} value={failed(familyCountResult) ? unavailable : (familyCount ?? 0).toLocaleString()} tone="bg-accent/10 text-accent" />
+        <StatCard icon={DollarSign} label={t('adminSystem.monthlyRevenue')} value={failed(subscriptionsResult) ? unavailable : fmtMoney(mrr)} tone="bg-success/10 text-success" />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -193,14 +198,14 @@ export default async function AdminSystemPage() {
           <div className="flex items-center gap-3">
             <FolderLock className="h-5 w-5 text-brand-text" />
             <div>
-              <p className="text-xl font-bold leading-none">{storageCeiling ? unavailable : fmtBytes(storageBytes)}</p>
+              <p className="text-xl font-bold leading-none">{failed(documentsResult) ? unavailable : fmtBytes(storageBytes)}</p>
               <p className="text-xs text-muted">{t('adminSystem.documentStorageUsedAcrossEveryFamily')}</p>
             </div>
           </div>
           <div className="mt-4 flex items-center gap-3">
             <Users className="h-5 w-5 text-accent" />
             <div>
-              <p className="text-xl font-bold leading-none">{newUsers30d.toLocaleString()}</p>
+              <p className="text-xl font-bold leading-none">{failed(newUsersResult) ? unavailable : newUsers30d.toLocaleString()}</p>
               <p className="text-xs text-muted">{t('adminSystem.newUsersInTheLast30')}</p>
             </div>
           </div>
@@ -209,7 +214,7 @@ export default async function AdminSystemPage() {
 
       <Card>
         <h2 className="mb-4 text-base font-semibold">{t('adminSystem.userGrowth')} <span className="text-muted">{t('adminSystem.last30DaysCumulative')}</span></h2>
-        {chartCeiling
+        {failed(profilesResult) || failed(chartBaseResult)
           ? <p className="text-sm text-muted">{unavailable}</p>
           : <GrowthChart timestamps={(profiles ?? []).map((p) => p.created_at)} base={chartBaseResult.count ?? 0} />}
       </Card>

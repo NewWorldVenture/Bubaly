@@ -344,8 +344,13 @@ describe('the other summed admin reads count each row once', () => {
     expect(html).not.toContain('Wallet oversight is incomplete');
   });
 
-  it('/admin/billing: Est. MRR', async () => {
-    db.seed('subscriptions', plusSubscriptions());
+  it('/admin/billing: Est. MRR and the new-MRR trend', async () => {
+    // Billing's tiles are head:true counts (review
+    // R6-BILLING-CEILING-STILL-WHOLE-PAGE), which read no page at all; its one
+    // paged, summed read is the trend's six months. So these subscriptions were
+    // started inside them, in October, and the write lands between the trend's
+    // pages.
+    db.seed('subscriptions', plusSubscriptions().map((s, i) => ({ ...s, created_at: new Date(Date.UTC(2026, 9, 1) + i * 60_000).toISOString() })));
     const wrote = writeBetweenPages(abandonedCheckout);
     const { default: AdminBillingPage } = await import('@/app/(app)/admin/billing/page');
     const html = await renderServerPage(await AdminBillingPage());
@@ -353,6 +358,8 @@ describe('the other summed admin reads count each row once', () => {
     expect(wrote()).toEqual(['subscriptions']);
     expect(statCardValue(html, 'Est. MRR')).toBe(fmtMoney(ROWS * PLUS_MONTHLY_CENTS));
     expect(statCardValue(html, 'Active Subscriptions')).toBe(ROWS.toLocaleString());
+    // October's bar adds each plan's price once.
+    expect(html).toContain(`title="${fmtMoney(ROWS * PLUS_MONTHLY_CENTS)}"`);
   });
 
   it('/admin/reports: Monthly revenue and Storage used', async () => {
