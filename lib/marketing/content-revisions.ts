@@ -49,8 +49,8 @@ export const PAGE_REVISED = {
   '/ai': '2026-09-09',
   '/mobile': '2026-10-04',
   '/family-display': '2026-09-09',
-  '/security': '2026-10-04',
-  '/faq': '2026-10-04',
+  '/security': '2026-10-23',
+  '/faq': '2026-10-23',
   '/blog': '2026-09-07',
   '/contact': '2026-09-07',
 } as const satisfies Record<string, RevisionDate>;
