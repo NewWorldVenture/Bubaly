@@ -53,3 +53,49 @@ export function isRetryableAuthError(error: unknown): boolean {
   const message = typeof e.message === 'string' ? e.message : '';
   return /fetch failed|network ?error|failed to fetch|timed? ?out|econnreset|enotfound|eai_again|socket hang up/i.test(message);
 }
+
+/**
+ * WHY a session read failed without proving sign-out. 'storage': the saved
+ * session on this device could not be read — a missing chunk, a corrupt header,
+ * an invalidated Keystore (chunked-storage.ts throws `session_storage_unavailable`).
+ * 'network': the auth server could not be reached. Null when the failure is
+ * definitive and the person really is signed out.
+ *
+ * The two used to be one boolean, and ReconnectingScreen said "Reconnecting…"
+ * for both, retrying every 30 s for ever. Nothing ever rewrites the chunks
+ * without a session, so a storage failure is permanent until the person signs
+ * out of the device — which the copy has to tell them, because no amount of
+ * waiting fixes it; and a network failure that lasts for minutes deserves more
+ * than a spinner.
+ */
+export type RestoreReason = 'network' | 'storage';
+export type RestoreIssue = { reason: RestoreReason; failures: number };
+
+export function restoreReason(error: unknown): RestoreReason | null {
+  if (!isRetryableAuthError(error)) return null;
+  const code = (error as { code?: unknown }).code;
+  return code === 'session_storage_unavailable' ? 'storage' : 'network';
+}
+
+/** The ceiling the retry backs off to; the first two attempts keep the auto-refresh ticker's 30 s. */
+export const RESTORE_RETRY_BASE_MS = 30_000;
+export const RESTORE_RETRY_MAX_MS = 300_000;
+/** Consecutive network failures before the screen stops saying "Reconnecting…" (about eight minutes in). */
+export const RESTORE_ESCALATE_AFTER = 6;
+
+/** How long to wait before the next session read, after `failures` consecutive failures: 30 s, 30 s, 60 s, 120 s, 240 s, then five minutes. */
+export function restoreRetryDelay(failures: number): number {
+  return Math.min(RESTORE_RETRY_BASE_MS * 2 ** Math.max(0, failures - 2), RESTORE_RETRY_MAX_MS);
+}
+
+export type RestoreCopy = 'mobileAssistant.reconnecting' | 'mobileAssistant.savedSignInUnreadable' | 'mobileAssistant.stillReconnecting';
+
+/** What ReconnectingScreen says: a transient reconnect, a reconnect that has gone on too long, or a saved sign-in this device cannot read. */
+export function restoreCopy(issue: RestoreIssue | null | undefined): RestoreCopy {
+  if (!issue) return 'mobileAssistant.reconnecting';
+  // One storage failure can be a locked Keychain at cold start; a second, 30 s
+  // later, is the device telling us the same thing twice.
+  if (issue.reason === 'storage' && issue.failures >= 2) return 'mobileAssistant.savedSignInUnreadable';
+  if (issue.reason === 'network' && issue.failures >= RESTORE_ESCALATE_AFTER) return 'mobileAssistant.stillReconnecting';
+  return 'mobileAssistant.reconnecting';
+}

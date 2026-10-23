@@ -6,11 +6,14 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { signedInUserId } from '@/lib/auth/signed-in-user';
 import { clientIp } from '@/lib/server/rate-limit';
+import { rateLimitDbVerdict } from '@/lib/server/rate-limit-db';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 /** Reviews one address may submit in a day: a person writes one. */
 const REVIEWS_PER_IP_PER_DAY = 3;
 const DAY_MS = 86_400_000;
+/** The key under which a review's text fingerprint travels in `reviews.metadata`. */
+const TEXT_FINGERPRINT = 'text_fingerprint';
 
 /**
  * Public review submission — NO auth. Writes via the service-role client (reviews
@@ -25,6 +28,23 @@ const DAY_MS = 86_400_000;
  * Beside it: a per-address daily budget, a honeypot field answered exactly like
  * a success that writes nothing, and repeated text within a day dropped
  * silently. Audit N4.
+ *
+ * The repeated-text check reads the reviews that were WRITTEN, not a limiter
+ * bucket. It used to charge `review:text:<sha256>` before the insert, so a
+ * refused insert consumed the bucket and the same person's retry was answered
+ * { ok: true } with nothing written (audit RV1-N4). The fingerprint now travels
+ * with the row, so the record that this text was written exists exactly when
+ * the review does. Audit RV1-N4-dedupe-order.
+ *
+ * A read cannot see a write that has not happened yet, though, and nothing in
+ * the schema makes the fingerprint unique: two submissions of the same words
+ * at once both read nothing and both wrote (PR #1077 review). So the read is
+ * only the fast path for a repeat that is already written. Admission is the
+ * atomic `review:text:<fingerprint>` counter (one a day), charged AFTER the
+ * insert succeeds — the order RV1-N4 needs, since a refused insert charges
+ * nothing. The first charge keeps its row; a later one deletes its own. Every
+ * review is written pending and published only once admitted, so a duplicate
+ * is never on the public wall for the moment before it is removed.
  */
 export async function submitReviewAction(input: {
   rating: number;
@@ -54,11 +74,19 @@ export async function submitReviewAction(input: {
 
   const title = typeof payload.title === 'string' ? payload.title.trim().slice(0, 160) || null : null;
   const body = typeof payload.body === 'string' ? payload.body.trim().slice(0, 4000) || null : null;
-  // The same words twice in a day are one review, whoever posts them.
-  if (title || body) {
-    const fingerprint = createHash('sha256').update(JSON.stringify([title, body])).digest('hex');
-    const repeat = await enforceRequestRateLimit(supabase, `review:text:${fingerprint}`, { limit: 1, windowMs: DAY_MS });
-    if (!repeat.ok) return { ok: true };
+  // The same words twice in a day are one review, whoever posts them. A
+  // review already written with this fingerprint is the repeat; a submission
+  // whose insert was refused left no row, so its retry is not. An unreadable
+  // ledger is reported, not absorbed into a silent success. This read answers
+  // a repeat without writing; two at once are settled after the insert.
+  const fingerprint = title || body ? createHash('sha256').update(JSON.stringify([title, body])).digest('hex') : null;
+  if (fingerprint) {
+    const repeat = await supabase.from('reviews').select('id')
+      .eq(`metadata->>${TEXT_FINGERPRINT}`, fingerprint)
+      .gte('created_at', new Date(Date.now() - DAY_MS).toISOString())
+      .order('id').limit(1);
+    if (repeat.error) return { ok: false, error: t('actions.couldNotSaveYourReview') };
+    if (repeat.data?.length) return { ok: true };
   }
 
   const { data: settings } = await supabase
@@ -67,17 +95,51 @@ export async function submitReviewAction(input: {
   // Only a signed-in member's review can clear the threshold; a stranger's is
   // moderated whatever its rating. Null is "not signed in", never a refusal.
   const authorId = await signedInUserId();
-  const status = authorId !== null && autoMin != null && rating >= autoMin ? 'approved' : 'pending';
+  const publish = authorId !== null && autoMin != null && rating >= autoMin;
 
-  const { error } = await supabase.from('reviews').insert({
+  // Pending whatever it will become: it is published below, once admitted.
+  const written = await supabase.from('reviews').insert({
     rating,
     title,
     body,
     author_name: typeof payload.name === 'string' ? payload.name.trim().slice(0, 120) || null : null,
     author_email: typeof payload.email === 'string' ? payload.email.trim().slice(0, 200) || null : null,
     source: 'internal',
-    status,
-  });
-  if (error) return { ok: false, error: t('actions.couldNotSaveYourReview') };
+    status: 'pending',
+    metadata: fingerprint ? { [TEXT_FINGERPRINT]: fingerprint } : {},
+  }).select('id');
+  const id = !written.error && written.data?.length === 1 ? written.data[0].id : null;
+  if (!id) return { ok: false, error: t('actions.couldNotSaveYourReview') };
+
+  if (fingerprint) {
+    // The durable counter alone: the per-instance guard in front of it in
+    // enforceRequestRateLimit would stay spent after an outage here, and turn
+    // the same person's retry into a "repeat" with nothing written.
+    const admission = await rateLimitDbVerdict(supabase, `review:text:${fingerprint}`, { limit: 1, windowMs: DAY_MS });
+    if (admission.verdict !== 'allowed') {
+      const removed = await supabase.from('reviews').delete().eq('id', id).select('id');
+      const gone = !removed.error && removed.data?.length === 1;
+      if (admission.verdict === 'refused') {
+        // A repeat, answered as one. A copy that could not be removed was
+        // never published; a moderator sees it pending.
+        if (!gone) console.error('[reviews] a repeated review could not be removed; it stays pending', { id, code: removed.error?.code ?? null });
+        return { ok: true };
+      }
+      // The repeat check could not be answered: fail closed, as an unreadable
+      // fingerprint read does, and leave nothing written that it did not admit.
+      if (!gone) console.error('[reviews] a review the repeat check could not admit could not be removed; it stays pending', { id, code: removed.error?.code ?? null });
+      return { ok: false, error: t('actions.couldNotSaveYourReview') };
+    }
+  }
+
+  if (publish) {
+    const promoted = await supabase.from('reviews').update({ status: 'approved' })
+      .eq('id', id).eq('status', 'pending').select('id');
+    // Written and admitted, so the person is told it was received; it waits
+    // for moderation instead of being published.
+    if (promoted.error || promoted.data?.length !== 1) {
+      console.error('[reviews] an auto-approved review could not be published; it stays pending', { id, code: promoted.error?.code ?? null });
+    }
+  }
   return { ok: true };
 }

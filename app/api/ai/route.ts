@@ -230,7 +230,10 @@ export async function POST(req: NextRequest) {
       signal: req.signal,
     };
     const prepared = await prepareAssistantTurn(input);
-    if (!prepared.ok) return NextResponse.json({ error: prepared.error }, { status: 500 });
+    // A code beside the message on every 500, so a native client can show its
+    // own copy: the phone used to fall through to this text, and
+    // describeAIError's text is written for the workspace admin.
+    if (!prepared.ok) return NextResponse.json({ error: prepared.error, code: 'context_unavailable' }, { status: 500 });
 
     if (json) {
       const result = await runAssistantTurn(input, prepared.turn);
@@ -239,6 +242,7 @@ export async function POST(req: NextRequest) {
     return new Response(createAssistantStream(input, prepared.turn), { headers: SSE_HEADERS });
   } catch (err) {
     console.error('[api/ai] error:', err);
-    return NextResponse.json({ error: describeAIError(err).message }, { status: 500 });
+    const described = describeAIError(err);
+    return NextResponse.json({ error: described.message, code: described.code }, { status: 500 });
   }
 }

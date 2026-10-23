@@ -22,7 +22,7 @@ import { describe, expect, it } from 'vitest';
 // already does.
 
 const ROOTS = ['app', 'lib'];
-const CALL = /\b(enforceRequestRateLimit|rateLimitDb|enforceAIRateLimit)\(/g;
+const CALL = /\b(enforceRequestRateLimit|rateLimitDb|rateLimitDbVerdict|enforceAIRateLimit)\(/g;
 const DEFINITIONS = new Set(['lib/server/rate-limit-db.ts', 'lib/server/request-rate-limit.ts', 'lib/server/ai-rate-limit.ts']);
 
 function walk(dir: string, out: string[] = []): string[] {

@@ -445,22 +445,38 @@ const RUN_TITLES: Record<string, string> = {
 
 export const STRUCTURED_CONTENT_VERSION = 1;
 
-/** What `ai_messages.structured_content` holds: the cards of the turn plus the runs it touched. */
-export type StructuredContent = { version: number; cards: ResultCard[]; runIds: string[]; responseError?: string };
+/**
+ * What `ai_messages.structured_content` holds: the cards of the turn plus the
+ * runs it touched, and — for a turn cut short mid-stream — the engine's account
+ * of why (`responseError`, describeAIError's message) with its code
+ * (`responseErrorCode`), so a client that cannot show the admin-facing message
+ * can show its own copy for the code.
+ */
+export type StructuredContent = { version: number; cards: ResultCard[]; runIds: string[]; responseError?: string; responseErrorCode?: string };
+
+/** A turn cut short: describeAIError's message and code (lib/ai/provider.ts). */
+export type ResponseFailure = { message: string; code: string };
 
 /** Null when the turn produced nothing structured, so the column stays null instead of `{cards:[]}`. */
-export function toStructuredContent(cards: ResultCard[], runIds: string[], responseError?: string): StructuredContent | null {
+export function toStructuredContent(cards: ResultCard[], runIds: string[], responseError?: string | ResponseFailure): StructuredContent | null {
   if (cards.length === 0 && runIds.length === 0 && !responseError) return null;
-  return { version: STRUCTURED_CONTENT_VERSION, cards, runIds: [...new Set(runIds)], ...(responseError ? { responseError } : {}) };
+  const failure = typeof responseError === 'string' ? { message: responseError, code: undefined } : responseError;
+  return {
+    version: STRUCTURED_CONTENT_VERSION, cards, runIds: [...new Set(runIds)],
+    ...(failure?.message ? { responseError: failure.message } : {}),
+    ...(failure?.message && failure.code ? { responseErrorCode: failure.code } : {}),
+  };
 }
 
 /** Read a stored column back; every card is re-validated because the schema may have moved on. */
-export function structuredContentFrom(value: unknown): { cards: ResultCard[]; runIds: string[]; responseError?: string } {
+export function structuredContentFrom(value: unknown): { cards: ResultCard[]; runIds: string[]; responseError?: string; responseErrorCode?: string } {
   if (!value || typeof value !== 'object') return { cards: [], runIds: [] };
   const record = value as Record<string, unknown>;
   const cards = Array.isArray(record.cards) ? record.cards.map(parseResultCard).filter((c): c is ResultCard => c !== null) : [];
   const runIds = Array.isArray(record.runIds) ? record.runIds.filter((id): id is string => typeof id === 'string' && id.length > 0) : [];
-  return { cards, runIds, ...(typeof record.responseError === 'string' && record.responseError.trim() ? { responseError: record.responseError.slice(0, 1000) } : {}) };
+  const responseError = typeof record.responseError === 'string' && record.responseError.trim() ? record.responseError.slice(0, 1000) : undefined;
+  const responseErrorCode = responseError && typeof record.responseErrorCode === 'string' && /^[a-z_]{1,64}$/.test(record.responseErrorCode) ? record.responseErrorCode : undefined;
+  return { cards, runIds, ...(responseError ? { responseError } : {}), ...(responseErrorCode ? { responseErrorCode } : {}) };
 }
 
 // ─── Tool result → card ─────────────────────────────────────────────────────

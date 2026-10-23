@@ -17,8 +17,11 @@ import type { Database } from '@/lib/database.types';
 // (0179) requires to appear in their key.
 //
 // The forms replaced are the ones `clientIp` produces — an IPv4 address or an
-// IPv6 /64 — and anything shaped like an email address. The digest is keyed on
-// a server secret, so it cannot be reversed by hashing the IPv4 space.
+// IPv6 /64 — anything shaped like an email address, and an E.164 phone number
+// (the Contact Center's per-sender budgets are keyed on the signed `From` of a
+// text or a call, lib/contact-center/inbound-budget.ts). The digest is keyed
+// on a server secret, so it cannot be reversed by hashing the IPv4 space, or
+// the ten billion numbers of one country.
 //
 // ONLY while that secret is one. With neither INTERNAL_SECRET nor
 // SUPABASE_SERVICE_ROLE_KEY set, the key used to fall back to the constant
@@ -33,6 +36,7 @@ import type { Database } from '@/lib/database.types';
 const IPV4 = /(?<![\d.])\d{1,3}(?:\.\d{1,3}){3}(?![\d.])/g;
 const IPV6_64 = /(?<![0-9a-f])[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){3}::\/64/gi;
 const EMAIL = /[^\s:@]+@[^\s:@]+/g;
+const E164 = /(?<![\w+])\+[1-9]\d{6,14}(?!\d)/g;
 const DEV_SUBJECT_KEY = 'bubaly-dev-rate-limit-subject';
 
 function subjectKey(): string {
@@ -58,7 +62,8 @@ export function storedBucketKey(key: string): string {
   return key
     .replace(EMAIL, (match) => digest(match.toLowerCase()))
     .replace(IPV6_64, (match) => digest(match.toLowerCase()))
-    .replace(IPV4, (match) => digest(match));
+    .replace(IPV4, (match) => digest(match))
+    .replace(E164, (match) => digest(match));
 }
 
 export type RateLimitDbOptions = {
@@ -73,11 +78,30 @@ export async function rateLimitDb(
   key: string,
   { limit = 10, windowMs = 60_000, failOpen = false }: RateLimitDbOptions = {},
 ): Promise<{ ok: boolean; retryAfter: number }> {
-  const unavailable = (): { ok: boolean; retryAfter: number } => ({
-    ok: failOpen,
-    retryAfter: failOpen ? 0 : 5,
-  });
+  const hit = await rateLimitDbVerdict(supabase, key, { limit, windowMs });
+  if (hit.verdict === 'unavailable') return { ok: failOpen, retryAfter: failOpen ? 0 : 5 };
+  return hit.verdict === 'allowed' ? { ok: true, retryAfter: 0 } : { ok: false, retryAfter: hit.retryAfter };
+}
 
+/** One durable hit, with "could not be evaluated" kept apart from "refused". */
+export type RateLimitDbVerdict =
+  | { verdict: 'allowed' }
+  | { verdict: 'refused'; retryAfter: number }
+  | { verdict: 'unavailable' };
+
+/**
+ * The hit `rateLimitDb` makes, answered without folding an unavailable limiter
+ * into a refusal (or, with failOpen, an allowance) — which is right for a
+ * budget, and wrong for a caller that uses a limit of one as an ARBITER: the
+ * first hit on a key wins and every later one is a repeat. Such a caller has to
+ * answer a repeat and an outage differently (app/reviews/new/actions.ts), so it
+ * needs to know which one it got.
+ */
+export async function rateLimitDbVerdict(
+  supabase: SupabaseClient<Database>,
+  key: string,
+  { limit = 10, windowMs = 60_000 }: Pick<RateLimitDbOptions, 'limit' | 'windowMs'> = {},
+): Promise<RateLimitDbVerdict> {
   try {
     const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : 10;
     const safeWindowSeconds = Number.isFinite(windowMs)
@@ -88,16 +112,17 @@ export async function rateLimitDb(
       p_limit: safeLimit,
       p_window_seconds: safeWindowSeconds,
     });
-    if (error || !data || (Array.isArray(data) && data.length !== 1)) return unavailable();
+    if (error || !data || (Array.isArray(data) && data.length !== 1)) return { verdict: 'unavailable' };
     const row = Array.isArray(data) ? data[0] : data;
-    if (!row || typeof row.allowed !== 'boolean') return unavailable();
+    if (!row || typeof row.allowed !== 'boolean') return { verdict: 'unavailable' };
+    if (row.allowed) return { verdict: 'allowed' };
     const parsedRetryAfter = Number(row.retry_after);
     const retryAfter = Number.isFinite(parsedRetryAfter)
       ? Math.max(0, Math.ceil(parsedRetryAfter))
       : 0;
-    return { ok: row.allowed, retryAfter: row.allowed ? 0 : Math.max(1, retryAfter) };
+    return { verdict: 'refused', retryAfter: Math.max(1, retryAfter) };
   } catch {
-    return unavailable();
+    return { verdict: 'unavailable' };
   }
 }
 

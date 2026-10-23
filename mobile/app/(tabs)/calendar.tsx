@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { RefreshControl, SectionList, View } from 'react-native';
 import { AppText } from '../../src/components/AppText';
 import { EmptyState } from '../../src/components/EmptyState';
+import { FamilyGate } from '../../src/components/FamilyGate';
 import { GlassCard } from '../../src/components/GlassCard';
 import { ListRow } from '../../src/components/ListRow';
 import { Pill } from '../../src/components/Pill';
@@ -14,7 +15,7 @@ import { useTheme } from '../../src/theme/theme';
 
 export default function CalendarScreen() {
   const { colors, spacing } = useTheme();
-  const { family } = useAuth();
+  const { family, familyLoading, familyError, refreshFamily } = useAuth();
   const events = useCalendar(14);
   const tz = events.data?.timezone ?? family?.timezone ?? 'UTC';
 
@@ -23,14 +24,27 @@ export default function CalendarScreen() {
     [events.data, tz],
   );
 
+  if (!family) {
+    return (
+      <Screen title="Calendar">
+        <FamilyGate loading={familyLoading} error={familyError} onRetry={() => void refreshFamily()} />
+      </Screen>
+    );
+  }
+
+  // Pull to refresh re-reads the family too: after the household's timezone
+  // changed on the web, the cached timezone failed the reply's owner check on
+  // every refresh until the Assistant tab happened to be focused.
+  const refresh = async () => { await Promise.all([events.refresh(), refreshFamily()]); };
   return (
     <Screen title="Calendar" subtitle="The next two weeks" scroll={false}>
       <SectionList
         sections={sections}
         keyExtractor={(item) => item.segmentKey}
         contentContainerStyle={{ paddingHorizontal: spacing[5], paddingBottom: spacing[10], gap: spacing[2] }}
-        refreshControl={<RefreshControl refreshing={events.refreshing} onRefresh={events.refresh} tintColor={colors.brandText} colors={[colors.brand]} />}
+        refreshControl={<RefreshControl refreshing={events.refreshing} onRefresh={refresh} tintColor={colors.brandText} colors={[colors.brand]} />}
         stickySectionHeadersEnabled={false}
+        ListHeaderComponent={events.error ? <AppText accessibilityRole="alert" color={colors.danger}>{events.error}</AppText> : null}
         ListFooterComponent={events.data && events.data.count > events.data.occurrences.length ? <AppText variant="muted">Showing {events.data.occurrences.length} of {events.data.count} events.</AppText> : null}
         renderSectionHeader={({ section }) => <AppText variant="label" style={{ marginTop: spacing[3] }}>{section.title}</AppText>}
         renderItem={({ item }) => (
@@ -43,11 +57,9 @@ export default function CalendarScreen() {
           </GlassCard>
         )}
         ListEmptyComponent={
-          events.loading ? null : (
+          events.loading || events.error ? null : (
             <View style={{ marginTop: spacing[4] }}>
-              {events.error
-                ? <AppText color={colors.danger}>{events.error}</AppText>
-                : <EmptyState icon="calendar-outline" title="A clear fortnight" body="Nothing scheduled in the next 14 days. Ask the assistant to add something." />}
+              <EmptyState icon="calendar-outline" title="A clear fortnight" body="Nothing scheduled in the next 14 days. Ask the assistant to add something." />
             </View>
           )
         }
