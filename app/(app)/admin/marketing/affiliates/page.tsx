@@ -12,12 +12,16 @@ import { saveAffiliateAction, toggleAffiliateStatusAction, deleteAffiliateAction
 import { getTranslations } from '@/lib/i18n/server';
 import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { SubmitButton } from '@/components/ui/submit-button';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
   return { title: t('affiliates.affiliates'), robots: { index: false } };
 }
 export const dynamic = 'force-dynamic';
+
+/** Referrals the commission figures may page through before they are reported as not shown. */
+const SUM_ROW_CEILING = 10000;
 
 type Affiliate = Tables<'affiliates'>;
 
@@ -33,33 +37,50 @@ export default async function AffiliatesPage() {
     // The commissions are summed, so the read pages on the id, not on offsets:
     // a referral recorded between two pages shifted every later offset by one,
     // and one commission was owed or paid twice.
+    //
+    // Past its ceiling the read costs what is summed from it — the three tiles
+    // and each partner's conversions and amount owed, which say they are not
+    // shown — not the partner list, its actions or the form to add one; it
+    // used to be the read-error state. It keeps its prefix (failOnMax: false)
+    // only so the ceiling is told from a failure: a cut-short read is never
+    // summed below. Pay out stays on every row then: settling a partner with
+    // nothing converted is the action's ordinary case. Any failure is still
+    // the read-error state.
     readAllByIdAsQuery((after, limit) => {
       let query = supabase.from('affiliate_referrals').select('id, affiliate_id, status, commission_cents');
       if (after) query = query.gt('id', after);
       return query.order('id').limit(limit);
-    }, { max: 10000 }),
+    }, { max: SUM_ROW_CEILING, failOnMax: false }),
   ]);
+  const referralsCeiling = 'truncated' in referralsResult && referralsResult.truncated;
   const readError = affiliatesResult.error ?? referralsResult.error;
   if (readError) {
     console.error('[admin-marketing-affiliates] affiliate read failed', readError);
     return <AdminAffiliatesReadError />;
   }
+  if (referralsCeiling) console.warn('[admin-marketing-affiliates] the referral read reached its ceiling; the commissions are not shown');
   const { data: affiliates } = affiliatesResult;
   const { data: referrals } = referralsResult;
   const list = (affiliates ?? []) as Affiliate[];
   const refs = (referrals ?? []) as ReferralLike[];
   const overall = summarizeReferrals(refs);
   const byAffiliate = payoutByAffiliate(refs);
+  const unavailable = t('strategyMetrics.unavailable');
+  const summed = (value: string | number) => (referralsCeiling ? unavailable : value);
 
   const stats = [
     { label: t('affiliates.affiliates'), value: list.length, icon: Handshake, tint: 'text-violet-400 bg-violet-500/15' },
-    { label: 'Conversions', value: overall.conversions, icon: BadgeCheck, tint: 'text-emerald-400 bg-emerald-500/15' },
-    { label: 'Owed (unpaid)', value: formatCents(overall.pendingPayoutCents), icon: Wallet, tint: 'text-amber-400 bg-amber-500/15' },
-    { label: 'Paid out', value: formatCents(overall.paidCents), icon: DollarSign, tint: 'text-blue-400 bg-blue-500/15' },
+    { label: 'Conversions', value: summed(overall.conversions), icon: BadgeCheck, tint: 'text-emerald-400 bg-emerald-500/15' },
+    { label: 'Owed (unpaid)', value: summed(formatCents(overall.pendingPayoutCents)), icon: Wallet, tint: 'text-amber-400 bg-amber-500/15' },
+    { label: 'Paid out', value: summed(formatCents(overall.paidCents)), icon: DollarSign, tint: 'text-blue-400 bg-blue-500/15' },
   ];
 
   return (
     <div className="space-y-5">
+      <PartialReadBanner
+        title={t('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
+        failures={referralsCeiling ? stats.slice(1).map((s) => s.label) : []}
+      />
       <p className="text-sm text-muted">{t('affiliates.externalPartnersWhoEarnCommission')}{' '}<code className="rounded bg-elevated px-1 py-0.5 text-xs">?via=CODE</code>.</p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -103,12 +124,12 @@ export default async function AffiliatesPage() {
                       <td className="py-2"><p className="font-medium">{a.name}</p>{a.email && <p className="text-xs text-muted">{a.email}</p>}</td>
                       <td className="py-2"><code className="rounded bg-elevated px-1.5 py-0.5 text-xs">{a.code}</code></td>
                       <td className="py-2">{Math.round(a.commission_rate * 100)}%</td>
-                      <td className="py-2">{sum?.conversions ?? 0}</td>
-                      <td className="py-2">{formatCents(sum?.pendingPayoutCents ?? 0)}</td>
+                      <td className="py-2">{summed(sum?.conversions ?? 0)}</td>
+                      <td className="py-2">{summed(formatCents(sum?.pendingPayoutCents ?? 0))}</td>
                       <td className="py-2"><span className={`rounded px-1.5 py-0.5 text-[11px] ${a.status === 'active' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-500/15 text-slate-300'}`}>{a.status}</span></td>
                       <td className="py-2">
                         <div className="flex items-center justify-end gap-1">
-                          {(sum?.pendingPayoutCents ?? 0) > 0 && (
+                          {(referralsCeiling || (sum?.pendingPayoutCents ?? 0) > 0) && (
                             <form action={markAffiliatePaidAction.bind(null, a.id)}>
                               <SubmitButton className="rounded-md border border-border px-2 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/10">{t('affiliates.payOut')}</SubmitButton>
                             </form>

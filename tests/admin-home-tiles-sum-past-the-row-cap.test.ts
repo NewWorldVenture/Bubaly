@@ -3,8 +3,9 @@ import { SOURCE_MESSAGES } from '@/lib/i18n/messages';
 import { translate } from '@/lib/i18n/translate';
 import { BASIC_MONTHLY_CENTS, PLUS_MONTHLY_CENTS } from '@/lib/constants/plans';
 import { fmtMoney } from '@/lib/utils/format';
-import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
+import { createInMemorySupabase, withFaults, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { renderServerPage, textOf } from './helpers/render-server-page';
+import { at } from './helpers/source-order';
 
 // The /admin dashboard home reduced its tiles from plain selects with no bound:
 // every family, every active member, every subscription, every document's
@@ -89,12 +90,22 @@ function statCard(html: string, label: string): { value: string; sub: string } {
   return { value: match[1], sub: match[2] };
 }
 
+/** The items the ceiling banner names, or null when it is not shown. */
+function ceilingBanner(html: string): string[] | null {
+  const title = translate(SOURCE_MESSAGES, 'adminCeiling.figuresNotShown', { n: (25_000).toLocaleString() });
+  const start = html.indexOf(`<p class="text-sm font-semibold text-danger">${title}</p>`);
+  if (start < 0) return null;
+  return [...html.slice(start, html.indexOf('</ul>', start)).matchAll(/<li>([^<]*)<\/li>/g)].map((m) => m[1]);
+}
+
 /** The markup of the Card whose heading is `heading`, up to the next card. */
 function card(html: string, heading: string): string {
-  const at = html.indexOf(heading);
-  if (at < 0) throw new Error(`no "${heading}" card on the page`);
-  const end = html.indexOf('<div class="glass-card', at);
-  return html.slice(at, end < 0 ? undefined : end);
+  // The heading itself, not the ceiling banner's item of the same words.
+  let start = html.indexOf(heading);
+  while (start >= 0 && html.slice(start - 4, start) === '<li>') start = html.indexOf(heading, start + 1);
+  if (start < 0) throw new Error(`no "${heading}" card on the page`);
+  const end = html.indexOf('<div class="glass-card', start);
+  return html.slice(start, end < 0 ? undefined : end);
 }
 
 beforeEach(() => {
@@ -182,13 +193,101 @@ describe('/admin adds up its tiles over every row, not the first thousand', () =
     expect(support).toContain('Resolved 1200');
   });
 
-  it('a read that reaches its ceiling is named in the banner, not rendered as a smaller platform', async () => {
+  // Reaching the ceiling costs that figure, not a zero beside a banner: the
+  // gauge says it is not shown and the ceiling banner names it (review
+  // R5-SIB-HOME-FAMILY-NAMES brings every summed read here into that class).
+  it('a read that reaches its ceiling is named in the ceiling banner and its figure is not shown, not rendered as a smaller platform', async () => {
     seedPlatform();
     db.seed('documents', Array.from({ length: 25_001 - DOCS }, (_, i) => ({
       id: `doc-x-${pad(i)}`, family_id: 'fam-000000', size_bytes: 1_000,
     })));
     const html = await render();
+    const storage = card(html, SOURCE_MESSAGES['admin.storageUsage']);
+    expect(storage).toContain(`<p class="text-sm text-muted">${SOURCE_MESSAGES['strategyMetrics.unavailable']}</p>`);
+    expect(storage).not.toContain('</text>');
+    expect(ceilingBanner(html)).toEqual([SOURCE_MESSAGES['admin.storageUsage']]);
+    // Nothing failed: the rest of the dashboard is whole.
+    expect(html).not.toContain(SOURCE_MESSAGES['admin.someDataCouldNotBeLoaded']);
+    expect(statCard(html, SOURCE_MESSAGES['admin.monthlyRevenue']).value).toBe(fmtMoney(ACTIVE_PLUS * PLUS_MONTHLY_CENTS));
+  });
+
+  it('a documents read that FAILS is still named in the read banner', async () => {
+    seedPlatform();
+    h.db = withFaults(db, (table) => (table === 'documents' ? { message: 'documents unavailable' } : null));
+    const html = await render();
     expect(html).toContain(SOURCE_MESSAGES['admin.someDataCouldNotBeLoaded']);
-    expect(textOf(html)).toMatch(/documents: readAllById reached the caller’s max of 25000 rows/);
+    expect(textOf(html)).toContain('documents: documents unavailable');
+    expect(ceilingBanner(html)).toBeNull();
+  });
+});
+
+// Top families and Recent activities were named from the plan donut's read of
+// every family, so past its 25,000-row ceiling the thirteen listed rows read
+// "Unknown" (review R5-SIB-HOME-FAMILY-NAMES). Each listed row is now named
+// from its own family; the ceiling costs the donut, which says so.
+describe('/admin past 25,000 families', () => {
+  const CEILING = 25_000;
+  const OWNERS = 3;
+
+  /** 25,001 empty families sorting first by id; three owner families after them with members and audit rows. */
+  function seedPastTheFamilyCeiling() {
+    db.seed('families', [
+      ...Array.from({ length: CEILING + 1 }, (_, i) => ({ id: `fam-${pad(i)}`, name: `Empty family ${i}`, created_at: '2025-03-01T00:00:00Z' })),
+      ...Array.from({ length: OWNERS }, (_, f) => ({ id: `fam-zz-${pad(f)}`, name: `Owner family ${f}`, created_at: '2025-03-01T00:00:00Z' })),
+    ]);
+    // Owner family f has 10 + f members, so they rank 2, 1, 0.
+    db.seed('family_members', Array.from({ length: OWNERS }, (_, f) => Array.from({ length: 10 + f }, (_, i) => ({
+      id: `mem-${f}-${pad(i)}`, family_id: `fam-zz-${pad(f)}`, is_active: true, display_name: `Member ${f}.${i}`, created_at: '2026-10-10T00:00:00Z',
+    }))).flat());
+    db.seed('audit_logs', Array.from({ length: 8 }, (_, i) => ({
+      id: `log-${pad(i)}`, family_id: `fam-zz-${pad(i % OWNERS)}`, actor_id: null, action: 'update', resource: 'chores',
+      created_at: new Date(Date.UTC(2026, 9, 21) + i * 60_000).toISOString(),
+    })));
+    for (const table of ['subscriptions', 'documents', 'support_tickets', 'admin_notifications']) db.seed(table, []);
+  }
+
+  it('Top families and Recent activities name each listed row\'s family; the donut alone is not shown', async () => {
+    seedPastTheFamilyCeiling();
+    const html = await render();
+    const top = card(html, SOURCE_MESSAGES['admin.topFamilies']);
+    const row = (f: number) => `<span class="min-w-0 flex-1 truncate text-sm font-medium">Owner family ${f}</span><span class="shrink-0 text-xs text-muted">${10 + f} members</span>`;
+    expect(at(top, row(2))).toBeLessThan(at(top, row(1)));
+    expect(at(top, row(1))).toBeLessThan(at(top, row(0)));
+    expect(textOf(top)).not.toContain('Unknown');
+    const activity = card(html, SOURCE_MESSAGES['admin.recentActivities']);
+    for (let f = 0; f < OWNERS; f++) expect(activity).toContain(`<p class="truncate text-xs text-muted">Owner family ${f}</p>`);
+    expect(activity).not.toContain('Unknown family');
+    expect(card(html, SOURCE_MESSAGES['admin.planDistribution'])).toContain(SOURCE_MESSAGES['strategyMetrics.unavailable']);
+    expect(ceilingBanner(html)).toEqual([SOURCE_MESSAGES['admin.planDistribution']]);
+    expect(html).not.toContain(SOURCE_MESSAGES['admin.someDataCouldNotBeLoaded']);
+  });
+
+  it('a family name read that FAILS is still named in the read banner', async () => {
+    seedPastTheFamilyCeiling();
+    h.db = withFaults(db, (table, calls) => (table === 'families' && calls.some((c) => c.method === 'in') ? { message: 'families unavailable' } : null));
+    const html = await render();
+    expect(html).toContain(SOURCE_MESSAGES['admin.someDataCouldNotBeLoaded']);
+    expect(textOf(html)).toContain('family names: families unavailable');
+  });
+
+  it('each other summed figure past its ceiling is not shown, and is named', async () => {
+    seedPlatform();
+    const many = CEILING + 1;
+    db.seed('subscriptions', Array.from({ length: many }, (_, i) => ({ id: `sub-x-${pad(i)}`, family_id: `fam-x-${pad(i)}`, plan: 'plus', status: 'active', created_at: '2026-10-06T00:00:00Z' })));
+    db.seed('family_members', Array.from({ length: many }, (_, i) => ({ id: `mem-x-${pad(i)}`, family_id: `fam-x-${pad(i)}`, is_active: true, display_name: `X ${i}`, created_at: '2026-10-11T00:00:00Z' })));
+    const html = await render();
+    expect(statCard(html, SOURCE_MESSAGES['admin.monthlyRevenue'])).toEqual({ value: SOURCE_MESSAGES['strategyMetrics.unavailable'], sub: '' });
+    for (const heading of ['admin.userGrowth', 'admin.topFamilies', 'admin.planDistribution', 'admin.revenueOverview']) {
+      expect(card(html, SOURCE_MESSAGES[heading])).toContain(`<p class="text-sm text-muted">${SOURCE_MESSAGES['strategyMetrics.unavailable']}</p>`);
+    }
+    expect(ceilingBanner(html)).toEqual(['admin.monthlyRevenue', 'admin.userGrowth', 'admin.topFamilies', 'admin.planDistribution', 'admin.revenueOverview'].map((k) => SOURCE_MESSAGES[k]));
+    // The counted tiles are exact and stay.
+    expect(statCard(html, SOURCE_MESSAGES['admin.subscriptions']).value).toBe((ACTIVE_PLUS + many).toLocaleString());
+    expect(html).not.toContain(SOURCE_MESSAGES['admin.someDataCouldNotBeLoaded']);
+  });
+
+  it('the control: under every ceiling no figure is withheld', async () => {
+    seedPlatform();
+    expect(ceilingBanner(await render())).toBeNull();
   });
 });

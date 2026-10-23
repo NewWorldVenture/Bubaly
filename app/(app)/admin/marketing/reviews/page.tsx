@@ -56,6 +56,10 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
   const stats = ratingStats(ratings.map((r) => r.rating));
   const filtered = all ?? [];
   const unavailable = t('strategyMetrics.unavailable');
+  // The review count beside the average and the count on each status filter
+  // come from the same read as the rating, and are hidden with it, so the
+  // banner names them too (review R5-CEILING-POLISH).
+  const figuresNotShown = [t('adminMarketingReviews.averageRating'), t('adminMarketingReviews.distribution'), t('adminMarketingReviews.reviewAndStatusCounts')];
   const reviewUrl = `${SITE_URL}/reviews/new`;
   const set = settings ?? null;
 
@@ -63,7 +67,7 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
     <div className="space-y-5">
       <PartialReadBanner
         title={t('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
-        failures={ratingsCeiling ? [t('adminMarketingReviews.averageRating'), t('adminMarketingReviews.distribution')] : []}
+        failures={ratingsCeiling ? figuresNotShown : []}
       />
       <div className="flex items-center gap-2">
         <MessageSquareQuote className="h-5 w-5 text-brand-text" />

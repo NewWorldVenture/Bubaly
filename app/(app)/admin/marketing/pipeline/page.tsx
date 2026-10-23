@@ -30,6 +30,8 @@ type Contact = Tables<'crm_contacts'>;
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
 /** Deals the tiles may page through before they are reported as not shown (one round trip per 1,000). */
 const SUM_ROW_CEILING = 25_000;
+/** The board lists the newest this many deals. */
+const BOARD_SHOWN = 500;
 const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
 
 const STAGE_TINT: Record<DealStage, string> = {
@@ -46,7 +48,7 @@ export default async function PipelinePage() {
   // deals are paged on the id to a real ceiling, and past it the tiles say
   // they are not shown rather than adding up part of the pipeline.
   const [dealsResult, contactsResult, pipelineResult] = await settleAll([
-    supabase.from('crm_deals').select('*').order('created_at', { ascending: false }).limit(500),
+    supabase.from('crm_deals').select('*').order('created_at', { ascending: false }).order('id', { ascending: false }).limit(BOARD_SHOWN),
     supabase.from('crm_contacts').select('id, first_name, last_name, email').order('created_at', { ascending: false }).limit(500),
     readAllByIdAsQuery((after, limit) => {
       let query = supabase.from('crm_deals').select('id, stage, amount_cents');
@@ -77,6 +79,14 @@ export default async function PipelinePage() {
   const contactName = new Map(labelsResult.data.map((c) => [c.id, contactDisplayName(c)]));
   const grouped = dealsByStage(list.map((d) => ({ ...d, stage: d.stage as DealStage })));
   const pipeline = (pipelineResult.data ?? []).map((d) => ({ ...d, stage: d.stage as DealStage }));
+  // Each column header counts and adds up its WHOLE stage, from the paged
+  // read the tiles use, so the open stages add up to Open pipeline; from the
+  // board they described the newest 500 deals (review
+  // R5-CRM-BOARD-AND-RANKING-FROM-CAPPED-LISTS). Past the ceiling they say they
+  // are not shown, as the tiles do, and the board says when it lists fewer
+  // deals than the pipeline holds.
+  const stageTotals = dealsByStage(pipeline);
+  const boardIsPart = pipelineCeiling || pipeline.length > list.length;
   const unavailable = t('strategyMetrics.unavailable');
   const tile = (value: string) => (pipelineCeiling ? unavailable : value);
 
@@ -91,7 +101,7 @@ export default async function PipelinePage() {
     <div className="space-y-5">
       <PartialReadBanner
         title={t('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
-        failures={pipelineCeiling ? stats.map((s) => s.label) : []}
+        failures={pipelineCeiling ? [...stats.map((s) => s.label), t('adminMarketingPipeline.stageTotals')] : []}
       />
       <p className="text-sm text-muted">{t('adminMarketingPipeline.trackEveryOpportunityFromLeadTo')}</p>
 
@@ -123,15 +133,19 @@ export default async function PipelinePage() {
       </Card>
 
       {/* Pipeline board */}
+      {boardIsPart && (
+        <p className="text-xs text-muted">{t('adminMarketingPipeline.boardIsTheNewest', { n: BOARD_SHOWN.toLocaleString() })}</p>
+      )}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         {DEAL_STAGES.map((stage) => {
           const col = grouped[stage];
-          const total = col.reduce((sum, d) => sum + (d.amount_cents || 0), 0);
+          const whole = stageTotals[stage];
+          const total = whole.reduce((sum, d) => sum + (d.amount_cents || 0), 0);
           return (
             <div key={stage} className="rounded-2xl border border-border bg-surface/30 p-2.5">
               <div className="flex items-center justify-between px-1 pb-2">
                 <span className={`text-sm font-semibold ${STAGE_TINT[stage]}`}>{DEAL_STAGE_LABELS[stage]}</span>
-                <span className="text-xs text-muted">{col.length} · {formatCents(total)}</span>
+                <span className="text-xs text-muted">{pipelineCeiling ? unavailable : `${whole.length} · ${formatCents(total)}`}</span>
               </div>
               <div className="space-y-2">
                 {col.length === 0 ? (

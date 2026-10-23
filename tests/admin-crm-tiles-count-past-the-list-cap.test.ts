@@ -181,9 +181,40 @@ describe('/admin/marketing/pipeline: the tiles are every deal, and a deal names 
     const html = await render();
     expect(html).not.toContain(SOURCE_MESSAGES['pipeline.couldNotLoadTheSales']);
     for (const label of ['Open pipeline', 'Weighted (expected)', 'Won', 'Win rate']) expect(statCardValue(html, label)).toBe(UNAVAILABLE);
-    expect(ceilingBanner(html)).toEqual(['Open pipeline', 'Weighted (expected)', 'Won', 'Win rate']);
+    // The board's stage headers add up the same whole pipeline, so they go with the tiles.
+    expect(ceilingBanner(html)).toEqual(['Open pipeline', 'Weighted (expected)', 'Won', 'Win rate', SOURCE_MESSAGES['adminMarketingPipeline.stageTotals']]);
+    expect(html.split(`<span class="text-xs text-muted">${UNAVAILABLE}</span>`)).toHaveLength(6 + 1);
     expect(html).toContain(`Deal ${ROWS - 1}`);
     expect(html).toContain(SOURCE_MESSAGES['adminMarketingPipeline.addDeal']);
+  });
+
+  // Each column header counted and added up the newest 500 deals on the board,
+  // so past 500 deals the open stages no longer added up to Open pipeline and
+  // nothing said the board was part of the pipeline (review
+  // R5-CRM-BOARD-AND-RANKING-FROM-CAPPED-LISTS).
+  it('each stage header counts and adds up its whole stage, and the board says it lists the newest 500', async () => {
+    seedDeals();
+    const html = await render();
+    const header = (label: string) => {
+      const match = new RegExp(`>${label}</span><span class="text-xs text-muted">([^<]*)</span>`).exec(html);
+      if (!match) throw new Error(`no "${label}" column on the board`);
+      return match[1];
+    };
+    // The newest 500 deals on the board are all leads; the 500 won and 300 lost are older.
+    expect(header('Lead')).toBe('500 · $5,000');
+    expect(header('Won')).toBe('500 · $50,000');
+    expect(header('Lost')).toBe('300 · $30,000');
+    expect(html).toContain(translate(SOURCE_MESSAGES, 'adminMarketingPipeline.boardIsTheNewest', { n: '500' }));
+  });
+
+  it('the control: a board that holds the whole pipeline does not say it is part of it', async () => {
+    seedContacts();
+    db.seed('crm_deals', Array.from({ length: 20 }, (_, i) => ({
+      id: `deal-${pad(i)}`, name: `Deal ${i}`, amount_cents: 1_000, stage: 'lead', contact_id: null, close_date: null, created_at: at(i), updated_at: at(i),
+    })));
+    const html = await render();
+    expect(html).toContain('>Lead</span><span class="text-xs text-muted">20 · $200</span>');
+    expect(html).not.toContain(translate(SOURCE_MESSAGES, 'adminMarketingPipeline.boardIsTheNewest', { n: '500' }));
   });
 });
 
@@ -301,7 +332,13 @@ describe('/admin/marketing/reviews: the rating is every review, and the moderati
     const html = await render();
     expect(html).not.toContain(SOURCE_MESSAGES['reviews.couldNotLoadReviewsFrom']);
     expect(ratingCard(html)).toBe(`${SOURCE_MESSAGES['adminMarketingReviews.averageRating']} ${UNAVAILABLE} ${SOURCE_MESSAGES['adminMarketingReviews.distribution']} ${UNAVAILABLE}`);
-    expect(ceilingBanner(html)).toEqual([SOURCE_MESSAGES['adminMarketingReviews.averageRating'], SOURCE_MESSAGES['adminMarketingReviews.distribution']]);
+    // The review count and the status filters' counts are hidden with them, and
+    // the banner says so too (review R5-CEILING-POLISH).
+    expect(ceilingBanner(html)).toEqual([
+      SOURCE_MESSAGES['adminMarketingReviews.averageRating'], SOURCE_MESSAGES['adminMarketingReviews.distribution'],
+      SOURCE_MESSAGES['adminMarketingReviews.reviewAndStatusCounts'],
+    ]);
+    expect(textOf(html)).toContain('pending approved featured rejected');
     expect(html).toContain(`Review ${ROWS - 1}`);
     expect(html).toContain(SOURCE_MESSAGES['adminMarketingReviews.saveSettings']);
   });
@@ -352,5 +389,42 @@ describe('/admin/marketing/competitive: the tiles are everything tracked', () =>
     expect(statCardValue(html, 'Keywords tracked')).toBe('1300');
     expect(html).toContain(`site${ROWS - 1}.example`);
     expect(html).toContain(SOURCE_MESSAGES['adminMarketingCompetitive.addBacklink']);
+  });
+
+  // The opportunity table ranked an UNORDERED read of 500 keywords, so past
+  // 500 the best opportunities could be missing from it (review
+  // R5-CRM-BOARD-AND-RANKING-FROM-CAPPED-LISTS). It ranks every keyword now.
+  const keywordRow = (i: number) => `<td class="py-2 font-medium">keyword ${i}</td>`;
+
+  it('the opportunity table ranks every keyword and lists the best 500, best first', async () => {
+    seedCompetitive();
+    const html = await render();
+    // Unranked keywords, so the opportunity grows with the volume, which is the
+    // row number: the best are the newest, and the first 500 inserted the worst.
+    const listed = [...html.matchAll(/<td class="py-2 font-medium">keyword (\d+)<\/td>/g)].map((m) => Number(m[1]));
+    expect(listed).toHaveLength(500);
+    expect(listed[0]).toBe(ROWS - 50);
+    expect(listed).toContain(ROWS - 1);
+    expect(listed.every((i) => i >= 750)).toBe(true);
+    expect(html).not.toContain(keywordRow(0));
+    expect(ceilingBanner(html)).toBeNull();
+  });
+
+  it('keywords past the ceiling cost the ranking, which says it is not shown; the count and the form stay', async () => {
+    seedCompetitive();
+    db.seed('keyword_intel', Array.from({ length: CEILING }, (_, i) => ({ id: `kw-z-${pad(i)}`, keyword: `old ${i}`, search_volume: 1, difficulty: 1, our_rank: 1, created_at: '2024-01-01T00:00:00Z' })));
+    const html = await render();
+    expect(html).not.toContain(SOURCE_MESSAGES['competitive.couldNotLoadCompetitiveIntelligence']);
+    expect(ceilingBanner(html)).toEqual([SOURCE_MESSAGES['adminMarketingCompetitive.keywordIntelligence']]);
+    expect(html).not.toContain(keywordRow(ROWS - 1));
+    expect(html).toContain(`<p class="py-3 text-center text-sm text-muted">${UNAVAILABLE}</p>`);
+    expect(statCardValue(html, 'Keywords tracked')).toBe(String(ROWS + CEILING));
+    expect(html).toContain(SOURCE_MESSAGES['adminMarketingCompetitive.addKeyword']);
+  });
+
+  it('a keyword read that FAILS is still the read-error state', async () => {
+    seedCompetitive();
+    h.db = withFaults(db, (table, calls) => (table === 'keyword_intel' && calls.some((c) => c.method === 'select' && c.args[0] === '*') ? { message: 'keywords unavailable' } : null));
+    expect(await render()).toContain(SOURCE_MESSAGES['competitive.couldNotLoadCompetitiveIntelligence']);
   });
 });

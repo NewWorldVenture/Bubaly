@@ -26,6 +26,10 @@ export type MarketingCustomer = {
 };
 
 const DAY = 86_400_000;
+/** The families and subscriptions the view reads before it reports a prefix; the smallest of its ceilings. */
+export const CUSTOMER_FAMILY_CEILING = 2000;
+/** The members and profiles it joins on before it reports a prefix. */
+const CUSTOMER_MEMBER_CEILING = 20000;
 
 function monthsBetween(from: string, to: number): number {
   const start = new Date(from).getTime();
@@ -38,7 +42,17 @@ function monthsBetween(from: string, to: number): number {
  * row is derived from the existing families + subscriptions + members + profiles
  * tables, so it always reflects live data and links back to the source family.
  */
-export async function getMarketingCustomersWithError(supabase: DB): Promise<{ customers: MarketingCustomer[]; error: unknown | null }> {
+export async function getMarketingCustomersWithError(supabase: DB): Promise<{
+  customers: MarketingCustomer[];
+  error: unknown | null;
+  /**
+   * The error is that a read below reached its ceiling, and nothing failed.
+   * Every caller still gets the error and no customers — a send or a segment
+   * built from part of the families is a wrong one — but a dashboard can show
+   * its customer figures as not shown instead of losing the page to them.
+   */
+  truncated?: boolean;
+}> {
   const [familiesResult, subsResult, membersResult, profilesResult] = await settleAll([
     // Every customer is one family row, and the customers are counted and their
     // plans summed (Est. MRR, Customer Acquisition), so the families page on
@@ -49,7 +63,7 @@ export async function getMarketingCustomersWithError(supabase: DB): Promise<{ cu
       let query = supabase.from('families').select('id, name, created_at, updated_at, closed_at');
       if (after) query = query.gt('id', after);
       return query.order('id').limit(limit);
-    }, { max: 2000 }),
+    }, { max: CUSTOMER_FAMILY_CEILING }),
     // The three sibling reads below page for the same reason the families read
     // does: each is joined BACK onto the families list, so a read capped at
     // db-max-rows does not shorten the table — it silently mislabels customers
@@ -64,21 +78,25 @@ export async function getMarketingCustomersWithError(supabase: DB): Promise<{ cu
       let query = supabase.from('subscriptions').select('id, family_id, plan, status, created_at, current_period_end');
       if (after) query = query.gt('id', after);
       return query.order('id').limit(limit);
-    }, { max: 2000 }),
+    }, { max: CUSTOMER_FAMILY_CEILING }),
     readAllByIdAsQuery((after, limit) => {
       let query = supabase.from('family_members').select('id, family_id, user_id, role, is_active');
       if (after) query = query.gt('id', after);
       return query.order('id').limit(limit);
-    }, { max: 20000 }),
+    }, { max: CUSTOMER_MEMBER_CEILING }),
     readAllByIdAsQuery((after, limit) => {
       let query = supabase.from('profiles').select('id, email');
       if (after) query = query.gt('id', after);
       return query.order('id').limit(limit);
-    }, { max: 20000 }),
+    }, { max: CUSTOMER_MEMBER_CEILING }),
   ]);
 
+  const results = [familiesResult, subsResult, membersResult, profilesResult];
   const error = familiesResult.error ?? subsResult.error ?? membersResult.error ?? profilesResult.error;
-  if (error) return { customers: [], error };
+  if (error) {
+    const truncated = results.every((r) => !r.error || ('truncated' in r && r.truncated));
+    return { customers: [], error, truncated };
+  }
 
   const { data: families } = familiesResult;
   const { data: subs } = subsResult;

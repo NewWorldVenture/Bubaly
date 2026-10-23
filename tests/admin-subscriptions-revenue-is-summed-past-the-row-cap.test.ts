@@ -1,10 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { GrowthChart } from '@/components/admin/growth-chart';
 import { SOURCE_MESSAGES } from '@/lib/i18n/messages';
 import { translate } from '@/lib/i18n/translate';
 import { PLUS_MONTHLY_CENTS } from '@/lib/constants/plans';
 import { fmtMoney } from '@/lib/utils/format';
 import { createInMemorySupabase, withFaults, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { renderServerPage, statCardValue } from './helpers/render-server-page';
+import { at } from './helpers/source-order';
 
 // /admin/subscriptions summed MRR and ARR, counted active subscriptions per
 // plan, computed the 30-day churn rate and labelled the All tab's count from
@@ -217,5 +221,109 @@ describe('/admin/subscriptions past 25,000 families', () => {
       expect(html).toContain(SOURCE_MESSAGES['subscriptions.couldNotLoadSubscriptionData']);
       expect(html).not.toContain('Subscriber family');
     }
+  });
+});
+
+// Every subscription row was read on every tab, paged to the 25,000-row
+// ceiling with reaching it an error, so past 25,000 subscriptions the Plans and
+// Billing tabs were the read-error state for rows neither lists, where the base
+// page rendered (review R5-SIB-SUBSCRIPTION-ROWS-LOCK-PLANS-AND-BILLING). Plans
+// now reads its counts, the chart's own window and its eight recent rows;
+// Billing reads no subscription; only the All tab, which lists them all, keeps
+// the ceiling as its own read-error state.
+describe('/admin/subscriptions past 25,000 subscriptions', () => {
+  const CEILING = 25_000;
+  /** Subscriptions inside the growth chart's thirty days; the rest are from 2025. */
+  const RECENT = 40;
+  const named = (i: number) => `<span class="font-medium">New family ${i}</span>`;
+  const notShownTitle = () => translate(SOURCE_MESSAGES, 'adminCeiling.figuresNotShown', { n: CEILING.toLocaleString() });
+
+  /** 25,001 active Plus subscriptions; the newest RECENT were taken out in October 2026. */
+  function seedPastTheSubscriptionCeiling(): string[] {
+    const old = Array.from({ length: CEILING + 1 - RECENT }, (_, i) => {
+      const createdAt = new Date(Date.UTC(2025, 0, 1) + i * 60_000).toISOString();
+      return { id: `sub-o-${pad(i)}`, family_id: `fam-o-${pad(i)}`, plan: 'plus', status: 'active', seats: 5, created_at: createdAt, updated_at: createdAt, current_period_end: null };
+    });
+    const recent = Array.from({ length: RECENT }, (_, i) => {
+      const createdAt = new Date(Date.UTC(2026, 9, 1) + i * 3_600_000).toISOString();
+      return { id: `sub-n-${pad(i)}`, family_id: `fam-n-${pad(i)}`, plan: 'plus', status: 'active', seats: 5, created_at: createdAt, updated_at: createdAt, current_period_end: null };
+    });
+    db.seed('subscriptions', [...old, ...recent]);
+    db.seed('families', recent.map((s, i) => ({ id: s.family_id, name: `New family ${i}` })));
+    db.seed('billing_customers', [{ id: 'bc-n', family_id: `fam-n-${pad(RECENT - 1)}`, provider: 'stripe', customer_ref: 'cus_newest' }]);
+    return db.table('subscriptions').map((s) => String(s.created_at));
+  }
+  const invoice = { id: 'in_newest', number: 'INV-NEWEST', amount_paid: PLUS_MONTHLY_CENTS, status: 'paid', created: 1_790_000_000, customer: 'cus_newest', hosted_invoice_url: null };
+
+  it('the Plans tab renders every tile, the chart of every subscription and the eight newest rows', async () => {
+    const timestamps = seedPastTheSubscriptionCeiling();
+    const html = await render();
+    expect(html).not.toContain(SOURCE_MESSAGES['subscriptions.couldNotLoadSubscriptionData']);
+    expect(statCardValue(html, SOURCE_MESSAGES['adminSubscriptions.activeSubscriptions'])).toBe((CEILING + 1).toLocaleString());
+    expect(statCardValue(html, 'MRR')).toBe(fmtMoney((CEILING + 1) * PLUS_MONTHLY_CENTS));
+    expect(statCardValue(html, SOURCE_MESSAGES['adminSubscriptions.churn30d'])).toBe('0.0%');
+    expect(html).toContain(`${(CEILING + 1).toLocaleString()} active`);
+    // The chart every subscription draws: a count before its first day, and the rows inside it.
+    expect(html).toContain(renderToStaticMarkup(createElement(GrowthChart, { timestamps })));
+    // The eight newest, newest first, each under its own family.
+    for (let i = RECENT - 8; i < RECENT; i++) expect(html).toContain(named(i));
+    expect(html).not.toContain(named(RECENT - 9));
+    expect(at(html, named(RECENT - 1))).toBeLessThan(at(html, named(RECENT - 8)));
+    expect(html).not.toContain('Unknown family');
+    expect(html).not.toContain(notShownTitle());
+  });
+
+  it('the Billing tab lists its invoices and reads no subscription row', async () => {
+    seedPastTheSubscriptionCeiling();
+    h.invoices = [invoice];
+    db.log.length = 0;
+    const html = await render('billing');
+    expect(html).not.toContain(SOURCE_MESSAGES['subscriptions.couldNotLoadSubscriptionData']);
+    expect(html).toContain('INV-NEWEST');
+    expect(html).toContain(named(RECENT - 1));
+    expect(db.log.filter((entry) => entry.table === 'subscriptions')).toEqual([]);
+  });
+
+  it('the All tab, which lists every subscription, is still its own read-error state past the ceiling', async () => {
+    seedPastTheSubscriptionCeiling();
+    const html = await render('all');
+    expect(html).toContain(SOURCE_MESSAGES['subscriptions.couldNotLoadSubscriptionData']);
+    expect(html).toContain('href="/admin/subscriptions?tab=all"');
+  });
+
+  it('past the ceiling inside the chart\'s thirty days the chart alone is not shown, and says so', async () => {
+    db.seed('subscriptions', Array.from({ length: CEILING + 1 }, (_, i) => {
+      const createdAt = new Date(Date.UTC(2026, 9, 1) + i * 60_000).toISOString();
+      return { id: `sub-${pad(i)}`, family_id: `fam-${pad(i)}`, plan: 'plus', status: 'active', seats: 5, created_at: createdAt, updated_at: createdAt, current_period_end: null };
+    }));
+    db.seed('families', Array.from({ length: 8 }, (_, k) => ({ id: `fam-${pad(CEILING - k)}`, name: `Newest family ${k}` })));
+    const html = await render();
+    expect(html).not.toContain(SOURCE_MESSAGES['subscriptions.couldNotLoadSubscriptionData']);
+    expect(statCardValue(html, SOURCE_MESSAGES['adminSubscriptions.activeSubscriptions'])).toBe((CEILING + 1).toLocaleString());
+    expect(html).toContain('<span class="font-medium">Newest family 0</span>');
+    expect(html).not.toContain('id="growthFill"');
+    expect(html).toContain(`<p class="text-sm text-muted">${SOURCE_MESSAGES['strategyMetrics.unavailable']}</p>`);
+    const banner = html.slice(at(html, notShownTitle()));
+    expect(banner.slice(0, banner.indexOf('</ul>'))).toContain(`<li>${SOURCE_MESSAGES['adminSubscriptions.subscriptionsOverTime']}</li>`);
+  });
+
+  it('a subscription read that FAILS is still the read-error state on Plans, and costs Billing nothing', async () => {
+    seedPastTheSubscriptionCeiling();
+    h.invoices = [invoice];
+    h.db = withFaults(db, (table) => (table === 'subscriptions' ? { message: 'subscriptions unavailable' } : null));
+    const plans = await render();
+    expect(plans).toContain(SOURCE_MESSAGES['subscriptions.couldNotLoadSubscriptionData']);
+    expect(plans).not.toContain('New family');
+    const billing = await render('billing');
+    expect(billing).not.toContain(SOURCE_MESSAGES['subscriptions.couldNotLoadSubscriptionData']);
+    expect(billing).toContain('INV-NEWEST');
+  });
+
+  it('the control: under the ceiling the All tab lists every subscription and Plans says nothing is missing', async () => {
+    seedPlatform();
+    const all = await render('all');
+    expect(all).not.toContain(SOURCE_MESSAGES['subscriptions.couldNotLoadSubscriptionData']);
+    expect(all).toContain(`(${ACTIVE + CANCELED})`);
+    expect(await render()).not.toContain(notShownTitle());
   });
 });

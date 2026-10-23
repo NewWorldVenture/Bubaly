@@ -129,6 +129,7 @@ export default async function AdminReportsPage() {
   const subscriptions = subscriptionsResult.data;
   const docs = docsResult.data;
   const activity = activityResult.data;
+  const reachedCeiling = (res: object) => 'truncated' in res && res.truncated === true;
   const readFailures = ([
     ['family count', familyCountResult],
     ['user count', userCountResult],
@@ -141,7 +142,19 @@ export default async function AdminReportsPage() {
     ['activity', activityResult],
   ] as const)
     .filter(([, res]) => res.error)
+    // A read past its ceiling did not fail: what it feeds says it is not shown
+    // (each tile and chart answers from its own read, below) and the ceiling
+    // banner names it. Any other failure is still named here.
+    .filter(([, res]) => !reachedCeiling(res))
     .map(([label, res]) => `${label}: ${describeReadError(res.error)}`);
+  const figuresNotShown = [
+    ...(reachedCeiling(familiesResult) ? [tr('adminReports.newFamilies')] : []),
+    ...(reachedCeiling(profilesResult) ? [tr('adminReports.newUsers')] : []),
+    ...(reachedCeiling(subscriptionsResult) ? [tr('adminReports.monthlyRevenue'), tr('adminReports.newMrr'), tr('adminReports.subscriptionsByPlan')] : []),
+    ...(reachedCeiling(docsResult) ? [tr('adminReports.storageUsed')] : []),
+    ...(reachedCeiling(activityResult) ? [tr('adminReports.activityVolume')] : []),
+  ];
+  if (figuresNotShown.length > 0) console.warn('[admin-reports] a summed read reached its ceiling; not shown:', figuresNotShown.join(', '));
   const readError = readFailures.length > 0;
   if (readError) {
     // Degraded, not fatal: every consumer below defaults an absent read to an
@@ -206,6 +219,7 @@ export default async function AdminReportsPage() {
   return (
     <div className="module-page space-y-5">
       <PartialReadBanner title={"This report is incomplete — some reads failed:"} failures={readFailures} hint={credentialHint(readFailures, describeConfiguredServiceKey())} />
+      <PartialReadBanner title={tr('adminCeiling.figuresNotShown', { n: ROW_CEILING.toLocaleString() })} failures={figuresNotShown} />
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('adminReports.reportsAmpAnalytics')}</h1>
         <p className="mt-1 text-sm text-muted">{tr('adminReports.growthRevenueAndEngagementAcrossEvery')}</p>
@@ -226,19 +240,22 @@ export default async function AdminReportsPage() {
       <StrategyMetricTiles metrics={strategyMetrics} />
 
       <div className="grid gap-4 lg:grid-cols-3">
+        {/* A chart answers from its own read, as each tile does: a read that
+            failed, or reached its ceiling, says so rather than drawing zeros
+            beside the banner that names it. */}
         <Card>
           <h2 className="mb-3 text-base font-semibold">{tr('adminReports.newFamilies')}</h2>
-          <Bars data={familyGrowth} max={maxFamily} />
+          {familiesResult.error ? <p className="text-sm text-muted">{unavailable}</p> : <Bars data={familyGrowth} max={maxFamily} />}
           <p className="mt-2 text-xs text-muted">{tr('adminReports.last6Months')}</p>
         </Card>
         <Card>
           <h2 className="mb-3 text-base font-semibold">{tr('adminReports.newUsers')}</h2>
-          <Bars data={userGrowth} max={maxUser} />
+          {profilesResult.error ? <p className="text-sm text-muted">{unavailable}</p> : <Bars data={userGrowth} max={maxUser} />}
           <p className="mt-2 text-xs text-muted">{tr('adminReports.last6Months')}</p>
         </Card>
         <Card>
           <h2 className="mb-3 text-base font-semibold">{tr('adminReports.newMrr')}</h2>
-          <Bars data={revenueTrend} max={maxRevenue} money />
+          {subscriptionsResult.error ? <p className="text-sm text-muted">{unavailable}</p> : <Bars data={revenueTrend} max={maxRevenue} money />}
           <p className="mt-2 text-xs text-muted">{tr('adminReports.revenueAddedLast6Months')}</p>
         </Card>
       </div>
@@ -246,7 +263,9 @@ export default async function AdminReportsPage() {
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>
           <h2 className="mb-3 text-base font-semibold">{tr('adminReports.subscriptionsByPlan')}</h2>
-          {subSegments.length === 0 ? (
+          {subscriptionsResult.error ? (
+            <p className="text-sm text-muted">{unavailable}</p>
+          ) : subSegments.length === 0 ? (
             <EmptyState icon={CreditCard} title={tr('adminReports.noActiveSubscriptions')} />
           ) : (
             <div className="flex items-center gap-4">
@@ -265,7 +284,7 @@ export default async function AdminReportsPage() {
         </Card>
         <Card className="lg:col-span-2">
           <h2 className="mb-3 text-base font-semibold">{tr('adminReports.activityVolume')}</h2>
-          <Bars data={activityByDay} max={maxActivity} />
+          {activityResult.error ? <p className="text-sm text-muted">{unavailable}</p> : <Bars data={activityByDay} max={maxActivity} />}
           <p className="mt-2 text-xs text-muted">{tr('adminReports.auditedActionsPerDayLast14')}</p>
         </Card>
       </div>

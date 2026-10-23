@@ -351,6 +351,46 @@ describe('/admin/marketing/surveys: every response is scored', () => {
     expect(html).toContain(SOURCE_MESSAGES['adminMarketingSurveys.createSurvey']);
   });
 
+  // One survey answered past the ceiling cost the scores of the up to 99 other
+  // surveys read in its batch, and the banner named them all as if each were
+  // past it (review R5-CEILING-POLISH). The batch is read again a survey at a
+  // time; and two surveys of one name are one line of the banner.
+  it('a survey answered past the ceiling costs its own score, not its batch\'s; a name is named once', async () => {
+    db.seed('surveys', Array.from({ length: 100 }, (_, i) => ({
+      id: `srv-${pad(i)}`, name: i < 2 ? 'Legacy' : `Survey ${i}`, type: 'nps', status: 'active', slug: `survey-${i}`, question: 'Recommend us?',
+      scale_min: 0, scale_max: 10, deleted_at: null, created_at: new Date(Date.UTC(2026, 8, 2) + i * 60_000).toISOString(),
+    })));
+    db.seed('survey_responses', [
+      ...Array.from({ length: 100 }, (_, i) => ({ id: `resp-${pad(i)}`, survey_id: `srv-${pad(i)}`, score: 10, comment: null, respondent_email: null, submitted_at: minutesAgo(i) })),
+      // The two surveys named Legacy are each answered past the ceiling.
+      ...[0, 1].flatMap((s) => Array.from({ length: CEILING + 1 }, (_, i) => ({
+        id: `resp-l${s}-${pad(i)}`, survey_id: `srv-${pad(s)}`, score: 0, comment: null, respondent_email: null, submitted_at: minutesAgo(i),
+      }))),
+    ]);
+    const { default: SurveysPage } = await import('@/app/(app)/admin/marketing/surveys/page');
+    const html = await renderServerPage(await SurveysPage());
+    const text = textOf(html);
+    expect(html).not.toContain(SOURCE_MESSAGES['surveys.couldNotLoadSurveyData']);
+    expect(ceilingBanner(html)).toEqual(['Legacy']);
+    expect(text.split(`Legacy NPS active ${UNAVAILABLE} NPS`)).toHaveLength(3);
+    // The 98 other surveys in the batch are scored.
+    for (const i of [2, 50, 99]) expect(text).toContain(`Survey ${i} NPS · 1 response active 100 NPS · 100% promoters · 0% detractors`);
+  });
+
+  it('a survey read that FAILS on the retry is still the read-error state', async () => {
+    db.seed('surveys', Array.from({ length: 2 }, (_, i) => ({
+      id: `srv-${pad(i)}`, name: `Survey ${i}`, type: 'nps', status: 'active', slug: `survey-${i}`, question: 'Recommend us?',
+      scale_min: 0, scale_max: 10, deleted_at: null, created_at: new Date(Date.UTC(2026, 8, 2) + i * 60_000).toISOString(),
+    })));
+    db.seed('survey_responses', Array.from({ length: CEILING + 1 }, (_, i) => ({ id: `resp-${pad(i)}`, survey_id: 'srv-000000', score: 0, comment: null, respondent_email: null, submitted_at: minutesAgo(i) })));
+    // The batch read answers; a single survey's read does not.
+    h.db = withFaults(db, (table, calls) => (table === 'survey_responses'
+      && calls.some((c) => c.method === 'in' && (c.args[1] as unknown[]).length === 1 && (c.args[1] as unknown[])[0] === 'srv-000001')
+      ? { message: 'responses unavailable' } : null));
+    const { default: SurveysPage } = await import('@/app/(app)/admin/marketing/surveys/page');
+    expect(await renderServerPage(await SurveysPage())).toContain(SOURCE_MESSAGES['surveys.couldNotLoadSurveyData']);
+  });
+
   it('the survey page scores every response, not its newest thousand', async () => {
     db.seed('surveys', [{ id: 'srv-a', name: 'Onboarding', type: 'nps', status: 'active', slug: 'onboarding', question: 'Recommend us?', scale_min: 0, scale_max: 10, deleted_at: null }]);
     // The 300 OLDEST responses are the detractors.

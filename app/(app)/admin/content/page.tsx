@@ -11,6 +11,7 @@ import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/filter-bar';
 import { DocumentRowActions } from '@/components/admin/document-row-actions';
 import { fmtDate } from '@/lib/utils/format';
+import { isUuid } from '@/lib/utils/validation';
 import { getTranslations } from '@/lib/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -59,7 +60,12 @@ export default async function AdminContentPage({ searchParams }: Params) {
 
   const q = (sp.q ?? '').trim().toLowerCase();
   const categoryFilter = sp.category ?? '';
-  const familyFilter = sp.family ?? '';
+  // A family id is a uuid. Anything else, from a hand-edited link, names no
+  // family and is no filter: handed to the server it made PostgREST refuse the
+  // list and the label read (22P02) and the page was its read-error state,
+  // where the in-memory filter it replaced showed the list (review
+  // R5-CONTENT-NON-UUID-FAMILY-PARAM).
+  const familyFilter = sp.family && isUuid(sp.family) ? sp.family : '';
   const since7 = new Date(Date.now() - 7 * 86400000);
 
   // This page used to read `documents.select('*')` once, unbounded, and compute
@@ -72,8 +78,8 @@ export default async function AdminContentPage({ searchParams }: Params) {
   //
   //   - the two tiles that are counts are `head: true` counts — exact, uncapped;
   //   - what is SUMMED (bytes, per-category counts) pages to a real ceiling,
-  //     and reaching it is an error that lands in the read-error state below
-  //     rather than a smaller platform. It pages on the id (readAllByIdAsQuery),
+  //     and reaching it costs those figures, which say they are not shown
+  //     (below), rather than a smaller platform. It pages on the id (readAllByIdAsQuery),
   //     not on offsets: families upload while this reads, and a document filed
   //     ahead of the next offset pushed one already read onto the next page,
   //     so its bytes were added twice;

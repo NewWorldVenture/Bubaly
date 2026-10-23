@@ -7,6 +7,7 @@ import { readInChunks } from '@/lib/supabase/chunked-in';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { ROLE_LABEL_KEYS, ROLE_ORDER, roleLabel, type MemberRole } from '@/lib/constants/roles';
 import { PLANS } from '@/lib/constants/plans';
 import { fmtDate } from '@/lib/utils/format';
@@ -29,6 +30,8 @@ export const dynamic = 'force-dynamic';
 const PAGE_SIZE = 10;
 /** Rows a paged read may go through before it is reported as a prefix (one round trip per 1,000). */
 const ROW_CEILING = 25_000;
+/** The All tab's rail shows this many of the newest invites. */
+const RECENT_INVITES = 5;
 const TABS = [
   { key: 'all', label: 'All Users' },
   { key: 'families', label: 'Families' },
@@ -99,35 +102,55 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   //     was listed and counted twice;
   //   - profiles are joined by the members' user ids rather than read whole.
   //
+  // Each tab reads what it lists, and a ceiling costs only what needs those
+  // rows (review R5-SIB-USERS-FAMILIES-LABEL-CEILING). Every family, every
+  // subscription and every invite used to be read on every tab, each paged to
+  // the ceiling with reaching it an error, so past 25,000 families the Add-user
+  // family picker was empty and every member's Family column, the search by
+  // family name and the invitations' families were lost; past 25,000
+  // subscriptions every member read Free; past 25,000 invites the All tab said
+  // "No invites yet"; past 25,000 members every tab was the read-error state:
+  //   - members (All, Families): the All tab's listed rows, so past the ceiling
+  //     that list is its own error state, and the Families tab's member counts
+  //     say they are not shown; the tiles, the donut and the other tabs stay;
+  //   - families: the Families tab's listed rows and the picker's options, read
+  //     once to the ceiling as a prefix (failOnMax: false). Past it the picker
+  //     offers the first families by id and says so, and the Families tab is
+  //     its own error state;
+  //   - a listed member's or invite's family, and each listed family's plan,
+  //     are read by the ids the tab names (readInChunks), not from a sweep;
+  //   - invites: the All tab's rail is the five newest; the Invitations tab
+  //     lists every invite, so its ceiling is that tab's own error state.
+  //
   // The counts and the paged reads settle in two batches so each keeps its own
   // tuple type. "This month" starts in the admin zone, not the host's
   // (lib/admin/clock.ts).
   const monthStart = new Date(utcMonthStartIso());
+  const listsMembers = tab === 'all' || tab === 'families';
+  const notRead = Promise.resolve({ data: null, count: null, error: null, truncated: false } as const);
   const [
-    [membersRes, familiesRes, subscriptionsRes, invitesRes, rolesRes, permissionsRes, superAdminsRes, memberCountRes, withAccountCountRes, newThisMonthCountRes],
+    [membersRes, familiesRes, invitesRes, recentInvitesRes, rolesRes, permissionsRes, superAdminsRes, memberCountRes, withAccountCountRes, newThisMonthCountRes],
     roleCountResults,
   ] = await Promise.all([
     settleAll([
-      readAllByIdAsQuery((after, limit) => {
+      listsMembers ? readAllByIdAsQuery((after, limit) => {
         let query = supabase.from('family_members').select('*').eq('is_active', true);
         if (after) query = query.gt('id', after);
         return query.order('id').limit(limit);
-      }, { max: ROW_CEILING }),
+      }, { max: ROW_CEILING }) : notRead,
       readAllByIdAsQuery((after, limit) => {
         let query = supabase.from('families').select('*');
         if (after) query = query.gt('id', after);
         return query.order('id').limit(limit);
-      }, { max: ROW_CEILING }),
-      readAllByIdAsQuery((after, limit) => {
-        let query = supabase.from('subscriptions').select('id, family_id, plan, status');
-        if (after) query = query.gt('id', after);
-        return query.order('id').limit(limit);
-      }, { max: ROW_CEILING }),
-      readAllByIdAsQuery((after, limit) => {
+      }, { max: ROW_CEILING, failOnMax: false }),
+      tab === 'invitations' ? readAllByIdAsQuery((after, limit) => {
         let query = supabase.from('invites').select('*');
         if (after) query = query.gt('id', after);
         return query.order('id').limit(limit);
-      }, { max: ROW_CEILING }),
+      }, { max: ROW_CEILING }) : notRead,
+      tab === 'all'
+        ? supabase.from('invites').select('*').order('created_at', { ascending: false }).order('id', { ascending: false }).limit(RECENT_INVITES)
+        : notRead,
       supabase.from('roles').select('*'),
       supabase.from('permissions').select('*'),
       supabase.from('super_admins').select('email'),
@@ -138,14 +161,30 @@ export default async function AdminUsersPage({ searchParams }: Params) {
     settleAll(ROLE_ORDER.map((role) =>
       supabase.from('family_members').select('id', { count: 'exact', head: true }).eq('is_active', true).eq('role', role))),
   ]);
-  const userIds = [...new Set((membersRes.data ?? []).map((m) => m.user_id).filter((id): id is string => !!id))];
-  const profilesRes = await readInChunks(userIds, (chunk) => supabase.from('profiles').select('*').in('id', chunk));
+  const membersCeiling = 'truncated' in membersRes && membersRes.truncated;
+  const familiesCeiling = 'truncated' in familiesRes && familiesRes.truncated;
+  if (membersCeiling) console.warn('[admin-users] the member read reached its ceiling; the member list and the member counts are not shown');
+  if (familiesCeiling) console.warn('[admin-users] the family read reached its ceiling; the picker offers the first families only');
+  const memberRows = membersRes.data ?? [];
+  const inviteRows = (tab === 'all' ? recentInvitesRes.data : invitesRes.data) ?? [];
+  // The families each listed row names, and the plan of each listed family.
+  const labelledFamilyIds = [...new Set([...memberRows.map((m) => m.family_id), ...inviteRows.map((inv) => inv.family_id)])];
+  const planFamilyIds = tab === 'all' ? [...new Set(memberRows.map((m) => m.family_id))]
+    : tab === 'families' && !familiesCeiling ? (familiesRes.data ?? []).map((f) => f.id)
+    : [];
+  const userIds = [...new Set(memberRows.map((m) => m.user_id).filter((id): id is string => !!id))];
+  const [profilesRes, familyLabelsRes, subscriptionsRes] = await Promise.all([
+    readInChunks(userIds, (chunk) => supabase.from('profiles').select('*').in('id', chunk)),
+    readInChunks(labelledFamilyIds, (chunk) => supabase.from('families').select('*').in('id', chunk)),
+    readInChunks(planFamilyIds, (chunk) =>
+      supabase.from('subscriptions').select('id, family_id, plan, status').in('family_id', chunk).order('id')),
+  ]);
 
   // Any query that errored (bad/missing key, unapplied migration, RLS) is reported
   // explicitly rather than silently collapsing to an empty result set.
   for (const [label, res] of [
-    ['profiles', profilesRes], ['family_members', membersRes], ['families', familiesRes],
-    ['subscriptions', subscriptionsRes], ['invites', invitesRes], ['roles', rolesRes], ['permissions', permissionsRes],
+    ['profiles', profilesRes], ['family_members', membersRes], ['families', familiesRes], ['families (names)', familyLabelsRes],
+    ['subscriptions', subscriptionsRes], ['invites', invitesRes], ['invites (recent)', recentInvitesRes], ['roles', rolesRes], ['permissions', permissionsRes],
     ['super_admins', superAdminsRes],
     ['family_members (count)', memberCountRes], ['family_members with an account (count)', withAccountCountRes],
     ['family_members new this month (count)', newThisMonthCountRes],
@@ -167,9 +206,15 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   // currently reporting CONNECT_TIMEOUT, which makes any one of the eight fail
   // intermittently. One flaky read should not cost an administrator the user
   // list.
-  if (membersRes.error) {
+  // Past its ceiling the member read costs the member list and the member
+  // counts (below), not the page; a member read that fails is still the
+  // read-error state.
+  if (membersRes.error && !membersCeiling) {
     console.error('[admin-users] users read failed', loadErrors.join('; '));
     return <AdminUsersReadError />;
+  }
+  if (familiesCeiling && tab === 'families') {
+    loadErrors.push(`Could not list “families”: there are more than ${ROW_CEILING.toLocaleString()}, and the Families tab lists none rather than part of them.`);
   }
   if (loadErrors.length > 0) {
     console.warn('[admin-users] partial read — rendering degraded', loadErrors.join('; '));
@@ -178,15 +223,16 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   const profiles = profilesRes.data;
   // Members oldest first and invites newest first, as the page has always listed
   // them; the paged reads were ordered by id.
-  const members = [...(membersRes.data ?? [])].sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
+  const members = [...memberRows].sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
+  // The Families tab's rows and the picker's options: the first families by id past the ceiling.
   const families = familiesRes.data;
-  const subscriptions = subscriptionsRes.data;
-  const invites = [...(invitesRes.data ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
+  const invites = [...inviteRows].sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
   const roles = rolesRes.data;
   const permissions = permissionsRes.data;
 
-  const familyById = new Map((families ?? []).map((f) => [f.id, f]));
-  const subByFamily = new Map((subscriptions ?? []).map((s) => [s.family_id, s]));
+  const familyById = new Map(familyLabelsRes.data.map((f) => [f.id, f]));
+  // In id order the last subscription a family has wins, as it did when every subscription was read by id.
+  const subByFamily = new Map([...subscriptionsRes.data].sort((a, b) => a.id.localeCompare(b.id)).map((s) => [s.family_id, s]));
   const profileByUserId = new Map(profiles.map((p) => [p.id, p]));
   // Site super-admins: the DB-backed `super_admins` table (toggleable here) plus
   // the immutable code/env allowlist (shown locked).
@@ -285,6 +331,14 @@ export default async function AdminUsersPage({ searchParams }: Params) {
           </div>
         </div>
       )}
+      <PartialReadBanner
+        title={tr('adminCeiling.offeredInPart', { n: ROW_CEILING.toLocaleString() })}
+        failures={familiesCeiling ? [tr('adminUsers.addUserFamilyPicker')] : []}
+      />
+      <PartialReadBanner
+        title={tr('adminCeiling.figuresNotShown', { n: ROW_CEILING.toLocaleString() })}
+        failures={membersCeiling && tab === 'families' ? [tr('adminUsers.members')] : []}
+      />
 
       <div className="tab-bar border-b border-border pb-px">
         {TABS.map((t) => (
@@ -323,7 +377,12 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                 ]} />
               </FilterForm>
 
-              {pageRows.length === 0 ? (
+              {membersCeiling ? (
+                // Past the ceiling the list is its own read-error state, not a
+                // prefix: it is searched, filtered and paged in memory, and the
+                // first members by id are no useful part of it.
+                <div className="mt-4"><ErrorState message={tr('users.couldNotLoadUsersAnd')} /></div>
+              ) : pageRows.length === 0 ? (
                 totalUsers === 0 && loadErrors.length === 0 ? (
                   <EmptyState
                     icon={UsersRound}
@@ -381,7 +440,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                 </div>
               )}
 
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
+              {!membersCeiling && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
                 <span>{tr('adminUsers.showing')} {pageRows.length === 0 ? 0 : (pageSafe - 1) * PAGE_SIZE + 1} to {(pageSafe - 1) * PAGE_SIZE + pageRows.length} of {filtered.length} members</span>
                 <div className="flex gap-1">
                   {Array.from({ length: totalPages }, (_, i) => i + 1).slice(0, 7).map((p) => (
@@ -391,7 +450,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                     </a>
                   ))}
                 </div>
-              </div>
+              </div>}
             </Card>
           </div>
 
@@ -406,7 +465,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                 <p className="text-sm text-muted">{tr('adminUsers.noInvitesYet')}</p>
               ) : (
                 <ul className="space-y-2.5">
-                  {invites.slice(0, 5).map((inv) => (
+                  {invites.slice(0, RECENT_INVITES).map((inv) => (
                     <li key={inv.id} className="text-sm">
                       <p className="truncate font-medium">{inv.email}</p>
                       <p className="text-xs text-muted">
@@ -424,8 +483,10 @@ export default async function AdminUsersPage({ searchParams }: Params) {
 
       {tab === 'families' && (
         <Card>
-          <h2 className="mb-4 text-base font-semibold">{tr('adminUsers.allFamilies')} <span className="text-muted">({families?.length ?? 0})</span></h2>
-          {!families || families.length === 0 ? (
+          <h2 className="mb-4 text-base font-semibold">{tr('adminUsers.allFamilies')} {!familiesCeiling && <span className="text-muted">({families?.length ?? 0})</span>}</h2>
+          {familiesCeiling ? (
+            <ErrorState message={tr('users.couldNotLoadUsersAnd')} />
+          ) : !families || families.length === 0 ? (
             <EmptyState icon={UsersRound} title={tr('adminUsers.noFamiliesYet')} />
           ) : (
             <div className="table-responsive">
@@ -445,7 +506,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                     return (
                       <tr key={f.id}>
                         <td className="px-3 py-2.5 font-medium">{f.name}</td>
-                        <td className="px-3 py-2.5 text-muted">{memberCountByFamily.get(f.id) ?? 0}</td>
+                        <td className="px-3 py-2.5 text-muted">{membersCeiling ? tr('strategyMetrics.unavailable') : memberCountByFamily.get(f.id) ?? 0}</td>
                         <td className="px-3 py-2.5"><SetPlanControl familyId={f.id} familyName={f.name} currentPlan={sub?.plan ?? 'free'} /></td>
                         <td className="px-3 py-2.5">{sub ? <Badge tone={sub.status === 'active' ? 'success' : 'neutral'}>{sub.status}</Badge> : '—'}</td>
                         <td className="px-3 py-2.5 text-muted">{fmtDate(f.created_at, 'MMM d, yyyy')}</td>
@@ -461,8 +522,11 @@ export default async function AdminUsersPage({ searchParams }: Params) {
 
       {tab === 'invitations' && (
         <Card>
-          <h2 className="mb-4 text-base font-semibold">{tr('adminUsers.allInvitations')} <span className="text-muted">({invites?.length ?? 0})</span></h2>
-          {!invites || invites.length === 0 ? (
+          <h2 className="mb-4 text-base font-semibold">{tr('adminUsers.allInvitations')} {!invitesRes.error && <span className="text-muted">({invites?.length ?? 0})</span>}</h2>
+          {invitesRes.error ? (
+            // Every invite or none: past the ceiling, or failed, this tab is its own read-error state.
+            <ErrorState message={tr('users.couldNotLoadUsersAnd')} />
+          ) : !invites || invites.length === 0 ? (
             <EmptyState icon={UserPlus} title={tr('adminUsers.noInvitationsSentYet')} />
           ) : (
             <div className="table-responsive">

@@ -5,10 +5,14 @@ import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Admin · Data & Storage', robots: { index: false } };
 export const dynamic = 'force-dynamic';
+
+/** Documents the storage figure may page through before it is reported as not shown (one round trip per 1,000). */
+const SUM_ROW_CEILING = 25_000;
 
 const TABLES: { table: string; label: string }[] = [
   { table: 'families', label: 'Families' },
@@ -52,12 +56,17 @@ export default async function AdminDataPage() {
   // renders rather than showing a number it cannot stand behind. It pages on
   // the id, not on offsets: an upload landing between two pages shifted every
   // later offset by one, and one document's bytes were added twice.
-  const { data: docs, error: docsError } = await readAllByIdAsQuery<{ id: string; size_bytes: number | null }>((after, limit) => {
+  //
+  // Reaching that ceiling costs the storage figure, not the page: it says it
+  // is not shown and the ceiling banner names it, while the table counts —
+  // exact, and the rest of what this page is for — stay. Stored documents is
+  // the documents table's own count. Any failure is still the read-error state.
+  const { data: docs, error: docsError, truncated: storageCeiling } = await readAllByIdAsQuery<{ id: string; size_bytes: number | null }>((after, limit) => {
     let query = supabase.from('documents').select('id, size_bytes');
     if (after) query = query.gt('id', after);
     return query.order('id').limit(limit);
-  }, { max: 25_000 });
-  const readError = counts.find((c) => c.error)?.error ?? docsError;
+  }, { max: SUM_ROW_CEILING });
+  const readError = counts.find((c) => c.error)?.error ?? (storageCeiling ? null : docsError);
   if (readError) {
     console.error('[admin-backup] data read failed', readError);
     return (
@@ -71,11 +80,17 @@ export default async function AdminDataPage() {
       </div>
     );
   }
+  if (storageCeiling) console.warn('[admin-backup] the storage read reached its ceiling; storage is not shown');
   const usedBytes = (docs ?? []).reduce((sum, d) => sum + (d.size_bytes ?? 0), 0);
   const totalRows = counts.reduce((sum, c) => sum + c.count, 0);
+  const storedDocuments = counts.find((c) => c.table === 'documents')?.count ?? 0;
 
   return (
     <div className="space-y-5">
+      <PartialReadBanner
+        title={tr('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
+        failures={storageCeiling ? [tr('adminBackup.documentStorageUsed')] : []}
+      />
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('adminBackup.dataAmpStorage')}</h1>
         <p className="mt-1 text-sm text-muted">{tr('adminBackup.liveRowCountsAndDocumentStorage')}</p>
@@ -88,11 +103,11 @@ export default async function AdminDataPage() {
         </Card>
         <Card className="flex flex-col gap-3">
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400"><HardDrive className="h-5 w-5" /></div>
-          <div><p className="text-xl font-bold leading-none">{fmtBytes(usedBytes)}</p><p className="mt-1 text-xs text-muted">{tr('adminBackup.documentStorageUsed')}</p></div>
+          <div><p className="text-xl font-bold leading-none">{storageCeiling ? tr('strategyMetrics.unavailable') : fmtBytes(usedBytes)}</p><p className="mt-1 text-xs text-muted">{tr('adminBackup.documentStorageUsed')}</p></div>
         </Card>
         <Card className="flex flex-col gap-3">
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400"><Shield className="h-5 w-5" /></div>
-          <div><p className="text-xl font-bold leading-none">{(docs ?? []).length.toLocaleString()}</p><p className="mt-1 text-xs text-muted">{tr('adminBackup.storedDocuments')}</p></div>
+          <div><p className="text-xl font-bold leading-none">{storedDocuments.toLocaleString()}</p><p className="mt-1 text-xs text-muted">{tr('adminBackup.storedDocuments')}</p></div>
         </Card>
       </div>
 

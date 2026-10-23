@@ -3,7 +3,7 @@ import { SOURCE_MESSAGES } from '@/lib/i18n/messages';
 import { translate } from '@/lib/i18n/translate';
 import { PLUS_MONTHLY_CENTS } from '@/lib/constants/plans';
 import { fmtMoney } from '@/lib/utils/format';
-import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
+import { createInMemorySupabase, withFaults, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { renderServerPage, statCardValue } from './helpers/render-server-page';
 
 // /admin/system paged `profiles` through readAllAsQuery and, in the same batch,
@@ -88,5 +88,46 @@ describe('/admin/system sums revenue and storage over every row', () => {
     expect(html).not.toContain('977 KB');
     // And it is the real number, not a degraded render that happened to add up.
     expect(html).not.toContain('System overview is incomplete');
+  });
+});
+
+// Past its 25,000-row ceiling a summed read rendered $0 and 0 B beside the
+// failure banner, numbers the page could not stand behind; the ceiling now
+// costs that figure, which says it is not shown and is named in the ceiling
+// banner (the class of every summed admin read, coverage round 6). A read
+// that fails is still named in the failure banner.
+describe('/admin/system past its ceilings', () => {
+  const CEILING = 25_000;
+  const unavailable = SOURCE_MESSAGES['strategyMetrics.unavailable'];
+  const ceilingBanner = (html: string): string[] | null => {
+    const title = translate(SOURCE_MESSAGES, 'adminCeiling.figuresNotShown', { n: CEILING.toLocaleString() });
+    const start = html.indexOf(`<p class="text-sm font-semibold text-danger">${title}</p>`);
+    if (start < 0) return null;
+    return [...html.slice(start, html.indexOf('</ul>', start)).matchAll(/<li>([^<]*)<\/li>/g)].map((m) => m[1]);
+  };
+
+  it('revenue, storage and the growth chart past their ceilings say they are not shown; the counts stay', async () => {
+    seedPlatform();
+    db.seed('subscriptions', Array.from({ length: CEILING }, (_, i) => ({ id: `sub-x-${pad(i)}`, family_id: 'fam-000000', plan: 'plus', status: 'active' })));
+    db.seed('documents', Array.from({ length: CEILING }, (_, i) => ({ id: `doc-x-${pad(i)}`, family_id: 'fam-000000', size_bytes: 1_000 })));
+    db.seed('profiles', Array.from({ length: CEILING + 1 }, (_, i) => ({ id: `usr-x-${pad(i)}`, created_at: '2026-10-15T00:00:00Z' })));
+    const html = await render();
+    expect(statCardValue(html, SOURCE_MESSAGES['adminSystem.monthlyRevenue'])).toBe(unavailable);
+    expect(html).toContain(`>${unavailable}</p><p class="text-xs text-muted">${SOURCE_MESSAGES['adminSystem.documentStorageUsedAcrossEveryFamily']}`);
+    expect(html).not.toContain('<path d="M 0');
+    expect(ceilingBanner(html)).toEqual([
+      SOURCE_MESSAGES['adminSystem.monthlyRevenue'], SOURCE_MESSAGES['adminSystem.documentStorageUsedAcrossEveryFamily'], SOURCE_MESSAGES['adminSystem.userGrowth'],
+    ]);
+    expect(html).not.toContain('System overview is incomplete');
+    expect(statCardValue(html, SOURCE_MESSAGES['adminSystem.totalUsers'])).toBe((CEILING + 4).toLocaleString());
+  });
+
+  it('a summed read that FAILS is still named in the failure banner', async () => {
+    seedPlatform();
+    h.db = withFaults(db, (table) => (table === 'documents' ? { message: 'documents unavailable' } : null));
+    const html = await render();
+    expect(html).toContain('System overview is incomplete');
+    expect(html).toContain('documents: documents unavailable');
+    expect(ceilingBanner(html)).toBeNull();
   });
 });

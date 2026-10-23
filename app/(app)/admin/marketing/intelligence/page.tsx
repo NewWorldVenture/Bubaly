@@ -9,12 +9,18 @@ import {
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
   return { title: t('intelligence.customerIntelligence'), robots: { index: false } };
 }
 export const dynamic = 'force-dynamic';
+
+/** Sessions the channel tally may page through before it is reported as not shown. */
+const SESSION_ROW_CEILING = 5000;
+/** Touchpoints the attribution may page through before it is reported as not shown. */
+const TOUCHPOINT_ROW_CEILING = 10000;
 
 async function ReadFailure() {
   const t = await getTranslations();
@@ -40,27 +46,41 @@ export default async function IntelligencePage() {
       // tables take a row on every public visit (/api/mkt/track) WHILE this
       // reads, so they page on the id: on offsets, a visit landing between two
       // pages pushed a row onto the next one and it was counted twice.
+      //
+      // A read past its ceiling costs what is computed from it, which says it
+      // is not shown and is named in the banner: the channels from the
+      // sessions; Conversions, Touchpoints and the attribution from the
+      // touchpoints. The exact visitor and session counts stay. Both tables
+      // take a row on every public visit, so their ceilings are reached in the
+      // ordinary course, and reaching one used to cost the whole page. Each
+      // keeps its prefix (failOnMax: false) only so a ceiling is told from a
+      // failure: a cut-short read is never counted below. Any failure is still
+      // the read-error state.
       readAllByIdAsQuery((after, limit) => {
         let query = supabase.from('mkt_sessions').select('id, source');
         if (after) query = query.gt('id', after);
         return query.order('id').limit(limit);
-      }, { max: 5000 }),
+      }, { max: SESSION_ROW_CEILING, failOnMax: false }),
       readAllByIdAsQuery((after, limit) => {
         let query = supabase.from('mkt_touchpoints').select('id, visitor_id, source, kind, occurred_at');
         if (after) query = query.gt('id', after);
         return query.order('id').limit(limit);
-      }, { max: 10000 }),
+      }, { max: TOUCHPOINT_ROW_CEILING, failOnMax: false }),
     ]);
   } catch {
     return <ReadFailure />;
   }
   const [visitorsResult, sessionCountResult, sessionsResult, touchpointsResult] = results;
   if (results.some((result) => result.error)) return <ReadFailure />;
+  const sessionsCeiling = 'truncated' in sessionsResult && sessionsResult.truncated;
+  const touchpointsCeiling = 'truncated' in touchpointsResult && touchpointsResult.truncated;
+  if (sessionsCeiling || touchpointsCeiling) console.warn('[admin-marketing-intelligence] a paged read reached its ceiling; its figures are not shown');
 
   const visitorCount = visitorsResult.count ?? 0;
   const sessionCount = sessionCountResult.count ?? 0;
   const sessions = sessionsResult.data ?? [];
   const touchpoints = touchpointsResult.data ?? [];
+  const unavailable = t('strategyMetrics.unavailable');
 
   const tps = touchpoints as Touchpoint[];
   const conversions = conversionCount(tps);
@@ -80,14 +100,18 @@ export default async function IntelligencePage() {
   const stats = [
     { label: 'Visitors', value: visitorCount, icon: Users, tint: 'text-violet-400 bg-violet-500/15' },
     { label: 'Sessions', value: sessionCount, icon: MousePointerClick, tint: 'text-blue-400 bg-blue-500/15' },
-    { label: 'Conversions', value: conversions, icon: Target, tint: 'text-emerald-400 bg-emerald-500/15' },
-    { label: 'Touchpoints', value: tps.length, icon: Radar, tint: 'text-amber-400 bg-amber-500/15' },
+    { label: 'Conversions', value: touchpointsCeiling ? unavailable : conversions, icon: Target, tint: 'text-emerald-400 bg-emerald-500/15' },
+    { label: 'Touchpoints', value: touchpointsCeiling ? unavailable : tps.length, icon: Radar, tint: 'text-amber-400 bg-amber-500/15' },
   ];
+  const sessionsNotShown = sessionsCeiling ? [t('adminMarketingIntelligence.topAcquisitionChannels')] : [];
+  const touchpointsNotShown = touchpointsCeiling ? [stats[2].label, stats[3].label, t('adminMarketingIntelligence.attributionByModel')] : [];
 
   const maxSource = Math.max(1, ...topSources.map((s) => s.count));
 
   return (
     <div className="space-y-5">
+      <PartialReadBanner title={t('adminCeiling.figuresNotShown', { n: SESSION_ROW_CEILING.toLocaleString() })} failures={sessionsNotShown} />
+      <PartialReadBanner title={t('adminCeiling.figuresNotShown', { n: TOUCHPOINT_ROW_CEILING.toLocaleString() })} failures={touchpointsNotShown} />
       <p className="text-sm text-muted">
         {t('adminMarketingIntelligence.customerIntelligenceVisitorTrackingACdp')}
         <code className="mx-1 rounded bg-elevated px-1 py-0.5 text-xs">{t('adminMarketingIntelligence.postApiMktTrack')}</code>.
@@ -104,7 +128,9 @@ export default async function IntelligencePage() {
 
       <Card>
         <h2 className="mb-4 text-base font-semibold">{t('adminMarketingIntelligence.topAcquisitionChannels')}</h2>
-        {topSources.length === 0 ? (
+        {sessionsCeiling ? (
+          <p className="py-6 text-center text-sm text-muted">{unavailable}</p>
+        ) : topSources.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">{t('adminMarketingIntelligence.noSessionsTrackedYetSendEvents')} <code>/api/mkt/track</code>.</p>
         ) : (
           <div className="space-y-2">
@@ -124,7 +150,7 @@ export default async function IntelligencePage() {
       <Card>
         <h2 className="mb-1 text-base font-semibold">{t('adminMarketingIntelligence.attributionByModel')}</h2>
         <p className="mb-4 text-xs text-muted">{t('adminMarketingIntelligence.conversionCreditDistributedAcrossChannelsCompare')}</p>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {touchpointsCeiling ? <p className="text-sm text-muted">{unavailable}</p> : <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {attribution.map(({ model, rows }) => (
             <div key={model} className="rounded-xl border border-border bg-surface/30 p-3">
               <p className="mb-2 text-sm font-semibold">{ATTRIBUTION_MODEL_LABELS[model]}</p>
@@ -142,7 +168,7 @@ export default async function IntelligencePage() {
               )}
             </div>
           ))}
-        </div>
+        </div>}
       </Card>
     </div>
   );
