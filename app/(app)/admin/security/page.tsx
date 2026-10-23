@@ -3,6 +3,7 @@ import { ShieldCheck, Mail, UserX, Clock, Activity, Lock, KeyRound, EyeOff, File
 import { createServiceClient } from '@/lib/supabase/server';
 import { settle, settleAll } from '@/lib/supabase/settle';
 import { listAllAuthUsers } from '@/lib/server/list-all-auth-users';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar } from '@/components/ui/avatar';
@@ -42,14 +43,18 @@ export default async function AdminSecurityPage() {
   // users are read page by page to an empty page (lib/server/list-all-auth-
   // users.ts); passing AUTH_USER_PAGES is an error that lands in the existing
   // read-error state rather than a smaller platform.
-  const [inviteStatusResults, authUsersResult, auditLogsResult, familiesResult] = await Promise.all([
+  const [inviteStatusResults, authUsersResult, auditLogsResult] = await Promise.all([
     settleAll(INVITE_STATUSES.map((status) =>
       supabase.from('invites').select('id', { count: 'exact', head: true }).eq('status', status))),
     listAllAuthUsers(supabase, { maxPages: AUTH_USER_PAGES }),
     settle(supabase.from('audit_logs').select('id, family_id, actor_id, action, resource, metadata, created_at').order('created_at', { ascending: false }).limit(25)),
-    settle(supabase.from('families').select('id, name')),
   ]);
   const invitesResult = { error: inviteStatusResults.find((r) => r.error)?.error ?? null };
+  // Only the families the listed audit rows name. The whole families table was
+  // read unbounded, which PostgREST answers with at most `db-max-rows` (1,000)
+  // rows, so a recent row for a family past them lost its family's name.
+  const auditFamilyIds = [...new Set((auditLogsResult.data ?? []).map((l) => l.family_id).filter((id): id is string => !!id))];
+  const familiesResult = await readInChunks(auditFamilyIds, (chunk) => supabase.from('families').select('id, name').in('id', chunk));
 
   const readError = invitesResult.error ?? authUsersResult.error ?? auditLogsResult.error ?? familiesResult.error;
   if (readError) {

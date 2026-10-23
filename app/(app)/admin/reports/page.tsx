@@ -3,7 +3,7 @@ import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { Home, Users, CreditCard, DollarSign, FolderLock, Activity } from 'lucide-react';
 import { createServiceClient, describeConfiguredServiceKey } from '@/lib/supabase/server';
 import { settleAll, describeReadError, credentialHint } from '@/lib/supabase/settle';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { Donut, Bars } from '@/components/admin/charts';
@@ -69,7 +69,7 @@ export default async function AdminReportsPage() {
   // the Documents tile — which renders `docs.length` — pinned at exactly 1,000
   // forever, sitting beside family and subscription tiles that were exact.
   //
-  // `readAllAsQuery` pages to a REAL ceiling and, on reaching it, returns an
+  // `readAllByIdAsQuery` pages to a REAL ceiling and, on reaching it, returns an
   // error saying the rows are a prefix. That error joins `readFailures` below,
   // so passing the ceiling shows the incomplete-report banner instead of
   // quietly reporting a smaller platform than exists.
@@ -78,22 +78,42 @@ export default async function AdminReportsPage() {
   // the honest interim: the real fix for growth buckets and a byte total is a
   // database aggregate rather than reading every row into the page, which is a
   // larger change than this one. Recorded in audit/claude-1.md.
+  //
+  // Each of them pages on the id, not on offsets. Families sign up, upload and
+  // check out while this page reads; a row written between two offset pages
+  // pushed the last row of one page onto the next, and its bytes, its price or
+  // its month's bar was counted twice.
   const ROW_CEILING = 25_000;
   const [familyCountResult, userCountResult, activeSubCountResult, docCountResult, familiesResult, profilesResult, subscriptionsResult, docsResult, activityResult] = await settleAll([
     supabase.from('families').select('id', { count: 'exact', head: true }),
     supabase.from('profiles').select('id', { count: 'exact', head: true }),
     supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active'),
     supabase.from('documents').select('id', { count: 'exact', head: true }),
-    readAllAsQuery<{ created_at: string }>((from, to) =>
-      supabase.from('families').select('created_at').order('id').range(from, to), { max: ROW_CEILING }),
-    readAllAsQuery<{ created_at: string }>((from, to) =>
-      supabase.from('profiles').select('created_at').order('id').range(from, to), { max: ROW_CEILING }),
-    readAllAsQuery<{ plan: string | null; status: string | null; created_at: string }>((from, to) =>
-      supabase.from('subscriptions').select('plan, status, created_at').order('id').range(from, to), { max: ROW_CEILING }),
-    readAllAsQuery<{ size_bytes: number | null }>((from, to) =>
-      supabase.from('documents').select('size_bytes').order('id').range(from, to), { max: ROW_CEILING }),
-    readAllAsQuery<{ created_at: string }>((from, to) =>
-      supabase.from('audit_logs').select('created_at').gte('created_at', fourteenDaysAgo).order('id').range(from, to), { max: ROW_CEILING }),
+    readAllByIdAsQuery<{ id: string; created_at: string }>((after, limit) => {
+      let query = supabase.from('families').select('id, created_at');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
+    readAllByIdAsQuery<{ id: string; created_at: string }>((after, limit) => {
+      let query = supabase.from('profiles').select('id, created_at');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
+    readAllByIdAsQuery<{ id: string; plan: string | null; status: string | null; created_at: string }>((after, limit) => {
+      let query = supabase.from('subscriptions').select('id, plan, status, created_at');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
+    readAllByIdAsQuery<{ id: string; size_bytes: number | null }>((after, limit) => {
+      let query = supabase.from('documents').select('id, size_bytes');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
+    readAllByIdAsQuery<{ id: string; created_at: string }>((after, limit) => {
+      let query = supabase.from('audit_logs').select('id, created_at').gte('created_at', fourteenDaysAgo);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
   ]);
 
   // Awaited here, before any early return, so the in-flight read always has an

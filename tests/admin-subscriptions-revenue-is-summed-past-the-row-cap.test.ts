@@ -3,7 +3,7 @@ import { SOURCE_MESSAGES } from '@/lib/i18n/messages';
 import { translate } from '@/lib/i18n/translate';
 import { PLUS_MONTHLY_CENTS } from '@/lib/constants/plans';
 import { fmtMoney } from '@/lib/utils/format';
-import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
+import { createInMemorySupabase, withFaults, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { renderServerPage, statCardValue } from './helpers/render-server-page';
 
 // /admin/subscriptions summed MRR and ARR, counted active subscriptions per
@@ -19,10 +19,14 @@ const ACTIVE = 1300;
 const CANCELED = 200;
 const pad = (i: number) => String(i).padStart(6, '0');
 
-const h = vi.hoisted(() => ({ db: null as unknown }));
+const h = vi.hoisted(() => ({ db: null as unknown, invoices: [] as Record<string, unknown>[] }));
 vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: () => h.db,
   describeConfiguredServiceKey: () => null,
+}));
+// The Billing tab lists Stripe's latest invoices; Stripe answers from here.
+vi.mock('@/lib/stripe', () => ({
+  getStripe: () => ({ invoices: { list: async () => ({ data: h.invoices }) } }),
 }));
 vi.mock('@/lib/i18n/server', () => ({
   getTranslations: async () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params),
@@ -65,6 +69,7 @@ async function render(tab?: string): Promise<string> {
 beforeEach(() => {
   db = createInMemorySupabase({ maxRows: CAP });
   h.db = db;
+  h.invoices = [];
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-10-22T12:00:00Z'));
   vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -112,6 +117,31 @@ describe('/admin/subscriptions reduces over every subscription, not the newest t
     const html = await render('all');
     expect(html).toContain(`(${ACTIVE + CANCELED})`);
     expect(html).toContain('Cancelled family 0');
+    expect(html).not.toContain('Unknown family');
+  });
+
+  it('the Billing tab names the family of an invoice whose customer is past the first thousand (R1-SUBS-BILLING-CUSTOMERS)', async () => {
+    seedPlatform();
+    // One Stripe customer per active family; Stripe's latest invoices belong to the newest, the last rows.
+    db.replace('billing_customers', Array.from({ length: ACTIVE }, (_, i) => ({
+      id: `bc-${pad(i)}`, family_id: `fam-a-${pad(i)}`, provider: 'stripe', customer_ref: `cus_${pad(i)}`,
+    })));
+    h.invoices = Array.from({ length: 20 }, (_, k) => {
+      const i = ACTIVE - 1 - k;
+      return { id: `in_${pad(i)}`, number: `INV-${i}`, amount_paid: PLUS_MONTHLY_CENTS, status: 'paid', created: 1_790_000_000 - k, customer: `cus_${pad(i)}`, hosted_invoice_url: null };
+    });
+    const html = await render('billing');
+    expect(html).toContain(`<span class="font-medium">Family ${ACTIVE - 1}</span>`);
+    expect(html).toContain(`<span class="font-medium">Family ${ACTIVE - 20}</span>`);
+    expect(html).not.toContain('Unknown family');
+  });
+
+  it('a billing customer read that fails is the read-error state, not "Unknown family"', async () => {
+    seedPlatform();
+    h.invoices = [{ id: 'in_1', number: 'INV-1', amount_paid: PLUS_MONTHLY_CENTS, status: 'paid', created: 1_790_000_000, customer: 'cus_1', hosted_invoice_url: null }];
+    h.db = withFaults(db, (table) => (table === 'billing_customers' ? { message: 'billing_customers unavailable' } : null));
+    const html = await render('billing');
+    expect(html).toContain(SOURCE_MESSAGES['subscriptions.couldNotLoadSubscriptionData']);
     expect(html).not.toContain('Unknown family');
   });
 });

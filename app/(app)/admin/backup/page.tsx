@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Database, HardDrive, Shield, Info } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
@@ -46,13 +46,16 @@ export default async function AdminDataPage() {
   // their bytes, and an unbounded select is answered with at most `db-max-rows`
   // (1,000) and no signal — so on a project past a thousand documents the
   // storage figure on a page whose title is "Data & Storage" was the size of
-  // the first thousand, reported as the total. `readAllAsQuery` pages to a real
+  // the first thousand, reported as the total. `readAllByIdAsQuery` pages to a real
   // ceiling and reports reaching it as an error, which this page already
-  // renders rather than showing a number it cannot stand behind.
-  const { data: docs, error: docsError } = await readAllAsQuery<{ size_bytes: number | null }>(
-    (from, to) => supabase.from('documents').select('size_bytes').order('id').range(from, to),
-    { max: 25_000 },
-  );
+  // renders rather than showing a number it cannot stand behind. It pages on
+  // the id, not on offsets: an upload landing between two pages shifted every
+  // later offset by one, and one document's bytes were added twice.
+  const { data: docs, error: docsError } = await readAllByIdAsQuery<{ id: string; size_bytes: number | null }>((after, limit) => {
+    let query = supabase.from('documents').select('id, size_bytes');
+    if (after) query = query.gt('id', after);
+    return query.order('id').limit(limit);
+  }, { max: 25_000 });
   const readError = counts.find((c) => c.error)?.error ?? docsError;
   if (readError) {
     console.error('[admin-backup] data read failed', readError);

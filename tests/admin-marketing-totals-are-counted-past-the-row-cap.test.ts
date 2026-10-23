@@ -5,7 +5,7 @@ import { SOURCE_MESSAGES } from '@/lib/i18n/messages';
 import { translate } from '@/lib/i18n/translate';
 import { fmtMoney } from '@/lib/utils/format';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
-import { renderServerPage } from './helpers/render-server-page';
+import { renderServerPage, statCardValue } from './helpers/render-server-page';
 
 // Three marketing admin pages summed or tallied an unbounded read:
 //
@@ -98,5 +98,53 @@ describe('/admin/marketing/ads totals every campaign', () => {
     expect(html).toContain(`${SOURCE_MESSAGES['adminMarketingAds.campaigns']}</p><p class="text-2xl font-bold">1300</p>`);
     expect(html).toContain(`${SOURCE_MESSAGES['adminMarketingAds.totalBudget']}</p><p class="text-2xl font-bold">${fmtMoney(1300 * 100)}</p>`);
     expect(html).toContain(`${SOURCE_MESSAGES['adminMarketingAds.totalSpend']}</p><p class="text-2xl font-bold">${fmtMoney(1300 * 50)}</p>`);
+  });
+});
+
+// The overview reduced its Email Open Rate and AEO readiness from two
+// unbounded selects, the sibling of the analytics read above (review
+// R1-MARKETING-OVERVIEW, R2-SIBLING-OFFSET-SUMS (h)).
+describe('/admin/marketing sums every sent email and counts every AEO question', () => {
+  async function renderOverview(): Promise<string> {
+    const { default: MarketingDashboard } = await import('@/app/(app)/admin/marketing/page');
+    return renderServerPage(await MarketingDashboard());
+  }
+
+  it('Email Open Rate is over every sent campaign, not the first thousand', async () => {
+    // The first thousand were never opened; the 300 after them were, 10 times each.
+    db.seed('marketing_email_campaigns', Array.from({ length: 1300 }, (_, i) => ({
+      id: `mail-${pad(i)}`, subject: `Mail ${i}`, status: 'sent', recipients: 10, opens: i < CAP ? 0 : 10, clicks: 0, deleted_at: null,
+    })));
+    const html = await renderOverview();
+    // 3,000 opens of 13,000 recipients; the first thousand alone read 0%.
+    expect(statCardValue(html, 'Email Open Rate')).toBe('23%');
+  });
+
+  it('a deleted campaign is left out of Email Open Rate, as analytics leaves it out', async () => {
+    db.seed('marketing_email_campaigns', [
+      { id: 'mail-kept', subject: 'Kept', status: 'sent', recipients: 100, opens: 50, clicks: 0, deleted_at: null },
+      { id: 'mail-gone', subject: 'Deleted', status: 'sent', recipients: 900, opens: 0, clicks: 0, deleted_at: '2026-06-01T00:00:00Z' },
+    ]);
+    const html = await renderOverview();
+    expect(statCardValue(html, 'Email Open Rate')).toBe('50%');
+  });
+
+  it('AEO readiness counts every question, not the first thousand', async () => {
+    db.seed('marketing_aeo_questions', Array.from({ length: 1300 }, (_, i) => ({
+      id: `aeo-${pad(i)}`, question: `Question ${i}`, status: i < CAP ? 'draft' : i % 2 ? 'answered' : 'published',
+    })));
+    const html = await renderOverview();
+    // 300 answered or published of 1,300; the first thousand alone read 0%.
+    expect(html).toContain(`${SOURCE_MESSAGES['adminMarketing.aeoReadiness']}</p><p class="font-semibold">23%</p>`);
+    expect(html).toContain('AEO (23%)');
+  });
+
+  it('reaching the row ceiling is the read-error state, not a smaller open rate', async () => {
+    db.seed('marketing_email_campaigns', Array.from({ length: 25_001 }, (_, i) => ({
+      id: `mail-${pad(i)}`, subject: `Mail ${i}`, status: 'sent', recipients: 1, opens: 1, clicks: 0, deleted_at: null,
+    })));
+    const html = await renderOverview();
+    expect(html).toContain(SOURCE_MESSAGES['marketing.couldNotLoadMarketingDashboard']);
+    expect(html).not.toContain('Email Open Rate');
   });
 });

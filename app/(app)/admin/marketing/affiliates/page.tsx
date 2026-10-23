@@ -10,7 +10,7 @@ import { summarizeReferrals, payoutByAffiliate, type ReferralLike } from '@/lib/
 import type { Tables } from '@/lib/database.types';
 import { saveAffiliateAction, toggleAffiliateStatusAction, deleteAffiliateAction, markAffiliatePaidAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { SubmitButton } from '@/components/ui/submit-button';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -30,7 +30,14 @@ export default async function AffiliatesPage() {
   const [affiliatesResult, referralsResult] = await settleAll([
     supabase.from('affiliates').select('*').order('created_at', { ascending: false }).limit(200),
     // `.limit(N)` above 1,000 is not a bound — PostgREST caps at db-max-rows.
-    readAllAsQuery((from, to) => supabase.from('affiliate_referrals').select('affiliate_id, status, commission_cents').order('id').range(from, to), { max: 10000 }),
+    // The commissions are summed, so the read pages on the id, not on offsets:
+    // a referral recorded between two pages shifted every later offset by one,
+    // and one commission was owed or paid twice.
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('affiliate_referrals').select('id, affiliate_id, status, commission_cents');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: 10000 }),
   ]);
   const readError = affiliatesResult.error ?? referralsResult.error;
   if (readError) {

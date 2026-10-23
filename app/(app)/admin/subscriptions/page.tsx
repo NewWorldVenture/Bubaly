@@ -3,6 +3,8 @@ import { CreditCard, Users, DollarSign, TrendingDown, ExternalLink, Receipt } fr
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { readAllAsQuery, readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { readInChunks } from '@/lib/supabase/chunked-in';
+import type Stripe from 'stripe';
 import { getStripe } from '@/lib/stripe';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -103,7 +105,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
   // so they page on the id, not on offsets: a checkout between two pages
   // shifted every later offset by one and counted one subscription twice.
   const since30 = new Date(Date.now() - 30 * 86400000);
-  const [[subscriptionsResult, activeCountResult, canceledRecentlyResult, familiesResult, billingCustomersResult], planCountResults] = await Promise.all([
+  const [[subscriptionsResult, activeCountResult, canceledRecentlyResult, familiesResult], planCountResults] = await Promise.all([
     settleAll([
       readAllByIdAsQuery((after, limit) => {
         let query = supabase.from('subscriptions').select('*');
@@ -113,13 +115,12 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
       supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active'),
       supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'canceled').gte('updated_at', since30.toISOString()),
       readAllAsQuery((from, to) => supabase.from('families').select('id, name').order('id').range(from, to), { max: ROW_CEILING }),
-      supabase.from('billing_customers').select('family_id, customer_ref'),
     ]),
     settleAll(PLANS.map((p) =>
       supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active').eq('plan', p.id))),
   ]);
 
-  const readError = subscriptionsResult.error ?? familiesResult.error ?? billingCustomersResult.error
+  const readError = subscriptionsResult.error ?? familiesResult.error
     ?? activeCountResult.error ?? canceledRecentlyResult.error ?? planCountResults.find((r) => r.error)?.error;
   if (readError) {
     console.error('[admin-subscriptions] subscription read failed', readError);
@@ -128,12 +129,10 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
 
   const { data: subscriptions } = subscriptionsResult;
   const { data: families } = familiesResult;
-  const { data: billingCustomers } = billingCustomersResult;
 
   // Newest first, as the lists below have always read; the paged read was ordered by id.
   const subs = [...(subscriptions ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
   const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
-  const customerToFamily = new Map((billingCustomers ?? []).filter((b) => b.customer_ref).map((b) => [b.customer_ref as string, b.family_id]));
 
   const planById = (id: string): Plan | undefined => PLANS.find((p) => p.id === id);
   const activeCount = activeCountResult.count ?? 0;
@@ -150,21 +149,35 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
   let invoices: { id: string; number: string | null; amountPaid: number; status: string; created: number; familyName: string; hostedUrl: string | null }[] = [];
   let stripeError: string | null = null;
   if (tab === 'billing') {
+    let listed: Stripe.Invoice[] = [];
     try {
       const stripe = getStripe();
-      const list = await stripe.invoices.list({ limit: 20 });
-      invoices = list.data.map((inv) => {
-        const customerId = typeof inv.customer === 'string' ? inv.customer : inv.customer?.id;
-        const familyId = customerId ? customerToFamily.get(customerId) : undefined;
-        return {
-          id: inv.id ?? '', number: inv.number, amountPaid: inv.amount_paid, status: inv.status ?? 'unknown',
-          created: inv.created, familyName: familyId ? familyNameById.get(familyId) ?? 'Unknown family' : 'Unknown family',
-          hostedUrl: inv.hosted_invoice_url ?? null,
-        };
-      });
+      listed = (await stripe.invoices.list({ limit: 20 })).data;
     } catch (err) {
       stripeError = describeDbError(err, tr('subscriptions.stripeIsNotConfigured'));
     }
+    const customerOf = (inv: Stripe.Invoice) => (typeof inv.customer === 'string' ? inv.customer : inv.customer?.id);
+    // Only the customers these invoices name. The whole billing_customers table
+    // was read unbounded, which PostgREST answers with at most `db-max-rows`
+    // (1,000) rows, so an invoice whose customer fell past them read "Unknown
+    // family".
+    const customerRefs = [...new Set(listed.map(customerOf).filter((ref): ref is string => !!ref))];
+    const billingCustomersResult = await readInChunks(customerRefs, (chunk) =>
+      supabase.from('billing_customers').select('family_id, customer_ref').in('customer_ref', chunk));
+    if (billingCustomersResult.error) {
+      console.error('[admin-subscriptions] billing customer read failed', billingCustomersResult.error);
+      return <AdminSubscriptionsReadError tab={tab} />;
+    }
+    const customerToFamily = new Map(billingCustomersResult.data.filter((b) => b.customer_ref).map((b) => [b.customer_ref as string, b.family_id]));
+    invoices = listed.map((inv) => {
+      const customerId = customerOf(inv);
+      const familyId = customerId ? customerToFamily.get(customerId) : undefined;
+      return {
+        id: inv.id ?? '', number: inv.number, amountPaid: inv.amount_paid, status: inv.status ?? 'unknown',
+        created: inv.created, familyName: familyId ? familyNameById.get(familyId) ?? 'Unknown family' : 'Unknown family',
+        hostedUrl: inv.hosted_invoice_url ?? null,
+      };
+    });
   }
 
   return (

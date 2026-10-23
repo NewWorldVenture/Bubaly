@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SOURCE_MESSAGES } from '@/lib/i18n/messages';
 import { translate } from '@/lib/i18n/translate';
-import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
+import { createInMemorySupabase, withFaults, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { renderServerPage, statCardValue } from './helpers/render-server-page';
 
 // /admin/security took its account statistics from ONE page of
@@ -117,5 +117,28 @@ describe('/admin/security counts every account and every invite', () => {
     expect(html).toContain(`${CAP} / ${USERS}`);
     // It paged: page one, page two, and the empty page that proves the end.
     expect(listUsersCalls.map((c) => c.page)).toEqual([1, 2, 3]);
+  });
+
+  it('a recent audit row names its family even past the first thousand families (R1-SECURITY-FAMILIES)', async () => {
+    seedPlatform();
+    db.replace('families', Array.from({ length: 1300 }, (_, i) => ({ id: `fam-${pad(i)}`, name: `Family ${i}` })));
+    // The newest activity is in the newest families, the last rows.
+    db.replace('audit_logs', Array.from({ length: 25 }, (_, k) => ({
+      id: `log-${pad(k)}`, family_id: `fam-${pad(1299 - k)}`, actor_id: null, action: 'document.view', resource: `Resource ${k}`,
+      metadata: null, created_at: new Date(Date.UTC(2026, 9, 22, 11) - k * 60_000).toISOString(),
+    })));
+    const html = await render();
+    expect(html).toContain('>in Family 1299</span>');
+    expect(html).toContain('>in Family 1275</span>');
+    expect(html).not.toContain('>in a family</span>');
+  });
+
+  it('a family name read that fails is the read-error state, not "a family"', async () => {
+    seedPlatform();
+    db.replace('audit_logs', [{ id: 'log-1', family_id: 'fam-000001', actor_id: null, action: 'document.view', resource: 'Resource', metadata: null, created_at: '2026-10-22T11:00:00Z' }]);
+    h.db = withFaults(db, (table) => (table === 'families' ? { message: 'families unavailable' } : null));
+    const html = await render();
+    expect(html).toContain(SOURCE_MESSAGES['security.couldNotLoadSecurityData']);
+    expect(html).not.toContain('>in a family</span>');
   });
 });

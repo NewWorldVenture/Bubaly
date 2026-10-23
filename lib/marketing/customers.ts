@@ -3,7 +3,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { planMonthlyCents, planName } from '@/lib/constants/plans';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllAsQuery, readAllByIdAsQuery } from '@/lib/supabase/read-all';
 
 type DB = SupabaseClient<Database>;
 
@@ -40,7 +40,16 @@ function monthsBetween(from: string, to: number): number {
  */
 export async function getMarketingCustomersWithError(supabase: DB): Promise<{ customers: MarketingCustomer[]; error: unknown | null }> {
   const [familiesResult, subsResult, membersResult, profilesResult] = await settleAll([
-    readAllAsQuery((from, to) => supabase.from('families').select('id, name, created_at, updated_at, closed_at').order('created_at', { ascending: false }).order('id').range(from, to), { max: 2000 }),
+    // Every customer is one family row, and the customers are counted and their
+    // plans summed (Est. MRR, Customer Acquisition), so the families page on
+    // the id, not on offsets. Read newest first by offset, a family signing up
+    // between two pages took offset 0 and pushed the last family of one page
+    // onto the next: one household was two customers. Sorted newest first below.
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('families').select('id, name, created_at, updated_at, closed_at');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: 2000 }),
     // The three sibling reads below page for the same reason the families read
     // does: each is joined BACK onto the families list, so a read capped at
     // db-max-rows does not shorten the table — it silently mislabels customers
@@ -75,7 +84,9 @@ export async function getMarketingCustomersWithError(supabase: DB): Promise<{ cu
 
   const now = Date.now();
 
-  const customers = (families ?? []).map((f) => {
+  // Newest first, the order every customer list has always read in.
+  const newestFirst = [...(families ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id));
+  const customers = newestFirst.map((f) => {
     const fam = membersByFamily.get(f.id) ?? [];
     const active = fam.filter((m) => m.is_active);
     const owner = fam.find((m) => m.role === 'parent' && m.user_id) ?? fam.find((m) => m.user_id);
