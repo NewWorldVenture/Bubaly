@@ -7,6 +7,7 @@ import { readInChunks } from '@/lib/supabase/chunked-in';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/filter-bar';
 import { DocumentRowActions } from '@/components/admin/document-row-actions';
 import { fmtDate } from '@/lib/utils/format';
@@ -116,8 +117,14 @@ export default async function AdminContentPage({ searchParams }: Params) {
   const { data: profiles, error: profilesError } = await readInChunks(uploaderIds, (chunk) =>
     supabase.from('profiles').select('id, full_name, email').in('id', chunk));
 
+  // The storage and category figures past their ceiling cost those figures,
+  // not the document list, its filters and row actions: they say they are not
+  // shown rather than adding up part of the platform. Any other failure is
+  // still the read-error state.
+  const aggregateCeiling = 'truncated' in aggregateResult && aggregateResult.truncated;
+  if (aggregateCeiling) console.warn('[admin-content] the storage read reached its ceiling; storage and categories are not shown');
   // Five reads of the one table; the first that failed names the failure.
-  const { error: documentsError } = [docCountResult, recentCountResult, aggregateResult, listResult, recentResult].find((r) => r.error) ?? docCountResult;
+  const { error: documentsError } = [docCountResult, recentCountResult, ...(aggregateCeiling ? [] : [aggregateResult]), listResult, recentResult].find((r) => r.error) ?? docCountResult;
   const readError = documentsError ?? familiesError ?? profilesError;
   if (readError) {
     console.error('[admin-content] content read failed', readError);
@@ -142,8 +149,19 @@ export default async function AdminContentPage({ searchParams }: Params) {
     bytesByCategory.set(cat, (bytesByCategory.get(cat) ?? 0) + (d.size_bytes ?? 0));
   }
 
+  const unavailable = tr('strategyMetrics.unavailable');
+  // The category filter keeps working past the ceiling: it offers the listed
+  // documents' categories, and the one already chosen, instead of none.
+  const filterCategories = aggregateCeiling
+    ? [...new Set([...(listResult.data ?? []).map((d) => d.category ?? 'other'), ...(categoryFilter ? [categoryFilter] : [])])]
+    : categories;
+
   return (
     <div className="module-page">
+      <PartialReadBanner
+        title={tr('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
+        failures={aggregateCeiling ? [tr('adminContent.storageUsed'), tr('adminContent.categories'), tr('adminContent.storageByCategory')] : []}
+      />
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('adminContent.contentManagement')}</h1>
         <p className="mt-1 text-sm text-muted">{tr('adminContent.manageAllDocumentsAndFilesAcross')}</p>
@@ -160,7 +178,9 @@ export default async function AdminContentPage({ searchParams }: Params) {
       {tab === 'categories' ? (
         <Card>
           <h2 className="mb-4 text-base font-semibold">{tr('adminContent.storageByCategory')}</h2>
-          {categories.length === 0 ? (
+          {aggregateCeiling ? (
+            <p className="text-sm text-muted">{unavailable}</p>
+          ) : categories.length === 0 ? (
             <EmptyState icon={FolderKanban} title={tr('adminContent.noDocumentsUploadedYet')} />
           ) : (
             <ul className="space-y-3">
@@ -188,8 +208,8 @@ export default async function AdminContentPage({ searchParams }: Params) {
           <div className="space-y-5">
             <div className="grid-stats">
               <StatCard icon={FileText} label={tr('adminContent.totalItems')} value={docCount} tone="bg-brand/10 text-brand-text" />
-              <StatCard icon={HardDrive} label={tr('adminContent.storageUsed')} value={fmtBytes(totalBytes)} tone="bg-success/10 text-success" />
-              <StatCard icon={FolderKanban} label={tr('adminContent.categories')} value={categories.length} tone="bg-accent/10 text-accent" />
+              <StatCard icon={HardDrive} label={tr('adminContent.storageUsed')} value={aggregateCeiling ? unavailable : fmtBytes(totalBytes)} tone="bg-success/10 text-success" />
+              <StatCard icon={FolderKanban} label={tr('adminContent.categories')} value={aggregateCeiling ? unavailable : categories.length} tone="bg-accent/10 text-accent" />
               <StatCard icon={Clock} label={tr('adminContent.addedThisWeek')} value={recentUploads} tone="bg-warning/10 text-warning" />
             </div>
 
@@ -198,7 +218,7 @@ export default async function AdminContentPage({ searchParams }: Params) {
                 <FilterSearchInput name="q" defaultValue={sp.q} placeholder={tr('adminContent.searchContentByTitleOrFamily')} />
                 <FilterSelect name="category" label={tr('adminContent.category')} defaultValue={categoryFilter} options={[
                   { value: '', label: 'All Categories' },
-                  ...categories.map((c) => ({ value: c, label: c })),
+                  ...filterCategories.map((c) => ({ value: c, label: c })),
                 ]} />
                 <FilterSelect name="family" label={tr('adminContent.family')} defaultValue={familyFilter} options={[
                   { value: '', label: 'All Families' },

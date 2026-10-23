@@ -2,10 +2,13 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Gauge, Plus, MessagesSquare } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
-import { settleAll } from '@/lib/supabase/settle';
+import { settle } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { SURVEY_TYPES, summarize, isSurveyType, type SurveyType } from '@/lib/marketing/surveys';
 import { createSurveyAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
@@ -16,14 +19,34 @@ export const dynamic = 'force-dynamic';
 
 const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring';
 const STATUS_TONE = { draft: 'neutral', active: 'success', closed: 'warning' } as const;
+/** Responses the scores may page through before they are reported as a prefix (one round trip per 1,000). */
+const SUM_ROW_CEILING = 25_000;
 
 export default async function SurveysPage() {
   const tr = await getTranslations();
   const supabase = createServiceClient();
-  const [surveysResult, responsesResult] = await settleAll([
-    supabase.from('surveys').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
-    supabase.from('survey_responses').select('survey_id, score'),
-  ]);
+  const surveysResult = await settle(
+    supabase.from('surveys').select('*').is('deleted_at', null).order('created_at', { ascending: false }));
+  // Every listed survey's score is summed from these, and the public answers
+  // while the page reads: paged on the id, to a real ceiling. An unbounded
+  // select stopped at 1,000 responses across ALL surveys with no error, so a
+  // survey's NPS was scored from whatever share of its answers came back.
+  //
+  // Only the LIVE surveys' responses, a hundred surveys a request: a deleted
+  // survey's answers are scored nowhere on this page, and reading them let
+  // them push the whole page past the ceiling. A batch that does reach it
+  // costs those surveys' scores, not the list or the form to create one.
+  const unscored = new Set<string>();
+  const responsesResult = await readInChunks((surveysResult.data ?? []).map((sv) => sv.id), async (chunk) => {
+    const page = await readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('survey_responses').select('id, survey_id, score').in('survey_id', chunk);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING });
+    if (!page.truncated) return page;
+    for (const id of chunk) unscored.add(id);
+    return { data: [], error: null };
+  });
   const readError = surveysResult.error ?? responsesResult.error;
   if (readError) {
     console.error('[admin-marketing-surveys] survey read failed', readError);
@@ -31,6 +54,8 @@ export default async function SurveysPage() {
   }
   const { data: surveys } = surveysResult;
   const { data: responses } = responsesResult;
+  const unscoredNames = (surveys ?? []).filter((sv) => unscored.has(sv.id)).map((sv) => sv.name);
+  if (unscoredNames.length > 0) console.warn('[admin-marketing-surveys] a response read reached its ceiling; those surveys are not scored');
 
   const scoresBySurvey = new Map<string, number[]>();
   for (const r of responses ?? []) {
@@ -42,6 +67,7 @@ export default async function SurveysPage() {
 
   return (
     <div className="space-y-5">
+      <PartialReadBanner title={tr('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })} failures={unscoredNames} />
       <div className="flex items-center gap-2">
         <Gauge className="h-5 w-5 text-brand-text" />
         <div>
@@ -85,20 +111,21 @@ export default async function SurveysPage() {
           {(surveys ?? []).map((sv) => {
             const type = isSurveyType(sv.type) ? sv.type : 'custom';
             const summary = summarize(type, scoresBySurvey.get(sv.id) ?? [], sv.scale_max);
+            const scored = !unscored.has(sv.id);
             return (
               <Link key={sv.id} href={`/admin/marketing/surveys/${sv.id}`}>
                 <Card className="transition hover:border-brand/40">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="font-semibold">{sv.name}</p>
-                      <p className="text-xs text-muted">{SURVEY_TYPES[type].label} · {summary.total} response{summary.total === 1 ? '' : 's'}</p>
+                      <p className="text-xs text-muted">{SURVEY_TYPES[type].label}{scored && <> · {summary.total} response{summary.total === 1 ? '' : 's'}</>}</p>
                     </div>
                     <Badge tone={STATUS_TONE[sv.status as keyof typeof STATUS_TONE] ?? 'neutral'}>{sv.status}</Badge>
                   </div>
                   <div className="mt-3 flex items-end justify-between">
                     <div>
-                      <p className="text-2xl font-bold leading-none">{summary.total > 0 ? summary.value : '—'}</p>
-                      <p className="mt-1 text-xs text-muted">{summary.headline}{summary.detail && summary.total > 0 ? ` · ${summary.detail}` : ''}</p>
+                      <p className="text-2xl font-bold leading-none">{!scored ? tr('strategyMetrics.unavailable') : summary.total > 0 ? summary.value : '—'}</p>
+                      <p className="mt-1 text-xs text-muted">{summary.headline}{scored && summary.detail && summary.total > 0 ? ` · ${summary.detail}` : ''}</p>
                     </div>
                   </div>
                 </Card>

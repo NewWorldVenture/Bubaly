@@ -12,8 +12,8 @@ import { PLANS } from '@/lib/constants/plans';
 import { fmtMoney } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
 import { getFormat } from '@/lib/utils/format-server';
-import { ADMIN_ZONE } from '@/lib/admin/clock';
-import { readAllAsQuery, readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { ADMIN_ZONE, lastUtcDays } from '@/lib/admin/clock';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -52,11 +52,17 @@ export default async function AdminSystemPage() {
   // in the host's locale, and an operator could not tell which.
   const { fmtDate } = await getFormat(ADMIN_ZONE);
   const supabase = createServiceClient();
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+  // The growth chart's first day. Every account older than it is one number,
+  // counted; only the accounts inside the chart are read row by row.
+  const chartStart = new Date(lastUtcDays(30)[0].start).toISOString();
 
   const [
     healthResults,
     userCountResult,
     familyCountResult,
+    newUsersResult,
+    chartBaseResult,
     profilesResult,
     subscriptionsResult,
     documentsResult,
@@ -64,7 +70,17 @@ export default async function AdminSystemPage() {
     Promise.all([checkDatabase(supabase), checkStorage(supabase), checkAuth(supabase), checkStripe(), Promise.resolve(checkEmail())]),
     settle(supabase.from('profiles').select('id', { count: 'exact', head: true })),
     settle(supabase.from('families').select('id', { count: 'exact', head: true })),
-    settle(readAllAsQuery((from, to) => supabase.from('profiles').select('created_at').order('created_at', { ascending: false }).order('id').range(from, to), { max: 2000 })),
+    // New users and the chart were taken from the 2,000 newest profiles, read
+    // on offsets while people sign up. Past 2,000 accounts that read reached
+    // its ceiling, so the banner never went away and both read zero; below
+    // it, a sign-up between two pages counted someone twice.
+    settle(supabase.from('profiles').select('id', { count: 'exact', head: true }).gte('created_at', thirtyDaysAgo)),
+    settle(supabase.from('profiles').select('id', { count: 'exact', head: true }).lt('created_at', chartStart)),
+    settle(readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('profiles').select('id, created_at').gte('created_at', chartStart);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING })),
     // Summed below, so read to a REAL ceiling: an unbounded select is answered
     // with at most `db-max-rows` (1,000) and no error, and these two tiles
     // summed that prefix as the platform's revenue and storage while the
@@ -88,6 +104,8 @@ export default async function AdminSystemPage() {
   const readFailures = ([
     ['user count', userCountResult],
     ['family count', familyCountResult],
+    ['new user count', newUsersResult],
+    ['user count before the chart', chartBaseResult],
     ['profiles', profilesResult],
     ['subscriptions', subscriptionsResult],
     ['documents', documentsResult],
@@ -115,7 +133,7 @@ export default async function AdminSystemPage() {
     .reduce((sum, s) => sum + (planById(s.plan)?.priceMonthly ?? 0), 0);
 
   const storageBytes = (documents ?? []).reduce((sum, d) => sum + (d.size_bytes ?? 0), 0);
-  const newUsers30d = (profiles ?? []).filter((p) => new Date(p.created_at) >= new Date(Date.now() - 30 * 86400000)).length;
+  const newUsers30d = newUsersResult.count ?? 0;
 
   const allHealthy = healthResults.every((h) => h.ok);
   const environment = process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? 'development';
@@ -175,7 +193,7 @@ export default async function AdminSystemPage() {
 
       <Card>
         <h2 className="mb-4 text-base font-semibold">{t('adminSystem.userGrowth')} <span className="text-muted">{t('adminSystem.last30DaysCumulative')}</span></h2>
-        <GrowthChart timestamps={(profiles ?? []).map((p) => p.created_at)} />
+        <GrowthChart timestamps={(profiles ?? []).map((p) => p.created_at)} base={chartBaseResult.count ?? 0} />
       </Card>
 
       <Card>

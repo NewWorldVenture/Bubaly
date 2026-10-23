@@ -3,12 +3,13 @@ import Link from 'next/link';
 import { FlaskConical, Trophy } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { readInChunks } from '@/lib/supabase/chunked-in';
+import { settle } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { computeABResults, leadingVariant, type ABVariant, type VariantTotals } from '@/lib/marketing/ab';
 import { NewExperimentForm, ExperimentControls } from './experiments-client';
 import { getTranslations } from '@/lib/i18n/server';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -26,24 +27,33 @@ const STATUS_STYLE: Record<string, string> = {
 export default async function ABTestingPage() {
   const tr = await getTranslations();
   const supabase = createServiceClient();
-  const { data: experiments, error: experimentsError } = await supabase
+  // Settled: a transport failure REJECTS the query rather than resolving
+  // { data, error }, and unsettled it took the route's error boundary in place
+  // of this page's own read-error state.
+  const { data: experiments, error: experimentsError } = await settle(supabase
     .from('ab_experiments')
     .select('*')
     .is('deleted_at', null)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false }));
 
   // `ab_experiments` is read unbounded, so `keys` is unbounded too — batch the
   // filter rather than building one query string out of every key.
   const keys = (experiments ?? []).map((e) => e.key);
   // The error type also admits `{ message }`: a paged read reports a TRANSPORT
   // failure in that shape rather than rejecting, so the batch survives it.
-  const eventResult = await readInChunks<{ experiment_key: string; variant_key: string; kind: string }, typeof experimentsError | { message: string }>(
+  const eventResult = await readInChunks<{ id: string; experiment_key: string; variant_key: string; kind: string }, typeof experimentsError | { message: string }>(
     keys,
     // Per CHUNK of experiment keys, and an event table is the one place rows
     // genuinely pile up: `.limit(100000)` returned 1,000 (PostgREST caps at
     // db-max-rows), so every conversion rate on this page was computed from a
-    // 1,000-row sample per chunk and read as exact.
-    (chunk) => readAllAsQuery((from, to) => supabase.from('ab_events').select('experiment_key, variant_key, kind').in('experiment_key', chunk).order('id').range(from, to), { max: 100000 }),
+    // 1,000-row sample per chunk and read as exact. Paged on the id, because
+    // /api/ab/track records exposures WHILE this reads: on offsets, one landing
+    // between two pages pushed an event onto the next and it was tallied twice.
+    (chunk) => readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('ab_events').select('id, experiment_key, variant_key, kind').in('experiment_key', chunk);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: 100000 }),
   );
   if (experimentsError || eventResult.error) {
     console.error('[admin-marketing-experiments] experiment read failed', experimentsError ?? eventResult.error);

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { CreditCard, Landmark, ShieldCheck, AlertTriangle, Radio, ToggleLeft, ToggleRight } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
-import { settleAll } from '@/lib/supabase/settle';
+import { settle, settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { readMoneyFlagsWithError, readStripeEnv, resolveCapabilities, type MoneyCapabilities } from '@/lib/stripe/capabilities';
@@ -42,7 +42,10 @@ export default async function AdminStripeMoneyPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
   const { flags: moneyFlags, error: moneyFlagsError } = await readMoneyFlagsWithError(supabase);
-  const stripeCfgResult = await supabase.from('stripe_settings').select('*').eq('id', 'singleton').maybeSingle();
+  // Settled: a transport failure REJECTS the query rather than resolving
+  // { data, error }, and unsettled it took the route's error boundary in place
+  // of this page's own read-error state.
+  const stripeCfgResult = await settle(supabase.from('stripe_settings').select('*').eq('id', 'singleton').maybeSingle());
 
   // Every tile here is a COUNT, asked for as one (`head: true`, exact), the way
   // the financial-accounts tile always was. Reading a table's `status` column

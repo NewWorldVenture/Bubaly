@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Database, HardDrive, Shield, Info } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
@@ -35,12 +36,12 @@ export default async function AdminDataPage() {
   const tr = await getTranslations();
   const supabase = createServiceClient();
 
-  const counts = await Promise.all(
-    TABLES.map(async (t) => {
-      const { count, error } = await supabase.from(t.table as 'families').select('id', { count: 'exact', head: true });
-      return { ...t, count: count ?? 0, error };
-    }),
-  );
+  // Settled, each count: a transport failure REJECTS the query rather than
+  // resolving { data, error }, and inside a bare Promise.all one unreachable
+  // table took the route's error boundary in place of the read-error state.
+  const countResults = await settleAll(TABLES.map((t) =>
+    supabase.from(t.table as 'families').select('id', { count: 'exact', head: true })));
+  const counts = TABLES.map((t, i) => ({ ...t, count: countResults[i].count ?? 0, error: countResults[i].error }));
 
   // The row counts above are `head: true` and exact. This one reads ROWS to sum
   // their bytes, and an unbounded select is answered with at most `db-max-rows`

@@ -861,6 +861,7 @@
   "adminBilling.started": "Gestart",
   "adminBilling.status": "Status",
   "adminBilling.subscriptions": "Abonnementen",
+  "adminCeiling.figuresNotShown": "Niet getoond, omdat elk van deze cijfers meer dan {n} rijen zou optellen en een totaal van slechts een deel daarvan onjuist zou zijn:",
   "adminContent.added": "Toegevoegd",
   "adminContent.addedThisWeek": "Deze week toegevoegd",
   "adminContent.categories": "Categorieën",

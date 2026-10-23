@@ -862,6 +862,7 @@
   "adminBilling.started": "Iniciado",
   "adminBilling.status": "Estado",
   "adminBilling.subscriptions": "Subscrições",
+  "adminCeiling.figuresNotShown": "Não apresentados, porque cada um destes valores somaria mais de {n} linhas e um total de apenas parte delas estaria errado:",
   "adminContent.added": "Adicionado",
   "adminContent.addedThisWeek": "Adicionado esta semana",
   "adminContent.categories": "Categorias",

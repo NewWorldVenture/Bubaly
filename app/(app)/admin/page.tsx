@@ -6,7 +6,7 @@ import {
   BarChart3, Plug, ArrowUpRight, Bell,
 } from 'lucide-react';
 import { createServiceClient, describeConfiguredServiceKey } from '@/lib/supabase/server';
-import { settleAll, describeReadError, credentialHint } from '@/lib/supabase/settle';
+import { settle, settleAll, describeReadError, credentialHint } from '@/lib/supabase/settle';
 import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { adminNoteKindMeta, type AdminNotificationRow } from '@/lib/admin/notifications';
 import { checkDatabase, checkStorage, checkEmail, checkAI } from '@/lib/server/health';
@@ -289,12 +289,14 @@ export default async function AdminDashboardPage() {
   // ── Recent activity actors ──
   const actorIds = [...new Set((recentLogs ?? []).map((l) => l.actor_id).filter((x): x is string => !!x))];
   const actorsResult = actorIds.length
-    ? await supabase.from('profiles').select('id, full_name, email').in('id', actorIds)
+    ? await settle(supabase.from('profiles').select('id, full_name, email').in('id', actorIds))
     : { data: [] as { id: string; full_name: string | null; email: string | null }[] };
   // A failed actor lookup costs the NAMES beside audit-log entries, nothing
   // more: actorById is consulted with `actorById.get(log.actor_id)` and the
   // render already handles a miss. Returning an error page for it meant the
-  // dashboard vanished because it could not label a row.
+  // dashboard vanished because it could not label a row. Settled, because a
+  // transport failure REJECTS the query instead of resolving { data, error },
+  // and that rejection took the route's error boundary in place of the page.
   if ('error' in actorsResult && actorsResult.error) {
     console.warn('[admin-dashboard] actor profile read failed — activity rows lose their names', actorsResult.error);
   }
