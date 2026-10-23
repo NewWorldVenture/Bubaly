@@ -13,7 +13,7 @@ import {
   Sparkles, CreditCard, TrendingDown, ArrowUpRight,
 } from 'lucide-react';
 import {
-  adminNoteKindMeta, filterAdminNotes,
+  adminNoteKindMeta, filterAdminNotes, NOTIFICATION_KIND_ORDER,
   type AdminNotificationRow,
 } from '@/lib/admin/notifications';
 import { markAdminNotesReadAction } from '@/app/(app)/admin/notifications-actions';
@@ -41,12 +41,6 @@ function timeAgo(iso: string, fmtDate: (v: string) => string): string {
   if (s < 604800) return `${Math.floor(s / 86400)}d ago`;
   return fmtDate(iso);
 }
-
-/** The kinds that get a chip, in a stable, sensible order. The page counts each. */
-export const NOTIFICATION_KIND_ORDER = [
-  'feedback_new', 'github_sync', 'github_error', 'support_ticket',
-  'marketplace_report', 'family_signup', 'subscription', 'subscription_churn', 'info',
-] as const;
 
 /**
  * `notifications` is the newest few hundred, listed; `totals` are the whole

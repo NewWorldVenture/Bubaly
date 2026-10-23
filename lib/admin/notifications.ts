@@ -24,6 +24,17 @@ export const ADMIN_NOTE_KIND_META: Record<AdminNoteKind, { label: string; tone: 
   info:               { label: 'Update',         tone: 'text-muted' },
 };
 
+/**
+ * The kinds that get a chip on /admin/notifications, in a stable, sensible
+ * order; the page counts each. It lives here, not in the 'use client' list,
+ * because the server page maps over it, and a server component that imports
+ * a value from a 'use client' module gets a client reference, not the array.
+ */
+export const NOTIFICATION_KIND_ORDER: readonly AdminNoteKind[] = [
+  'feedback_new', 'github_sync', 'github_error', 'support_ticket',
+  'marketplace_report', 'family_signup', 'subscription', 'subscription_churn', 'info',
+];
+
 export function isAdminNoteKind(v: unknown): v is AdminNoteKind {
   return typeof v === 'string' && v in ADMIN_NOTE_KIND_META;
 }
