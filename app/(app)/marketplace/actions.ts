@@ -159,7 +159,7 @@ export async function setOrderStatusAction(orderId: string, status: string): Pro
   // buyer's as buyer_family_id.
   const { data: order, error: orderError } = await readFamilyOrders(ctx.active.familyId, (scope) => scope(supabase
     .from('marketplace_orders')
-    .select('id, status, family_id, seller_member')
+    .select('id, status, family_id, seller_member, kind')
     .eq('id', orderId))
     .maybeSingle());
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
@@ -204,8 +204,9 @@ export async function setOrderStatusAction(orderId: string, status: string): Pro
   // take it — or its family-calendar event — down.
   // The pickup row is the order's family's; a calendar event is in the
   // family of whoever confirmed it, which the caller can only remove from
-  // their own (see cancelOrderPickup).
-  if (status === 'cancelled') await cancelOrderPickup(supabase, orderId, order.family_id, ctx.active.familyId);
+  // their own (see cancelOrderPickup). `kind` tells a loan's completed pickup,
+  // a start that never finished, which goes too, from a sale's, which never does.
+  if (status === 'cancelled') await cancelOrderPickup(supabase, orderId, order.family_id, ctx.active.familyId, order.kind);
   revalidatePath(`${MARKETPLACE}/orders`);
   return { ok: true };
 }

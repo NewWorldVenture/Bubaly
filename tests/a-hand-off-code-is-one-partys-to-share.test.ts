@@ -264,7 +264,9 @@ describe('a rent or a borrow starts at its pickup (N6)', () => {
     ]);
     // The lender has claimed the pickup and is about to start the order when
     // the borrower's own Cancel runs start to finish. Its cancelOrderPickup
-    // finds the pickup already 'completed', so it takes nothing down.
+    // takes the loan's 'completed' pickup down, and the lender's take-down then
+    // finds nothing left to do (tests/a-cancelled-loan-takes-down-the-pickup-
+    // its-start-claimed.test.ts has the two-household and failed-start cases).
     const realFrom = db.from.bind(db);
     let cancel: Promise<unknown> | null = null;
     db.from = ((table: string) => {

@@ -309,17 +309,19 @@ async function startLoanAtPickup(
   if (wroteNoRows(started)) {
     // The order is no longer confirmed or active: it was cancelled (or closed)
     // since it was read. So the pickup this call completed is taken down, not
-    // put back to 'confirmed': the order's own cancel, landing after the claim
-    // above, found no open pickup to cancel, and a reopened pickup was a live
-    // code and a calendar event on an order that is off. The claim is
-    // this call's alone and the take-down is predicated on it, so it cannot
-    // touch anyone else's. The event is in the confirmer's family; between two
-    // households that copy is theirs to remove, and a miss is logged.
+    // put back to 'confirmed': a reopened pickup was a live code and a calendar
+    // event on an order that is off. The claim is this call's alone and the
+    // take-down is predicated on it, so it cannot touch anyone else's. Zero
+    // rows is the order's own cancel having taken it down first (a loan's
+    // completed pickup goes with its order, cancelOrderPickup), which is the
+    // outcome wanted here, not a failure. The event is in the confirmer's
+    // family; between two households that copy is theirs to remove, and a miss
+    // is logged.
     const { data: undone, error: undoError } = await sb.from('marketplace_handoffs').update({ status: 'cancelled', completed_at: null })
       .eq('id', handoff.id).eq('family_id', order.family_id).eq('status', 'completed').eq('completed_at', completedAt)
       .select('id, calendar_event_id');
-    if (undoError || wroteNoRows(undone)) console.error('[marketplace-handoff] could not take the pickup down', undoError ?? handoff.id);
-    else await removePickupFromCalendar(sb, actorFamilyId, undone?.[0]?.calendar_event_id);
+    if (undoError) console.error('[marketplace-handoff] could not take the pickup down', undoError);
+    else if (!wroteNoRows(undone)) await removePickupFromCalendar(sb, actorFamilyId, undone?.[0]?.calendar_event_id);
     return { ok: false, error: t('handoff.pickupChangedRefresh') };
   }
   return { ok: true, data: { loanStarted: true } };
