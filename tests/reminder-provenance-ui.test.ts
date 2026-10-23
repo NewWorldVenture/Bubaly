@@ -76,7 +76,9 @@ it('hides internal provenance from row/filter chips and the editable tag list, a
   // Remove the ordinary tag in the real editor, leaving the reserved receipt intact.
   const remove = nodes(tree).find((node) => node.props['aria-label'] === 'Remove school')!;
   (remove.props.onClick as () => void)(); tree = render();
-  vi.stubGlobal('FormData', class { get(key: string) { return ({ title: 'Edited reminder', remind_at: '2026-09-12T10:00:00Z' } as Record<string, string>)[key] ?? null; } });
+  // What a `datetime-local` box yields: a wall reading with no zone. The editor
+  // reads it on the family's clock and refuses anything else (TIME-003).
+  vi.stubGlobal('FormData', class { get(key: string) { return ({ title: 'Edited reminder', remind_at: '2026-09-12T10:00' } as Record<string, string>)[key] ?? null; } });
   const form = nodes(tree).find((node) => node.type === 'form')!;
   await (form.props.onSubmit as (event: unknown) => Promise<void>)({ preventDefault: () => {}, currentTarget: {} });
   expect(state.update).toHaveBeenCalledWith(expect.objectContaining({ title: 'Edited reminder', tags: [fingerprint] }));

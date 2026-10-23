@@ -130,8 +130,8 @@ describe('the reminders module, converted only where it can be', () => {
     expect(writesIn(PARTIALLY_CONVERTED)).not.toContain('delete');
   });
 
-  it('leaves exactly the six writes that are actually blocked', () => {
-    // Pinned at six so a NEW direct write cannot hide among the blocked ones,
+  it('leaves exactly the seven writes that are actually blocked', () => {
+    // Pinned at seven so a NEW direct write cannot hide among the blocked ones,
     // and so converting any of them has to edit this number deliberately:
     //
     //   editor insert + update ....... need the six columns 0100 added
@@ -140,7 +140,11 @@ describe('the reminders module, converted only where it can be', () => {
     //   complete update .............. the recurrence question: this spawns a
     //                                  history row, completeReminder rolls the
     //                                  same row forward in place
-    expect(writesIn(PARTIALLY_CONVERTED)).toHaveLength(6);
+    //   complete restore update ...... puts that completion back when the
+    //                                  respawn fails, so a series does not end
+    //                                  under "Reminder completed" (it goes with
+    //                                  the complete update above)
+    expect(writesIn(PARTIALLY_CONVERTED)).toHaveLength(7);
   });
 
   it('keeps its tolerance for an unapplied 0100', () => {
