@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { AIProviderConfig } from '@/lib/ai/provider';
 import type { AIEngine, AIConfigView } from '@/lib/ai/models';
+import { settle } from '@/lib/supabase/settle';
 
 type DB = SupabaseClient<Database>;
 
@@ -48,16 +49,36 @@ export async function getOpenAIKey(supabase: DB): Promise<string> {
   }
 }
 
-export async function getAIConfigView(supabase: DB): Promise<AIConfigView> {
-  const { data } = await supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle();
+/** The admin console's view of the AI config, or the read that could not be made. */
+export type AIConfigViewRead =
+  | { view: AIConfigView; error: null }
+  | { view: null; error: { message: string } };
+
+/**
+ * The UI-safe AI config for the admin console.
+ *
+ * The app_settings error used to be dropped, so a refused or unreachable read
+ * became `{}`: "no stored key, default model". /admin/ai then preselected the
+ * first model over the stored one and offered a Save that wrote it,
+ * /admin/settings read "OPENAI_API_KEY not set" and /admin/marketing/settings
+ * "Set OPENAI_API_KEY", none of which anyone had read. The caller now gets the
+ * error and says the config is unavailable. Settled, so a transport rejection
+ * arrives the same way rather than as a throw.
+ */
+export async function getAIConfigView(supabase: DB): Promise<AIConfigViewRead> {
+  const { data, error } = await settle(supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle());
+  if (error) return { view: null, error };
   const stored = (data?.value ?? {}) as StoredConfig;
   return {
-    provider: 'openai',
-    model: stored.model || process.env.AI_MODEL || null,
-    anthropicKeySet: Boolean(stored.anthropicKey || process.env.ANTHROPIC_API_KEY),
-    openaiKeySet: Boolean(stored.openaiKey || process.env.OPENAI_API_KEY),
-    anthropicFromEnv: !stored.anthropicKey && Boolean(process.env.ANTHROPIC_API_KEY),
-    openaiFromEnv: !stored.openaiKey && Boolean(process.env.OPENAI_API_KEY),
+    view: {
+      provider: 'openai',
+      model: stored.model || process.env.AI_MODEL || null,
+      anthropicKeySet: Boolean(stored.anthropicKey || process.env.ANTHROPIC_API_KEY),
+      openaiKeySet: Boolean(stored.openaiKey || process.env.OPENAI_API_KEY),
+      anthropicFromEnv: !stored.anthropicKey && Boolean(process.env.ANTHROPIC_API_KEY),
+      openaiFromEnv: !stored.openaiKey && Boolean(process.env.OPENAI_API_KEY),
+    },
+    error: null,
   };
 }
 

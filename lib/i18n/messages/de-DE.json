@@ -764,6 +764,7 @@
   "admin.viewAll": "Alle anzeigen",
   "admin.youreAllCaughtUp": "Sie sind auf dem neuesten Stand",
   "adminAi.aiEngine": "KI-Engine",
+  "adminAi.couldNotLoadAiEngineSettings": "Die KI-Engine-Einstellungen konnten nicht geladen werden. Bitte aktualisieren und erneut versuchen.",
   "adminAi.currentlyActive": "Derzeit aktiv:",
   "adminAiActivity.failedLastHours": "Fehlgeschlagen · letzte {hours} Std.",
   "adminAiActivity.inFlightLastHours": "Laufend · letzte {hours} Std.",

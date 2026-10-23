@@ -764,6 +764,7 @@
   "admin.viewAll": "Mostra tutto",
   "admin.youreAllCaughtUp": "Sei aggiornato",
   "adminAi.aiEngine": "Motore IA",
+  "adminAi.couldNotLoadAiEngineSettings": "Impossibile caricare le impostazioni del motore IA. Aggiorna e riprova.",
   "adminAi.currentlyActive": "Attualmente attivo:",
   "adminAiActivity.failedLastHours": "Non riuscite · ultime {hours} h",
   "adminAiActivity.inFlightLastHours": "In corso · ultime {hours} h",

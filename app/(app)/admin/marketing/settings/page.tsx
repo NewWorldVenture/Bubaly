@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { CheckCircle2, XCircle } from 'lucide-react';
+import { CheckCircle2, CircleAlert, XCircle } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settle } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
@@ -16,11 +16,18 @@ export const dynamic = 'force-dynamic';
 
 const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring';
 
-function providerStatus(ai: AIConfigView) {
+/**
+ * `ready: null` is a status that was not read: the AI row when the app_settings
+ * read failed. It reads Unavailable, not "Set OPENAI_API_KEY", since the key the
+ * app uses may well be stored in the admin console. `env` is what a row that is
+ * not ready asks for, so the AI row's is the variable: it used to name the key's
+ * source, which for no key at all read "Set admin console".
+ */
+function providerStatus(ai: AIConfigView | null): { name: string; ready: boolean | null; env: string }[] {
   return [
     { name: 'Email (Resend)', ready: !!process.env.RESEND_API_KEY, env: 'RESEND_API_KEY' },
     { name: 'SMS (Twilio)', ready: isTwilioConfigured(), env: 'TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN + TWILIO_PHONE_NUMBER' },
-    { name: 'AI (OpenAI)', ready: ai.openaiKeySet, env: ai.openaiFromEnv ? 'OPENAI_API_KEY' : 'admin console' },
+    { name: 'AI (OpenAI)', ready: ai ? ai.openaiKeySet : null, env: 'OPENAI_API_KEY' },
     { name: 'Payments (Stripe)', ready: !!process.env.STRIPE_SECRET_KEY, env: 'STRIPE_SECRET_KEY' },
     { name: 'Search Console', ready: !!process.env.GOOGLE_SEARCH_CONSOLE_KEY, env: 'GOOGLE_SEARCH_CONSOLE_KEY' },
   ];
@@ -43,6 +50,7 @@ export default async function MarketingSettingsPage() {
     console.error('[admin-marketing-settings] settings read failed', settingsError);
     return <AdminMarketingSettingsReadError />;
   }
+  if (aiConfig.error) console.error('[admin-marketing-settings] AI config read failed', aiConfig.error);
   const byKey = new Map((settings ?? []).map((s) => [s.key, s.value]));
 
   return (
@@ -50,12 +58,14 @@ export default async function MarketingSettingsPage() {
       <Card>
         <h2 className="mb-3 font-semibold">{t('adminMarketingSettings.channelProviders')}</h2>
         <ul className="space-y-2">
-          {providerStatus(aiConfig).map((p) => (
-            <li key={p.env} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
+          {providerStatus(aiConfig.view).map((p) => (
+            <li key={p.name} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
               <span>{p.name}</span>
-              {p.ready
-                ? <span className="inline-flex items-center gap-1 text-success"><CheckCircle2 className="h-4 w-4" />{' '}{t('settings.connected')}</span>
-                : <span className="inline-flex items-center gap-1 text-muted"><XCircle className="h-4 w-4" /> Set {p.env}</span>}
+              {p.ready === null
+                ? <span className="inline-flex items-center gap-1 text-muted"><CircleAlert className="h-4 w-4" />{' '}{t('strategyMetrics.unavailable')}</span>
+                : p.ready
+                  ? <span className="inline-flex items-center gap-1 text-success"><CheckCircle2 className="h-4 w-4" />{' '}{t('settings.connected')}</span>
+                  : <span className="inline-flex items-center gap-1 text-muted"><XCircle className="h-4 w-4" /> Set {p.env}</span>}
             </li>
           ))}
         </ul>

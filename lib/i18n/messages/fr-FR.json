@@ -764,6 +764,7 @@
   "admin.viewAll": "Tout afficher",
   "admin.youreAllCaughtUp": "Vous êtes à jour",
   "adminAi.aiEngine": "Moteur d'IA",
+  "adminAi.couldNotLoadAiEngineSettings": "Impossible de charger les paramètres du moteur d’IA. Actualisez et réessayez.",
   "adminAi.currentlyActive": "Actuellement actif :",
   "adminAiActivity.failedLastHours": "Échecs · dernières {hours} h",
   "adminAiActivity.inFlightLastHours": "En cours · dernières {hours} h",

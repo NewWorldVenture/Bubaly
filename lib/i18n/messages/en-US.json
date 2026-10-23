@@ -757,6 +757,7 @@
   "admin.viewAll": "View all",
   "admin.youreAllCaughtUp": "You’re all caught up",
   "adminAi.aiEngine": "AI Engine",
+  "adminAi.couldNotLoadAiEngineSettings": "Could not load the AI engine settings. Refresh and try again.",
   "adminAi.currentlyActive": "Currently active:",
   "adminAiActivity.failedLastHours": "Failed · last {hours}h",
   "adminAiActivity.inFlightLastHours": "In flight · last {hours}h",

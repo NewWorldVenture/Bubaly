@@ -764,6 +764,7 @@
   "admin.viewAll": "Alles bekijken",
   "admin.youreAllCaughtUp": "Je bent helemaal bij",
   "adminAi.aiEngine": "AI-engine",
+  "adminAi.couldNotLoadAiEngineSettings": "Kon de instellingen van de AI-engine niet laden. Ververs en probeer het opnieuw.",
   "adminAi.currentlyActive": "Momenteel actief:",
   "adminAiActivity.failedLastHours": "Mislukt · laatste {hours} u",
   "adminAiActivity.inFlightLastHours": "Bezig · laatste {hours} u",
