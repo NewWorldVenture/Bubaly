@@ -210,13 +210,16 @@ describe('what the Privacy Center says, rendered', () => {
     const notIncluded = at(screen, EN_US['privacyCenter.exportNotIncluded']);
     expect(notIncluded).toBeGreaterThan(help);
     expect(at(screen, EN_US['privacyCenter.exportButton'])).toBeGreaterThan(notIncluded);
-    for (const word of ['health', 'journal', 'locations', 'wallet', 'notIncluded']) expect(EN_US['privacyCenter.exportNotIncluded']).toContain(word);
+    for (const word of ['health', 'journal', 'locations', 'wallet', 'listed inside the file']) expect(EN_US['privacyCenter.exportNotIncluded']).toContain(word);
+    // The file's field name is for the file; the reader is told where to look in plain words.
+    expect(screen).not.toContain('notIncluded');
   });
 
   it('in every base catalogue', () => {
     for (const locale of ['de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT']) {
       const messages = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')) as Record<string, string>;
       expect(messages['privacyCenter.exportNotIncluded'], locale).toBeTruthy();
+      expect(messages['privacyCenter.exportNotIncluded'], locale).not.toContain('notIncluded');
       expect(messages['privacyCenter.exportNotIncluded'], locale).not.toBe(EN_US['privacyCenter.exportNotIncluded']);
       expect(messages['privacyCenter.exportHelp'], locale).not.toBe(EN_US['privacyCenter.exportHelp']);
     }

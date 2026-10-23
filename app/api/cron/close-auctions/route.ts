@@ -19,6 +19,15 @@ export const maxDuration = 120;
 const BATCH = 50;
 
 /**
+ * Pages of due auctions read to fill one BATCH. An auction whose winning
+ * bidder's household has closed is held (see the due query) and stays due, so
+ * a single page could fill with held auctions and starve the settleable ones
+ * behind them. Bounded, as the re-check below is, so one run stays inside
+ * maxDuration.
+ */
+const DUE_MAX_PAGES = 4;
+
+/**
  * How far back a settled auction's notices are re-checked. Settlement commits
  * before anyone is told, and once a listing is no longer `available` the due
  * query above never selects it again — so a notice that failed (no scope, a
@@ -170,20 +179,47 @@ export async function GET(req: NextRequest) {
   // embed named by its column: marketplace_listings has a second foreign key
   // into families (highest_bidder_family_id), and an unhinted `families(...)`
   // is ambiguous to PostgREST.
-  const { data: due, error } = await admin
-    .from('marketplace_listings')
-    .select('id, family:families!family_id!inner(closed_at)')
-    .eq('sale_format', 'auction').eq('status', 'available')
-    .lt('auction_ends_at', nowIso)
-    .is('family.closed_at', null)
-    .limit(BATCH);
-  if (error) return NextResponse.json({ ok: false, error: t('closeAuctions.couldNotLoadAuctions') }, { status: 500 });
+  //
+  // Nor is one settled to a winning bidder whose household has closed since
+  // bidding: marketplace_close_auction would write the 'Won at auction' order
+  // for highest_bidder_family_id regardless, a confirmed order the winner
+  // cannot see, with the seller waiting on them — the harm the negotiation
+  // actions refuse for a closed buyer. What a closed winner SHOULD mean (fall
+  // through to the next bidder, or refuse to settle) is the owner's call for
+  // that RPC; until then the cron holds such an auction unsettled, counts it
+  // (`heldForClosedBidder`) and settles it on the first run after that
+  // household reopens. The second embed is hinted by its column for the same
+  // ambiguity, and is not `!inner`: an auction with no bids has no bidder.
+  type Due = { id: string; bidder: { closed_at: string | null } | { closed_at: string | null }[] | null };
+  const due: Due[] = [];
+  let heldForClosedBidder = 0;
+  for (let page = 0; page < DUE_MAX_PAGES && due.length < BATCH; page++) {
+    const from = page * BATCH;
+    const { data: rows, error } = await admin
+      .from('marketplace_listings')
+      .select('id, family:families!family_id!inner(closed_at), bidder:families!highest_bidder_family_id(closed_at)')
+      .eq('sale_format', 'auction').eq('status', 'available')
+      .lt('auction_ends_at', nowIso)
+      .is('family.closed_at', null)
+      .order('id', { ascending: true })
+      .range(from, from + BATCH - 1);
+    if (error) return NextResponse.json({ ok: false, error: t('closeAuctions.couldNotLoadAuctions') }, { status: 500 });
+    for (const row of (rows ?? []) as unknown as Due[]) {
+      const bidder = Array.isArray(row.bidder) ? row.bidder[0] : row.bidder;
+      if (bidder?.closed_at) heldForClosedBidder++;
+      else if (due.length < BATCH) due.push(row);
+    }
+    if ((rows ?? []).length < BATCH) break;
+  }
+  if (heldForClosedBidder > 0) {
+    console.warn(`Auctions held unsettled because the winning bidder's household has closed: ${heldForClosedBidder}`);
+  }
 
   let sold = 0;
   let unsold = 0;
   let failed = 0;
   const settledThisRun = new Set<string>();
-  for (const listing of due ?? []) {
+  for (const listing of due) {
     const { data: closed, error: closeError } = await admin.rpc('marketplace_close_auction', {
       p_listing_id: listing.id,
       p_now: nowIso,
@@ -280,5 +316,5 @@ export async function GET(req: NextRequest) {
 
   if (skipped > 0) console.warn(`Auction notices skipped for families with no notice scope: ${skipped}`);
   const ok = failed === 0;
-  return NextResponse.json({ ok, closed: sold + unsold, sold, unsold, failed, skipped, rechecked }, { status: ok ? 200 : 502 });
+  return NextResponse.json({ ok, closed: sold + unsold, sold, unsold, failed, skipped, rechecked, heldForClosedBidder }, { status: ok ? 200 : 502 });
 }

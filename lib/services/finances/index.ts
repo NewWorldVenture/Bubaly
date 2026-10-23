@@ -1015,7 +1015,6 @@ export async function createTransaction(
   // points at.
   for (const [table, id, noun] of [
     ['financial_accounts', input.accountId, 'account'],
-    ['family_members', input.memberId, 'member'],
     ['documents', input.receiptDocumentId, 'receipt'],
   ] as const) {
     if (!id) continue;
@@ -1030,6 +1029,29 @@ export async function createTransaction(
       return fail(describeDbError(error, `Could not check that ${noun}.`), { code: SERVICE_CODES.db });
     }
     if (!data) return fail(`That ${noun} does not belong to this family.`, { code: SERVICE_CODES.notFound });
+  }
+  // The member is checked the same way, and must also still BE in the family.
+  // A removed member's id stays readable (family.listMembers with
+  // include_inactive, a remembered id), and this is the one AI write that
+  // takes a member id without resolveAssigneeId's requireActive — so a new
+  // purchase was filed under someone who has left. The choice is deliberate:
+  // a former member's past purchase is recorded with no member rather than
+  // attributed to a person the family no longer has. It is checked here, after
+  // the operation-receipt probe, so a replay of a purchase recorded while they
+  // were still a member returns its receipt.
+  if (input.memberId) {
+    const { data: member, error } = await scope.db
+      .from('family_members')
+      .select('id, is_active')
+      .eq('family_id', scope.familyId)
+      .eq('id', input.memberId)
+      .maybeSingle();
+    if (error) {
+      console.error('[service:finances] family_members check failed', error);
+      return fail(describeDbError(error, 'Could not check that member.'), { code: SERVICE_CODES.db });
+    }
+    if (!member) return fail('That member does not belong to this family.', { code: SERVICE_CODES.notFound });
+    if (member.is_active === false) return fail('That member is no longer in this family.', { code: SERVICE_CODES.notFound });
   }
 
   let data: TransactionRow;

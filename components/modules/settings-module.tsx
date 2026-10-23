@@ -511,7 +511,8 @@ function EditMemberModal({ member, isSelf, onClose }: {
     setSaving(false);
     if (!res) return toastError(t('errors.thatChangeWasNotSaved'));
     if (!res.ok) return toastError(res.error);
-    success(t('settingsModule.memberUpdated'));
+    if (res.invitesRevoked === false) toastError(t('familyModule.roleChangedButInviteStillOpen'));
+    else success(t('settingsModule.memberUpdated'));
     onClose();
     window.location.reload();
   }

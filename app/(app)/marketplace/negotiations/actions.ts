@@ -143,13 +143,17 @@ export async function respondToOfferAction(
   // household that closed (see the header). The thread is read with the
   // caller's own session, scoped to their side of it, so the standings asked
   // about are of families the caller is already dealing with; a thread it does
-  // not return is left to the RPC's not_found.
+  // not return is left to the RPC's not_found. Their side is EVERY household
+  // they belong to, not only the active one: the RPC finds the caller through
+  // marketplace_member_id (0154), which answers for any of their families, so
+  // a thread of their other household reached it with no standing asked.
   if (input.action === 'accept' || input.action === 'counter') {
+    const ownFamilies = [...new Set([ctx.active.familyId, ...ctx.memberships.map((m) => m.familyId)])];
     const { data: thread, error: threadError } = await supabase
       .from('marketplace_negotiations')
       .select('id, listing_id, buyer_family_id')
       .eq('id', input.negotiationId)
-      .or(eitherPartyFamily(ctx.active.familyId))
+      .or(ownFamilies.map(eitherPartyFamily).join(','))
       .maybeSingle();
     if (threadError) return actionFailure('read the negotiation', t('negotiations.couldNotRespondToTheOffer'), threadError);
     if (thread?.listing_id) {
