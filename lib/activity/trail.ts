@@ -94,16 +94,35 @@ function titleOf(metadata: unknown): string | null {
 }
 
 /**
- * The person a row is by: its actor, or, on a row with no actor, the parent
- * the server recorded as reopening the account (lib/family/account-reopened.ts
- * writes that entry with no actor and keeps them in metadata.reopened_by). A
- * member's own row must name the member (0380), so only the server writes a
- * row without one; the key is read only there, and a member who writes it on
- * their own row is still the one named.
+ * Whether the row is the server's account-reopen entry, by its exact shape: no
+ * actor, action 'update', resource 'family', metadata.change 'reopened'
+ * (lib/family/account-reopened.ts writes it with no actor and keeps the
+ * parent who reopened in metadata.reopened_by).
+ *
+ * A row with no actor is not, by that alone, the server's. A member's own row
+ * must name the member when it is written (0380), but audit_logs.actor_id is
+ * `references auth.users(id) on delete set null` (0002), so it ends with no
+ * actor once that member's login is deleted (removeChildLoginAction deletes a
+ * PIN child's; an erasure or a dashboard deletion anyone's). Read as the reopen on
+ * any null-actor row, a child's row that named a parent there and a title of
+ * the child's choosing became that parent's line once the child's login went
+ * (household-roles N5-R1-NULL-ACTOR-TRAIL-ATTRIBUTION).
+ */
+function isReopenEntry(row: TrailRow): boolean {
+  if (row.actor_id || row.action !== 'update' || row.resource !== 'family') return false;
+  if (!row.metadata || typeof row.metadata !== 'object') return false;
+  return (row.metadata as { change?: unknown }).change === 'reopened';
+}
+
+/**
+ * The person a row is by: its actor, or, on the reopen entry only, the parent
+ * the server recorded as reopening the account. Every other row with no actor
+ * names no one ("Someone"), and a member who writes the key on their own row
+ * is still the one named.
  */
 function personOf(row: TrailRow): string | null {
   if (row.actor_id) return row.actor_id;
-  if (!row.metadata || typeof row.metadata !== 'object') return null;
+  if (!isReopenEntry(row)) return null;
   const reopenedBy = (row.metadata as { reopened_by?: unknown }).reopened_by;
   return typeof reopenedBy === 'string' && reopenedBy ? reopenedBy : null;
 }
@@ -119,11 +138,15 @@ export function describeTrailRow(row: TrailRow, nameByUserId: Map<string, string
   const byAssistant = byAssistantOf(row.metadata);
   const person = personOf(row);
   const named = person ? nameByUserId.get(person) : undefined;
+  // The server writes no title on the reopen entry, so a line credited to the
+  // parent it names says only what the server says ("updated family"): a
+  // title in that shape is someone else's words.
+  const title = isReopenEntry(row) ? null : titleOf(row.metadata);
 
   return {
     id: row.id,
     who: byAssistant ? 'Bubaly' : named ?? 'Someone',
-    what: titleOf(row.metadata) ?? `${TRAIL_VERBS[row.action as TrailAction] ?? row.action} ${row.resource.replace(/_/g, ' ')}`,
+    what: title ?? `${TRAIL_VERBS[row.action as TrailAction] ?? row.action} ${row.resource.replace(/_/g, ' ')}`,
     at: row.created_at,
     byAssistant,
   };
