@@ -68,6 +68,20 @@ export async function castBallot(input: { voteId: string; optionId: string; choi
   const memberId = ctx.active.member?.id;
   if (!memberId) return { ok: false, error: t('actions.noFamilyMemberProfileFound') };
   const supabase = await createServer();
+  // A closed vote is decided. The page stops offering these buttons once it is
+  // closed, but a page left open from before someone closed it (or a direct
+  // call) would still have moved the counts under the winner, and nothing in
+  // RLS looks at the status. So ask first. A read that fails, or a vote not in
+  // this family, is refused too: neither is evidence the vote is open.
+  // (A close landing between this read and the write below can still let one
+  // ballot through; only a database rule could shut that.)
+  const { data: vote, error: voteError } = await settle(supabase.from('meal_votes').select('status')
+    .eq('id', input.voteId).eq('family_id', ctx.active.familyId).maybeSingle());
+  if (voteError || !vote) {
+    if (voteError) console.error('[meal-vote] could not read the vote to cast a ballot', { voteId: input.voteId, reason: describeReadError(voteError) });
+    return { ok: false, error: t('actions.couldNotRecordYourVote') };
+  }
+  if (vote.status !== 'open') return { ok: false, error: t('actions.thatVoteIsClosed') };
   const { error } = await supabase.from('meal_vote_ballots').upsert({
     vote_id: input.voteId, option_id: input.optionId, family_id: ctx.active.familyId,
     member_id: memberId, choice: input.choice,
