@@ -5,6 +5,7 @@ import type { LocaleCode } from '@/lib/i18n/locales';
 import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { MARKETPLACE_CURRENCY } from '@/lib/marketplace/listings';
+import { RESERVE_VIEW_COLUMNS, readWithReserveView } from '@/lib/marketplace/reserve-view';
 import { createFormat } from '@/lib/utils/format';
 import { notify } from '@/lib/services/notifications';
 import { systemScopeForFamily } from '@/lib/services/scope';
@@ -190,23 +191,45 @@ export async function GET(req: NextRequest) {
   // (`heldForClosedBidder`) and settles it on the first run after that
   // household reopens. The second embed is hinted by its column for the same
   // ambiguity, and is not `!inner`: an auction with no bids has no bidder.
-  type Due = { id: string; bidder: { closed_at: string | null } | { closed_at: string | null }[] | null };
+  //
+  // Only an auction that would SELL to that bidder is held: marketplace_close_
+  // auction writes the order only when its `v_sold` holds (0483: bids, a
+  // leader's max that meets the reserve, a leading member and family). Any
+  // other closes unsold, with no order for anyone, so a closed leader is no
+  // reason to keep an open seller's auction running past its end. The figures
+  // v_sold compares are the two SEC-016 secrets, which no code names, so this
+  // reads 0452's public `reserve_met` instead: since 0483(b) a leader whose max
+  // covers the reserve shows at least the reserve, and before 0483 the RPC
+  // compared the shown price itself (0457), so bids plus reserve_met is v_sold.
+  // (A bid placed before 0483(b) whose hidden max covered the reserve without
+  // the price showing it reads as unmet; what the RPC does for a closed winner
+  // is the owner's SQL.)
+  type Due = {
+    id: string; bid_count: number | null; reserve_met: boolean | null; highest_bidder_member_id: string | null;
+    bidder: { closed_at: string | null } | { closed_at: string | null }[] | null;
+  };
+  const wouldSell = (row: Due) => Number(row.bid_count ?? 0) > 0 && row.reserve_met === true && row.highest_bidder_member_id != null;
   const due: Due[] = [];
   let heldForClosedBidder = 0;
   for (let page = 0; page < DUE_MAX_PAGES && due.length < BATCH; page++) {
     const from = page * BATCH;
-    const { data: rows, error } = await admin
-      .from('marketplace_listings')
-      .select('id, family:families!family_id!inner(closed_at), bidder:families!highest_bidder_family_id(closed_at)')
-      .eq('sale_format', 'auction').eq('status', 'available')
-      .lt('auction_ends_at', nowIso)
-      .is('family.closed_at', null)
-      .order('id', { ascending: true })
-      .range(from, from + BATCH - 1);
+    // Through readWithReserveView, so a database 0452 has not reached yet
+    // still settles (lib/marketplace/reserve-view.ts).
+    const { data: rows, error } = await readWithReserveView<Due[]>(
+      `id, bid_count, ${RESERVE_VIEW_COLUMNS}, highest_bidder_member_id, family:families!family_id!inner(closed_at), bidder:families!highest_bidder_family_id(closed_at)`,
+      (columns) => admin
+        .from('marketplace_listings')
+        .select(columns)
+        .eq('sale_format', 'auction').eq('status', 'available')
+        .lt('auction_ends_at', nowIso)
+        .is('family.closed_at', null)
+        .order('id', { ascending: true })
+        .range(from, from + BATCH - 1),
+    );
     if (error) return NextResponse.json({ ok: false, error: t('closeAuctions.couldNotLoadAuctions') }, { status: 500 });
-    for (const row of (rows ?? []) as unknown as Due[]) {
+    for (const row of rows ?? []) {
       const bidder = Array.isArray(row.bidder) ? row.bidder[0] : row.bidder;
-      if (bidder?.closed_at) heldForClosedBidder++;
+      if (bidder?.closed_at && wouldSell(row)) heldForClosedBidder++;
       else if (due.length < BATCH) due.push(row);
     }
     if ((rows ?? []).length < BATCH) break;

@@ -511,8 +511,12 @@ function EditMemberModal({ member, isSelf, onClose }: {
     setSaving(false);
     if (!res) return toastError(t('errors.thatChangeWasNotSaved'));
     if (!res.ok) return toastError(res.error);
-    if (res.invitesRevoked === false) toastError(t('familyModule.roleChangedButInviteStillOpen'));
-    else success(t('settingsModule.memberUpdated'));
+    // Said before the reload, and as an error, the way removeMember does: a
+    // toast lives in React state, so the reload below cleared this warning the
+    // moment it appeared. The role did change; the Pending invites list can
+    // revoke the one still open by hand.
+    if (res.invitesRevoked === false) { toastError(t('familyModule.roleChangedButInviteStillOpen')); onClose(); return; }
+    success(t('settingsModule.memberUpdated'));
     onClose();
     window.location.reload();
   }
