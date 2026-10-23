@@ -14,6 +14,9 @@ import { signFeedbackAttachments } from '@/lib/storage/feedback-attachment-signi
 export const metadata: Metadata = { title: 'Admin · Feedback & Ideas', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
+/** Comments the threads' paged read may go through before it is reported as a prefix. */
+const COMMENT_CEILING = 3000;
+
 export default async function AdminFeedbackPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
@@ -30,7 +33,7 @@ export default async function AdminFeedbackPage() {
       .select('id, idea_id, author_name, is_team, body, created_at')
       .order('created_at', { ascending: true })
       .order('id')
-      .range(from, to), { max: 3000 })),
+      .range(from, to), { max: COMMENT_CEILING })),
     settle(supabase.from('admin_notifications')
       .select('id, kind, title, body, url, is_read, created_at')
       .order('created_at', { ascending: false })
@@ -38,7 +41,15 @@ export default async function AdminFeedbackPage() {
     githubRepoStatus(),
   ]);
 
-  const readError = ideasResult.error ?? commentsResult.error ?? notesResult.error;
+  // The comment rows only fill the threads. Past the ceiling they are a prefix,
+  // so the threads say they are not shown, and the ideas, every moderation form
+  // and the relay, which need none of them, stay: reaching it used to be the
+  // read-error state for the whole console (review
+  // R6-FEEDBACK-COMMENT-CEILING-TAKES-THE-IDEAS). A comment read that FAILS is
+  // still the read-error state.
+  const threadsCeiling = 'truncated' in commentsResult && commentsResult.truncated;
+  if (threadsCeiling) console.warn('[admin-feedback] the comment read reached its ceiling; the threads are not shown');
+  const readError = ideasResult.error ?? (threadsCeiling ? null : commentsResult.error) ?? notesResult.error;
   if (readError) {
     console.error('[admin-feedback] feedback read failed', readError);
     return <AdminFeedbackReadError />;
@@ -80,7 +91,7 @@ export default async function AdminFeedbackPage() {
 
       <FeedbackAdmin
         ideas={(ideas ?? []) as IdeaRow[]}
-        comments={(comments ?? []) as AdminComment[]}
+        comments={threadsCeiling ? null : (comments ?? []) as AdminComment[]}
         notifications={(notes ?? []) as AdminNotification[]}
         githubConfigured={gh.ok}
       />

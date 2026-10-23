@@ -35,8 +35,13 @@ const fmtIn = (locale: LocaleCode) => (iso: string) => {
   return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
+/**
+ * `comments` is null when the page could not read every comment on the board:
+ * each thread then says it is not shown, rather than showing part of itself as
+ * the whole, and everything else on a card still works.
+ */
 export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfigured = false }: {
-  ideas: IdeaRow[]; comments: AdminComment[]; notifications?: AdminNotification[]; githubConfigured?: boolean;
+  ideas: IdeaRow[]; comments: AdminComment[] | null; notifications?: AdminNotification[]; githubConfigured?: boolean;
 }) {
   const locale = useLocale();
   const fmt = fmtIn(locale.code);
@@ -65,6 +70,7 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
     });
   }
   const commentsByIdea = useMemo(() => {
+    if (!comments) return null;
     const m = new Map<string, AdminComment[]>();
     for (const c of comments) { const a = m.get(c.idea_id) ?? []; a.push(c); m.set(c.idea_id, a); }
     return m;
@@ -196,7 +202,7 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
             <IdeaAdminCard
               key={idea.id}
               idea={idea}
-              comments={commentsByIdea.get(idea.id) ?? []}
+              comments={commentsByIdea ? commentsByIdea.get(idea.id) ?? [] : null}
               expanded={expanded === idea.id}
               onToggle={() => setExpanded((e) => (e === idea.id ? null : idea.id))}
               onSuccess={success}
@@ -224,7 +230,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
 }
 
 function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError }: {
-  idea: IdeaRow; comments: AdminComment[]; expanded: boolean; onToggle: () => void;
+  idea: IdeaRow; comments: AdminComment[] | null; expanded: boolean; onToggle: () => void;
   onSuccess: (m: string) => void; onError: (m: string) => void;
 }) {
   const locale = useLocale();
@@ -351,7 +357,9 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
           </div>
 
           {/* Existing comments */}
-          {comments.length > 0 && (
+          {comments === null ? (
+            <p className="text-xs text-muted">{t('feedbackAdmin.conversationNotShown')}</p>
+          ) : comments.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-semibold text-muted">{t('feedbackAdmin.conversation')}</p>
               {comments.map((c) => (
