@@ -212,21 +212,33 @@ describe('the pages themselves still page (MAIN-F-J05, J06, J07)', () => {
     const { readFile } = await import('node:fs/promises');
     const source = (await readFile(file, 'utf8')).split('\n').filter((l) => !l.trimStart().startsWith('//')).join('\n');
     const marker = `from('${table}')`;
-    const chains: string[] = [];
+    const chains: { chain: string; bound: string | null; next: string }[] = [];
     for (let at = source.indexOf(marker); at !== -1; at = source.indexOf(marker, at + 1)) {
       // A chain ends at the `,` or `;` that closes its statement; a readAllAsQuery
       // callback closes with `.range(from, to)`.
       const rest = source.slice(at);
       const end = rest.search(/\)\s*(,|;)\s*\n/);
-      chains.push(rest.slice(0, end === -1 ? rest.length : end + 1));
+      chains.push({
+        chain: rest.slice(0, end === -1 ? rest.length : end + 1),
+        // `let query = supabase.from(…)…;` names the builder the statements after it page.
+        bound: /let (\w+) = \w+\.$/.exec(source.slice(Math.max(0, at - 40), at))?.[1] ?? null,
+        next: end === -1 ? '' : rest.slice(end + 1),
+      });
     }
     expect(chains.length).toBeGreaterThan(0);
-    for (const chain of chains) {
+    for (const { chain, bound, next } of chains) {
       const flat = chain.replace(/\s+/g, ' ');
       const isWrite = /\.(insert|update|upsert|delete)\(/.test(chain);
       const isCount = /count: 'exact', head: true/.test(chain);
       const pages = /\.order\('id'\)[^;]*\.range\(from, to\)/.test(flat);
-      expect(isWrite || isCount || pages, `${file}: ${flat.slice(0, 160)}`).toBe(true);
+      // Or it pages on the key, as a readAllById callback does: the builder the
+      // chain is bound to moves past the last id read and is ordered and
+      // limited by it in the very next two statements. A summed read pages
+      // this way so a row written between pages is not read twice.
+      const pagesOnId = bound !== null && new RegExp(
+        `^;\\s*if \\(after\\) ${bound} = ${bound}\\.gt\\('id', after\\);\\s*return ${bound}\\.order\\('id'\\)\\.limit\\(limit\\);`,
+      ).test(next);
+      expect(isWrite || isCount || pages || pagesOnId, `${file}: ${flat.slice(0, 160)}`).toBe(true);
     }
   });
 

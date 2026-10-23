@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { createServiceClient, describeConfiguredServiceKey } from '@/lib/supabase/server';
 import { settleAll, describeReadError, credentialHint } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { adminNoteKindMeta, type AdminNotificationRow } from '@/lib/admin/notifications';
 import { checkDatabase, checkStorage, checkEmail, checkAI } from '@/lib/server/health';
 import { Card } from '@/components/ui/card';
@@ -25,6 +26,8 @@ export const dynamic = 'force-dynamic';
 
 const MS_DAY = 86_400_000;
 const STORAGE_CAP_BYTES = 5 * 1024 ** 4; // 5 TB soft cap for the usage gauge
+/** Rows a paged read may go through before it is reported as a prefix (one round trip per 1,000). */
+const ROW_CEILING = 25_000;
 
 const planLabel = (plan: string | null): string => planName(plan);
 
@@ -57,31 +60,88 @@ export default async function AdminDashboardPage() {
     checkStorage(supabase).catch((cause) => ({ ok: false as const, detail: String(cause) })),
   ]);
 
+  // The revenue trend's rows start at the first of its six admin-zone months.
+  const revenueSince = new Date(lastUtcMonths(6)[0].start).toISOString();
+
+  // Every tile below used to be reduced from a plain select with no bound.
+  // PostgREST answers one with at most `db-max-rows` (1,000) and no error, so
+  // past a thousand rows Monthly revenue read "from 1000 active plans", the
+  // storage gauge summed the first thousand documents, the plan donut and Top
+  // families saw the first thousand families and members, the trend the first
+  // thousand subscriptions and Support the first thousand tickets — each shown
+  // as the platform's total. /admin/subscriptions and /admin/system fixed the
+  // same reads; this page now reads the same way:
+  //
+  //   - what is only COUNTED is a `head: true` count — exact, and no response
+  //     cap touches it: the new-this-month figures and each support status;
+  //   - what is SUMMED or tallied pages on the id (readAllByIdAsQuery) to a
+  //     real ceiling. Families upload documents and check out subscriptions
+  //     while this page reads, and an offset read repeats or skips a row when
+  //     one lands between its pages; paging on `id > last` reads each row at
+  //     most once. Reaching the ceiling is an error, which joins loadErrors and
+  //     the banner instead of rendering a smaller platform than exists;
+  //   - each paged read asks for the rows its figure needs and no more: active
+  //     subscriptions for revenue and the donut, the trend's six months of new
+  //     subscriptions, active members for Top families.
   const [
     familyCountResult,
     activeMemberCountResult,
     activeSubCountResult,
+    newFamilyCountResult,
+    newMemberCountResult,
     familiesResult,
     activeMembersResult,
     subscriptionsResult,
+    newSubscriptionsResult,
     docsResult,
     newMembersResult,
     recentLogsResult,
-    ticketsResult,
+    openTicketCountResult,
+    pendingTicketCountResult,
+    resolvedTicketCountResult,
     adminNotesResult,
     unreadNoteCountResult,
   ] = await settleAll([
     supabase.from('families').select('id', { count: 'exact', head: true }),
     supabase.from('family_members').select('id', { count: 'exact', head: true }).eq('is_active', true),
     supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-    supabase.from('families').select('id, name, created_at').order('created_at', { ascending: false }),
-    supabase.from('family_members').select('family_id, created_at').eq('is_active', true),
-    supabase.from('subscriptions').select('family_id, plan, status, created_at'),
-    supabase.from('documents').select('size_bytes'),
-    supabase.from('family_members').select('created_at').eq('is_active', true).gte('created_at', thirtyDaysAgo),
+    supabase.from('families').select('id', { count: 'exact', head: true }).gte('created_at', monthStart),
+    supabase.from('family_members').select('id', { count: 'exact', head: true }).eq('is_active', true).gte('created_at', monthStart),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('families').select('id, name');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('family_members').select('id, family_id').eq('is_active', true);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('subscriptions').select('id, family_id, plan').eq('status', 'active');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('subscriptions').select('id, plan, created_at').gte('created_at', revenueSince);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('documents').select('id, size_bytes');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('family_members').select('id, created_at').eq('is_active', true).gte('created_at', thirtyDaysAgo);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
     supabase.from('audit_logs').select('id, family_id, actor_id, action, resource, created_at')
       .order('created_at', { ascending: false }).limit(8),
-    supabase.from('support_tickets').select('status'),
+    supabase.from('support_tickets').select('id', { count: 'exact', head: true }).eq('status', 'open'),
+    supabase.from('support_tickets').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabase.from('support_tickets').select('id', { count: 'exact', head: true }).in('status', ['resolved', 'closed']),
     supabase.from('admin_notifications').select('id, kind, title, body, url, is_read, created_at')
       .order('created_at', { ascending: false }).limit(5),
     supabase.from('admin_notifications').select('id', { count: 'exact', head: true }).eq('is_read', false),
@@ -104,13 +164,18 @@ export default async function AdminDashboardPage() {
     ['families (count)', familyCountResult],
     ['active members (count)', activeMemberCountResult],
     ['active subscriptions (count)', activeSubCountResult],
+    ['families new this month (count)', newFamilyCountResult],
+    ['members new this month (count)', newMemberCountResult],
     ['families', familiesResult],
     ['active members', activeMembersResult],
-    ['subscriptions', subscriptionsResult],
+    ['active subscriptions', subscriptionsResult],
+    ['new subscriptions (last 6 months)', newSubscriptionsResult],
     ['documents', docsResult],
     ['new members', newMembersResult],
     ['recent audit logs', recentLogsResult],
-    ['support tickets', ticketsResult],
+    ['support tickets (open count)', openTicketCountResult],
+    ['support tickets (pending count)', pendingTicketCountResult],
+    ['support tickets (resolved count)', resolvedTicketCountResult],
     ['admin notifications', adminNotesResult],
     ['unread notifications (count)', unreadNoteCountResult],
   ] as const)
@@ -123,13 +188,15 @@ export default async function AdminDashboardPage() {
   const { count: familyCount } = familyCountResult;
   const { count: activeMemberCount } = activeMemberCountResult;
   const { count: activeSubCount } = activeSubCountResult;
+  const { count: newFamilyCount } = newFamilyCountResult;
+  const { count: newMemberCount } = newMemberCountResult;
   const { data: families } = familiesResult;
   const { data: activeMembers } = activeMembersResult;
-  const { data: subscriptions } = subscriptionsResult;
+  const { data: activeSubscriptions } = subscriptionsResult;
+  const { data: newSubscriptions } = newSubscriptionsResult;
   const { data: docs } = docsResult;
   const { data: newMembers } = newMembersResult;
   const { data: recentLogs } = recentLogsResult;
-  const { data: tickets } = ticketsResult;
   const { data: adminNotes } = adminNotesResult;
   const { count: unreadNoteCount } = unreadNoteCountResult;
 
@@ -141,10 +208,10 @@ export default async function AdminDashboardPage() {
   // including account-less ones — not just rows in `profiles` (people who've
   // created a login). Counting profiles alone understates active families.
   const userCount = activeMemberCount;
-  const newFamiliesThisMonth = (families ?? []).filter((f) => f.created_at >= monthStart).length;
-  const activeSubs = (subscriptions ?? []).filter((s) => s.status === 'active');
+  const newFamiliesThisMonth = newFamilyCount ?? 0;
+  const activeSubs = activeSubscriptions ?? [];
   const monthlyRevenueCents = activeSubs.reduce((sum, s) => sum + planMonthlyCents(s.plan), 0);
-  const newUsersThisMonth = (newMembers ?? []).filter((p) => p.created_at >= monthStart).length;
+  const newUsersThisMonth = newMemberCount ?? 0;
 
   // ── System status (real probes + configuration readiness) ──
   const statuses = [
@@ -204,7 +271,7 @@ export default async function AdminDashboardPage() {
 
   // ── Revenue overview (last 6 months of new MRR) ──
   const months = lastUtcMonths(6).map((w) => {
-    const cents = (subscriptions ?? [])
+    const cents = (newSubscriptions ?? [])
       .filter((s) => inWindow(s.created_at, w))
       .reduce((sum, s) => sum + planMonthlyCents(s.plan), 0);
     return { label: new Date(w.start).toLocaleDateString(locale, { month: 'short', timeZone: ADMIN_ZONE }), cents };
@@ -212,12 +279,12 @@ export default async function AdminDashboardPage() {
   const maxRevenue = Math.max(...months.map((m) => m.cents), 1);
 
   // ── Support overview ──
-  const ticketCounts = { open: 0, pending: 0, resolved: 0 };
-  for (const t of tickets ?? []) {
-    if (t.status === 'open') ticketCounts.open++;
-    else if (t.status === 'pending') ticketCounts.pending++;
-    else if (t.status === 'resolved' || t.status === 'closed') ticketCounts.resolved++;
-  }
+  // One exact count per status; "Resolved" has always included closed tickets.
+  const ticketCounts = {
+    open: openTicketCountResult.count ?? 0,
+    pending: pendingTicketCountResult.count ?? 0,
+    resolved: resolvedTicketCountResult.count ?? 0,
+  };
 
   // ── Recent activity actors ──
   const actorIds = [...new Set((recentLogs ?? []).map((l) => l.actor_id).filter((x): x is string => !!x))];

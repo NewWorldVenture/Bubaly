@@ -871,6 +871,7 @@
   "adminContent.size": "Tamaño",
   "adminContent.storageByCategory": "Almacenamiento por categoría",
   "adminContent.storageUsed": "Almacenamiento usado",
+  "adminContent.theListIsTheNewestItems": "La lista muestra los {n} elementos más recientes; los filtros de categoría y familia abarcan todos los elementos.",
   "adminContent.title": "Título",
   "adminContent.totalItems": "Total de elementos",
   "adminContent.type": "Tipo",

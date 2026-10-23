@@ -871,6 +871,7 @@
   "adminContent.size": "Größe",
   "adminContent.storageByCategory": "Speicher nach Kategorie",
   "adminContent.storageUsed": "Belegter Speicher",
+  "adminContent.theListIsTheNewestItems": "Die Liste zeigt die neuesten {n} Elemente; die Kategorie- und Familienfilter erfassen alle Elemente.",
   "adminContent.title": "Titel",
   "adminContent.totalItems": "Einträge insgesamt",
   "adminContent.type": "Typ",

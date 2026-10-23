@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import { FileText, Image as ImageIcon, FolderKanban, HardDrive, Clock } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAllAsQuery, readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -26,6 +28,11 @@ type TabKey = (typeof TABS)[number]['key'];
 
 type Params = { searchParams: Promise<{ tab?: string; q?: string; category?: string; family?: string }> };
 
+/** Rows a summed read may page through before it is reported as a prefix (one round trip per 1,000). */
+const SUM_ROW_CEILING = 25_000;
+/** The browsable list is the newest this many documents, and says so when there are more. */
+const LIST_CEILING = 1_000;
+
 function fmtBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -47,44 +54,93 @@ export default async function AdminContentPage({ searchParams }: Params) {
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key as TabKey) ?? 'all';
   const supabase = createServiceClient();
 
-  const [{ data: documents, error: documentsError }, { data: families, error: familiesError }, { data: profiles, error: profilesError }] = await settleAll([
-    supabase.from('documents').select('*').order('created_at', { ascending: false }),
-    supabase.from('families').select('id, name'),
-    supabase.from('profiles').select('id, full_name, email'),
+  const q = (sp.q ?? '').trim().toLowerCase();
+  const categoryFilter = sp.category ?? '';
+  const familyFilter = sp.family ?? '';
+  const since7 = new Date(Date.now() - 7 * 86400000);
+
+  // This page used to read `documents.select('*')` once, unbounded, and compute
+  // everything from what came back. PostgREST answers that with at most
+  // `db-max-rows` (1,000) and no error, so past a thousand documents the Total
+  // items tile pinned at 1,000, the storage total and the per-category bars
+  // understated, and a category whose documents were all older than the newest
+  // thousand was not on the page at all. admin/reports and admin/backup fixed
+  // this for the same table; this page now reads the same way:
+  //
+  //   - the two tiles that are counts are `head: true` counts — exact, uncapped;
+  //   - what is SUMMED (bytes, per-category counts) pages to a real ceiling,
+  //     and reaching it is an error that lands in the read-error state below
+  //     rather than a smaller platform. It pages on the id (readAllByIdAsQuery),
+  //     not on offsets: families upload while this reads, and a document filed
+  //     ahead of the next offset pushed one already read onto the next page,
+  //     so its bytes were added twice;
+  //   - the browsable list is an explicit newest-first page of LIST_CEILING,
+  //     with the category and family filters applied by the server so they
+  //     reach the whole table, and it says when there are more;
+  //   - the "Recent uploads" rail is its own six-row read, so a filter on the
+  //     list does not change what counts as recent;
+  //   - uploaders are joined by the listed documents' created_by ids rather
+  //     than by reading every profile, which was capped the same way.
+  const [docCountResult, recentCountResult, aggregateResult, listResult, recentResult, familiesResult] = await settleAll([
+    supabase.from('documents').select('id', { count: 'exact', head: true }),
+    supabase.from('documents').select('id', { count: 'exact', head: true }).gte('created_at', since7.toISOString()),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('documents').select('id, category, size_bytes');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
+    readAllAsQuery((from, to) => {
+      let query = supabase.from('documents').select('*');
+      if (familyFilter) query = query.eq('family_id', familyFilter);
+      if (categoryFilter) {
+        // 'other' is how a document with no category is shown and filtered.
+        query = categoryFilter === 'other' ? query.or('category.is.null,category.eq.other') : query.eq('category', categoryFilter);
+      }
+      return query.order('created_at', { ascending: false }).order('id', { ascending: false }).range(from, to);
+    }, { max: LIST_CEILING, failOnMax: false }),
+    supabase.from('documents').select('*').order('created_at', { ascending: false }).order('id', { ascending: false }).limit(6),
+    readAllAsQuery((from, to) =>
+      supabase.from('families').select('id, name').order('id').range(from, to), { max: SUM_ROW_CEILING }),
   ]);
 
+  const { data: families, error: familiesError } = familiesResult;
+  const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
+
+  let scoped = listResult.data ?? [];
+  if (tab === 'photos') scoped = scoped.filter((d) => d.mime_type?.startsWith('image/'));
+  if (tab === 'files') scoped = scoped.filter((d) => !d.mime_type?.startsWith('image/'));
+  const filtered = scoped.filter((d) => !q || `${d.title} ${familyNameById.get(d.family_id) ?? ''}`.toLowerCase().includes(q));
+  const shown = filtered.slice(0, 50);
+
+  const uploaderIds = [...new Set([...shown, ...(recentResult.data ?? [])].map((d) => d.created_by).filter((id): id is string => !!id))];
+  const { data: profiles, error: profilesError } = await readInChunks(uploaderIds, (chunk) =>
+    supabase.from('profiles').select('id, full_name, email').in('id', chunk));
+
+  // Five reads of the one table; the first that failed names the failure.
+  const { error: documentsError } = [docCountResult, recentCountResult, aggregateResult, listResult, recentResult].find((r) => r.error) ?? docCountResult;
   const readError = documentsError ?? familiesError ?? profilesError;
   if (readError) {
     console.error('[admin-content] content read failed', readError);
     return <AdminContentReadError />;
   }
 
-  const docs = documents ?? [];
-  const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
-  const uploaderById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.email || 'Unknown']));
+  const docCount = docCountResult.count ?? 0;
+  const recentUploads = recentCountResult.count ?? 0;
+  const aggregate = aggregateResult.data ?? [];
+  const recent = recentResult.data ?? [];
+  const listTruncated = 'truncated' in listResult && listResult.truncated;
+  const uploaderById = new Map(profiles.map((p) => [p.id, p.full_name || p.email || 'Unknown']));
 
-  const totalBytes = docs.reduce((sum, d) => sum + (d.size_bytes ?? 0), 0);
-  const categories = [...new Set(docs.map((d) => d.category ?? 'other'))];
-  const since7 = new Date(Date.now() - 7 * 86400000);
-  const recentUploads = docs.filter((d) => new Date(d.created_at) >= since7).length;
+  const totalBytes = aggregate.reduce((sum, d) => sum + (d.size_bytes ?? 0), 0);
+  const categories = [...new Set(aggregate.map((d) => d.category ?? 'other'))];
 
+  const countByCategory = new Map<string, number>();
   const bytesByCategory = new Map<string, number>();
-  for (const d of docs) bytesByCategory.set(d.category ?? 'other', (bytesByCategory.get(d.category ?? 'other') ?? 0) + (d.size_bytes ?? 0));
-
-  const q = (sp.q ?? '').trim().toLowerCase();
-  const categoryFilter = sp.category ?? '';
-  const familyFilter = sp.family ?? '';
-
-  let scoped = docs;
-  if (tab === 'photos') scoped = scoped.filter((d) => d.mime_type?.startsWith('image/'));
-  if (tab === 'files') scoped = scoped.filter((d) => !d.mime_type?.startsWith('image/'));
-
-  const filtered = scoped.filter((d) => {
-    if (q && !`${d.title} ${familyNameById.get(d.family_id) ?? ''}`.toLowerCase().includes(q)) return false;
-    if (categoryFilter && (d.category ?? 'other') !== categoryFilter) return false;
-    if (familyFilter && d.family_id !== familyFilter) return false;
-    return true;
-  });
+  for (const d of aggregate) {
+    const cat = d.category ?? 'other';
+    countByCategory.set(cat, (countByCategory.get(cat) ?? 0) + 1);
+    bytesByCategory.set(cat, (bytesByCategory.get(cat) ?? 0) + (d.size_bytes ?? 0));
+  }
 
   return (
     <div className="module-page">
@@ -109,7 +165,7 @@ export default async function AdminContentPage({ searchParams }: Params) {
           ) : (
             <ul className="space-y-3">
               {categories.map((cat) => {
-                const count = docs.filter((d) => (d.category ?? 'other') === cat).length;
+                const count = countByCategory.get(cat) ?? 0;
                 const bytes = bytesByCategory.get(cat) ?? 0;
                 const pct = totalBytes > 0 ? (bytes / totalBytes) * 100 : 0;
                 return (
@@ -131,7 +187,7 @@ export default async function AdminContentPage({ searchParams }: Params) {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="space-y-5">
             <div className="grid-stats">
-              <StatCard icon={FileText} label={tr('adminContent.totalItems')} value={docs.length} tone="bg-brand/10 text-brand-text" />
+              <StatCard icon={FileText} label={tr('adminContent.totalItems')} value={docCount} tone="bg-brand/10 text-brand-text" />
               <StatCard icon={HardDrive} label={tr('adminContent.storageUsed')} value={fmtBytes(totalBytes)} tone="bg-success/10 text-success" />
               <StatCard icon={FolderKanban} label={tr('adminContent.categories')} value={categories.length} tone="bg-accent/10 text-accent" />
               <StatCard icon={Clock} label={tr('adminContent.addedThisWeek')} value={recentUploads} tone="bg-warning/10 text-warning" />
@@ -167,7 +223,7 @@ export default async function AdminContentPage({ searchParams }: Params) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/60">
-                      {filtered.slice(0, 50).map((d) => {
+                      {shown.map((d) => {
                         const type = typeLabel(d.mime_type);
                         return (
                           <tr key={d.id}>
@@ -193,17 +249,20 @@ export default async function AdminContentPage({ searchParams }: Params) {
                   )}
                 </div>
               )}
+              {listTruncated && (
+                <p className="mt-3 text-center text-xs text-muted">{tr('adminContent.theListIsTheNewestItems', { n: LIST_CEILING.toLocaleString() })}</p>
+              )}
             </Card>
           </div>
 
           <div className="space-y-5">
             <Card>
               <h2 className="mb-3 text-base font-semibold">{tr('adminContent.recentUploads')}</h2>
-              {docs.length === 0 ? (
+              {recent.length === 0 ? (
                 <p className="text-sm text-muted">{tr('adminContent.nothingUploadedYet')}</p>
               ) : (
                 <ul className="space-y-3">
-                  {docs.slice(0, 6).map((d) => {
+                  {recent.map((d) => {
                     const type = typeLabel(d.mime_type);
                     return (
                       <li key={d.id} className="flex items-start gap-2.5 text-sm">

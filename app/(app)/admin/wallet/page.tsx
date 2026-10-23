@@ -7,7 +7,7 @@ import { settleAll, describeReadError, credentialHint } from '@/lib/supabase/set
 
 import { AdminWalletClient, type FlagRow, type AuditRow } from './admin-wallet-client';
 import { getTranslations } from '@/lib/i18n/server';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Admin · Family Wallet', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -30,8 +30,14 @@ export default async function AdminWalletPage() {
     supabase.from('gift_payments').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     supabase.from('parent_approvals').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     // Money: `.limit(10000)` was never 10,000 (PostgREST caps at db-max-rows),
-    // so this platform total was the sum of 1,000 arbitrary rows.
-    readAllAsQuery((from, to) => supabase.from('wallet_transactions').select('amount_cents, direction, status').eq('status', 'completed').order('id').range(from, to), { max: 10000, failOnMax: true }),
+    // so this platform total was the sum of 1,000 arbitrary rows. It pages on
+    // the id, not on offsets: a transaction completing between two pages
+    // shifted every later offset by one, and one row's cents were added twice.
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('wallet_transactions').select('id, amount_cents, direction, status').eq('status', 'completed');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: 10000, failOnMax: true }),
     supabase.from('feature_flags').select('key, enabled, description').order('key'),
     supabase.from('wallet_audit_logs').select('id, family_id, action, entity_type, detail, created_at').order('created_at', { ascending: false }).limit(25),
   ]);

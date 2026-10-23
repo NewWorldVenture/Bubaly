@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { fmtMoney } from '@/lib/utils/format';
@@ -18,26 +19,43 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 export const dynamic = 'force-dynamic';
 
+/** Rows a summed read may page through before it is reported as a prefix (one round trip per 1,000). */
+const SUM_ROW_CEILING = 25_000;
+
 export default async function MarketingDashboard() {
   const t = await getTranslations();
   const supabase = createServiceClient();
   const { customers, error: customersError } = await getMarketingCustomersWithError(supabase);
   const m = summarizeCustomers(customers);
 
+  // Email Open Rate and AEO readiness were reduced from two unbounded selects,
+  // which PostgREST answers with at most `db-max-rows` (1,000) and no error, so
+  // past a thousand campaigns or questions each was a prefix shown as the
+  // whole. The sent emails are summed, so they page on the id to a real
+  // ceiling (reaching it is an error, and the page's read-error state), and
+  // a deleted campaign is left out, as /admin/marketing/analytics and the email
+  // list leave it out. Readiness needs only two numbers, so it is two exact
+  // `head: true` counts.
   const [
     activeSegmentsResult,
     activeCampaignsResult,
     emailsResult,
     leadsResult,
     seoPagesResult,
-    aeoResult,
+    aeoTotalResult,
+    aeoAnsweredResult,
   ] = await settleAll([
     supabase.from('marketing_segments').select('id', { count: 'exact', head: true }).eq('status', 'active'),
     supabase.from('marketing_campaigns').select('id', { count: 'exact', head: true }).in('status', ['active', 'scheduled']),
-    supabase.from('marketing_email_campaigns').select('recipients, opens, clicks, status'),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('marketing_email_campaigns').select('id, recipients, opens, clicks, status').is('deleted_at', null);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
     supabase.from('support_tickets').select('id', { count: 'exact', head: true }).contains('tags', ['contact-form']),
     supabase.from('marketing_seo_pages').select('id', { count: 'exact', head: true }),
-    supabase.from('marketing_aeo_questions').select('status'),
+    supabase.from('marketing_aeo_questions').select('id', { count: 'exact', head: true }),
+    supabase.from('marketing_aeo_questions').select('id', { count: 'exact', head: true }).in('status', ['answered', 'published']),
   ]);
 
   const readError = customersError
@@ -46,7 +64,8 @@ export default async function MarketingDashboard() {
     ?? emailsResult.error
     ?? leadsResult.error
     ?? seoPagesResult.error
-    ?? aeoResult.error;
+    ?? aeoTotalResult.error
+    ?? aeoAnsweredResult.error;
   if (readError) {
     console.error('[admin-marketing] dashboard read failed', readError);
     return <MarketingDashboardReadError />;
@@ -57,7 +76,7 @@ export default async function MarketingDashboard() {
   const { data: emails } = emailsResult;
   const { count: leads } = leadsResult;
   const { count: seoPages } = seoPagesResult;
-  const { data: aeo } = aeoResult;
+  const aeoTotal = aeoTotalResult.count ?? 0;
 
   const emailRows = emails ?? [];
   const sent = emailRows.filter((e) => e.status === 'sent');
@@ -65,9 +84,8 @@ export default async function MarketingDashboard() {
   const totalOpens = sent.reduce((s, e) => s + (e.opens ?? 0), 0);
   const openRate = totalRecipients > 0 ? Math.round((totalOpens / totalRecipients) * 100) : null;
 
-  const aeoRows = aeo ?? [];
-  const aeoAnswered = aeoRows.filter((q) => q.status === 'answered' || q.status === 'published').length;
-  const aeoReadiness = aeoRows.length > 0 ? Math.round((aeoAnswered / aeoRows.length) * 100) : null;
+  const aeoAnswered = aeoAnsweredResult.count ?? 0;
+  const aeoReadiness = aeoTotal > 0 ? Math.round((aeoAnswered / aeoTotal) * 100) : null;
 
   // Recommended next actions — deterministic, derived from real data (not AI guesses).
   const recs: { text: string; href: string }[] = [];
@@ -75,7 +93,7 @@ export default async function MarketingDashboard() {
   if (m.byLifecycle.free > 0) recs.push({ text: m.byLifecycle.free === 1 ? t('adminMarketing.freeFamiliesOne') : t('adminMarketing.freeFamiliesMany', { n: m.byLifecycle.free }), href: '/admin/marketing/segments' });
   if (m.newThisMonth > 0) recs.push({ text: m.newThisMonth === 1 ? t('adminMarketing.newCustomersOne') : t('adminMarketing.newCustomersMany', { n: m.newThisMonth }), href: '/admin/marketing/email' });
   if ((activeSegments ?? 0) === 0) recs.push({ text: t('adminMarketing.noSegmentsYet'), href: '/admin/marketing/segments' });
-  if (aeoRows.length === 0) recs.push({ text: 'No AEO questions tracked — seed answer-engine opportunities.', href: '/admin/marketing/aeo' });
+  if (aeoTotal === 0) recs.push({ text: 'No AEO questions tracked — seed answer-engine opportunities.', href: '/admin/marketing/aeo' });
 
   const stats = [
     { label: 'Total Customers', value: m.total.toLocaleString(), icon: Users, tint: 'text-violet-400 bg-violet-500/15' },

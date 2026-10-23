@@ -2,6 +2,9 @@ import type { Metadata } from 'next';
 import { CreditCard, Users, DollarSign, TrendingDown, ExternalLink, Receipt } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAllAsQuery, readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { readInChunks } from '@/lib/supabase/chunked-in';
+import type Stripe from 'stripe';
 import { getStripe } from '@/lib/stripe';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +30,9 @@ const TABS = [
 type TabKey = (typeof TABS)[number]['key'];
 
 type Params = { searchParams: Promise<{ tab?: string }> };
+
+/** Rows a paged read may go through before it is reported as a prefix (one round trip per 1,000). */
+const ROW_CEILING = 25_000;
 
 async function PlanDonut({ counts, total }: { counts: Map<string, number>; total: number }) {
   const tr = await getTranslations();
@@ -79,13 +85,43 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key as TabKey) ?? 'plans';
   const supabase = createServiceClient();
 
-  const [subscriptionsResult, familiesResult, billingCustomersResult] = await settleAll([
-    supabase.from('subscriptions').select('*').order('created_at', { ascending: false }),
-    supabase.from('families').select('id, name'),
-    supabase.from('billing_customers').select('family_id, customer_ref'),
+  // Every revenue figure here used to be reduced from ONE unbounded
+  // `subscriptions.select('*')`, newest first. PostgREST answers that with at
+  // most `db-max-rows` (1,000) and no error, so past a thousand subscriptions
+  // MRR, ARR, the plan donut, the active count and the churn rate were computed
+  // over the newest thousand — and the OLDEST rows, where the cancelled
+  // accounts that feed churn live, were the ones dropped. The unbounded
+  // `families` read beside it labelled any family past the thousandth "Unknown
+  // family".
+  //
+  // The tiles are now `head: true` counts — exact, uncapped — and MRR is the
+  // per-plan active counts times the plan prices, which is the same sum without
+  // reading a row. The rows the growth chart and the lists need page to a real
+  // ceiling, and reaching it is an error that lands in the read-error state
+  // below rather than in a smaller platform. The counts and the paged reads
+  // settle separately so each keeps its own tuple type.
+  //
+  // The subscription rows are counted (the growth chart, the All tab's total),
+  // so they page on the id, not on offsets: a checkout between two pages
+  // shifted every later offset by one and counted one subscription twice.
+  const since30 = new Date(Date.now() - 30 * 86400000);
+  const [[subscriptionsResult, activeCountResult, canceledRecentlyResult, familiesResult], planCountResults] = await Promise.all([
+    settleAll([
+      readAllByIdAsQuery((after, limit) => {
+        let query = supabase.from('subscriptions').select('*');
+        if (after) query = query.gt('id', after);
+        return query.order('id').limit(limit);
+      }, { max: ROW_CEILING }),
+      supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+      supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'canceled').gte('updated_at', since30.toISOString()),
+      readAllAsQuery((from, to) => supabase.from('families').select('id, name').order('id').range(from, to), { max: ROW_CEILING }),
+    ]),
+    settleAll(PLANS.map((p) =>
+      supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active').eq('plan', p.id))),
   ]);
 
-  const readError = subscriptionsResult.error ?? familiesResult.error ?? billingCustomersResult.error;
+  const readError = subscriptionsResult.error ?? familiesResult.error
+    ?? activeCountResult.error ?? canceledRecentlyResult.error ?? planCountResults.find((r) => r.error)?.error;
   if (readError) {
     console.error('[admin-subscriptions] subscription read failed', readError);
     return <AdminSubscriptionsReadError tab={tab} />;
@@ -93,44 +129,55 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
 
   const { data: subscriptions } = subscriptionsResult;
   const { data: families } = familiesResult;
-  const { data: billingCustomers } = billingCustomersResult;
 
-  const subs = subscriptions ?? [];
+  // Newest first, as the lists below have always read; the paged read was ordered by id.
+  const subs = [...(subscriptions ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
   const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
-  const customerToFamily = new Map((billingCustomers ?? []).filter((b) => b.customer_ref).map((b) => [b.customer_ref as string, b.family_id]));
 
   const planById = (id: string): Plan | undefined => PLANS.find((p) => p.id === id);
-  const activeSubs = subs.filter((s) => s.status === 'active');
-  const countsByPlan = new Map<string, number>();
-  for (const s of activeSubs) countsByPlan.set(s.plan, (countsByPlan.get(s.plan) ?? 0) + 1);
+  const activeCount = activeCountResult.count ?? 0;
+  const countsByPlan = new Map<string, number>(PLANS.map((p, i) => [p.id, planCountResults[i].count ?? 0]));
 
-  const mrr = activeSubs.reduce((sum, s) => sum + (planById(s.plan)?.priceMonthly ?? 0), 0);
+  const mrr = PLANS.reduce((sum, p) => sum + (countsByPlan.get(p.id) ?? 0) * p.priceMonthly, 0);
   const arr = mrr * 12;
 
-  const since30 = new Date(Date.now() - 30 * 86400000);
-  const canceledRecently = subs.filter((s) => s.status === 'canceled' && new Date(s.updated_at) >= since30).length;
-  const churnBase = activeSubs.length + canceledRecently;
+  const canceledRecently = canceledRecentlyResult.count ?? 0;
+  const churnBase = activeCount + canceledRecently;
   const churnRate = churnBase > 0 ? (canceledRecently / churnBase) * 100 : 0;
 
   // Real Stripe invoices (account-wide, no per-customer fan-out). Gracefully empty if Stripe isn't configured.
   let invoices: { id: string; number: string | null; amountPaid: number; status: string; created: number; familyName: string; hostedUrl: string | null }[] = [];
   let stripeError: string | null = null;
   if (tab === 'billing') {
+    let listed: Stripe.Invoice[] = [];
     try {
       const stripe = getStripe();
-      const list = await stripe.invoices.list({ limit: 20 });
-      invoices = list.data.map((inv) => {
-        const customerId = typeof inv.customer === 'string' ? inv.customer : inv.customer?.id;
-        const familyId = customerId ? customerToFamily.get(customerId) : undefined;
-        return {
-          id: inv.id ?? '', number: inv.number, amountPaid: inv.amount_paid, status: inv.status ?? 'unknown',
-          created: inv.created, familyName: familyId ? familyNameById.get(familyId) ?? 'Unknown family' : 'Unknown family',
-          hostedUrl: inv.hosted_invoice_url ?? null,
-        };
-      });
+      listed = (await stripe.invoices.list({ limit: 20 })).data;
     } catch (err) {
       stripeError = describeDbError(err, tr('subscriptions.stripeIsNotConfigured'));
     }
+    const customerOf = (inv: Stripe.Invoice) => (typeof inv.customer === 'string' ? inv.customer : inv.customer?.id);
+    // Only the customers these invoices name. The whole billing_customers table
+    // was read unbounded, which PostgREST answers with at most `db-max-rows`
+    // (1,000) rows, so an invoice whose customer fell past them read "Unknown
+    // family".
+    const customerRefs = [...new Set(listed.map(customerOf).filter((ref): ref is string => !!ref))];
+    const billingCustomersResult = await readInChunks(customerRefs, (chunk) =>
+      supabase.from('billing_customers').select('family_id, customer_ref').in('customer_ref', chunk));
+    if (billingCustomersResult.error) {
+      console.error('[admin-subscriptions] billing customer read failed', billingCustomersResult.error);
+      return <AdminSubscriptionsReadError tab={tab} />;
+    }
+    const customerToFamily = new Map(billingCustomersResult.data.filter((b) => b.customer_ref).map((b) => [b.customer_ref as string, b.family_id]));
+    invoices = listed.map((inv) => {
+      const customerId = customerOf(inv);
+      const familyId = customerId ? customerToFamily.get(customerId) : undefined;
+      return {
+        id: inv.id ?? '', number: inv.number, amountPaid: inv.amount_paid, status: inv.status ?? 'unknown',
+        created: inv.created, familyName: familyId ? familyNameById.get(familyId) ?? 'Unknown family' : 'Unknown family',
+        hostedUrl: inv.hosted_invoice_url ?? null,
+      };
+    });
   }
 
   return (
@@ -169,7 +216,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
           </div>
 
           <div className="grid-stats">
-            <StatCard icon={Users} label={tr('adminSubscriptions.activeSubscriptions')} value={activeSubs.length.toLocaleString()} tone="bg-brand/10 text-brand-text" />
+            <StatCard icon={Users} label={tr('adminSubscriptions.activeSubscriptions')} value={activeCount.toLocaleString()} tone="bg-brand/10 text-brand-text" />
             <StatCard icon={DollarSign} label="MRR" value={fmtMoney(mrr)} tone="bg-success/10 text-success" />
             <StatCard icon={DollarSign} label="ARR" value={fmtMoney(arr)} tone="bg-accent/10 text-accent" />
             <StatCard icon={TrendingDown} label={tr('adminSubscriptions.churn30d')} value={`${churnRate.toFixed(1)}%`} tone="bg-danger/10 text-danger" />
@@ -182,7 +229,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
             </Card>
             <Card>
               <h2 className="mb-3 text-base font-semibold">{tr('adminSubscriptions.byPlan')}</h2>
-              <PlanDonut counts={countsByPlan} total={activeSubs.length} />
+              <PlanDonut counts={countsByPlan} total={activeCount} />
             </Card>
           </div>
 

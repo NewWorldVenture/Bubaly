@@ -13,13 +13,16 @@ import { fmtMoney } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
 import { getFormat } from '@/lib/utils/format-server';
 import { ADMIN_ZONE } from '@/lib/admin/clock';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllAsQuery, readAllByIdAsQuery } from '@/lib/supabase/read-all';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
   return { title: t('system.systemOverview'), robots: { index: false } };
 }
 export const dynamic = 'force-dynamic';
+
+/** Rows a summed read may page through before it is reported as a prefix (one round trip per 1,000). */
+const SUM_ROW_CEILING = 25_000;
 
 function fmtBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -62,8 +65,24 @@ export default async function AdminSystemPage() {
     settle(supabase.from('profiles').select('id', { count: 'exact', head: true })),
     settle(supabase.from('families').select('id', { count: 'exact', head: true })),
     settle(readAllAsQuery((from, to) => supabase.from('profiles').select('created_at').order('created_at', { ascending: false }).order('id').range(from, to), { max: 2000 })),
-    settle(supabase.from('subscriptions').select('plan, status')),
-    settle(supabase.from('documents').select('size_bytes')),
+    // Summed below, so read to a REAL ceiling: an unbounded select is answered
+    // with at most `db-max-rows` (1,000) and no error, and these two tiles
+    // summed that prefix as the platform's revenue and storage while the
+    // profiles read beside them paged. Reaching the ceiling is an error, which
+    // joins readFailures and names itself in the banner instead of rendering
+    // a smaller platform than exists. Both page on the id, not on offsets:
+    // a checkout or an upload landing between two pages shifted every later
+    // offset by one, and one row's price or bytes was added twice.
+    settle(readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('subscriptions').select('id, plan, status');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING })),
+    settle(readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('documents').select('id, size_bytes');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING })),
   ]);
 
   const readFailures = ([

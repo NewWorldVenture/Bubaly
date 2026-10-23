@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { createServiceClient } from '@/lib/supabase/server';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { settle } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
@@ -13,14 +14,34 @@ import { ADMIN_ZONE, inWindow, lastUtcMonths } from '@/lib/admin/clock';
 export const metadata: Metadata = { title: 'Marketing · Analytics', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
+/** Rows a summed read may page through before it is reported as a prefix (one round trip per 1,000). */
+const SUM_ROW_CEILING = 25_000;
+
 export default async function AnalyticsPage() {
   const locale = (await getLocaleContext()).locale.code;
   const tr = await getTranslations();
   const supabase = createServiceClient();
+  // Both tables are SUMMED below (budget per channel; recipients, opens and
+  // clicks), so they are read to a real ceiling: an unbounded select is
+  // answered with at most `db-max-rows` (1,000) and no error. Reaching the
+  // ceiling is an error, which takes the page to its read-error state rather
+  // than to a smaller total. Both page on the id, not on offsets: a campaign
+  // created or deleted between two pages shifted every later offset by one,
+  // and one row's budget or engagement was added twice, or dropped. Each read
+  // sits under settle, as every read in a batch does, so a rejection cannot
+  // take the batch down even if the reader beneath it changes.
   const [customersResult, campaignsResult, emailsResult] = await Promise.all([
     getMarketingCustomersWithError(supabase),
-    settle(supabase.from('marketing_campaigns').select('channel, status, budget_cents').is('deleted_at', null)),
-    settle(supabase.from('marketing_email_campaigns').select('recipients, opens, clicks, status').is('deleted_at', null)),
+    settle(readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('marketing_campaigns').select('id, channel, status, budget_cents').is('deleted_at', null);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING })),
+    settle(readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('marketing_email_campaigns').select('id, recipients, opens, clicks, status').is('deleted_at', null);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING })),
   ]);
   const readError = customersResult.error ?? campaignsResult.error ?? emailsResult.error;
   if (readError) {

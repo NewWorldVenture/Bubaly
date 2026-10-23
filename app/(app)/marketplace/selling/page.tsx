@@ -12,6 +12,7 @@ import {
   attentionItems, rankListings, sellerTotals, needsAttention,
   type ListingSignals, type AttentionTone,
 } from '@/lib/marketplace/selling';
+import { todayKeyFor } from '@/lib/services/scope';
 import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -94,7 +95,11 @@ export default async function SellingPage() {
   const negMine = tally((negRes.data ?? []).filter((r) => r.last_actor === 'buyer').map((r) => ({ listing_id: r.listing_id })));
   const questions = tally(qRes.data);
   const handoffs = tally(handoffRes.data);
-  const today = now.toISOString().slice(0, 10);
+  // "Due back today" is the family's day, not the server's: on a UTC host it is
+  // already tomorrow from 5pm in California, and this chip called an item due
+  // back today an overdue return for the rest of that family's evening. The
+  // orders page beside this one judges the same return on todayKeyFor.
+  const today = todayKeyFor(ctx, now);
   const overdue = tally((overdueRes.data ?? [])
     .filter((o) => !o.returned_at && o.ends_on && o.ends_on < today)
     .map((o) => ({ listing_id: o.listing_id })));

@@ -871,6 +871,7 @@
   "adminContent.size": "Grootte",
   "adminContent.storageByCategory": "Opslag per categorie",
   "adminContent.storageUsed": "Gebruikte opslag",
+  "adminContent.theListIsTheNewestItems": "De lijst toont de nieuwste {n} items; de categorie- en gezinsfilters bereiken alle items.",
   "adminContent.title": "Titel",
   "adminContent.totalItems": "Totaal aantal items",
   "adminContent.type": "Type",
