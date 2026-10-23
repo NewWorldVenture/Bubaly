@@ -163,9 +163,13 @@ export async function adminCreateFamilyAction(input: {
   const authOwner = matches[0];
 
   // The display name still comes from the profile — a self-chosen name is
-  // exactly what that column is for. Only the IDENTITY moved.
-  const { data: ownerProfile } = await supabase
+  // exactly what that column is for. Only the IDENTITY moved. A failed read is
+  // not "no name": dropped, it saved the address's local part as the parent's
+  // display_name (review R10-CREATE-FAMILY-OWNER-NAME-READ-DROPPED). Nothing is
+  // created until it answers.
+  const { data: ownerProfile, error: ownerProfileError } = await supabase
     .from('profiles').select('full_name').eq('id', authOwner.id).maybeSingle();
+  if (ownerProfileError) return actionFailure(ownerProfileError, t('actions.couldNotCheckThatRefresh'));
   const owner = {
     id: authOwner.id,
     full_name: ownerProfile?.full_name ?? null,

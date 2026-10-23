@@ -45,6 +45,7 @@ vi.mock('@/app/(app)/admin/marketing/loyalty/reward-editor', () => ({ RewardRow:
 vi.mock('@/app/(app)/admin/marketing/loyalty/redemption-row', () => ({ RedemptionRow: () => null }));
 vi.mock('@/app/(app)/admin/marketing/platform/actions', () => ({ archivePlatformPage: noop, createPlatformPage: noop, retryMarketingJob: noop, saveMarketingBrandRule: noop, saveMarketingTemplate: noop, updatePlatformPage: noop }));
 vi.mock('@/app/(app)/admin/marketing/social/recurring/controls', () => ({ RecurringAdControls: () => null, NewRecurringAdForm: () => null }));
+vi.mock('@/app/(app)/admin/marketing/actions', () => ({ addKeyword: noop, archiveSeoKeyword: noop, archiveSeoPage: noop, saveSeoPage: noop, updateSeoKeyword: noop }));
 
 let db: InMemorySupabase;
 const m = (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params);
@@ -241,6 +242,62 @@ describe('/admin/marketing/platform: the Templates and Brand rules cards', () =>
     expect(badge(html, m('adminMarketingPlatform.templates'))).toBe('2');
     expect(badge(html, m('adminMarketingPlatform.brandRules'))).toBe('3');
     expect(textOf(html)).not.toContain(part('adminCeiling.listShowsPart', 2, 2).slice(0, 20));
+  });
+});
+
+// Round 11 (review R10-SEO-REGISTRY-COUNTS-ITS-UNBOUNDED-LIST): the SEO page
+// registry's tab count and "N tracked" were the length of an unbounded list,
+// the same shape as the platform's Templates and Brand rules badges.
+describe('/admin/marketing/seo: the SEO page registry', () => {
+  const seoPage = (k: number): Row => ({ id: `sp-${pad(k)}`, path: `/p/${pad(k)}`, title: null, meta_description: null, score: null, status: 'active', created_at: at(k), updated_at: at(k) });
+  function seed(pages: number) {
+    db.seed('marketing_seo_keywords', []);
+    db.seed('marketing_seo_pages', Array.from({ length: pages }, (_, k) => seoPage(k)));
+  }
+  type Tab = { id: string; label: string; count?: number; panel: React.ReactNode };
+  /** The tabs the page hands its (real) tab switcher, which shows only the first panel. */
+  function tabsOf(node: unknown): Tab[] | undefined {
+    if (!node || typeof node !== 'object') return undefined;
+    if (Array.isArray(node)) return node.map(tabsOf).find(Boolean);
+    const props = (node as { props?: { tabs?: Tab[]; children?: unknown } }).props;
+    return props?.tabs ?? tabsOf(props?.children);
+  }
+  async function renderSeo() {
+    const { default: Page } = await import('@/app/(app)/admin/marketing/seo/page');
+    const tree = await (Page as () => Promise<React.ReactElement>)();
+    const html = await renderServerPage(tree);
+    const registry = tabsOf(tree)?.find((tab) => tab.id === 'registry');
+    return { html, registry: registry ? textOf(await renderServerPage(registry.panel)) : '' };
+  }
+  /** The count beside a tab's label. */
+  const tabCount = (html: string, label: string) => new RegExp(`${label}<span[^>]*>\\(([^)]*)\\)</span>`).exec(html)?.[1];
+
+  it('the tab and "N tracked" count every page past the 1,000 listed, and the list says it is part', async () => {
+    seed(1001);
+    const { html, registry } = await renderSeo();
+    expect(tabCount(html, 'SEO Page Registry')).toBe('1,001');
+    expect(registry).toContain('1,001 tracked');
+    expect(registry).toContain(part('adminCeiling.listShowsPart', 1000, 1001));
+  });
+  it('a registry count that FAILS, alone, is the read-error state', async () => {
+    seed(3);
+    let faulted = 0;
+    h.db = withFaults(db, (table, calls) => {
+      if (table !== 'marketing_seo_pages' || !head(calls)) return null;
+      faulted += 1;
+      return { message: 'marketing_seo_pages unavailable' };
+    });
+    const { html, registry } = await renderSeo();
+    expect(faulted).toBe(1);
+    expect(textOf(html)).toContain(m('seo.couldNotLoadSeoKeywords'));
+    expect(registry).toBe('');
+  });
+  it('the control: a registry the list holds is counted the same and says nothing', async () => {
+    seed(3);
+    const { html, registry } = await renderSeo();
+    expect(tabCount(html, 'SEO Page Registry')).toBe('3');
+    expect(registry).toContain('3 tracked');
+    expect(registry).not.toContain(part('adminCeiling.listShowsPart', 3, 3).slice(0, 20));
   });
 });
 
