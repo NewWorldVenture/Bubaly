@@ -6,7 +6,8 @@ import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { Bars } from '@/components/admin/charts';
 import { fmtMoney } from '@/lib/utils/format';
-import { getMarketingCustomersWithError, summarizeCustomers } from '@/lib/marketing/customers';
+import { CUSTOMER_FAMILY_CEILING, getMarketingCustomersWithError, summarizeCustomers } from '@/lib/marketing/customers';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { planMonthlyCents } from '@/lib/constants/plans';
 import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
 import { ADMIN_ZONE, inWindow, lastUtcMonths } from '@/lib/admin/clock';
@@ -23,13 +24,18 @@ export default async function AnalyticsPage() {
   const supabase = createServiceClient();
   // Both tables are SUMMED below (budget per channel; recipients, opens and
   // clicks), so they are read to a real ceiling: an unbounded select is
-  // answered with at most `db-max-rows` (1,000) and no error. Reaching the
-  // ceiling is an error, which takes the page to its read-error state rather
-  // than to a smaller total. Both page on the id, not on offsets: a campaign
-  // created or deleted between two pages shifted every later offset by one,
-  // and one row's budget or engagement was added twice, or dropped. Each read
-  // sits under settle, as every read in a batch does, so a rejection cannot
-  // take the batch down even if the reader beneath it changes.
+  // answered with at most `db-max-rows` (1,000) and no error. Both page on the
+  // id, not on offsets: a campaign created or deleted between two pages
+  // shifted every later offset by one, and one row's budget or engagement was
+  // added twice, or dropped. Each read sits under settle, as every read in a
+  // batch does, so a rejection cannot take the batch down even if the reader
+  // beneath it changes.
+  //
+  // Reaching a ceiling costs the figures summed from that read, not the page
+  // (review R5-DASHBOARD-CEILING-STILL-WHOLE-PAGE): the channel mix, the email
+  // figures, or — when the customer view (lib/marketing/customers.ts) reaches
+  // its own — the customer figures, each said to be not shown and named in the
+  // banner. Any other failure is still the read-error state.
   const [customersResult, campaignsResult, emailsResult] = await Promise.all([
     getMarketingCustomersWithError(supabase),
     settle(readAllByIdAsQuery((after, limit) => {
@@ -43,15 +49,24 @@ export default async function AnalyticsPage() {
       return query.order('id').limit(limit);
     }, { max: SUM_ROW_CEILING })),
   ]);
-  const readError = customersResult.error ?? campaignsResult.error ?? emailsResult.error;
+  const customersCeiling = customersResult.truncated === true;
+  const campaignsCeiling = 'truncated' in campaignsResult && campaignsResult.truncated;
+  const emailsCeiling = 'truncated' in emailsResult && emailsResult.truncated;
+  const readError = (customersCeiling ? null : customersResult.error)
+    ?? (campaignsCeiling ? null : campaignsResult.error)
+    ?? (emailsCeiling ? null : emailsResult.error);
   if (readError) {
     console.error('[admin-marketing-analytics] analytics read failed', readError);
     return <MarketingAnalyticsReadError />;
   }
+  if (customersCeiling || campaignsCeiling || emailsCeiling) console.warn('[admin-marketing-analytics] a summed read reached its ceiling; its figures are not shown');
   const { customers } = customersResult;
   const { data: campaigns } = campaignsResult;
   const { data: emails } = emailsResult;
   const m = summarizeCustomers(customers);
+  const unavailable = tr('strategyMetrics.unavailable');
+  const customerFigure = (value: string | number) => (customersCeiling ? unavailable : value);
+  const emailFigure = (value: string | number) => (emailsCeiling ? unavailable : value);
 
   // Customer acquisition — last 6 months from real family.created_at.
   // Months in the admin zone, not the host's (lib/admin/clock.ts).
@@ -82,25 +97,41 @@ export default async function AnalyticsPage() {
 
   return (
     <div className="space-y-5">
+      <PartialReadBanner
+        title={tr('adminCeiling.figuresNotShown', { n: CUSTOMER_FAMILY_CEILING.toLocaleString() })}
+        failures={customersCeiling ? [
+          tr('adminMarketingAnalytics.customers'), tr('adminMarketingAnalytics.paying'), tr('adminMarketingAnalytics.estMrr'),
+          tr('adminMarketingAnalytics.customerAcquisition'), tr('adminMarketingAnalytics.estRevenueInfluencedMonthly'),
+        ] : []}
+      />
+      <PartialReadBanner
+        title={tr('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
+        failures={[
+          ...(campaignsCeiling ? [tr('adminMarketingAnalytics.campaignsByChannel')] : []),
+          ...(emailsCeiling ? [tr('adminMarketingAnalytics.emailOpenRate'), tr('adminMarketingAnalytics.emailPerformance')] : []),
+        ]}
+      />
       <p className="text-sm text-muted">{tr('adminMarketingAnalytics.allFiguresAreComputedFromLive')}</p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Card><p className="text-xs text-muted">{tr('adminMarketingAnalytics.customers')}</p><p className="text-2xl font-bold">{m.total}</p></Card>
-        <Card><p className="text-xs text-muted">{tr('adminMarketingAnalytics.paying')}</p><p className="text-2xl font-bold">{m.paying}</p></Card>
-        <Card><p className="text-xs text-muted">{tr('adminMarketingAnalytics.estMrr')}</p><p className="text-2xl font-bold">{fmtMoney(m.estMrrCents)}</p></Card>
-        <Card><p className="text-xs text-muted">{tr('adminMarketingAnalytics.emailOpenRate')}</p><p className="text-2xl font-bold">{recip > 0 ? `${Math.round((opens / recip) * 100)}%` : '—'}</p></Card>
+        <Card><p className="text-xs text-muted">{tr('adminMarketingAnalytics.customers')}</p><p className="text-2xl font-bold">{customerFigure(m.total)}</p></Card>
+        <Card><p className="text-xs text-muted">{tr('adminMarketingAnalytics.paying')}</p><p className="text-2xl font-bold">{customerFigure(m.paying)}</p></Card>
+        <Card><p className="text-xs text-muted">{tr('adminMarketingAnalytics.estMrr')}</p><p className="text-2xl font-bold">{customerFigure(fmtMoney(m.estMrrCents))}</p></Card>
+        <Card><p className="text-xs text-muted">{tr('adminMarketingAnalytics.emailOpenRate')}</p><p className="text-2xl font-bold">{emailFigure(recip > 0 ? `${Math.round((opens / recip) * 100)}%` : '—')}</p></Card>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <h2 className="mb-3 text-base font-semibold">{tr('adminMarketingAnalytics.customerAcquisition')}</h2>
-          <Bars data={acq} max={maxAcq} />
+          {customersCeiling ? <p className="text-sm text-muted">{unavailable}</p> : <Bars data={acq} max={maxAcq} />}
           <p className="mt-2 text-xs text-muted">{tr('adminMarketingAnalytics.newFamiliesLast6Months')}</p>
         </Card>
 
         <Card>
           <h2 className="mb-3 text-base font-semibold">{tr('adminMarketingAnalytics.campaignsByChannel')}</h2>
-          {byChannel.size === 0 ? (
+          {campaignsCeiling ? (
+            <p className="py-8 text-center text-sm text-muted">{unavailable}</p>
+          ) : byChannel.size === 0 ? (
             <p className="py-8 text-center text-sm text-muted">{tr('adminMarketingAnalytics.noCampaignsYet')}</p>
           ) : (
             <ul className="space-y-2 text-sm">
@@ -117,9 +148,9 @@ export default async function AnalyticsPage() {
         <Card>
           <h2 className="mb-3 text-base font-semibold">{tr('adminMarketingAnalytics.emailPerformance')}</h2>
           <div className="grid grid-cols-3 gap-3 text-center">
-            <div><p className="text-2xl font-bold">{recip}</p><p className="text-xs text-muted">{tr('adminMarketingAnalytics.recipients')}</p></div>
-            <div><p className="text-2xl font-bold">{opens}</p><p className="text-xs text-muted">{tr('adminMarketingAnalytics.opens')}</p></div>
-            <div><p className="text-2xl font-bold">{clicks}</p><p className="text-xs text-muted">{tr('adminMarketingAnalytics.clicks')}</p></div>
+            <div><p className="text-2xl font-bold">{emailFigure(recip)}</p><p className="text-xs text-muted">{tr('adminMarketingAnalytics.recipients')}</p></div>
+            <div><p className="text-2xl font-bold">{emailFigure(opens)}</p><p className="text-xs text-muted">{tr('adminMarketingAnalytics.opens')}</p></div>
+            <div><p className="text-2xl font-bold">{emailFigure(clicks)}</p><p className="text-xs text-muted">{tr('adminMarketingAnalytics.clicks')}</p></div>
           </div>
         </Card>
 
@@ -129,7 +160,7 @@ export default async function AnalyticsPage() {
             {revByLifecycle.map((r) => (
               <li key={r.label} className="flex items-center justify-between">
                 <span>{r.label} customers</span>
-                <span className="font-semibold">{fmtMoney(r.cents)}</span>
+                <span className="font-semibold">{customerFigure(fmtMoney(r.cents))}</span>
               </li>
             ))}
           </ul>

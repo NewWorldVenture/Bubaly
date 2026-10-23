@@ -101,6 +101,13 @@ export default async function AdminSystemPage() {
     }, { max: SUM_ROW_CEILING })),
   ]);
 
+  // A summed read that reached its ceiling did not fail: its figure says it is
+  // not shown and the ceiling banner names it, rather than $0 or 0 B beside the
+  // failure banner. Any other failure is still named in that banner.
+  const reachedCeiling = (res: object) => 'truncated' in res && res.truncated === true;
+  const chartCeiling = reachedCeiling(profilesResult);
+  const revenueCeiling = reachedCeiling(subscriptionsResult);
+  const storageCeiling = reachedCeiling(documentsResult);
   const readFailures = ([
     ['user count', userCountResult],
     ['family count', familyCountResult],
@@ -111,7 +118,15 @@ export default async function AdminSystemPage() {
     ['documents', documentsResult],
   ] as const)
     .filter(([, res]) => res.error)
+    .filter(([, res]) => !reachedCeiling(res))
     .map(([label, res]) => `${label}: ${describeReadError(res.error)}`);
+  const unavailable = t('strategyMetrics.unavailable');
+  const figuresNotShown = [
+    ...(revenueCeiling ? [t('adminSystem.monthlyRevenue')] : []),
+    ...(storageCeiling ? [t('adminSystem.documentStorageUsedAcrossEveryFamily')] : []),
+    ...(chartCeiling ? [t('adminSystem.userGrowth')] : []),
+  ];
+  if (figuresNotShown.length > 0) console.warn('[admin-system] a summed read reached its ceiling; not shown:', figuresNotShown.join(', '));
   const readError = readFailures.length > 0;
   if (readError) {
     // Degraded, not fatal: every consumer below defaults an absent read to an
@@ -142,6 +157,7 @@ export default async function AdminSystemPage() {
   return (
     <div className="module-page">
       <PartialReadBanner title={"System overview is incomplete — some reads failed:"} failures={readFailures} hint={credentialHint(readFailures, describeConfiguredServiceKey())} />
+      <PartialReadBanner title={t('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })} failures={figuresNotShown} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminSystem.systemOverview')}</h1>
@@ -154,7 +170,7 @@ export default async function AdminSystemPage() {
         <StatCard icon={allHealthy ? CheckCircle2 : XCircle} label={t('adminSystem.overallStatus')} value={allHealthy ? 'All systems go' : 'Degraded'} tone={allHealthy ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'} />
         <StatCard icon={Users} label={t('adminSystem.totalUsers')} value={(userCount ?? 0).toLocaleString()} tone="bg-brand/10 text-brand-text" />
         <StatCard icon={Home} label={t('adminSystem.activeFamilies')} value={(familyCount ?? 0).toLocaleString()} tone="bg-accent/10 text-accent" />
-        <StatCard icon={DollarSign} label={t('adminSystem.monthlyRevenue')} value={fmtMoney(mrr)} tone="bg-success/10 text-success" />
+        <StatCard icon={DollarSign} label={t('adminSystem.monthlyRevenue')} value={revenueCeiling ? unavailable : fmtMoney(mrr)} tone="bg-success/10 text-success" />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -177,7 +193,7 @@ export default async function AdminSystemPage() {
           <div className="flex items-center gap-3">
             <FolderLock className="h-5 w-5 text-brand-text" />
             <div>
-              <p className="text-xl font-bold leading-none">{fmtBytes(storageBytes)}</p>
+              <p className="text-xl font-bold leading-none">{storageCeiling ? unavailable : fmtBytes(storageBytes)}</p>
               <p className="text-xs text-muted">{t('adminSystem.documentStorageUsedAcrossEveryFamily')}</p>
             </div>
           </div>
@@ -193,7 +209,9 @@ export default async function AdminSystemPage() {
 
       <Card>
         <h2 className="mb-4 text-base font-semibold">{t('adminSystem.userGrowth')} <span className="text-muted">{t('adminSystem.last30DaysCumulative')}</span></h2>
-        <GrowthChart timestamps={(profiles ?? []).map((p) => p.created_at)} base={chartBaseResult.count ?? 0} />
+        {chartCeiling
+          ? <p className="text-sm text-muted">{unavailable}</p>
+          : <GrowthChart timestamps={(profiles ?? []).map((p) => p.created_at)} base={chartBaseResult.count ?? 0} />}
       </Card>
 
       <Card>

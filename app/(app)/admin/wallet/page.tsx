@@ -12,6 +12,9 @@ import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 export const metadata: Metadata = { title: 'Admin · Family Wallet', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
+/** Completed transactions the ledger volume may page through before it is reported as not shown. */
+const VOLUME_ROW_CEILING = 10000;
+
 export default async function AdminWalletPage() {
   const tr = await getTranslations();
   const supabase = createServiceClient();
@@ -37,7 +40,7 @@ export default async function AdminWalletPage() {
       let query = supabase.from('wallet_transactions').select('id, amount_cents, direction, status').eq('status', 'completed');
       if (after) query = query.gt('id', after);
       return query.order('id').limit(limit);
-    }, { max: 10000, failOnMax: true }),
+    }, { max: VOLUME_ROW_CEILING, failOnMax: true }),
     supabase.from('feature_flags').select('key, enabled, description').order('key'),
     supabase.from('wallet_audit_logs').select('id, family_id, action, entity_type, detail, created_at').order('created_at', { ascending: false }).limit(25),
   ]);
@@ -52,7 +55,13 @@ export default async function AdminWalletPage() {
     ['audit', auditResult],
   ] as const)
     .filter(([, res]) => res.error)
+    // The ledger volume past its ceiling did not fail: its three figures say
+    // they are not shown and the ceiling banner names them, rather than $0.00
+    // beside this banner. Any other failure is still named here.
+    .filter(([, res]) => !('truncated' in res && res.truncated))
     .map(([label, res]) => `${label}: ${describeReadError(res.error)}`);
+  const volumeCeiling = 'truncated' in creditAggResult && creditAggResult.truncated;
+  if (volumeCeiling) console.warn('[admin-wallet] the ledger volume read reached its ceiling; the volume is not shown');
   const readError = readFailures.length > 0;
   if (readError) {
     // Degraded, not fatal: every consumer below defaults an absent read to an
@@ -82,6 +91,10 @@ export default async function AdminWalletPage() {
   return (
     <div className="space-y-5">
       <PartialReadBanner title={"Wallet oversight is incomplete — some reads failed:"} failures={readFailures} hint={credentialHint(readFailures, describeConfiguredServiceKey())} />
+      <PartialReadBanner
+        title={tr('adminCeiling.figuresNotShown', { n: VOLUME_ROW_CEILING.toLocaleString() })}
+        failures={volumeCeiling ? [tr('adminWalletAdminWalletClient.totalCredits'), tr('adminWalletAdminWalletClient.totalDebits'), tr('adminWalletAdminWalletClient.netOutstanding')] : []}
+      />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
@@ -100,9 +113,9 @@ export default async function AdminWalletPage() {
           childWallets: childWallets ?? 0,
           pendingGifts: pendingGifts ?? 0,
           pendingApprovals: pendingApprovals ?? 0,
-          creditVolumeCents,
-          debitVolumeCents,
-          netCents: creditVolumeCents - debitVolumeCents,
+          creditVolumeCents: volumeCeiling ? null : creditVolumeCents,
+          debitVolumeCents: volumeCeiling ? null : debitVolumeCents,
+          netCents: volumeCeiling ? null : creditVolumeCents - debitVolumeCents,
         }}
         flags={flagRows}
         audit={auditRows}

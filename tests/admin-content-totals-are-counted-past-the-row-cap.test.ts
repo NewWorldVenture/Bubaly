@@ -197,16 +197,18 @@ describe('/admin/content past 25,000 families', () => {
   }
 
   // 25,001 families with no documents sort first by id; the three that own
-  // every document sort after them, past the first 25,000.
+  // every document sort after them, past the first 25,000. A family id is a
+  // uuid (0002_tables.sql), and the page drops a family filter that is not.
+  const owner = (f: number) => `ffffffff-ffff-4fff-8fff-${String(f).padStart(12, '0')}`;
   function seedPastTheFamilyCeiling() {
     db.seed('families', [
       ...Array.from({ length: CEILING + 1 }, (_, i) => ({ id: `fam-${pad(i)}`, name: `Empty family ${i}` })),
-      ...Array.from({ length: 3 }, (_, f) => ({ id: `fam-zz-${pad(f)}`, name: `Owner family ${f}` })),
+      ...Array.from({ length: 3 }, (_, f) => ({ id: owner(f), name: `Owner family ${f}` })),
     ]);
     db.seed('documents', Array.from({ length: DOCUMENTS }, (_, i) => {
       const createdAt = new Date(Date.UTC(2026, 9, 1) + i * 60_000).toISOString();
       return {
-        id: `doc-${pad(i)}`, family_id: `fam-zz-${pad(i % 3)}`, title: `Doc ${i}`, category: 'school', storage_path: `fam/${i}.pdf`,
+        id: `doc-${pad(i)}`, family_id: owner(i % 3), title: `Doc ${i}`, category: 'school', storage_path: `fam/${i}.pdf`,
         mime_type: 'application/pdf', size_bytes: 1_000, created_by: `usr-${pad(i)}`, created_at: createdAt, updated_at: createdAt,
       };
     }));
@@ -247,9 +249,9 @@ describe('/admin/content past 25,000 families', () => {
 
   it('a family chosen past the 25,000th stays selected, and the filter and the search still reach its documents', async () => {
     seedPastTheFamilyCeiling();
-    const filtered = await renderWith({ family: 'fam-zz-000001' });
+    const filtered = await renderWith({ family: owner(1) });
     expect(filtered).not.toContain(SOURCE_MESSAGES['content.couldNotLoadContentFrom']);
-    expect(filtered).toContain('<option value="fam-zz-000001" selected="">Owner family 1</option>');
+    expect(filtered).toContain(`<option value="${owner(1)}" selected="">Owner family 1</option>`);
     expect(filtered).toContain(row(DOCUMENTS - 2));
     expect(filtered).not.toContain(row(DOCUMENTS - 1));
 
@@ -280,5 +282,41 @@ describe('/admin/content past 25,000 families', () => {
     const html = await render();
     expect(bannerTitled(html, offeredTitle())).toBeNull();
     for (const f of [0, 1, 2]) expect(html).toContain(`<option value="fam-${pad(f)}">Family ${f}</option>`);
+  });
+
+  // `documents.family_id` and `families.id` are uuid, and since the family
+  // filter moved to the server PostgREST answered a hand-edited ?family= that
+  // is not one with 22P02, so the page was its read-error state where the base
+  // page showed the list (review R5-CONTENT-NON-UUID-FAMILY-PARAM). The fake
+  // does not type its columns, so it answers as PostgREST does here.
+  const refusesNonUuid = () => withFaults(db, (table, calls) => {
+    const uuidColumn = (table === 'documents' && calls.some((c) => c.method === 'eq' && c.args[0] === 'family_id'))
+      ? calls.find((c) => c.method === 'eq' && c.args[0] === 'family_id')?.args[1]
+      : null;
+    const values = [
+      ...(uuidColumn === null || uuidColumn === undefined ? [] : [uuidColumn]),
+      ...(table === 'families' ? calls.filter((c) => c.method === 'in' && c.args[0] === 'id').flatMap((c) => c.args[1] as unknown[]) : []),
+    ];
+    const bad = values.find((value) => typeof value === 'string' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value));
+    return bad ? { code: '22P02', message: `invalid input syntax for type uuid: "${String(bad)}"` } : null;
+  });
+
+  it('a ?family= that is not a uuid is no filter: the list, not the read-error state', async () => {
+    seedPastTheFamilyCeiling();
+    h.db = refusesNonUuid();
+    const html = await renderWith({ family: 'not-a-family' });
+    expect(html).not.toContain(SOURCE_MESSAGES['content.couldNotLoadContentFrom']);
+    for (const i of [0, DOCUMENTS - 1]) expect(html).toContain(row(i));
+    expect(html).toContain('<option value="" selected="">All Families</option>');
+    expect(html).not.toContain('not-a-family');
+  });
+
+  it('the control: a uuid ?family= still filters, through the same refusing fake', async () => {
+    seedPastTheFamilyCeiling();
+    h.db = refusesNonUuid();
+    const html = await renderWith({ family: owner(2) });
+    expect(html).not.toContain(SOURCE_MESSAGES['content.couldNotLoadContentFrom']);
+    expect(html).toContain(row(DOCUMENTS - 1));
+    expect(html).not.toContain(row(DOCUMENTS - 2));
   });
 });

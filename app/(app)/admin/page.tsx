@@ -6,8 +6,10 @@ import {
   BarChart3, Plug, ArrowUpRight, Bell,
 } from 'lucide-react';
 import { createServiceClient, describeConfiguredServiceKey } from '@/lib/supabase/server';
-import { settle, settleAll, describeReadError, credentialHint } from '@/lib/supabase/settle';
+import { settleAll, describeReadError, credentialHint } from '@/lib/supabase/settle';
 import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { readInChunks } from '@/lib/supabase/chunked-in';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { adminNoteKindMeta, type AdminNotificationRow } from '@/lib/admin/notifications';
 import { checkDatabase, checkStorage, checkEmail, checkAI } from '@/lib/server/health';
 import { Card } from '@/components/ui/card';
@@ -78,11 +80,16 @@ export default async function AdminDashboardPage() {
   //     real ceiling. Families upload documents and check out subscriptions
   //     while this page reads, and an offset read repeats or skips a row when
   //     one lands between its pages; paging on `id > last` reads each row at
-  //     most once. Reaching the ceiling is an error, which joins loadErrors and
-  //     the banner instead of rendering a smaller platform than exists;
+  //     most once. Reaching the ceiling costs that figure alone: it says it is
+  //     not shown, and the ceiling banner names it, instead of rendering a
+  //     smaller platform than exists. Any other failure joins loadErrors;
   //   - each paged read asks for the rows its figure needs and no more: active
   //     subscriptions for revenue and the donut, the trend's six months of new
-  //     subscriptions, active members for Top families.
+  //     subscriptions, active members for Top families;
+  //   - a listed row's family is named from its own family, by the ids Top
+  //     families and Recent activities list (readInChunks). Their names came
+  //     from the donut's read of every family, so past its ceiling the thirteen
+  //     listed rows read "Unknown" (review R5-SIB-HOME-FAMILY-NAMES).
   const [
     familyCountResult,
     activeMemberCountResult,
@@ -160,6 +167,17 @@ export default async function AdminDashboardPage() {
   // Nothing here is load-bearing: every tile and list has an empty state. So
   // there is no bail at all now — the failures are named in a banner instead,
   // which is more useful than an error page because it says WHICH read failed.
+  //
+  // A summed read that reached its ceiling did not fail: its figure says it is
+  // not shown and the ceiling banner names it, rather than a zero beside a
+  // banner.
+  const reachedCeiling = (res: object) => 'truncated' in res && res.truncated === true;
+  const familiesCeiling = reachedCeiling(familiesResult);
+  const membersCeiling = reachedCeiling(activeMembersResult);
+  const subscriptionsCeiling = reachedCeiling(subscriptionsResult);
+  const trendCeiling = reachedCeiling(newSubscriptionsResult);
+  const docsCeiling = reachedCeiling(docsResult);
+  const growthCeiling = reachedCeiling(newMembersResult);
   const loadErrors = ([
     ['families (count)', familyCountResult],
     ['active members (count)', activeMemberCountResult],
@@ -180,10 +198,19 @@ export default async function AdminDashboardPage() {
     ['unread notifications (count)', unreadNoteCountResult],
   ] as const)
     .filter(([, res]) => res.error)
+    // A read past its ceiling is a figure not shown (below), not a failed read.
+    .filter(([, res]) => !reachedCeiling(res))
     .map(([label, res]) => `${label}: ${describeReadError(res.error)}`);
-  if (loadErrors.length > 0) {
-    console.error('[admin-dashboard] partial read — rendering degraded', loadErrors.join('; '));
-  }
+  const unavailable = tr('strategyMetrics.unavailable');
+  const figuresNotShown = [
+    ...(subscriptionsCeiling ? [tr('admin.monthlyRevenue')] : []),
+    ...(growthCeiling ? [tr('admin.userGrowth')] : []),
+    ...(docsCeiling ? [tr('admin.storageUsage')] : []),
+    ...(membersCeiling ? [tr('admin.topFamilies')] : []),
+    ...(familiesCeiling || subscriptionsCeiling ? [tr('admin.planDistribution')] : []),
+    ...(trendCeiling ? [tr('admin.revenueOverview')] : []),
+  ];
+  if (figuresNotShown.length > 0) console.warn('[admin-dashboard] a summed read reached its ceiling; not shown:', figuresNotShown.join(', '));
 
   const { count: familyCount } = familyCountResult;
   const { count: activeMemberCount } = activeMemberCountResult;
@@ -242,10 +269,8 @@ export default async function AdminDashboardPage() {
   // ── Top families by active members ──
   const memberCounts = new Map<string, number>();
   for (const m of activeMembers ?? []) memberCounts.set(m.family_id, (memberCounts.get(m.family_id) ?? 0) + 1);
-  const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
-  const topFamilies = [...memberCounts.entries()]
-    .map(([id, count]) => ({ id, name: familyNameById.get(id) ?? 'Unknown', count }))
-    .sort((a, b) => b.count - a.count)
+  const topFamilyCounts = [...memberCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
 
   // ── Plan distribution across every family (not just paid subscriptions) ──
@@ -286,11 +311,25 @@ export default async function AdminDashboardPage() {
     resolved: resolvedTicketCountResult.count ?? 0,
   };
 
-  // ── Recent activity actors ──
+  // ── Recent activity actors, and the families the listed rows name ──
   const actorIds = [...new Set((recentLogs ?? []).map((l) => l.actor_id).filter((x): x is string => !!x))];
-  const actorsResult = actorIds.length
-    ? await settle(supabase.from('profiles').select('id, full_name, email').in('id', actorIds))
-    : { data: [] as { id: string; full_name: string | null; email: string | null }[] };
+  const namedFamilyIds = [...new Set([
+    ...topFamilyCounts.map(([id]) => id),
+    ...(recentLogs ?? []).map((l) => l.family_id).filter((x): x is string => !!x),
+  ])];
+  const [actorsResult, familyNamesResult] = await settleAll([
+    actorIds.length
+      ? supabase.from('profiles').select('id, full_name, email').in('id', actorIds)
+      : Promise.resolve({ data: [] as { id: string; full_name: string | null; email: string | null }[], error: null }),
+    readInChunks(namedFamilyIds, (chunk) => supabase.from('families').select('id, name').in('id', chunk)),
+  ]);
+  // A failed name read costs the names, like the actors below; it is named in the banner.
+  if (familyNamesResult.error) loadErrors.push(`family names: ${describeReadError(familyNamesResult.error)}`);
+  if (loadErrors.length > 0) {
+    console.error('[admin-dashboard] partial read — rendering degraded', loadErrors.join('; '));
+  }
+  const familyNameById = new Map((familyNamesResult.data ?? []).map((f) => [f.id, f.name]));
+  const topFamilies = topFamilyCounts.map(([id, count]) => ({ id, name: familyNameById.get(id) ?? 'Unknown', count }));
   // A failed actor lookup costs the NAMES beside audit-log entries, nothing
   // more: actorById is consulted with `actorById.get(log.actor_id)` and the
   // render already handles a miss. Returning an error page for it meant the
@@ -322,6 +361,7 @@ export default async function AdminDashboardPage() {
           </ul>
         </div>
       )}
+      <PartialReadBanner title={tr('adminCeiling.figuresNotShown', { n: ROW_CEILING.toLocaleString() })} failures={figuresNotShown} />
 
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Main column */}
@@ -330,7 +370,7 @@ export default async function AdminDashboardPage() {
             <StatCard icon={Home} tint="text-violet-400 bg-violet-500/15" label={tr('admin.totalFamilies')} value={familyCount?.toLocaleString() ?? '0'} sub={tr('admin.newThisMonth', { n: newFamiliesThisMonth })} />
             <StatCard icon={Users} tint="text-blue-400 bg-blue-500/15" label={tr('admin.activeUsers')} value={userCount?.toLocaleString() ?? '0'} sub={tr('admin.newThisMonth', { n: newUsersThisMonth })} />
             <StatCard icon={CreditCard} tint="text-emerald-400 bg-emerald-500/15" label={tr('admin.subscriptions')} value={activeSubCount?.toLocaleString() ?? '0'} sub={`${activeMemberCount?.toLocaleString() ?? 0} active members`} />
-            <StatCard icon={DollarSign} tint="text-amber-400 bg-amber-500/15" label={tr('admin.monthlyRevenue')} value={fmtMoney(monthlyRevenueCents)} sub={`from ${activeSubs.length} active plans`} />
+            <StatCard icon={DollarSign} tint="text-amber-400 bg-amber-500/15" label={tr('admin.monthlyRevenue')} value={subscriptionsCeiling ? unavailable : fmtMoney(monthlyRevenueCents)} sub={subscriptionsCeiling ? '' : `from ${activeSubs.length} active plans`} />
           </div>
 
           {/* System overview */}
@@ -338,9 +378,9 @@ export default async function AdminDashboardPage() {
             <Card>
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-sm font-semibold">{tr('admin.userGrowth')}</p>
-                <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-emerald-400"><TrendingUp className="h-3.5 w-3.5" />+{newUsers30}</span>
+                {!growthCeiling && <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-emerald-400"><TrendingUp className="h-3.5 w-3.5" />+{newUsers30}</span>}
               </div>
-              <Sparkline data={growthByDay} />
+              {growthCeiling ? <p className="text-sm text-muted">{unavailable}</p> : <Sparkline data={growthByDay} />}
               <p className="mt-2 text-xs text-muted">{tr('admin.newUsersLast30Days')}</p>
             </Card>
             <Card>
@@ -353,7 +393,7 @@ export default async function AdminDashboardPage() {
             <Card>
               <p className="mb-2 text-sm font-semibold">{tr('admin.storageUsage')}</p>
               <div className="flex items-center justify-center py-1">
-                <Gauge pct={storagePct} color="#7c5dff" centerLabel={fmtBytes(usedBytes)} />
+                {docsCeiling ? <p className="text-sm text-muted">{unavailable}</p> : <Gauge pct={storagePct} color="#7c5dff" centerLabel={fmtBytes(usedBytes)} />}
               </div>
               <p className="mt-1 text-center text-xs text-muted">of {fmtBytes(STORAGE_CAP_BYTES)} capacity</p>
             </Card>
@@ -454,7 +494,9 @@ export default async function AdminDashboardPage() {
               <h2 className="text-base font-semibold">{tr('admin.topFamilies')}</h2>
               <Link href="/admin/users" className="text-xs font-medium text-brand-text hover:underline">{tr('admin.viewAll')}</Link>
             </div>
-            {topFamilies.length === 0 ? (
+            {membersCeiling ? (
+              <p className="text-sm text-muted">{unavailable}</p>
+            ) : topFamilies.length === 0 ? (
               <EmptyState icon={Home} title={tr('admin.noFamiliesYet')} />
             ) : (
               <ul className="space-y-2.5">
@@ -476,7 +518,9 @@ export default async function AdminDashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <h2 className="mb-3 text-base font-semibold">{tr('admin.planDistribution')}</h2>
-          {subSegments.length === 0 ? (
+          {familiesCeiling || subscriptionsCeiling ? (
+            <p className="text-sm text-muted">{unavailable}</p>
+          ) : subSegments.length === 0 ? (
             <EmptyState icon={CreditCard} title={tr('admin.noFamiliesYet')} />
           ) : (
             <div className="flex items-center gap-4">
@@ -496,7 +540,9 @@ export default async function AdminDashboardPage() {
 
         <Card>
           <h2 className="mb-3 text-base font-semibold">{tr('admin.revenueOverview')}</h2>
-          <Bars data={months.map((m) => ({ label: m.label, value: m.cents }))} max={maxRevenue} money />
+          {trendCeiling
+            ? <p className="text-sm text-muted">{unavailable}</p>
+            : <Bars data={months.map((m) => ({ label: m.label, value: m.cents }))} max={maxRevenue} money />}
           <p className="mt-2 text-xs text-muted">{tr('admin.newMrrLast6Months')}</p>
         </Card>
 

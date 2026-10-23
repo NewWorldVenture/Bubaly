@@ -15,6 +15,8 @@ import { GrowthChart } from '@/components/admin/growth-chart';
 import { describeDbError } from '@/lib/supabase/errors';
 import { getTranslations } from '@/lib/i18n/server';
 import { safeWebLink } from '@/lib/utils/safe-link';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
+import { lastUtcDays } from '@/lib/admin/clock';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -98,51 +100,75 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
   //
   // The tiles are now `head: true` counts — exact, uncapped — and MRR is the
   // per-plan active counts times the plan prices, which is the same sum without
-  // reading a row. The rows the growth chart and the lists need page to a real
-  // ceiling, and reaching it is an error that lands in the read-error state
-  // below rather than in a smaller platform. The counts and the paged reads
-  // settle separately so each keeps its own tuple type.
+  // reading a row.
   //
-  // The subscription rows are counted (the growth chart, the All tab's total),
-  // so they page on the id, not on offsets: a checkout between two pages
-  // shifted every later offset by one and counted one subscription twice.
+  // Each tab reads only what it shows (review
+  // R5-SIB-SUBSCRIPTION-ROWS-LOCK-PLANS-AND-BILLING). Every subscription row
+  // used to be read on every tab, paged to a 25,000-row ceiling with reaching
+  // it an error, so past 25,000 subscriptions Plans and Billing were the
+  // read-error state too, for rows neither of them lists:
+  //   - Plans: the tiles' counts; the growth chart drawn as /admin/system draws
+  //     its own, from one count of the subscriptions created before its first
+  //     day and only the rows inside it; and the newest RECENT_SHOWN rows. Past
+  //     the ceiling inside the chart's thirty days the chart alone says it is
+  //     not shown;
+  //   - All: every subscription, which is what the tab lists, so its ceiling
+  //     is still the tab's read-error state;
+  //   - Billing: no subscription row; it lists Stripe's invoices.
+  // The paged reads go on the id, not on offsets: a checkout between two pages
+  // shifted every later offset by one and listed or drew one subscription twice.
   //
-  // The family names only label rows. They were one read of every family,
-  // paged to the same ceiling with reaching it an error, so past 25,000
-  // families the page lost every tile and row to the read-error state for a
-  // label (review R5-FAMILIES-LABEL-CEILING-LOCKS-PAGES). Each listed row is
-  // now named from its own family, below.
+  // The family names only label rows, so each listed row is named from its own
+  // family, below (review R5-FAMILIES-LABEL-CEILING-LOCKS-PAGES).
+  const onPlans = tab === 'plans';
+  const notRead = Promise.resolve({ data: null, count: null, error: null, truncated: false } as const);
   const since30 = new Date(Date.now() - 30 * 86400000);
-  const [[subscriptionsResult, activeCountResult, canceledRecentlyResult], planCountResults] = await Promise.all([
+  // The growth chart's first day (lib/admin/clock.ts).
+  const chartStart = new Date(lastUtcDays(30)[0].start).toISOString();
+  const [
+    [activeCountResult, canceledRecentlyResult, chartBaseResult, recentResult, chartResult, subscriptionsResult],
+    planCountResults,
+  ] = await Promise.all([
     settleAll([
-      readAllByIdAsQuery((after, limit) => {
+      onPlans ? supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active') : notRead,
+      onPlans ? supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'canceled').gte('updated_at', since30.toISOString()) : notRead,
+      onPlans ? supabase.from('subscriptions').select('id', { count: 'exact', head: true }).lt('created_at', chartStart) : notRead,
+      onPlans ? supabase.from('subscriptions').select('*').order('created_at', { ascending: false }).order('id', { ascending: false }).limit(RECENT_SHOWN) : notRead,
+      onPlans ? readAllByIdAsQuery((after, limit) => {
+        let query = supabase.from('subscriptions').select('id, created_at').gte('created_at', chartStart);
+        if (after) query = query.gt('id', after);
+        return query.order('id').limit(limit);
+      }, { max: ROW_CEILING }) : notRead,
+      tab === 'all' ? readAllByIdAsQuery((after, limit) => {
         let query = supabase.from('subscriptions').select('*');
         if (after) query = query.gt('id', after);
         return query.order('id').limit(limit);
-      }, { max: ROW_CEILING }),
-      supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-      supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'canceled').gte('updated_at', since30.toISOString()),
+      }, { max: ROW_CEILING }) : notRead,
     ]),
-    settleAll(PLANS.map((p) =>
-      supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active').eq('plan', p.id))),
+    settleAll(onPlans ? PLANS.map((p) =>
+      supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active').eq('plan', p.id)) : []),
   ]);
 
-  const readError = subscriptionsResult.error
-    ?? activeCountResult.error ?? canceledRecentlyResult.error ?? planCountResults.find((r) => r.error)?.error;
+  // The chart's rows past the ceiling cost the chart, not the tiles and the
+  // recent rows beside it. Any other failure is still the read-error state.
+  const chartCeiling = 'truncated' in chartResult && chartResult.truncated;
+  if (chartCeiling) console.warn('[admin-subscriptions] the growth chart read reached its ceiling; the chart is not shown');
+  const readError = subscriptionsResult.error ?? (chartCeiling ? null : chartResult.error)
+    ?? activeCountResult.error ?? canceledRecentlyResult.error ?? chartBaseResult.error ?? recentResult.error
+    ?? planCountResults.find((r) => r.error)?.error;
   if (readError) {
     console.error('[admin-subscriptions] subscription read failed', readError);
     return <AdminSubscriptionsReadError tab={tab} />;
   }
 
-  const { data: subscriptions } = subscriptionsResult;
-
-  // Newest first, as the lists below have always read; the paged read was ordered by id.
-  const subs = [...(subscriptions ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
-  const recentSubs = subs.slice(0, RECENT_SHOWN);
+  // Newest first, as the All tab has always listed them; the paged read was ordered by id.
+  const subs = [...(subscriptionsResult.data ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
+  const recentSubs = recentResult.data ?? [];
 
   const planById = (id: string): Plan | undefined => PLANS.find((p) => p.id === id);
   const activeCount = activeCountResult.count ?? 0;
-  const countsByPlan = new Map<string, number>(PLANS.map((p, i) => [p.id, planCountResults[i].count ?? 0]));
+  // Read on Plans only; the other tabs show no count.
+  const countsByPlan = new Map<string, number>(PLANS.map((p, i) => [p.id, planCountResults[i]?.count ?? 0]));
 
   const mrr = PLANS.reduce((sum, p) => sum + (countsByPlan.get(p.id) ?? 0) * p.priceMonthly, 0);
   const arr = mrr * 12;
@@ -221,6 +247,10 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
 
       {tab === 'plans' && (
         <>
+          <PartialReadBanner
+            title={tr('adminCeiling.figuresNotShown', { n: ROW_CEILING.toLocaleString() })}
+            failures={chartCeiling ? [tr('adminSubscriptions.subscriptionsOverTime')] : []}
+          />
           <div className="grid gap-4 sm:grid-cols-3">
             {PLANS.map((p) => (
               <Card key={p.id} className={p.featured ? 'ring-2 ring-brand' : undefined}>
@@ -249,7 +279,9 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
             <Card>
               <h2 className="mb-4 text-base font-semibold">{tr('adminSubscriptions.subscriptionsOverTime')} <span className="text-muted">{tr('adminSubscriptions.last30Days')}</span></h2>
-              <GrowthChart timestamps={subs.map((s) => s.created_at)} />
+              {chartCeiling
+                ? <p className="text-sm text-muted">{tr('strategyMetrics.unavailable')}</p>
+                : <GrowthChart timestamps={(chartResult.data ?? []).map((s) => s.created_at)} base={chartBaseResult.count ?? 0} />}
             </Card>
             <Card>
               <h2 className="mb-3 text-base font-semibold">{tr('adminSubscriptions.byPlan')}</h2>
@@ -259,7 +291,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
 
           <Card>
             <h2 className="mb-4 text-base font-semibold">{tr('adminSubscriptions.recentSubscriptions')}</h2>
-            {subs.length === 0 ? (
+            {recentSubs.length === 0 ? (
               <EmptyState icon={CreditCard} title={tr('adminSubscriptions.noSubscriptionsYet')} />
             ) : (
               <ul className="space-y-2">

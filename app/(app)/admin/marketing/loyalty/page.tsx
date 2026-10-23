@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { Gift, Trophy, Coins, Settings2, Users, Sparkles } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
-import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { readAllAsQuery, readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +23,8 @@ const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3
 const TIER_TONE: Record<Tier, 'neutral' | 'brand' | 'warning'> = { bronze: 'neutral', silver: 'brand', gold: 'warning' };
 /** Rows a summed read may page through before it is reported as a prefix (one round trip per 1,000). */
 const SUM_ROW_CEILING = 25_000;
+/** The award form's family picker offers at most this many families, and says so when there are more. */
+const FAMILY_OPTION_CEILING = 25_000;
 
 export default async function LoyaltyPage() {
   const t = await getTranslations();
@@ -42,8 +44,12 @@ export default async function LoyaltyPage() {
     supabase.from('loyalty_accounts').select('*').order('lifetime_points', { ascending: false }).limit(100),
     supabase.from('loyalty_redemptions').select('*').order('created_at', { ascending: false }).limit(100),
     // The award form's family picker. The rows above are labelled from their
-    // own families, read below, not from this list.
-    supabase.from('families').select('id, name').limit(1000),
+    // own families, read below, not from this list. It was `.limit(1000)` with
+    // no order: past a thousand families it offered an arbitrary thousand and
+    // said nothing. It offers the first FAMILY_OPTION_CEILING by id now, and
+    // says so when there are more (an options list, read with failOnMax: false).
+    readAllAsQuery((from, to) =>
+      supabase.from('families').select('id, name').order('id').range(from, to), { max: FAMILY_OPTION_CEILING, failOnMax: false }),
     supabase.from('loyalty_accounts').select('id', { count: 'exact', head: true }),
     supabase.from('loyalty_redemptions').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     // Summed while families earn and spend, so paged on the id: an offset read
@@ -105,6 +111,10 @@ export default async function LoyaltyPage() {
       <PartialReadBanner
         title={t('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
         failures={balancesCeiling ? [t('adminMarketingLoyalty.pointsOutstanding')] : []}
+      />
+      <PartialReadBanner
+        title={t('adminCeiling.offeredInPart', { n: FAMILY_OPTION_CEILING.toLocaleString() })}
+        failures={'truncated' in familiesResult && familiesResult.truncated ? [t('adminMarketingLoyalty.awardFamilyPicker')] : []}
       />
       <div className="flex items-center gap-2">
         <Trophy className="h-5 w-5 text-brand-text" />
