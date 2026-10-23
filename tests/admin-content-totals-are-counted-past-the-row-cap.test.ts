@@ -24,8 +24,12 @@ vi.mock('@/lib/i18n/server', () => ({
   getTranslations: async () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params),
   getLocaleContext: async () => ({ locale: { code: 'en-US' } }),
 }));
-// The row control reaches for the app router, which a static render has not.
-vi.mock('@/components/admin/document-row-actions', () => ({ DocumentRowActions: () => null }));
+// The row control reaches for the app router, which a static render has not;
+// it stands in as a marker naming the document it acts on.
+vi.mock('@/components/admin/document-row-actions', async () => {
+  const { createElement } = await import('react');
+  return { DocumentRowActions: ({ documentId }: { documentId: string }) => createElement('span', { 'data-row-actions': documentId }) };
+});
 
 let db: InMemorySupabase;
 
@@ -167,5 +171,114 @@ describe('/admin/content past the storage ceiling', () => {
   it('the control: under the ceiling no banner is shown', async () => {
     seedPlatform();
     expect(banner(await render())).toBeNull();
+  });
+});
+
+// The family filter's options and every listed document's family name came
+// from ONE read of the whole families table, paged to the same 25,000-row
+// ceiling as the summed figures, and reaching it returned the read-error
+// state: the list, its filters and its row actions went with it, where the
+// page used to render (review R5-FAMILIES-LABEL-CEILING-LOCKS-PAGES). A listed
+// document is now named from its own family, and the ceiling costs only the
+// filter options past it, which the page says.
+describe('/admin/content past 25,000 families', () => {
+  const CEILING = 25_000;
+  const DOCUMENTS = 30;
+  const offeredTitle = () => translate(SOURCE_MESSAGES, 'adminCeiling.offeredInPart', { n: CEILING.toLocaleString() });
+  const bannerTitled = (html: string, title: string) => {
+    const at = html.indexOf(`<p class="text-sm font-semibold text-danger">${title}</p>`);
+    return at < 0 ? null : html.slice(at, html.indexOf('</ul></div>', at));
+  };
+  const row = (i: number) => `<span class="font-medium">Doc ${i}</span>`;
+
+  async function renderWith(params: { tab?: string; q?: string; category?: string; family?: string }): Promise<string> {
+    const { default: AdminContentPage } = await import('@/app/(app)/admin/content/page');
+    return renderServerPage(await AdminContentPage({ searchParams: Promise.resolve(params) }));
+  }
+
+  // 25,001 families with no documents sort first by id; the three that own
+  // every document sort after them, past the first 25,000.
+  function seedPastTheFamilyCeiling() {
+    db.seed('families', [
+      ...Array.from({ length: CEILING + 1 }, (_, i) => ({ id: `fam-${pad(i)}`, name: `Empty family ${i}` })),
+      ...Array.from({ length: 3 }, (_, f) => ({ id: `fam-zz-${pad(f)}`, name: `Owner family ${f}` })),
+    ]);
+    db.seed('documents', Array.from({ length: DOCUMENTS }, (_, i) => {
+      const createdAt = new Date(Date.UTC(2026, 9, 1) + i * 60_000).toISOString();
+      return {
+        id: `doc-${pad(i)}`, family_id: `fam-zz-${pad(i % 3)}`, title: `Doc ${i}`, category: 'school', storage_path: `fam/${i}.pdf`,
+        mime_type: 'application/pdf', size_bytes: 1_000, created_by: `usr-${pad(i)}`, created_at: createdAt, updated_at: createdAt,
+      };
+    }));
+    db.seed('profiles', Array.from({ length: DOCUMENTS }, (_, i) => ({ id: `usr-${pad(i)}`, full_name: `Uploader ${i}`, email: `u${i}@example.com` })));
+  }
+
+  it('the page, its list and row actions render, and every listed document names its own family', async () => {
+    seedPastTheFamilyCeiling();
+    const html = await render();
+    expect(html).not.toContain(SOURCE_MESSAGES['content.couldNotLoadContentFrom']);
+    expect(statCardValue(html, SOURCE_MESSAGES['adminContent.totalItems'])).toBe(String(DOCUMENTS));
+    expect(statCardValue(html, SOURCE_MESSAGES['adminContent.storageUsed'])).toBe('29 KB');
+    for (const i of [0, DOCUMENTS - 1]) {
+      expect(html).toContain(row(i));
+      expect(html).toContain(`data-row-actions="doc-${pad(i)}"`);
+    }
+    // Each owner family names its ten documents' rows, and the recent rail.
+    for (const f of [0, 1, 2]) {
+      expect(html.split(`<td class="px-3 py-2.5 text-muted">Owner family ${f}</td>`)).toHaveLength(DOCUMENTS / 3 + 1);
+      expect(html).toContain(`<p class="text-xs text-muted">Owner family ${f} · `);
+    }
+    expect(html).not.toContain('Unknown family');
+    expect(html).toContain(`Uploader ${DOCUMENTS - 1}`);
+  });
+
+  it('the family filter offers the first 25,000 families and says it is cut short', async () => {
+    seedPastTheFamilyCeiling();
+    const html = await render();
+    const shown = bannerTitled(html, offeredTitle());
+    expect(shown).not.toBeNull();
+    expect([...(shown ?? '').matchAll(/<li>([^<]*)<\/li>/g)].map((m) => m[1])).toEqual([SOURCE_MESSAGES['adminContent.familyFilter']]);
+    expect(html).toContain('<option value="fam-000000">Empty family 0</option>');
+    expect(html).toContain(`<option value="fam-${pad(CEILING - 1)}">Empty family ${CEILING - 1}</option>`);
+    expect(html).not.toContain(`<option value="fam-${pad(CEILING)}">`);
+    // The summed figures are under their own ceiling: their banner is not shown.
+    expect(html).not.toContain(translate(SOURCE_MESSAGES, 'adminCeiling.figuresNotShown', { n: CEILING.toLocaleString() }));
+  });
+
+  it('a family chosen past the 25,000th stays selected, and the filter and the search still reach its documents', async () => {
+    seedPastTheFamilyCeiling();
+    const filtered = await renderWith({ family: 'fam-zz-000001' });
+    expect(filtered).not.toContain(SOURCE_MESSAGES['content.couldNotLoadContentFrom']);
+    expect(filtered).toContain('<option value="fam-zz-000001" selected="">Owner family 1</option>');
+    expect(filtered).toContain(row(DOCUMENTS - 2));
+    expect(filtered).not.toContain(row(DOCUMENTS - 1));
+
+    const searched = await renderWith({ q: 'owner family 2' });
+    expect(searched).not.toContain(SOURCE_MESSAGES['content.couldNotLoadContentFrom']);
+    expect(searched).toContain(row(DOCUMENTS - 1));
+    expect(searched).not.toContain(row(DOCUMENTS - 2));
+  });
+
+  it('a family label read that fails is still the read-error state', async () => {
+    seedPastTheFamilyCeiling();
+    h.db = withFaults(db, (table, calls) => (table === 'families' && calls.some((c) => c.method === 'in') ? { message: 'families unavailable' } : null));
+    const html = await render();
+    expect(html).toContain(SOURCE_MESSAGES['content.couldNotLoadContentFrom']);
+    expect(html).not.toContain(row(0));
+  });
+
+  it('a family filter read that fails is still the read-error state', async () => {
+    seedPastTheFamilyCeiling();
+    h.db = withFaults(db, (table, calls) => (table === 'families' && calls.some((c) => c.method === 'range') ? { message: 'families unavailable' } : null));
+    const html = await render();
+    expect(html).toContain(SOURCE_MESSAGES['content.couldNotLoadContentFrom']);
+    expect(html).not.toContain(row(0));
+  });
+
+  it('the control: under the ceiling the filter offers every family and says nothing', async () => {
+    seedPlatform();
+    const html = await render();
+    expect(bannerTitled(html, offeredTitle())).toBeNull();
+    for (const f of [0, 1, 2]) expect(html).toContain(`<option value="fam-${pad(f)}">Family ${f}</option>`);
   });
 });

@@ -145,3 +145,77 @@ describe('/admin/subscriptions reduces over every subscription, not the newest t
     expect(html).not.toContain('Unknown family');
   });
 });
+
+// The family names came from ONE read of the whole families table, paged to
+// the 25,000-row ceiling of the counted subscription read, and reaching it
+// returned the read-error state: past 25,000 families the page lost every
+// subscription row and tile, where it used to render (review
+// R5-FAMILIES-LABEL-CEILING-LOCKS-PAGES). It only ever labelled rows, so each
+// listed subscription and invoice is now named from its own family.
+describe('/admin/subscriptions past 25,000 families', () => {
+  const CEILING = 25_000;
+  const SUBSCRIBERS = 12;
+  const named = (i: number) => `<span class="font-medium">Subscriber family ${i}</span>`;
+
+  // 25,001 families with no subscription sort first by id; the subscribers'
+  // families sort after them, past the first 25,000.
+  function seedPastTheFamilyCeiling() {
+    db.seed('families', [
+      ...Array.from({ length: CEILING + 1 }, (_, i) => ({ id: `fam-${pad(i)}`, name: `Free family ${i}` })),
+      ...Array.from({ length: SUBSCRIBERS }, (_, i) => ({ id: `fam-zz-${pad(i)}`, name: `Subscriber family ${i}` })),
+    ]);
+    db.seed('subscriptions', Array.from({ length: SUBSCRIBERS }, (_, i) => {
+      const createdAt = new Date(Date.UTC(2026, 9, 1) + i * 60_000).toISOString();
+      return { id: `sub-${pad(i)}`, family_id: `fam-zz-${pad(i)}`, plan: 'plus', status: 'active', seats: 5, created_at: createdAt, updated_at: createdAt, current_period_end: null };
+    }));
+    db.seed('billing_customers', [
+      ...Array.from({ length: SUBSCRIBERS }, (_, i) => ({ id: `bc-${pad(i)}`, family_id: `fam-zz-${pad(i)}`, provider: 'stripe', customer_ref: `cus_${pad(i)}` })),
+      // A family past the 25,000th by id that pays an invoice without a subscription row.
+      { id: 'bc-free', family_id: `fam-${pad(CEILING)}`, provider: 'stripe', customer_ref: 'cus_free' },
+    ]);
+  }
+
+  it('the Plans tab renders its tiles and names each recent subscription\'s family', async () => {
+    seedPastTheFamilyCeiling();
+    const html = await render();
+    expect(html).not.toContain(SOURCE_MESSAGES['subscriptions.couldNotLoadSubscriptionData']);
+    expect(statCardValue(html, SOURCE_MESSAGES['adminSubscriptions.activeSubscriptions'])).toBe(String(SUBSCRIBERS));
+    expect(statCardValue(html, 'MRR')).toBe(fmtMoney(SUBSCRIBERS * PLUS_MONTHLY_CENTS));
+    // The newest eight, newest first.
+    for (let i = SUBSCRIBERS - 8; i < SUBSCRIBERS; i++) expect(html).toContain(named(i));
+    expect(html).not.toContain(named(SUBSCRIBERS - 9));
+    expect(html).not.toContain('Unknown family');
+  });
+
+  it('the All tab lists every subscription under its family', async () => {
+    seedPastTheFamilyCeiling();
+    const html = await render('all');
+    expect(html).not.toContain(SOURCE_MESSAGES['subscriptions.couldNotLoadSubscriptionData']);
+    expect(html).toContain(`(${SUBSCRIBERS})`);
+    for (let i = 0; i < SUBSCRIBERS; i++) expect(html).toContain(`<td class="px-3 py-2.5 font-medium">Subscriber family ${i}</td>`);
+    expect(html).not.toContain('Unknown family');
+  });
+
+  it('the Billing tab names each invoice\'s family, with or without a subscription', async () => {
+    seedPastTheFamilyCeiling();
+    h.invoices = [
+      { id: 'in_sub', number: 'INV-SUB', amount_paid: PLUS_MONTHLY_CENTS, status: 'paid', created: 1_790_000_000, customer: `cus_${pad(SUBSCRIBERS - 1)}`, hosted_invoice_url: null },
+      { id: 'in_free', number: 'INV-FREE', amount_paid: PLUS_MONTHLY_CENTS, status: 'paid', created: 1_789_999_000, customer: 'cus_free', hosted_invoice_url: null },
+    ];
+    const html = await render('billing');
+    expect(html).not.toContain(SOURCE_MESSAGES['subscriptions.couldNotLoadSubscriptionData']);
+    expect(html).toContain(named(SUBSCRIBERS - 1));
+    expect(html).toContain(`<span class="font-medium">Free family ${CEILING}</span>`);
+    expect(html).not.toContain('Unknown family');
+  });
+
+  it('a family label read that fails is still the read-error state', async () => {
+    seedPastTheFamilyCeiling();
+    h.db = withFaults(db, (table) => (table === 'families' ? { message: 'families unavailable' } : null));
+    for (const tab of ['plans', 'all']) {
+      const html = await render(tab);
+      expect(html).toContain(SOURCE_MESSAGES['subscriptions.couldNotLoadSubscriptionData']);
+      expect(html).not.toContain('Subscriber family');
+    }
+  });
+});

@@ -33,6 +33,8 @@ type Params = { searchParams: Promise<{ tab?: string; q?: string; category?: str
 const SUM_ROW_CEILING = 25_000;
 /** The browsable list is the newest this many documents, and says so when there are more. */
 const LIST_CEILING = 1_000;
+/** The family filter offers at most this many families, and says so when there are more. */
+const FAMILY_OPTION_CEILING = 25_000;
 
 function fmtBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -81,8 +83,15 @@ export default async function AdminContentPage({ searchParams }: Params) {
   //   - the "Recent uploads" rail is its own six-row read, so a filter on the
   //     list does not change what counts as recent;
   //   - uploaders are joined by the listed documents' created_by ids rather
-  //     than by reading every profile, which was capped the same way.
-  const [docCountResult, recentCountResult, aggregateResult, listResult, recentResult, familiesResult] = await settleAll([
+  //     than by reading every profile, which was capped the same way;
+  //   - a listed document is named from its own family (family_id), and the
+  //     family filter offers the first FAMILY_OPTION_CEILING families. Both
+  //     used to come from one read of every family, paged to SUM_ROW_CEILING
+  //     with reaching it an error, so past 25,000 families the list, its
+  //     filters and row actions were the read-error state — for a read that
+  //     only labels rows. Past that ceiling the filter now loses the options
+  //     after it, keeps the family chosen, and the banner says so.
+  const [docCountResult, recentCountResult, aggregateResult, listResult, recentResult, familyOptionsResult] = await settleAll([
     supabase.from('documents').select('id', { count: 'exact', head: true }),
     supabase.from('documents').select('id', { count: 'exact', head: true }).gte('created_at', since7.toISOString()),
     readAllByIdAsQuery((after, limit) => {
@@ -101,11 +110,28 @@ export default async function AdminContentPage({ searchParams }: Params) {
     }, { max: LIST_CEILING, failOnMax: false }),
     supabase.from('documents').select('*').order('created_at', { ascending: false }).order('id', { ascending: false }).limit(6),
     readAllAsQuery((from, to) =>
-      supabase.from('families').select('id, name').order('id').range(from, to), { max: SUM_ROW_CEILING }),
+      supabase.from('families').select('id, name').order('id').range(from, to), { max: FAMILY_OPTION_CEILING, failOnMax: false }),
   ]);
 
-  const { data: families, error: familiesError } = familiesResult;
-  const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
+  // The storage and category figures past their ceiling cost those figures,
+  // not the document list, its filters and row actions: they say they are not
+  // shown rather than adding up part of the platform. Any other failure is
+  // still the read-error state.
+  const aggregateCeiling = 'truncated' in aggregateResult && aggregateResult.truncated;
+  if (aggregateCeiling) console.warn('[admin-content] the storage read reached its ceiling; storage and categories are not shown');
+  // Five reads of the one table; the first that failed names the failure.
+  const { error: documentsError } = [docCountResult, recentCountResult, ...(aggregateCeiling ? [] : [aggregateResult]), listResult, recentResult].find((r) => r.error) ?? docCountResult;
+
+  // The search below matches a family's name, so every listed document is
+  // labelled, not only the fifty shown; the chosen family is labelled for the
+  // filter in case it is past the options' ceiling.
+  const labelledFamilyIds = [...new Set([
+    ...[...(listResult.data ?? []), ...(recentResult.data ?? [])].map((d) => d.family_id),
+    ...(familyFilter ? [familyFilter] : []),
+  ])];
+  const { data: families, error: familiesError } = await readInChunks(labelledFamilyIds, (chunk) =>
+    supabase.from('families').select('id, name').in('id', chunk));
+  const familyNameById = new Map(families.map((f) => [f.id, f.name]));
 
   let scoped = listResult.data ?? [];
   if (tab === 'photos') scoped = scoped.filter((d) => d.mime_type?.startsWith('image/'));
@@ -117,15 +143,9 @@ export default async function AdminContentPage({ searchParams }: Params) {
   const { data: profiles, error: profilesError } = await readInChunks(uploaderIds, (chunk) =>
     supabase.from('profiles').select('id, full_name, email').in('id', chunk));
 
-  // The storage and category figures past their ceiling cost those figures,
-  // not the document list, its filters and row actions: they say they are not
-  // shown rather than adding up part of the platform. Any other failure is
-  // still the read-error state.
-  const aggregateCeiling = 'truncated' in aggregateResult && aggregateResult.truncated;
-  if (aggregateCeiling) console.warn('[admin-content] the storage read reached its ceiling; storage and categories are not shown');
-  // Five reads of the one table; the first that failed names the failure.
-  const { error: documentsError } = [docCountResult, recentCountResult, ...(aggregateCeiling ? [] : [aggregateResult]), listResult, recentResult].find((r) => r.error) ?? docCountResult;
-  const readError = documentsError ?? familiesError ?? profilesError;
+  // The family filter's own read failing is still the read-error state; only
+  // its ceiling costs less (below).
+  const readError = documentsError ?? familiesError ?? profilesError ?? familyOptionsResult.error;
   if (readError) {
     console.error('[admin-content] content read failed', readError);
     return <AdminContentReadError />;
@@ -155,12 +175,25 @@ export default async function AdminContentPage({ searchParams }: Params) {
   const filterCategories = aggregateCeiling
     ? [...new Set([...(listResult.data ?? []).map((d) => d.category ?? 'other'), ...(categoryFilter ? [categoryFilter] : [])])]
     : categories;
+  // Past its ceiling the family filter offers the first families by id, and
+  // the one already chosen, which the labels above name.
+  const familyOptionsCeiling = 'truncated' in familyOptionsResult && familyOptionsResult.truncated;
+  if (familyOptionsCeiling) console.warn('[admin-content] the family filter reached its ceiling; it offers the first families only');
+  const familyOptions = familyOptionsResult.data ?? [];
+  const chosenFamily = familyFilter && !familyOptions.some((f) => f.id === familyFilter)
+    ? families.find((f) => f.id === familyFilter)
+    : undefined;
+  const filterFamilies = chosenFamily ? [...familyOptions, chosenFamily] : familyOptions;
 
   return (
     <div className="module-page">
       <PartialReadBanner
         title={tr('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
         failures={aggregateCeiling ? [tr('adminContent.storageUsed'), tr('adminContent.categories'), tr('adminContent.storageByCategory')] : []}
+      />
+      <PartialReadBanner
+        title={tr('adminCeiling.offeredInPart', { n: FAMILY_OPTION_CEILING.toLocaleString() })}
+        failures={familyOptionsCeiling ? [tr('adminContent.familyFilter')] : []}
       />
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('adminContent.contentManagement')}</h1>
@@ -222,7 +255,7 @@ export default async function AdminContentPage({ searchParams }: Params) {
                 ]} />
                 <FilterSelect name="family" label={tr('adminContent.family')} defaultValue={familyFilter} options={[
                   { value: '', label: 'All Families' },
-                  ...(families ?? []).map((f) => ({ value: f.id, label: f.name })),
+                  ...filterFamilies.map((f) => ({ value: f.id, label: f.name })),
                 ]} />
               </FilterForm>
 
