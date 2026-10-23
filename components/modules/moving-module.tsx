@@ -54,10 +54,15 @@ export function MovingWorkspace() {
   const askConfirm = useConfirm();
   // Money follows the reader; the currency stays the money's own.
   const money = (cents: number | null | undefined) => moneyIn(cents, locale.code);
-  const { familyId, userId, members, selfMember } = useApp();
+  const { familyId, userId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
   const context = { familyId, userId, memberId: selfMember?.id ?? null, role: selfMember?.role ?? null, active: selfMember?.is_active === true };
   const canRecalculate = context.active && !!context.memberId && (context.role === 'parent' || context.role === 'adult');
+  // A guest views the move and does not plan it (0464). Calling a move off,
+  // rewriting it or deleting it with every task and box is for whoever may
+  // move its date (a parent or adult), or the member who planned it.
+  const readOnly = role === 'guest';
+  const canManageMove = (m: Move) => !readOnly && (canRecalculate || m.created_by === userId);
 
   const moves = useRealtimeQuery<Move>({
     table: 'moves', familyId,
@@ -203,7 +208,7 @@ export function MovingWorkspace() {
     const meta = categoryMeta(t.category);
     return (
       <li className={cn('flex items-center gap-3 rounded-xl border px-3 py-2', t.status === 'done' ? 'border-border/60 bg-surface/30' : overdue ? 'border-rose-500/30 bg-rose-500/5' : 'border-border bg-surface/60')}>
-        <button onClick={() => setTaskStatus(t, t.status === 'done' ? 'todo' : 'done')} aria-label={t.status === 'done' ? `Reopen ${t.title}` : `Complete ${t.title}`}
+        <button onClick={() => setTaskStatus(t, t.status === 'done' ? 'todo' : 'done')} disabled={readOnly} aria-label={t.status === 'done' ? `Reopen ${t.title}` : `Complete ${t.title}`}
           className={cn('grid h-6 w-6 shrink-0 place-items-center rounded-full border coarse:h-8 coarse:w-8', t.status === 'done' ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-border hover:border-brand')}>
           {t.status === 'done' && <Check className="h-3.5 w-3.5" />}
         </button>
@@ -215,13 +220,13 @@ export function MovingWorkspace() {
             {' · '}{meta.label}{t.assignee_id ? ` · ${nameOf(t.assignee_id) ?? 'someone'}` : ''}{t.status === 'skipped' ? ' · skipped' : t.status === 'doing' ? ' · in progress' : ''}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-0.5">
+        {!readOnly && <div className="flex shrink-0 items-center gap-0.5">
           {t.status === 'todo' && <button onClick={() => setTaskStatus(t, 'doing')} aria-label={tr('moving.markInProgress')} title={tr('moving.inProgress')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ChevronRight className="h-4 w-4" /></button>}
           {(t.status === 'todo' || t.status === 'doing') && <button onClick={() => setTaskStatus(t, 'skipped')} aria-label={tr('itemAction.skip', { name: t.title })} className="rounded-lg p-1.5 text-muted hover:text-fg"><SkipForward className="h-4 w-4" /></button>}
           {t.status === 'skipped' && <button onClick={() => setTaskStatus(t, 'todo')} aria-label={tr('itemAction.restore', { name: t.title })} className="rounded-lg p-1.5 text-muted hover:text-fg"><RotateCcw className="h-4 w-4" /></button>}
           <button onClick={() => setTaskForm({ open: true, task: t })} aria-label={tr('itemAction.edit', { name: t.title })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
           <button onClick={() => deleteTask(t)} aria-label={tr('itemAction.delete', { name: t.title })} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
-        </div>
+        </div>}
       </li>
     );
   };
@@ -235,11 +240,11 @@ export function MovingWorkspace() {
           <p className="text-xs text-muted">{b.from_room ? `${b.from_room} → ` : ''}{b.to_room ?? 'unassigned'} · {boxStatusLabel(b.status)}{b.packed_by ? ` by ${nameOf(b.packed_by)}` : ''}</p>
           {b.contents.length > 0 && <p className="mt-1 truncate text-xs text-muted">{b.contents.join(', ')}</p>}
         </div>
-        <div className="flex shrink-0 items-center gap-0.5">
+        {!readOnly && <div className="flex shrink-0 items-center gap-0.5">
           {b.status !== 'unpacked' && <Button size="sm" variant="secondary" onClick={() => advanceBox(b)}>{boxStatusLabel(BOX_ORDER[BOX_ORDER.indexOf(b.status) + 1])}</Button>}
           <button onClick={() => setBoxForm({ open: true, box: b })} aria-label={tr('moving.editBoxN', { number: b.box_number })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
           <button onClick={() => deleteBox(b)} aria-label={tr('moving.deleteBoxN', { number: b.box_number })} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
-        </div>
+        </div>}
       </div>
     </li>
   );
@@ -252,15 +257,15 @@ export function MovingWorkspace() {
         action={
           <div className="flex flex-wrap items-center gap-2">
             <AiInsight kind="moving" iconOnly />
-            {move && <Button variant="secondary" onClick={() => setBoxForm({ open: true, box: null })}><Package className="h-4 w-4" /> Box</Button>}
-            {move && <Button variant="secondary" onClick={() => setTaskForm({ open: true, task: null })}><Plus className="h-4 w-4" /> {tr('moving.task')}</Button>}
-            <Button onClick={() => setMoveForm({ open: true, move: null })}><Truck className="h-4 w-4" /> {tr('moving.newMove')}</Button>
+            {move && !readOnly && <Button variant="secondary" onClick={() => setBoxForm({ open: true, box: null })}><Package className="h-4 w-4" /> Box</Button>}
+            {move && !readOnly && <Button variant="secondary" onClick={() => setTaskForm({ open: true, task: null })}><Plus className="h-4 w-4" /> {tr('moving.task')}</Button>}
+            {!readOnly && <Button onClick={() => setMoveForm({ open: true, move: null })}><Truck className="h-4 w-4" /> {tr('moving.newMove')}</Button>}
           </div>
         }
       />
 
       {moves.data.length === 0 || !move || !summary || !budget ? (
-        <EmptyState icon={Truck} title={tr('moving.noMovePlanned')} description={tr('movingModule.addTheMoveDateAnd')} action={<Button onClick={() => setMoveForm({ open: true, move: null })}><Truck className="h-4 w-4" /> {tr('moving.planAMove')}</Button>} />
+        <EmptyState icon={Truck} title={tr('moving.noMovePlanned')} description={tr('movingModule.addTheMoveDateAnd')} action={readOnly ? undefined : <Button onClick={() => setMoveForm({ open: true, move: null })}><Truck className="h-4 w-4" /> {tr('moving.planAMove')}</Button>} />
       ) : (
         <>
           {moves.data.length > 1 && (
@@ -281,7 +286,7 @@ export function MovingWorkspace() {
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-lg font-semibold">{move.title}</h2>
                   <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted">{statusLabel(tr, move.status)}</span>
-                  {suggested && suggested !== move.status && move.status !== 'done' && move.status !== 'cancelled' && (
+                  {canManageMove(move) && suggested && suggested !== move.status && move.status !== 'done' && move.status !== 'cancelled' && (
                     <button onClick={() => setMoveStatus(suggested)} className="rounded-full border border-brand/30 bg-brand/10 px-2 py-0.5 text-xs text-brand-text hover:bg-brand/20">{tr('moving.mark')} {statusLabel(tr, suggested)} →</button>
                   )}
                 </div>
@@ -291,8 +296,8 @@ export function MovingWorkspace() {
               </div>
               <div className="flex items-center gap-1">
                 {canRecalculate && move.status !== 'done' && move.status !== 'cancelled' && <Button size="sm" variant="secondary" onClick={() => setDateMoveId(move.id)}>{tr('moving.changeDate')}</Button>}
-                <button onClick={() => setMoveForm({ open: true, move })} aria-label={tr('moving.editMove')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-                <button onClick={() => deleteMove(move)} aria-label={tr('moving.deleteMove')} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
+                {canManageMove(move) && <button onClick={() => setMoveForm({ open: true, move })} aria-label={tr('moving.editMove')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>}
+                {canManageMove(move) && <button onClick={() => deleteMove(move)} aria-label={tr('moving.deleteMove')} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>}
               </div>
             </div>
           </div>
@@ -339,7 +344,7 @@ export function MovingWorkspace() {
             ))}
             <div className="ml-auto flex items-center gap-2 pb-1">
               {tab === 'timeline' && <label className="flex items-center gap-1.5 text-xs text-muted"><input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} className="accent-brand" /> {tr('moving.showDone')}</label>}
-              {tab === 'timeline' && <Button size="sm" onClick={generateTasks} loading={planning} disabled={!plan.length}><Wand2 className="h-3.5 w-3.5" /> {plan.length ? tr('moving.addNStepChecklist', { n: plan.length }) : tr('moving.checklistComplete')}</Button>}
+              {tab === 'timeline' && !readOnly && <Button size="sm" onClick={generateTasks} loading={planning} disabled={!plan.length}><Wand2 className="h-3.5 w-3.5" /> {plan.length ? tr('moving.addNStepChecklist', { n: plan.length }) : tr('moving.checklistComplete')}</Button>}
             </div>
           </div>
 
@@ -348,7 +353,7 @@ export function MovingWorkspace() {
               <div className="rounded-2xl border border-brand/20 bg-brand/5 p-5">
                 <p className="text-sm font-semibold text-brand-text">{tr('moving.noTasksYet')}</p>
                 <p className="mt-1 text-sm text-muted">{tr('moving.theTemplateHas')} {plan.length} {tr('moving.stepsForA')} {MOVE_KINDS.find((k) => k.value === move.move_kind)?.label.toLowerCase()} move{move.has_kids ? ' with kids' : ''}{move.has_pets ? ' and pets' : ''}{tr('moving.fromEightWeeksOutToTwo')}</p>
-                <Button className="mt-3" onClick={generateTasks} loading={planning}><Wand2 className="h-4 w-4" /> {tr('moving.addTheChecklist')}</Button>
+                {!readOnly && <Button className="mt-3" onClick={generateTasks} loading={planning}><Wand2 className="h-4 w-4" /> {tr('moving.addTheChecklist')}</Button>}
               </div>
             ) : (
               <div className="space-y-5">
@@ -379,7 +384,7 @@ export function MovingWorkspace() {
               {query.trim() ? (
                 found.length ? <ul className="grid gap-2 sm:grid-cols-2">{found.map((b) => <BoxCard key={b.id} b={b} />)}</ul> : <p className="text-sm text-muted">{tr('moving.nothingLabelledOrListedAs')}{query}”.</p>
               ) : rooms.length === 0 ? (
-                <EmptyState icon={Package} title={tr('moving.noBoxesYet')} description={tr('movingModule.numberEveryBoxNameIts')} action={<Button onClick={() => setBoxForm({ open: true, box: null })}><Package className="h-4 w-4" /> {tr('moving.addBox1')}</Button>} />
+                <EmptyState icon={Package} title={tr('moving.noBoxesYet')} description={tr('movingModule.numberEveryBoxNameIts')} action={readOnly ? undefined : <Button onClick={() => setBoxForm({ open: true, box: null })}><Package className="h-4 w-4" /> {tr('moving.addBox1')}</Button>} />
               ) : (
                 rooms.map(({ room, boxes: list }) => (
                   <section key={room}>

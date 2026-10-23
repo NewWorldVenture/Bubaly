@@ -18,6 +18,7 @@ import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
 import { readsHouseholdMoney } from '@/lib/finance/household-money';
 import { budgetByCategory, periodWindow } from '@/lib/finance/budget-periods';
 import { dayKeyInTz } from '@/lib/services/scope';
+import { isManager } from '@/lib/constants/roles';
 
 // Decision Simulator server action (Digital Twin, pillar #2). Assembles the real
 // household context for the proposed decision and runs the pure simulator. All
@@ -141,10 +142,22 @@ export interface ActivityProjectionInput {
   travelMinEach?: number; costDollars?: number; costCategory?: string;
 }
 
+type TwinContext = Awaited<ReturnType<typeof requireUserContext>>;
+type Translate = Awaited<ReturnType<typeof getTranslations>>;
+type Projected = { ok: true; data: ProjectionResult } | { ok: false; error: string };
+
 /** Assemble the real household context and run the pure projection. No writes. */
-export async function projectActivityAction(input: ActivityProjectionInput): Promise<{ ok: true; data: ProjectionResult } | { ok: false; error: string }> {
+export async function projectActivityAction(input: ActivityProjectionInput): Promise<Projected> {
   const tr = await getTranslations();
   const ctx = await requireUserContext();
+  return runActivityProjection(ctx, tr, input);
+}
+
+/**
+ * The projection itself, for `ctx`: what projectActivityAction answers, and
+ * what saveSimulationAction keeps. Reads only.
+ */
+async function runActivityProjection(ctx: TwinContext, tr: Translate, input: ActivityProjectionInput): Promise<Projected> {
   const familyId = ctx.active.familyId;
   if (!input.activityName?.trim() || !input.startsAt || !(input.durationMin > 0)) {
     return { ok: false, error: tr('actions.fillInAnActivityTime') };
@@ -207,32 +220,79 @@ export async function projectActivityAction(input: ActivityProjectionInput): Pro
   return { ok: true, data: projectActivity(decision, { memberEvents, budgets, vacationWindows }) };
 }
 
-/** Save a projection the family wants to keep. */
-export async function saveSimulationAction(input: ActivityProjectionInput, result: ProjectionResult): Promise<Result> {
+/**
+ * Save a projection the family wants to keep.
+ *
+ * The scenario is projected HERE, from the household's own rows. The browser's
+ * verdict, hours and dimensions used to be stored as given, so any member could
+ * keep "Travel soccer · clear · 0.5h/wk" for a projection that never said so,
+ * and every member's Saved list showed it. A guest views the household and does
+ * not write to it (0464). The member named must be one of this family's, and
+ * the name kept is the roster's.
+ *
+ * What is kept leaves the household's money out. The Cost line ("$X of a $Y
+ * 'Sports' budget", "$R left after") and the cost and category typed in are a
+ * parent's or adult's (projectActivityAction shows them to no one else), while
+ * every member reads twin_simulations (0147), and nothing reads `input` or
+ * `dimensions` back. So neither is stored.
+ */
+export async function saveSimulationAction(input: ActivityProjectionInput): Promise<Result> {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
+  if (ctx.active.role === 'guest') return { ok: false, error: tr('householdRoles.guestViewsOnly') };
+  const familyId = ctx.active.familyId;
   const supabase = await createServer();
-  const { error } = await supabase.from('twin_simulations').insert({
-    family_id: ctx.active.familyId,
+  const numbers = [input.durationMin, input.sessionsPerWeek, input.weeks, input.travelMinEach ?? 0];
+  if (typeof input.startsAt !== 'string' || Number.isNaN(Date.parse(input.startsAt)) || !numbers.every((n) => typeof n === 'number' && Number.isFinite(n))) {
+    return { ok: false, error: tr('actions.fillInAnActivityTime') };
+  }
+  let memberName = typeof input.memberName === 'string' ? input.memberName : '';
+  if (input.memberId) {
+    const { data: member, error: memberError } = await supabase.from('family_members')
+      .select('id, display_name').eq('id', input.memberId).eq('family_id', familyId).maybeSingle();
+    if (memberError) return { ok: false, error: describeActionError(memberError) };
+    if (!member) return { ok: false, error: tr('actions.thatUserIsNotAn') };
+    memberName = member.display_name;
+  }
+  const projected = await runActivityProjection(ctx, tr, { ...input, memberName });
+  if (!projected.ok) return projected;
+  const result = projected.data;
+  const kept = {
+    memberId: input.memberId || null, memberName, activityName: input.activityName.trim().slice(0, 200),
+    startsAt: input.startsAt, durationMin: input.durationMin, sessionsPerWeek: input.sessionsPerWeek, weeks: input.weeks,
+    ...(input.travelMinEach ? { travelMinEach: input.travelMinEach } : {}),
+  };
+  const { data: saved, error } = await supabase.from('twin_simulations').insert({
+    family_id: familyId,
     member_id: input.memberId || null,
-    activity_name: input.activityName.trim().slice(0, 200),
+    activity_name: kept.activityName,
     verdict: result.verdict,
     weekly_hours: result.weeklyHours,
-    input: input as never,
-    dimensions: result.dimensions as never,
+    input: kept as never,
+    dimensions: result.dimensions.filter((d) => d.key !== 'cost') as never,
     created_by: ctx.user.id,
-  });
+  }).select('id').single();
   if (error) return { ok: false, error: describeActionError(error) };
+  if (!saved) return { ok: false, error: tr('errors.thatChangeWasNotSaved') };
   revalidatePath('/dashboard/family-digital-twin');
   return { ok: true };
 }
 
-/** Delete a saved simulation. */
+/**
+ * Delete a saved simulation. A manager (a parent or adult) deletes any; anyone
+ * else only one they saved (0478 and 0479 decide a household record's delete
+ * the same way); a guest none (0464). The author is a filter on the delete
+ * itself, so someone else's scenario matches no row and is reported as not
+ * deleted.
+ */
 export async function deleteSimulationAction(id: string): Promise<Result> {
   const tr = await getTranslations();
   const ctx = await requireUserContext();
+  if (ctx.active.role === 'guest') return { ok: false, error: tr('householdRoles.guestViewsOnly') };
   const supabase = await createServer();
+  const ownOnly = isManager(ctx.active.role) ? {} : { created_by: ctx.user.id };
   const { data: deleted, error } = await supabase.from('twin_simulations')
-    .delete().eq('id', id).eq('family_id', ctx.active.familyId).select('id');
+    .delete().eq('id', id).eq('family_id', ctx.active.familyId).match(ownOnly).select('id');
   if (error) return { ok: false, error: describeActionError(error) };
   if (wroteNoRows(deleted)) return { ok: false, error: tr('actions.couldNotDeleteThatSimulation') };
   revalidatePath('/dashboard/family-digital-twin');

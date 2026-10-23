@@ -17189,5 +17189,8 @@
   "marketplace.anAuctionTakesBidsNotInterest": "This is an auction: place a bid instead.",
   "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Questions between two households are not open yet.",
   "assistantActions.couldNotReadTheBoard": "Could not read the marketplace board just now. Try again in a moment.",
-  "negotiations.theOtherSideActedAtTheSameMoment": "The other side acted on this offer at the same moment. Refresh and try again."
+  "negotiations.theOtherSideActedAtTheSameMoment": "The other side acted on this offer at the same moment. Refresh and try again.",
+  "householdRoles.guestViewsOnly": "Guests can view this, but not change it.",
+  "socialActions.notInYourPlan": "Social media tools aren't part of your family's plan.",
+  "socialActions.couldNotConfirmYourPlan": "Bubaly could not confirm your plan right now. Try again in a moment."
 }

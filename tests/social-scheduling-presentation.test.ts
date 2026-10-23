@@ -20,6 +20,10 @@ vi.mock('@/lib/i18n/server', () => ({
   getLocaleContext: async () => ({ locale: localeOrDefault(boundary.locale), source: 'default' }),
 }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: boundary.auth }));
+// The pages' plan and social-role guard is a request boundary like auth (a
+// role that may read these pages); tests/social-is-the-familys-plan-and-the-
+// members-role.test.ts drives the real guard.
+vi.mock('@/lib/social/access', () => ({ requireSocialPage: async () => ({ ctx: await boundary.auth(), access: { can: () => true } }) }));
 vi.mock('@/lib/social/queries', () => ({ getPost: boundary.post, getCalendarItems: boundary.calendar, getAccounts: boundary.accounts, getFeed: boundary.feed, getInbox: boundary.inbox }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => ({ from: boundary.from }) }));
 vi.mock('@/app/(app)/dashboard/social/actions', () => ({ retryPublishAction: boundary.retry, resolveCommentAction: boundary.resolve }));

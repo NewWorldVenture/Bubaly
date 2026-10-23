@@ -3,11 +3,13 @@
 // the SQL helper public.social_has_permission (migration 0034). Use these in
 // server actions / route handlers BEFORE any privileged write; RLS is the backstop.
 import 'server-only';
+import { redirect } from 'next/navigation';
 import { REFUSAL_DIGEST_PREFIX } from '@/lib/actions/refusal';
+import { requireFeature, type UserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { settle, settleAll } from '@/lib/supabase/settle';
 import {
-  ROLE_PERMISSIONS, defaultSocialRoleForMember, isSocialRole,
+  ROLE_PERMISSIONS, canAnySocial, defaultSocialRoleForMember, isSocialRole,
   type SocialRole, type SocialPermission,
 } from './roles';
 
@@ -108,4 +110,19 @@ export async function requireSocialPermission(
     throw new SocialAccessError(permission);
   }
   return access;
+}
+
+/**
+ * Guard for a social console page that not every social role may read: the
+ * feature (plan and switch, as the layout checks), then the caller's social
+ * role, which must hold one of `anyOf` (SOCIAL_SURFACES in ./roles). Anyone
+ * else is sent to the unified feed, which every social role reads. The pages
+ * used to check neither, so a read_only child, caregiver or guest read every
+ * draft, the queue, each post's provider errors and the media library.
+ */
+export async function requireSocialPage(anyOf: readonly SocialPermission[]): Promise<{ ctx: UserContext; access: SocialAccess }> {
+  const ctx = await requireFeature('/dashboard/social');
+  const access = await getSocialAccess(ctx.active.familyId);
+  if (!access || !canAnySocial(access.can, anyOf)) redirect('/dashboard/social/feed');
+  return { ctx, access };
 }

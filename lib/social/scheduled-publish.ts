@@ -6,6 +6,8 @@ import { getConnector, type ConnectorPublishInput, type ConnectorPublishOutput }
 import { derivePostStatus } from './content';
 import { runPublishNow, type PublishOutcome } from './publish';
 import { assertXCredentials } from './account-tokens';
+import { familyHasFeature, getFeatureTiersByHref } from '@/lib/server/feature-entitlement';
+import type { FeatureTier } from '@/lib/constants/feature-catalog';
 import {
   ScheduledPublishError, SCHEDULE_TOOL, scheduleFailure, scheduleIdentity, scheduleSignal,
   readSchedule, changeSchedule, checkScheduleActor, requestScheduleActor, readScheduleSnapshot,
@@ -244,6 +246,22 @@ export async function runScheduledPublishDrain(options: { now?: Date; signal?: A
   if (savedCursor.data && (!cursor || !/^[0-9a-f-]{36}$/i.test(cursor))) return scheduleFailure();
   let wrapped = false;
   const visited = new Set<string>();
+  // The plan and the feature switch, as the pages and the actions check them.
+  // The drain published for every family with a queued post, so a family below
+  // Social's tier, or every family once Social was switched off, still had its
+  // scheduled posts sent. Such a receipt is left queued and untouched, like a
+  // closed family's. Asked once per family per drain; the tiers once per drain.
+  // An unreadable plan throws into the receipt's own catch: failed, retryable.
+  const entitled = new Map<string, boolean>();
+  let tiers: Record<string, FeatureTier> | null = null;
+  const familyMayPublish = async (familyId: string): Promise<boolean> => {
+    const known = entitled.get(familyId);
+    if (known !== undefined) return known;
+    tiers ??= await getFeatureTiersByHref(db, { onUnavailable: 'throw' });
+    const allowed = await familyHasFeature(db, familyId, '/dashboard/social', tiers);
+    entitled.set(familyId, allowed);
+    return allowed;
+  };
   for (let page = 0; page < 20 && !signal.aborted; page += 1) {
     // Receipts of OPEN families only (families.closed_at): a closed account's
     // scheduled posts are not published. Its receipts stay queued, untouched.
@@ -269,6 +287,7 @@ export async function runScheduledPublishDrain(options: { now?: Date; signal?: A
         if (receipt.outputs.reconcile && (receipt.outputs.phase !== 'dispatching' || heldPresentation)) await reconcileScheduledPost(db, receipt, signal);
         if (receipt.outputs.phase !== 'queued' || Date.parse(receipt.inputs.scheduledFor) > now.getTime()
           || (receipt.outputs.retryAt && Date.parse(receipt.outputs.retryAt) > now.getTime())) continue;
+        if (!(await familyMayPublish(receipt.family_id))) continue;
         const refreshed = await readSchedule(db, receipt.id, signal);
         if (!refreshed) continue;
         summary.attempted++;

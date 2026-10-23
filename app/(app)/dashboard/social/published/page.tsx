@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireSocialPage } from '@/lib/social/access';
+import { SOCIAL_SURFACES } from '@/lib/social/roles';
 import { getPosts } from '@/lib/social/queries';
 import { PostsList, PostTabs } from '@/components/social/posts-list';
 
@@ -12,7 +13,8 @@ export const dynamic = 'force-dynamic';
 
 export default async function PublishedPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  // What went out is the pipeline's, and an analyst's too.
+  const { ctx } = await requireSocialPage(SOCIAL_SURFACES.published);
   const posts = await getPosts(ctx.active.familyId, ['published', 'partially_published']);
   return (
     <div className="space-y-4">

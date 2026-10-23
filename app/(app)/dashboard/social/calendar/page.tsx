@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { CalendarClock, PenSquare } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireSocialPage } from '@/lib/social/access';
+import { SOCIAL_SURFACES } from '@/lib/social/roles';
 import { getCalendarItems } from '@/lib/social/queries';
 import { PlatformDot } from '@/components/social/platform';
 import { Card } from '@/components/ui/card';
@@ -19,8 +20,9 @@ export const dynamic = 'force-dynamic';
 export default async function CalendarPage() {
   const t = await getTranslations();
   const { locale } = await getLocaleContext();
-  const ctx = await requireUserContext();
+  const { ctx, access } = await requireSocialPage(SOCIAL_SURFACES.pipeline);
   const items = await getCalendarItems(ctx.active.familyId);
+  const canCompose = SOCIAL_SURFACES.compose.some((p) => access.can(p));
 
   // Each saved schedule carries its own zone; legacy rows show explicit UTC.
   const byDay = new Map<string, typeof items>();
@@ -36,9 +38,11 @@ export default async function CalendarPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold">{t('dashboardSocialCalendar.contentCalendar')}</h2>
-        <Link href="/dashboard/social/content-studio/new" className="inline-flex h-9 items-center gap-2 rounded-lg bg-brand px-3 text-sm font-medium text-brand-fg">
-          <PenSquare className="h-4 w-4" /> {t('dashboardSocialCalendar.scheduleAPost')}
-        </Link>
+        {canCompose && (
+          <Link href="/dashboard/social/content-studio/new" className="inline-flex h-9 items-center gap-2 rounded-lg bg-brand px-3 text-sm font-medium text-brand-fg">
+            <PenSquare className="h-4 w-4" /> {t('dashboardSocialCalendar.scheduleAPost')}
+          </Link>
+        )}
       </div>
 
       {items.length === 0 ? (

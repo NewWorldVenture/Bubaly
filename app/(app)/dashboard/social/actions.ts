@@ -22,6 +22,8 @@ import { clearXTokens, XBoundaryError } from '@/lib/social/account-tokens';
 import { resolveScheduleTime, validateScheduleInstant } from '@/lib/social/schedule-time';
 import { armScheduledPublishReceipt, createScheduledPublishReceipt, publishScheduledPostNow, ScheduledPublishError } from '@/lib/social/scheduled-publish';
 import { safeSocialLink } from '@/lib/social/links';
+import { resolveFeatureEntitlement } from '@/lib/server/feature-entitlement';
+import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 
 type SocialSupabase = Awaited<ReturnType<typeof createServer>>;
 const SOCIAL_SAVE_FAILURE = 'Social publishing could not be saved completely. Review the post status before retrying.';
@@ -40,9 +42,33 @@ function definitiveCreateRejection(error: unknown): boolean {
   return typeof code === 'string' && (/^(22|23|40|42|44)[A-Z0-9]{3}$/.test(code) || code === 'P0001');
 }
 
-async function familyId() {
+const SOCIAL_FEATURE = '/dashboard/social';
+type SocialRefusal = { message: string; refusal: 'notAllowed' | 'notSaved' };
+
+/**
+ * The caller's family, and whether that family may use Social at all.
+ *
+ * The pages check the plan and the feature switch (layout.tsx's requireFeature),
+ * but a layout does not run for a server action, and these never checked: a
+ * Free family's parent, or any family after Social was switched off, could
+ * still start X's OAuth, draft, schedule and publish by posting them. The same
+ * resolver as requireFeature, so a page and its actions cannot disagree; a
+ * super administrator passes, as on the pages. A plan that could not be read
+ * is not an answer either way. Each action reports `refused` in its own shape.
+ */
+async function familyId(): Promise<{ familyId: string; userId: string; refused: SocialRefusal | null }> {
   const ctx = await requireUserContext();
-  return { familyId: ctx.active.familyId, userId: ctx.user.id };
+  const fid = ctx.active.familyId;
+  const tr = await getTranslations();
+  let refused: SocialRefusal | null = null;
+  try {
+    const entitlement = await resolveFeatureEntitlement(await createServer(), fid, SOCIAL_FEATURE);
+    if (!entitlement.allowed && !isSuperAdminEmail(ctx.user.email)) refused = { message: tr('socialActions.notInYourPlan'), refusal: 'notAllowed' };
+  } catch (error) {
+    console.error('[social-action] plan read failed', error);
+    refused = { message: tr('socialActions.couldNotConfirmYourPlan'), refusal: 'notSaved' };
+  }
+  return { familyId: fid, userId: ctx.user.id, refused };
 }
 
 /**
@@ -53,7 +79,8 @@ export async function connectAccountAction(formData: FormData) {
   const tr = await getTranslations();
   const platform = String(formData.get('platform') ?? '');
   if (!isPlatform(platform)) return { ok: false, error: tr('actions.unknownPlatform') };
-  const { familyId: fid, userId } = await familyId();
+  const { familyId: fid, userId, refused } = await familyId();
+  if (refused) return { ok: false, error: refused.message };
   await requireSocialPermission(fid, 'connect_accounts');
 
   if (platform === 'x') {
@@ -91,7 +118,8 @@ export async function connectAccountAction(formData: FormData) {
 
 export async function disconnectAccountAction(accountId: string) {
   const tr = await getTranslations();
-  const { familyId: fid, userId } = await familyId();
+  const { familyId: fid, userId, refused } = await familyId();
+  if (refused) return { ok: false, error: refused.message };
   await requireSocialPermission(fid, 'connect_accounts');
   if (!accountId.trim()) return { ok: false, error: tr('actions.chooseAnAccountToDisconnect') };
   const supabase = await createServer();
@@ -130,7 +158,8 @@ export type CreatePostResult = {
  */
 export async function createPostAction(formData: FormData): Promise<CreatePostResult> {
   const tr = await getTranslations();
-  const { familyId: fid, userId } = await familyId();
+  const { familyId: fid, userId, refused } = await familyId();
+  if (refused) return { ok: false, error: refused.message };
 
   const intentValue = String(formData.get('intent') ?? 'draft');
   if (intentValue !== 'draft' && intentValue !== 'schedule' && intentValue !== 'publish') return { ok: false, error: tr('socialSchedule.invalid') };
@@ -305,7 +334,8 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
 /** Re-run publishing for failed/pending targets on an existing post. */
 export async function retryPublishAction(postId: string): Promise<CreatePostResult> {
   const tr = await getTranslations();
-  const { familyId: fid, userId } = await familyId();
+  const { familyId: fid, userId, refused } = await familyId();
+  if (refused) return { ok: false, error: refused.message };
   try {
     await requireSocialPermission(fid, 'publish_posts');
   } catch {
@@ -327,7 +357,8 @@ export async function retryPublishAction(postId: string): Promise<CreatePostResu
 
 export async function resolveCommentAction(id: string) {
   const tr = await getTranslations();
-  const { familyId: fid, userId } = await familyId();
+  const { familyId: fid, userId, refused } = await familyId();
+  if (refused) throw refusalError(refused.message, refused.refusal);
   await requireSocialPermission(fid, 'view_feed');
   if (!id.trim()) throw new Error('Choose a comment to resolve.');
   const supabase = await createServer();
@@ -344,7 +375,8 @@ export async function resolveCommentAction(id: string) {
 
 export async function createMediaAction(formData: FormData) {
   const tr = await getTranslations();
-  const { familyId: fid, userId } = await familyId();
+  const { familyId: fid, userId, refused } = await familyId();
+  if (refused) throw refusalError(refused.message, refused.refusal);
   await requireSocialPermission(fid, 'upload_media');
   const supabase = await createServer();
   const title = String(formData.get('title') ?? '').trim() || null;
@@ -376,7 +408,8 @@ export async function createMediaAction(formData: FormData) {
 
 export async function updateSettingsAction(formData: FormData) {
   const tr = await getTranslations();
-  const { familyId: fid, userId } = await familyId();
+  const { familyId: fid, userId, refused } = await familyId();
+  if (refused) throw refusalError(refused.message, refused.refusal);
   await requireSocialPermission(fid, 'manage_settings');
   const supabase = await createServer();
   const default_timezone = String(formData.get('default_timezone') ?? 'UTC');
@@ -398,7 +431,8 @@ export async function updateSettingsAction(formData: FormData) {
 
 export async function grantAccessAction(formData: FormData) {
   const tr = await getTranslations();
-  const { familyId: fid, userId } = await familyId();
+  const { familyId: fid, userId, refused } = await familyId();
+  if (refused) throw refusalError(refused.message, refused.refusal);
   await requireSocialPermission(fid, 'manage_access');
   const supabase = await createServer();
   const targetUserId = String(formData.get('user_id') ?? '').trim();

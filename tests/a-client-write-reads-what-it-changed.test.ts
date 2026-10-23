@@ -57,7 +57,9 @@ const FIXED = [
   'components/vacations/trip-packing.tsx',
   'components/vacations/trip-budget.tsx',
   'components/vacations/trip-overview.tsx',
-  'components/family/play-dates-view.tsx',
+  // The play-date writes left the browser for server actions (household-roles
+  // N9): the confirmed write, and its read, are held where they now live.
+  'app/(app)/dashboard/family/play-dates/actions.ts',
   'components/family/check-in-view.tsx',
   'components/family/driving-safety-view.tsx',
   'components/meals/favorites-view.tsx',
