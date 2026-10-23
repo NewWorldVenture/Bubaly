@@ -3,8 +3,16 @@
 import { revalidatePath } from 'next/cache';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { normalizeTrigger } from '@/lib/marketing/exit-intent';
+import { safeHref } from '@/lib/marketing/landing';
 import type { AudienceMatch } from '@/lib/marketing/personalization';
 import type { Json } from '@/lib/database.types';
+import { refuseInput } from '@/lib/actions/refusal';
+
+// An offer is shown to every matching public visitor, so its copy is bounded
+// and its link is a same-site path or an http(s) URL, as a landing CTA's is.
+const HEADLINE_MAX = 120;
+const BODY_MAX = 600;
+const CTA_LABEL_MAX = 40;
 
 function s(fd: FormData, k: string): string | null {
   const v = String(fd.get(k) ?? '').trim();
@@ -25,8 +33,10 @@ function buildMatch(fd: FormData): AudienceMatch {
   const returning = s(fd, 'returning');
   if (returning === 'true') m.returning = true;
   else if (returning === 'false') m.returning = false;
-  const minSessions = Number(s(fd, 'minSessions') ?? '');
-  if (Number.isFinite(minSessions) && minSessions > 0) m.minSessions = Math.round(minSessions);
+  // Segments and session counts have no trusted source: the resolve route
+  // would have to take them from the visitor's own request body. An offer
+  // targeted by them reached no genuine visitor and anyone who forged them.
+  if (m.segments || s(fd, 'minSessions')) refuseInput('Segment and session-count targeting is not available for exit-intent offers.');
   return m;
 }
 
@@ -35,6 +45,13 @@ export async function createExitIntentAction(formData: FormData): Promise<void> 
   const name = s(formData, 'name');
   const headline = s(formData, 'headline');
   if (!name || !headline) return;
+  const body = s(formData, 'body');
+  const ctaLabel = s(formData, 'cta_label');
+  const ctaHref = s(formData, 'cta_href');
+  if (headline.length > HEADLINE_MAX || (body?.length ?? 0) > BODY_MAX || (ctaLabel?.length ?? 0) > CTA_LABEL_MAX) {
+    refuseInput(`Keep the headline to ${HEADLINE_MAX}, the body to ${BODY_MAX} and the button label to ${CTA_LABEL_MAX} characters.`);
+  }
+  if (ctaHref && safeHref(ctaHref) !== ctaHref) refuseInput('The button link must be a path on this site (/signup) or an http(s) URL.');
 
   const trigger = normalizeTrigger({
     mode: s(formData, 'mode'),
@@ -46,13 +63,14 @@ export async function createExitIntentAction(formData: FormData): Promise<void> 
   const { data, error } = await supabase.from('marketing_exit_intent').insert({
     name,
     headline,
-    body: s(formData, 'body'),
-    cta_label: s(formData, 'cta_label'),
-    cta_href: s(formData, 'cta_href'),
+    body,
+    cta_label: ctaLabel,
+    cta_href: ctaHref,
     match: buildMatch(formData) as unknown as Json,
     trigger_config: trigger as unknown as Json,
     priority: Number.isFinite(priority) ? Math.round(priority) : 0,
-    status: s(formData, 'status') === 'paused' ? 'paused' : 'active',
+    // Live to every public visitor is a deliberate choice, not the default.
+    status: s(formData, 'status') === 'active' ? 'active' : 'paused',
     created_by: actorId,
   }).select('id').single();
   if (error || !data) marketingActionFailure('create the exit-intent offer', error ?? new Error('The exit-intent offer row was not returned after save.'));

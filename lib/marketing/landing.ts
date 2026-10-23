@@ -38,9 +38,11 @@ export function safeHref(href: string): string {
   return DEFAULT_CTA_HREF;
 }
 
-/** Normalize a user-entered slug to lowercase kebab-case. */
+/** Normalize a user-entered slug to lowercase kebab-case. Idempotent: the
+ *  admin stores this form and the public route looks pages up by it again, so
+ *  the 120-character cut must not leave a trailing hyphen the second pass drops. */
 export function normalizeSlug(input: string): string {
-  return (input ?? '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '').slice(0, 120);
+  return (input ?? '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '').slice(0, 120).replace(/-+$/, '');
 }
 
 /** Split body copy into paragraphs on blank lines (for rendering). */

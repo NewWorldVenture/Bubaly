@@ -211,7 +211,9 @@ describe('legacy landing rename through the real action, bridge, and public read
       }
     };
     await expect(updateLandingPage(form())).rejects.toBeDefined();
-    expect(operations.every(call => call.table !== 'marketing_pages')).toBe(true);
+    // Only the read that checks /lp/<new slug> is free (admin reach N12) precedes
+    // the legacy write; no canonical row is written before the reload.
+    expect(operations.filter(call => call.table === 'marketing_pages')).toEqual([{ table: 'marketing_pages', operation: 'select' }]);
     expectNoSuccess();
   });
 
@@ -244,7 +246,9 @@ describe('legacy landing rename through the real action, bridge, and public read
     await updateLandingPage(form());
     expect(db.table('marketing_landing_pages')[0]).toMatchObject({ slug: newSlug, title: 'Updated title' });
     expect(state.audit).toHaveBeenCalledOnce();
-    expect(operations.filter(call => call.table === 'marketing_pages').map(call => call.operation)).toEqual(['upsert']);
+    // The path-ownership read (admin reach N12) takes the same missing-table
+    // answer as the sync: the registry is absent, so the path is free.
+    expect(operations.filter(call => call.table === 'marketing_pages').map(call => call.operation)).toEqual(['select', 'upsert']);
     expect(state.retireAnswers).not.toHaveBeenCalled();
   });
 
