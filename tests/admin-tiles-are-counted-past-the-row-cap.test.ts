@@ -295,4 +295,71 @@ describe('/admin/audit: a row names its family even past the first thousand fami
     const html = await renderServerPage(await AdminAuditPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain(SOURCE_MESSAGES['audit.couldNotLoadAuditLogs']);
   });
+
+  // A transport failure (DNS, TCP, TLS, a timed-out fetch) REJECTS the query
+  // instead of resolving { data, error }. Unsettled, that rejection escaped the
+  // page and the route's error boundary rendered in place of the page's own
+  // read-error state (review R4-AUDIT-TRANSPORT-UNSETTLED).
+  it.each(['audit_logs', 'families', 'profiles'])('an unreachable %s read is the read-error state, not the error boundary', async (unreachable) => {
+    seedLog();
+    db.seed('profiles', [{ id: 'actor-1', full_name: 'Avery Admin', email: 'avery@example.com' }]);
+    db.seed('audit_logs', [{
+      id: 'log-actor', family_id: 'fam-000000', actor_id: 'actor-1', action: 'document.view', resource: 'Resource actor',
+      metadata: null, created_at: minutesAgo(30),
+    }]);
+    h.db = withTransportFailure(db, unreachable);
+    const { default: AdminAuditPage } = await import('@/app/(app)/admin/audit/page');
+    const page = AdminAuditPage({ searchParams: Promise.resolve({}) });
+    await expect(page).resolves.toBeDefined();
+    const html = await renderServerPage(await page);
+    expect(html).toContain(SOURCE_MESSAGES['audit.couldNotLoadAuditLogs']);
+    expect(html).not.toContain('>Resource 0</td>');
+  });
+
+  it('the control: with every table reachable the same seed renders the log, actor named', async () => {
+    seedLog();
+    db.seed('profiles', [{ id: 'actor-1', full_name: 'Avery Admin', email: 'avery@example.com' }]);
+    db.seed('audit_logs', [{
+      id: 'log-actor', family_id: 'fam-000000', actor_id: 'actor-1', action: 'document.view', resource: 'Resource actor',
+      metadata: null, created_at: minutesAgo(30),
+    }]);
+    h.db = withTransportFailure(db, 'no_such_table');
+    const { default: AdminAuditPage } = await import('@/app/(app)/admin/audit/page');
+    const html = await renderServerPage(await AdminAuditPage({ searchParams: Promise.resolve({}) }));
+    expect(html).not.toContain(SOURCE_MESSAGES['audit.couldNotLoadAuditLogs']);
+    expect(html).toContain('>Resource 0</td>');
+    expect(html).toContain('Avery Admin');
+  });
 });
+
+/**
+ * The same client, with every query on `table` REJECTING the way a transport
+ * failure does (supabase-js rejects only when the request never completed), and
+ * every other table answering from the in-memory database.
+ */
+function withTransportFailure<T extends object>(client: T, table: string): T {
+  return new Proxy(client, {
+    get(target, property, receiver) {
+      if (property !== 'from') return Reflect.get(target, property, receiver);
+      return (name: string) => {
+        const builder = (target as unknown as InMemorySupabase).from(name);
+        if (name !== table) return builder;
+        const proxy: object = new Proxy(builder, {
+          get(object, key) {
+            if (key === 'then') {
+              return (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) =>
+                Promise.reject(new Error(`CONNECT_TIMEOUT reading ${name}`)).then(resolve, reject);
+            }
+            const value = Reflect.get(object, key);
+            if (typeof value !== 'function') return value;
+            return (...args: unknown[]) => {
+              const result = Reflect.apply(value, object, args);
+              return result === object ? proxy : result;
+            };
+          },
+        });
+        return proxy;
+      };
+    },
+  });
+}

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { ScrollText, ShieldAlert, Activity, Building2 } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
-import { settleAll } from '@/lib/supabase/settle';
+import { settle, settleAll } from '@/lib/supabase/settle';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -26,9 +26,11 @@ export default async function AdminAuditPage({ searchParams }: Params) {
   const supabase = createServiceClient();
 
   // Pull a bounded recent window; admin-scale auditing would page server-side,
-  // flagged here rather than hidden.
-  const { data: logs, error: logsError } = await supabase.from('audit_logs').select('id, family_id, actor_id, action, resource, metadata, created_at')
-    .order('created_at', { ascending: false }).limit(1000);
+  // flagged here rather than hidden. Settled: a transport failure REJECTS
+  // rather than resolving { error }, and unsettled it skipped the read-error
+  // state below for the route's error boundary.
+  const { data: logs, error: logsError } = await settle(supabase.from('audit_logs').select('id, family_id, actor_id, action, resource, metadata, created_at')
+    .order('created_at', { ascending: false }).limit(1000));
 
   const rows = logs ?? [];
   // Name only the families and actors these rows name, a hundred ids a
