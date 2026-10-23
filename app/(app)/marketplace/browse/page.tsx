@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
-import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
+import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { MarketplaceModule } from '@/components/modules/marketplace-module';
 import { MarketplaceMatchesStrip } from '@/components/marketplace/matches-strip';
@@ -18,7 +18,6 @@ export const dynamic = 'force-dynamic';
 // ?q= pre-fills search.
 export default async function MarketplaceBrowsePage({ searchParams }: { searchParams: Promise<{ kind?: string; cat?: string; post?: string; q?: string }> }) {
   const ctx = await requireUserContext();
-  const admin = await isSuperAdmin();
   const params = await searchParams;
 
   const kind = KIND_ORDER.includes(params.kind as ListingKind) ? (params.kind as ListingKind) : 'all';
@@ -32,7 +31,6 @@ export default async function MarketplaceBrowsePage({ searchParams }: { searchPa
     <div>
       {matches.length > 0 && <MarketplaceMatchesStrip matches={matches} />}
       <MarketplaceModule
-        canSeed={admin}
         initialKind={kind}
         initialCategory={cat}
         initialQuery={params.q ?? ''}

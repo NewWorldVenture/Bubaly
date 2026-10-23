@@ -1,5 +1,12 @@
 // lib/marketing/reputation.ts — pure helpers for testimonials + case studies.
 
+/**
+ * The cache tag on the homepage's published-testimonials read. Every admin
+ * write to a testimonial drops it, so an unpublished, deleted or corrected
+ * quote leaves the public site now instead of within the hour.
+ */
+export const TESTIMONIALS_CACHE_TAG = 'public-testimonials';
+
 /** URL-safe slug from a title (lowercase, hyphenated, trimmed). */
 export function slugify(input: string): string {
   return (input ?? '')

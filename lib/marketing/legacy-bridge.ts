@@ -3,6 +3,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/database.types';
 import { retireAeoQuestionsForPath } from './platform';
+import { refuseInput } from '@/lib/actions/refusal';
 
 type MarketingDb = SupabaseClient<Database>;
 
@@ -48,8 +49,79 @@ type LegacyLanding = {
   actorId: string;
 };
 
+/** A legacy landing page's id and its slug as stored now. */
+type LandingAsStored = Pick<LegacyLanding, 'id' | 'slug'>;
+
 function isMissingPlatformSchema(error: { code?: string; message?: string } | null): boolean {
   return error?.code === 'PGRST205' || /marketing_pages|schema cache|relation .* does not exist/i.test(error?.message ?? '');
+}
+
+function contentSource(content: Json | null | undefined): { source?: unknown; source_id?: unknown } {
+  return content && typeof content === 'object' && !Array.isArray(content)
+    ? content as { source?: unknown; source_id?: unknown }
+    : {};
+}
+
+/**
+ * TRANSITIONAL (admin reach N12-REGEN-REPAIR-SPEC). A registry row with no
+ * `content.source` at all. Until 7ebf6fe94 the marketing cron's regeneration
+ * replaced `content` whole, and every bridge write queues one, so in production
+ * almost every existing mirror is such a row. Recognising a mirror by its
+ * marker alone would, on deploy, refuse a legacy page's own Publish and edit
+ * and a blog republish ('duplicate'), and leave Unpublish and Archive with the
+ * page still live.
+ *
+ * So an unmarked row is handled as main handles every row: by path. At the path
+ * the legacy record already holds — /lp/<the landing page's current slug>, or
+ * /blog/<slug> — it is that record's mirror. At the path a landing page is
+ * created at or renamed onto, main's upsert took it over, and so does the
+ * bridge (N12-TRANSITION-OLD-SLUG): every rename under main left an unmarked
+ * live alias at /lp/<old slug>, since retireLegacyLandingAliases matches the
+ * marker, and refusing those would refuse renaming a page back to a former
+ * slug, or another page taking it. The bridge's write stamps the marker back.
+ * A row marked as any other source is never touched, and that includes a page
+ * the platform console made or moved (CONSOLE_PAGE_SOURCE in ./platform). A
+ * console page made before that stamp existed cannot be told from an unmarked
+ * mirror by its row, so it is handled as main handles it too: until the repair
+ * stamps it, a legacy create or rename onto its path takes it over.
+ *
+ * Once the owner's repair has re-marked the existing mirrors (and stamped the
+ * console's own pages), a row with no marker is no mirror: delete this and
+ * each `unmarked` branch below, and the strict ownership rule applies
+ * everywhere.
+ */
+function unmarked(content: Json | null | undefined): boolean {
+  return contentSource(content).source == null;
+}
+
+/**
+ * The rows at /blog/<slug> that mirror the legacy blog: this publisher's own,
+ * and the copies scripts/backfill-marketing-pages.mjs made of blog_posts. Any
+ * of them is the article's own row, whichever content item last published it:
+ * blog_posts is keyed by slug, so the article at /blog/<slug> is the one a
+ * publish there replaces, and its mirror follows it.
+ */
+const LEGACY_BLOG_SOURCES = ['marketing_content_items', 'blog_posts'];
+
+/** The same rows as a PostgREST filter, with the TRANSITIONAL unmarked row (see `unmarked`). */
+const LEGACY_BLOG_ROW = `content->>source.is.null,content->>source.in.(${LEGACY_BLOG_SOURCES.join(',')})`;
+
+/**
+ * Admin reach N12-S1. Refuse a blog publish whose /blog/<slug> belongs to a
+ * page that is not a legacy blog mirror, such as one made in the platform
+ * console, which offers page type "Blog" under the same prefix. The sync below
+ * upserts on `path`, so it replaced that page's title, body, content, SEO and
+ * AEO with the post's and forced it published. The caller runs this BEFORE its
+ * blog_posts write, so a refusal publishes nothing.
+ */
+export async function assertLegacyBlogPathFree(db: MarketingDb, slug: string): Promise<void> {
+  const { data, error } = await db.from('marketing_pages').select('content').eq('path', `/blog/${slug}`).maybeSingle();
+  if (error) {
+    if (isMissingPlatformSchema(error)) return;
+    throw error;
+  }
+  if (!data || unmarked(data.content) || LEGACY_BLOG_SOURCES.includes(String(contentSource(data.content).source))) return;
+  refuseInput(`/blog/${slug} is already used by another marketing page.`, 'duplicate');
 }
 
 /**
@@ -87,12 +159,16 @@ export async function syncLegacyBlogToPlatform(db: MarketingDb, post: LegacyBlog
 }
 
 export async function syncLegacyBlogVisibility(db: MarketingDb, slug: string, actorId: string, published: boolean): Promise<boolean> {
+  // Only a legacy blog mirror (admin reach N12-S1), or an unmarked row there
+  // (TRANSITIONAL, see `unmarked`): a console page at the path is not this
+  // post's to draft. Answers are still retired below by path: the
+  // public /blog/<slug> renders blog_posts alone, and the post is now down.
   const { data, error } = await db.from('marketing_pages').update({
     status: published ? 'published' : 'draft',
     published_at: published ? new Date().toISOString() : null,
     updated_by: actorId,
     deleted_at: null,
-  }).eq('path', `/blog/${slug}`).select('id').maybeSingle();
+  }).eq('path', `/blog/${slug}`).or(LEGACY_BLOG_ROW).select('id').maybeSingle();
   if (error) {
     if (isMissingPlatformSchema(error)) return false;
     throw error;
@@ -105,15 +181,60 @@ export async function syncLegacyBlogVisibility(db: MarketingDb, slug: string, ac
 }
 
 export async function archiveLegacyBlogOnPlatform(db: MarketingDb, slug: string, actorId: string): Promise<boolean> {
+  // Scoped, and its answers retired, as in syncLegacyBlogVisibility (N12-S1).
   const { data, error } = await db.from('marketing_pages').update({
     status: 'archived', deleted_at: new Date().toISOString(), updated_by: actorId,
-  }).eq('path', `/blog/${slug}`).select('id').maybeSingle();
+  }).eq('path', `/blog/${slug}`).or(LEGACY_BLOG_ROW).select('id').maybeSingle();
   if (error) {
     if (isMissingPlatformSchema(error)) return false;
     throw error;
   }
   await retirePublicAnswers(db, `/blog/${slug}`);
   return Boolean(data?.id);
+}
+
+function isMissingLandingRegistry(error: { code?: string; message?: string }): boolean {
+  return (error.code === 'PGRST205' && /could not find the table ['"](?:public\.)?marketing_pages['"] in the schema cache/i.test(error.message ?? '')) ||
+    (error.code === '42P01' && /^relation ["']?(?:public\.)?marketing_pages["']? does not exist$/i.test(error.message ?? ''));
+}
+
+/**
+ * Refuse a legacy landing page whose /lp/<slug> already belongs to another page
+ * in the platform registry. The sync below upserts on `path`, and the legacy
+ * slug is unique only in its own table, so a draft created (or renamed) onto a
+ * platform page's slug replaced that live page's content and took it down.
+ * Callers run this BEFORE writing the legacy row: once a published legacy row
+ * holds the slug, /lp/<slug> serves it in place of the platform page anyway.
+ *
+ * The path is free when nothing is there, when the row is this legacy page's
+ * own mirror, or when it is an archived mirror of a legacy page (a renamed
+ * page's retired alias), which no live page holds. TRANSITIONAL (`unmarked`):
+ * a row with no marker is free at any path, as on main, whose sync upserted
+ * over whatever row held it: the page's own mirror at its current path, and on
+ * a create or a rename the unmarked alias a rename under main left at a former
+ * slug. A marked row keeps the rule above.
+ *
+ * `landing` is the legacy page as stored now, or null for one not yet created.
+ */
+export async function assertLegacyLandingPathFree(db: MarketingDb, slug: string, landing: LandingAsStored | null): Promise<void> {
+  if (await legacyLandingPathTaken(db, slug, landing)) refuseInput(`/lp/${slug} is already used by another marketing page.`, 'duplicate');
+}
+
+/** The same rule as a yes/no, for a caller that can go on without writing the mirror (setLandingPublished, N12-R1). */
+export async function legacyLandingPathTaken(db: MarketingDb, slug: string, landing: LandingAsStored | null): Promise<boolean> {
+  const { data, error } = await db.from('marketing_pages')
+    .select('id, content, deleted_at').eq('path', `/lp/${slug}`).maybeSingle();
+  if (error) {
+    if (isMissingLandingRegistry(error)) return false;
+    throw error;
+  }
+  if (!data) return false;
+  if (unmarked(data.content)) return false;
+  const content = contentSource(data.content);
+  const legacy = content.source === 'marketing_landing_pages';
+  if (legacy && landing !== null && content.source_id === landing.id) return false;
+  if (legacy && data.deleted_at != null) return false;
+  return true;
 }
 
 export async function syncLegacyLandingToPlatform(db: MarketingDb, page: LegacyLanding): Promise<{ available: boolean; pageId: string | null }> {
@@ -137,10 +258,7 @@ export async function syncLegacyLandingToPlatform(db: MarketingDb, page: LegacyL
   if (error) {
     // A missing trigger dependency must not masquerade as an absent registry.
     // Keep this compatibility check specific to the landing table being synced.
-    const missingRegistry =
-      (error.code === 'PGRST205' && /could not find the table ['"](?:public\.)?marketing_pages['"] in the schema cache/i.test(error.message)) ||
-      (error.code === '42P01' && /^relation ["']?(?:public\.)?marketing_pages["']? does not exist$/i.test(error.message));
-    if (missingRegistry) {
+    if (isMissingLandingRegistry(error)) {
       console.warn('[marketing-legacy-bridge] marketing platform migration is not applied; legacy landing page remains active');
       return { available: false, pageId: null };
     }
@@ -171,14 +289,28 @@ export async function retireLegacyLandingAliases(db: MarketingDb, page: Pick<Leg
   return data.map(row => row.path);
 }
 
-export async function archiveLegacyLandingOnPlatform(db: MarketingDb, slug: string, actorId: string): Promise<boolean> {
-  const { data, error } = await db.from('marketing_pages').update({
-    status: 'archived', deleted_at: new Date().toISOString(), updated_by: actorId,
-  }).eq('path', `/lp/${slug}`).select('id').maybeSingle();
+/**
+ * Admin reach N12-R1: this page's own mirror and its answers only. By path
+ * alone this archived whatever page held /lp/<slug> (such as a platform page
+ * made there after the console renamed the mirror off it) and retired that
+ * page's answers, though it is what /lp/<slug> serves once the legacy page goes.
+ * TRANSITIONAL (`unmarked`): with no marked mirror at the page's own path, a
+ * row there with no marker is its mirror, as on main.
+ */
+export async function archiveLegacyLandingOnPlatform(db: MarketingDb, page: Pick<LegacyLanding, 'id' | 'slug' | 'actorId'>): Promise<boolean> {
+  const archived = { status: 'archived', deleted_at: new Date().toISOString(), updated_by: page.actorId };
+  let { data, error } = await db.from('marketing_pages').update(archived)
+    .eq('path', `/lp/${page.slug}`).contains('content', { source: 'marketing_landing_pages', source_id: page.id })
+    .select('id').maybeSingle();
+  if (!error && !data) {
+    ({ data, error } = await db.from('marketing_pages').update(archived)
+      .eq('path', `/lp/${page.slug}`).is('content->>source', null).select('id').maybeSingle());
+  }
   if (error) {
     if (isMissingPlatformSchema(error)) return false;
     throw error;
   }
-  await retirePublicAnswers(db, `/lp/${slug}`);
-  return Boolean(data?.id);
+  if (!data?.id) return false;
+  await retirePublicAnswers(db, `/lp/${page.slug}`);
+  return true;
 }

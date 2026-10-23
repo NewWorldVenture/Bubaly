@@ -1,6 +1,7 @@
 import 'server-only';
 import { createServiceClient } from '@/lib/supabase/server';
 import { resolveExitIntent, normalizeTrigger, type ExitTrigger } from '@/lib/marketing/exit-intent';
+import { safeHref } from '@/lib/marketing/landing';
 import type { AudienceMatch, VisitorContext } from '@/lib/marketing/personalization';
 
 export type PublicExitOffer = {
@@ -32,7 +33,9 @@ export async function resolveActiveExitIntent(ctx: VisitorContext): Promise<Publ
     headline: offer.headline,
     body: offer.body,
     cta_label: offer.cta_label,
-    cta_href: offer.cta_href,
+    // A link saved before the console checked it renders no button, rather
+    // than sending every visitor somewhere nobody vetted.
+    cta_href: offer.cta_href && safeHref(offer.cta_href) === offer.cta_href ? offer.cta_href : null,
     trigger: normalizeTrigger(offer.trigger_config),
   };
 }

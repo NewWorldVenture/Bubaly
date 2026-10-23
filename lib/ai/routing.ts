@@ -103,8 +103,9 @@ type ConfigReadOptions = { db?: SupabaseClient<Database>; failClosed?: boolean; 
 
 /**
  * Read the stored per-task model map. `getAIConfig` (lib/ai/settings.ts) does not
- * expose `models`, so the row is read directly here; it is the same
- * `app_settings.ai_provider` value the admin form writes.
+ * expose `models`, so the row is read directly here. It lives in the same
+ * `app_settings.ai_provider` value the /admin/ai form saves, but that form does
+ * not write it: it is set by SQL, and setAIConfig carries it through a save.
  */
 async function readStoredConfig(options: ConfigReadOptions = {}): Promise<StoredAIProvider> {
   try {
