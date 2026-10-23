@@ -17192,5 +17192,8 @@
   "negotiations.theOtherSideActedAtTheSameMoment": "The other side acted on this offer at the same moment. Refresh and try again.",
   "householdRoles.guestViewsOnly": "Guests can view this, but not change it.",
   "socialActions.notInYourPlan": "Social media tools aren't part of your family's plan.",
-  "socialActions.couldNotConfirmYourPlan": "Bubaly could not confirm your plan right now. Try again in a moment."
+  "socialActions.couldNotConfirmYourPlan": "Bubaly could not confirm your plan right now. Try again in a moment.",
+  "socialLeftConnected.title": "Social media tools aren't available to your family right now",
+  "socialLeftConnected.body": "These accounts are still connected to Bubaly. Whatever your plan, you can disconnect them: disconnecting one removes it and deletes the sign-in Bubaly keeps for it.",
+  "socialLeftConnected.seePlans": "See plans"
 }

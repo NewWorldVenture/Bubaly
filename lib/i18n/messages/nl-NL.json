@@ -17192,5 +17192,8 @@
   "negotiations.theOtherSideActedAtTheSameMoment": "De andere partij reageerde op hetzelfde moment op dit aanbod. Vernieuw de pagina en probeer het opnieuw.",
   "householdRoles.guestViewsOnly": "Gasten kunnen dit bekijken, maar niet wijzigen.",
   "socialActions.notInYourPlan": "De socialemediatools horen niet bij het abonnement van je gezin.",
-  "socialActions.couldNotConfirmYourPlan": "Bubaly kon je abonnement nu niet bevestigen. Probeer het zo meteen opnieuw."
+  "socialActions.couldNotConfirmYourPlan": "Bubaly kon je abonnement nu niet bevestigen. Probeer het zo meteen opnieuw.",
+  "socialLeftConnected.title": "De socialemediatools zijn op dit moment niet beschikbaar voor je gezin",
+  "socialLeftConnected.body": "Deze accounts zijn nog met Bubaly verbonden. Wat je abonnement ook is, je kunt ze loskoppelen: als je er een loskoppelt, wordt het verwijderd en wist Bubaly de aanmelding die het ervoor bewaart.",
+  "socialLeftConnected.seePlans": "Abonnementen bekijken"
 }

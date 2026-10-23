@@ -17192,5 +17192,8 @@
   "negotiations.theOtherSideActedAtTheSameMoment": "Die andere Seite hat im selben Moment auf dieses Angebot reagiert. Aktualisieren Sie die Seite und versuchen Sie es erneut.",
   "householdRoles.guestViewsOnly": "Gäste können das ansehen, aber nicht ändern.",
   "socialActions.notInYourPlan": "Die Social-Media-Tools sind nicht Teil des Tarifs deiner Familie.",
-  "socialActions.couldNotConfirmYourPlan": "Bubaly konnte deinen Tarif gerade nicht bestätigen. Versuche es gleich noch einmal."
+  "socialActions.couldNotConfirmYourPlan": "Bubaly konnte deinen Tarif gerade nicht bestätigen. Versuche es gleich noch einmal.",
+  "socialLeftConnected.title": "Die Social-Media-Tools sind für deine Familie gerade nicht verfügbar",
+  "socialLeftConnected.body": "Diese Konten sind noch mit Bubaly verbunden. Du kannst sie unabhängig von deinem Tarif trennen: Beim Trennen wird das Konto entfernt und die Anmeldung gelöscht, die Bubaly dafür speichert.",
+  "socialLeftConnected.seePlans": "Tarife ansehen"
 }

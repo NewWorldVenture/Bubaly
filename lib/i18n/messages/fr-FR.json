@@ -17192,5 +17192,8 @@
   "negotiations.theOtherSideActedAtTheSameMoment": "L’autre partie a agi sur cette offre au même moment. Actualisez la page et réessayez.",
   "householdRoles.guestViewsOnly": "Les invités peuvent consulter ceci, mais pas le modifier.",
   "socialActions.notInYourPlan": "Les outils de réseaux sociaux ne font pas partie du forfait de votre famille.",
-  "socialActions.couldNotConfirmYourPlan": "Bubaly n'a pas pu confirmer votre forfait pour le moment. Réessayez dans un instant."
+  "socialActions.couldNotConfirmYourPlan": "Bubaly n'a pas pu confirmer votre forfait pour le moment. Réessayez dans un instant.",
+  "socialLeftConnected.title": "Les outils de réseaux sociaux ne sont pas disponibles pour votre famille pour le moment",
+  "socialLeftConnected.body": "Ces comptes sont toujours connectés à Bubaly. Quel que soit votre forfait, vous pouvez les déconnecter : déconnecter un compte le retire et efface la connexion que Bubaly conserve pour lui.",
+  "socialLeftConnected.seePlans": "Voir les forfaits"
 }

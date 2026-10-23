@@ -45,6 +45,12 @@ function definitiveCreateRejection(error: unknown): boolean {
 const SOCIAL_FEATURE = '/dashboard/social';
 type SocialRefusal = { message: string; refusal: 'notAllowed' | 'notSaved' };
 
+/** The caller's active family and user, and nothing about the family's plan. */
+async function signedIn() {
+  const ctx = await requireUserContext();
+  return { ctx, familyId: ctx.active.familyId, userId: ctx.user.id };
+}
+
 /**
  * The caller's family, and whether that family may use Social at all.
  *
@@ -55,10 +61,10 @@ type SocialRefusal = { message: string; refusal: 'notAllowed' | 'notSaved' };
  * resolver as requireFeature, so a page and its actions cannot disagree; a
  * super administrator passes, as on the pages. A plan that could not be read
  * is not an answer either way. Each action reports `refused` in its own shape.
+ * Every action but disconnectAccountAction, which removes, asks it.
  */
 async function familyId(): Promise<{ familyId: string; userId: string; refused: SocialRefusal | null }> {
-  const ctx = await requireUserContext();
-  const fid = ctx.active.familyId;
+  const { ctx, familyId: fid } = await signedIn();
   const tr = await getTranslations();
   let refused: SocialRefusal | null = null;
   try {
@@ -116,10 +122,20 @@ export async function connectAccountAction(formData: FormData) {
   return { ok: true, requiresSetup: !configured };
 }
 
+/**
+ * Disconnect one of the family's accounts, and for X clear the tokens Bubaly
+ * keeps (the only caller of clearXTokens).
+ *
+ * The social role decides, NOT the plan: a plan gates creating and changing,
+ * never removing (lib/family/actions.ts, refuseIfUnentitled). A family that
+ * connected X on Basic and then dropped to Free, or saw Social switched off,
+ * must still be able to take back what it handed Bubaly; behind the plan its X
+ * tokens stayed stored until it paid again (household-roles N2-R1). The social
+ * layout shows such a family its accounts with this control and nothing else.
+ */
 export async function disconnectAccountAction(accountId: string) {
   const tr = await getTranslations();
-  const { familyId: fid, userId, refused } = await familyId();
-  if (refused) return { ok: false, error: refused.message };
+  const { familyId: fid, userId } = await signedIn();
   await requireSocialPermission(fid, 'connect_accounts');
   if (!accountId.trim()) return { ok: false, error: tr('actions.chooseAnAccountToDisconnect') };
   const supabase = await createServer();
@@ -137,7 +153,9 @@ export async function disconnectAccountAction(accountId: string) {
     .select('id')
     .single();
   if (error || !data) return { ok: false, error: describeActionError(error, tr('actions.couldNotDisconnectThatAccount')) };
-  revalidatePath('/dashboard/social/accounts');
+  // The layout, too: without Social it lists what is left to disconnect on
+  // every page below it, and after the last one sends the family to its plan.
+  revalidatePath('/dashboard/social', 'layout');
   return { ok: true };
 }
 

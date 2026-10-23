@@ -17192,5 +17192,8 @@
   "negotiations.theOtherSideActedAtTheSameMoment": "A outra parte agiu sobre esta oferta no mesmo momento. Atualize a página e tente novamente.",
   "householdRoles.guestViewsOnly": "Os convidados podem ver isto, mas não alterá-lo.",
   "socialActions.notInYourPlan": "As ferramentas de redes sociais não fazem parte do plano da sua família.",
-  "socialActions.couldNotConfirmYourPlan": "O Bubaly não conseguiu confirmar o seu plano neste momento. Tente novamente daqui a pouco."
+  "socialActions.couldNotConfirmYourPlan": "O Bubaly não conseguiu confirmar o seu plano neste momento. Tente novamente daqui a pouco.",
+  "socialLeftConnected.title": "As ferramentas de redes sociais não estão disponíveis para a sua família neste momento",
+  "socialLeftConnected.body": "Estas contas continuam ligadas ao Bubaly. Seja qual for o seu plano, pode desligá-las: ao desligar uma, ela é removida e o Bubaly apaga o início de sessão que guarda para ela.",
+  "socialLeftConnected.seePlans": "Ver planos"
 }

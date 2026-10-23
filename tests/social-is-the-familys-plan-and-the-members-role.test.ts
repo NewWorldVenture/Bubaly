@@ -15,6 +15,13 @@
 // family (or any family once Social was switched off) opened every page by URL
 // and could connect an account, draft and publish by posting the actions.
 //
+// N2-R1: the fix for N2 put the plan in front of disconnectAccountAction too,
+// and the layout sent the family to billing from the accounts page, so a family
+// that connected X on Basic and then dropped to Free (or saw Social switched
+// off) could no longer disconnect it: Bubaly kept its X tokens, and nothing in
+// Bubaly could clear them until the family paid again. A plan gates creating
+// and changing, not removing (lib/family/actions.ts).
+//
 // Driven here: the real layout, pages and actions; the real social-role
 // resolver (getSocialAccess) and the real plan resolver
 // (resolveFeatureEntitlement), against an in-memory database. requireFeature
@@ -95,7 +102,8 @@ const pages = {
   accounts: (await import('@/app/(app)/dashboard/social/accounts/page')).default,
 };
 const { default: PostDetailPage } = await import('@/app/(app)/dashboard/social/posts/[id]/page');
-const { connectAccountAction, createPostAction, createMediaAction } = await import('@/app/(app)/dashboard/social/actions');
+const { connectAccountAction, createPostAction, createMediaAction, disconnectAccountAction } = await import('@/app/(app)/dashboard/social/actions');
+const { ToastProvider } = await import('@/components/ui/toast');
 
 const stamps = { created_at: '2026-10-01T00:00:00.000Z', updated_at: '2026-10-01T00:00:00.000Z' };
 
@@ -322,5 +330,89 @@ describe('Social is the family\'s plan, on every page and every action (N2)', ()
     await createMediaAction(media);
     expect(db.table('social_accounts')).toHaveLength(1);
     expect(db.table('social_media_library')).toHaveLength(2);
+  });
+});
+
+describe('a family that lost Social can still disconnect what it connected (N2-R1)', () => {
+  const X_ACCOUNT = 'e0000000-0000-4000-8000-000000000001';
+  const OFF = { key: 'feature_tiers', value: { 'social-circle': 'off' } };
+  const PAGE_BELOW = 'The page below the layout';
+
+  /** An X account the family connected while it had Social, and the tokens Bubaly keeps for it. */
+  function withConnectedX(db: InMemorySupabase): InMemorySupabase {
+    db.seed('social_accounts', [{
+      id: X_ACCOUNT, family_id: FAMILY, user_id: USERS.parent, platform: 'x', status: 'connected', display_name: 'Rivera fair on X',
+      handle: 'riverafair', provider_account_id: '123456789', scopes: [], last_error: null, last_synced_at: null, deleted_at: null,
+      created_by: USERS.parent, updated_by: null, metadata: {}, ...stamps,
+    }]);
+    db.seed('social_account_tokens', [{
+      id: X_ACCOUNT, account_id: X_ACCOUNT, family_id: FAMILY, platform: 'x', provider_account_id: '123456789',
+      access_token_enc: 'sealed-access-token', refresh_token_enc: 'sealed-refresh-token', expires_at: null,
+      created_by: USERS.parent, updated_by: null, metadata: { x_state: 'connected' }, ...stamps,
+    }]);
+    return db;
+  }
+  const account = (db: InMemorySupabase) => db.table('social_accounts').find((row) => row.id === X_ACCOUNT)!;
+  const token = (db: InMemorySupabase) => db.table('social_account_tokens').find((row) => row.id === X_ACCOUNT)!;
+  // Inside the toast provider app/layout.tsx puts around every page: each
+  // account's Disconnect reports a failure through it.
+  const layout = async () => html(createElement(ToastProvider, null, await SocialLayout({ children: createElement('main', null, PAGE_BELOW) })));
+  const linksIn = (markup: string) => [...markup.matchAll(/href="([^"]+)"/g)].map((m) => m[1].replace(/&amp;/g, '&'));
+
+  it('a Free family\'s parent disconnects their X account, and Bubaly no longer holds its tokens', async () => {
+    const db = withConnectedX(household('parent', null));
+    expect(await disconnectAccountAction(X_ACCOUNT)).toEqual({ ok: true });
+    expect(account(db)).toMatchObject({ status: 'disconnected', deleted_at: expect.any(String) });
+    expect(token(db)).toMatchObject({ access_token_enc: null, refresh_token_enc: null, metadata: expect.objectContaining({ x_state: 'blocked' }) });
+  });
+
+  it('so does a Family+ household once Social is switched off', async () => {
+    const db = withConnectedX(household('parent', 'plus'));
+    db.seed('app_settings', [OFF]);
+    expect(await disconnectAccountAction(X_ACCOUNT)).toEqual({ ok: true });
+    expect(account(db).status).toBe('disconnected');
+    expect(token(db)).toMatchObject({ access_token_enc: null, refresh_token_enc: null });
+  });
+
+  it('the social role still decides who disconnects: a Free family\'s child cannot', async () => {
+    const db = withConnectedX(household('child', null));
+    await expect(disconnectAccountAction(X_ACCOUNT)).rejects.toThrow('Missing social permission: connect_accounts');
+    expect(account(db)).toMatchObject({ status: 'connected', deleted_at: null });
+    expect(token(db)).toMatchObject({ access_token_enc: 'sealed-access-token', refresh_token_enc: 'sealed-refresh-token' });
+  });
+
+  it('the layout shows a Free family\'s parent the accounts still connected, with Disconnect and the plans, and nothing else of Social', async () => {
+    withConnectedX(household('parent', null));
+    const markup = await layout();
+    const text = textOf(markup);
+    expect(text).toContain('Rivera fair on X');
+    expect(text).toContain('Disconnect');
+    expect(text).toContain('Social media tools aren’t available to your family right now');
+    expect(text, 'no page below the layout renders').not.toContain(PAGE_BELOW);
+    const links = linksIn(markup);
+    expect(links.filter((href) => href.startsWith('/dashboard/social')), 'no section of the console is offered').toEqual([]);
+    expect(links).toContain('/dashboard/billing?upgrade=1&need=1');
+  });
+
+  it('switched off, the layout shows the same, without an offer to upgrade', async () => {
+    const db = withConnectedX(household('parent', 'plus'));
+    db.seed('app_settings', [OFF]);
+    const markup = await layout();
+    expect(textOf(markup)).toContain('Rivera fair on X');
+    expect(textOf(markup)).not.toContain(PAGE_BELOW);
+    expect(linksIn(markup).filter((href) => href.startsWith('/dashboard/billing'))).toEqual([]);
+  });
+
+  it('a Free family\'s child, who cannot disconnect, is still refused before anything renders', async () => {
+    withConnectedX(household('child', null));
+    await expect(layout()).rejects.toThrow('FEATURE_REFUSED /dashboard/social');
+  });
+
+  it('a Family Basic household with an account connected gets the console as before', async () => {
+    withConnectedX(household('parent', 'basic'));
+    const markup = await layout();
+    expect(textOf(markup)).toContain(PAGE_BELOW);
+    expect(linksIn(markup)).toContain('/dashboard/social/posts');
+    expect(h.featureChecks).toEqual(['/dashboard/social']);
   });
 });

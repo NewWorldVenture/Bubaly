@@ -38,11 +38,15 @@ export function AccountRow({
         type="button"
         disabled={pending}
         onClick={() => start(async () => {
-          // disconnectAccountAction returns void and throws — requireSocialPermission
-          // raises SocialAccessError for a member without `connect_accounts`, and
-          // that message never reached the person who pressed the button.
-          try { await disconnectAccountAction(id); }
-          catch (err) { toastError(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong')); }
+          // requireSocialPermission THROWS SocialAccessError for a member without
+          // `connect_accounts`; a disconnect that did not complete (X's tokens
+          // not cleared, the account not found) RETURNS { ok: false, error }.
+          // Both reach the person who pressed the button: the second used to
+          // say nothing, and the family took its tokens for cleared.
+          try {
+            const result = await disconnectAccountAction(id);
+            if (!result.ok) toastError(result.error ?? t('globalError.somethingWentWrong'));
+          } catch (err) { toastError(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong')); }
         })}
         className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2 text-xs text-muted hover:text-danger disabled:opacity-60"
       >
