@@ -16,6 +16,7 @@
 // the run's error now, like the linked-idea read beside it.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, withFaults, type InMemorySupabase } from './helpers/in-memory-supabase';
+import { rateLimitHit } from './helpers/rate-limit-rpc';
 
 const h = vi.hoisted(() => ({
   db: null as unknown,
@@ -59,7 +60,10 @@ const releaseAll = () => { for (const r of h.release.splice(0)) r(); };
 beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
   h.created = []; h.hold = false; h.release = []; h.fail = false;
-  db = createInMemorySupabase();
+  // The backfill's per-family daily cap (feedback-github-backfill:<subject>) is
+  // a real limiter on main; serve it, or the limiter fails closed and holds
+  // every idea before any claim is tried.
+  db = createInMemorySupabase({ rpc: { rate_limit_hit: rateLimitHit } });
   h.db = db;
   db.seed('feedback_ideas', [{ ...IDEA }]);
 });

@@ -32,6 +32,9 @@ beforeEach(() => {
   closedAt = null;
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://closed-family-fixture.supabase.co');
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'synthetic-anon');
+  // The route's locked-family gate (refuseIfLocked) reads the plan with the
+  // service client; the bearer refusal below runs first for a closed family.
+  vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'synthetic-service-role');
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
@@ -39,7 +42,8 @@ beforeEach(() => {
     reads.push(url.pathname);
     if (url.pathname === '/auth/v1/user') return Response.json({ id: userId, email: 'synthetic@example.invalid' });
     if (url.pathname === '/rest/v1/family_members') return Response.json([{ id: 'synthetic-member', family_id: familyId, user_id: userId, role: 'parent', is_active: true }]);
-    if (url.pathname === '/rest/v1/families') return Response.json([{ id: familyId, timezone: 'UTC', closed_at: closedAt }]);
+    if (url.pathname === '/rest/v1/families') return Response.json([{ id: familyId, timezone: 'UTC', closed_at: closedAt, trial_ends_at: null }]);
+    if (url.pathname === '/rest/v1/subscriptions') return Response.json([]);
     if (url.pathname === '/rest/v1/user_preferences') return Response.json({ active_family_id: familyId });
     if (url.pathname === '/rest/v1/calendar_events') return Response.json([], { headers: { 'content-range': '*/0' } });
     throw new Error(`Unexpected synthetic request ${url.pathname}`);

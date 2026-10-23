@@ -16,7 +16,8 @@ import { DEFAULT_POLICY } from '@/lib/auth/child-throttle';
 const h = vi.hoisted(() => ({ db: null as unknown }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => h.db }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
-vi.mock('@/lib/marketing/automation-runner', () => ({ runAutomations: async () => ({ workflows: 0, fired: 0, failures: 0 }) }));
+// The runner's summary also counts the subjects its run budget cut off.
+vi.mock('@/lib/marketing/automation-runner', () => ({ runAutomations: async () => ({ workflows: 0, fired: 0, failures: 0, unserved: 0 }) }));
 
 const NOW = new Date('2026-10-21T12:00:00.000Z');
 const HOUR = 3_600_000;
