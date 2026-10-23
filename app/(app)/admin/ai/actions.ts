@@ -4,8 +4,9 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { superAdminGate } from '@/lib/auth/super-admin-gate';
 import { createServiceClient } from '@/lib/supabase/server';
-import { setAIConfig } from '@/lib/ai/settings';
-import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
+import { readAIConfig, setAIConfig } from '@/lib/ai/settings';
+import { providerFromConfig, describeAIError } from '@/lib/ai/provider';
+import { isProviderStubEnabled, scriptedProvider } from '@/lib/ai/provider-stub';
 import { describeActionError } from '@/lib/supabase/errors';
 import { logAudit } from '@/lib/server/audit';
 
@@ -55,12 +56,25 @@ export async function testAIConnectionAction(): Promise<TestAIResult> {
   if (gate.status === 'unavailable') return { ok: false, code: 'unavailable', message: t('ai.accountContextIsTemporarilyUnavailable'), detail: '' };
   if (gate.status !== 'allowed') return { ok: false, code: 'forbidden', message: t('actions.forbidden'), detail: '' };
 
-  if (!(await isAIConfigured())) {
+  // The config is read once, with its error, and the provider is built from
+  // what was read. isAIConfigured() and resolveProvider() each re-read through
+  // getAIConfig, which drops the error: a failed read said "No OpenAI key
+  // configured" over a key saved above, or tested the environment's key and
+  // model and called the stored config OK (review
+  // R9-2-ADMIN-TEST-CONNECTION-FAILED-READ-IS-NO-KEY). The scripted provider
+  // (tests and CI only) still counts as configured, as it did through them.
+  const { config, error: readError } = await readAIConfig(createServiceClient());
+  if (readError) {
+    console.error('[admin-ai] AI engine settings read failed', readError);
+    return { ok: false, code: 'unavailable', message: t('adminAi.couldNotLoadAiEngineSettings'), detail: '' };
+  }
+  const stubbed = isProviderStubEnabled();
+  if (!stubbed && !config.openaiKey) {
     return { ok: false, code: 'unconfigured', message: 'No OpenAI key configured. Add one above and save, then test again.', detail: '' };
   }
 
   try {
-    const provider = await resolveProvider();
+    const provider = stubbed ? scriptedProvider() : providerFromConfig(config);
     const startedAt = Date.now();
     const completion = await provider.complete({
       system: 'You are a connection test. Reply with exactly: OK',

@@ -2,6 +2,9 @@ import type { Metadata } from 'next';
 import { CreditCard, Users, DollarSign, TrendingDown, ExternalLink, Receipt } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { readInChunks } from '@/lib/supabase/chunked-in';
+import type Stripe from 'stripe';
 import { getStripe } from '@/lib/stripe';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +15,8 @@ import { GrowthChart } from '@/components/admin/growth-chart';
 import { describeDbError } from '@/lib/supabase/errors';
 import { getTranslations } from '@/lib/i18n/server';
 import { safeWebLink } from '@/lib/utils/safe-link';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
+import { lastUtcDays } from '@/lib/admin/clock';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -27,6 +32,11 @@ const TABS = [
 type TabKey = (typeof TABS)[number]['key'];
 
 type Params = { searchParams: Promise<{ tab?: string }> };
+
+/** Rows a paged read may go through before it is reported as a prefix (one round trip per 1,000). */
+const ROW_CEILING = 25_000;
+/** The Plans tab lists this many of the newest subscriptions. */
+const RECENT_SHOWN = 8;
 
 async function PlanDonut({ counts, total }: { counts: Map<string, number>; total: number }) {
   const tr = await getTranslations();
@@ -79,59 +89,146 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key as TabKey) ?? 'plans';
   const supabase = createServiceClient();
 
-  const [subscriptionsResult, familiesResult, billingCustomersResult] = await settleAll([
-    supabase.from('subscriptions').select('*').order('created_at', { ascending: false }),
-    supabase.from('families').select('id, name'),
-    supabase.from('billing_customers').select('family_id, customer_ref'),
+  // Every revenue figure here used to be reduced from ONE unbounded
+  // `subscriptions.select('*')`, newest first. PostgREST answers that with at
+  // most `db-max-rows` (1,000) and no error, so past a thousand subscriptions
+  // MRR, ARR, the plan donut, the active count and the churn rate were computed
+  // over the newest thousand — and the OLDEST rows, where the cancelled
+  // accounts that feed churn live, were the ones dropped. The unbounded
+  // `families` read beside it labelled any family past the thousandth "Unknown
+  // family".
+  //
+  // The tiles are now `head: true` counts — exact, uncapped — and MRR is the
+  // per-plan active counts times the plan prices, which is the same sum without
+  // reading a row.
+  //
+  // Each tab reads only what it shows (review
+  // R5-SIB-SUBSCRIPTION-ROWS-LOCK-PLANS-AND-BILLING). Every subscription row
+  // used to be read on every tab, paged to a 25,000-row ceiling with reaching
+  // it an error, so past 25,000 subscriptions Plans and Billing were the
+  // read-error state too, for rows neither of them lists:
+  //   - Plans: the tiles' counts; the growth chart drawn as /admin/system draws
+  //     its own, from one count of the subscriptions created before its first
+  //     day and only the rows inside it; and the newest RECENT_SHOWN rows. Past
+  //     the ceiling inside the chart's thirty days the chart alone says it is
+  //     not shown;
+  //   - All: every subscription, which is what the tab lists, so its ceiling
+  //     is still the tab's read-error state;
+  //   - Billing: no subscription row; it lists Stripe's invoices.
+  // The paged reads go on the id, not on offsets: a checkout between two pages
+  // shifted every later offset by one and listed or drew one subscription twice.
+  //
+  // The family names only label rows, so each listed row is named from its own
+  // family, below (review R5-FAMILIES-LABEL-CEILING-LOCKS-PAGES).
+  const onPlans = tab === 'plans';
+  const notRead = Promise.resolve({ data: null, count: null, error: null, truncated: false } as const);
+  const since30 = new Date(Date.now() - 30 * 86400000);
+  // The growth chart's first day (lib/admin/clock.ts).
+  const chartStart = new Date(lastUtcDays(30)[0].start).toISOString();
+  const [
+    [activeCountResult, canceledRecentlyResult, chartBaseResult, recentResult, chartResult, subscriptionsResult],
+    planCountResults,
+  ] = await Promise.all([
+    settleAll([
+      onPlans ? supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active') : notRead,
+      onPlans ? supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'canceled').gte('updated_at', since30.toISOString()) : notRead,
+      onPlans ? supabase.from('subscriptions').select('id', { count: 'exact', head: true }).lt('created_at', chartStart) : notRead,
+      onPlans ? supabase.from('subscriptions').select('*').order('created_at', { ascending: false }).order('id', { ascending: false }).limit(RECENT_SHOWN) : notRead,
+      onPlans ? readAllByIdAsQuery((after, limit) => {
+        let query = supabase.from('subscriptions').select('id, created_at').gte('created_at', chartStart);
+        if (after) query = query.gt('id', after);
+        return query.order('id').limit(limit);
+      }, { max: ROW_CEILING }) : notRead,
+      tab === 'all' ? readAllByIdAsQuery((after, limit) => {
+        let query = supabase.from('subscriptions').select('*');
+        if (after) query = query.gt('id', after);
+        return query.order('id').limit(limit);
+      }, { max: ROW_CEILING }) : notRead,
+    ]),
+    settleAll(onPlans ? PLANS.map((p) =>
+      supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active').eq('plan', p.id)) : []),
   ]);
 
-  const readError = subscriptionsResult.error ?? familiesResult.error ?? billingCustomersResult.error;
+  // The chart's rows past the ceiling cost the chart, not the tiles and the
+  // recent rows beside it. Any other failure is still the read-error state.
+  const chartCeiling = 'truncated' in chartResult && chartResult.truncated;
+  if (chartCeiling) console.warn('[admin-subscriptions] the growth chart read reached its ceiling; the chart is not shown');
+  const readError = subscriptionsResult.error ?? (chartCeiling ? null : chartResult.error)
+    ?? activeCountResult.error ?? canceledRecentlyResult.error ?? chartBaseResult.error ?? recentResult.error
+    ?? planCountResults.find((r) => r.error)?.error;
   if (readError) {
     console.error('[admin-subscriptions] subscription read failed', readError);
     return <AdminSubscriptionsReadError tab={tab} />;
   }
 
-  const { data: subscriptions } = subscriptionsResult;
-  const { data: families } = familiesResult;
-  const { data: billingCustomers } = billingCustomersResult;
-
-  const subs = subscriptions ?? [];
-  const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
-  const customerToFamily = new Map((billingCustomers ?? []).filter((b) => b.customer_ref).map((b) => [b.customer_ref as string, b.family_id]));
+  // Newest first, as the All tab has always listed them; the paged read was ordered by id.
+  const subs = [...(subscriptionsResult.data ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
+  const recentSubs = recentResult.data ?? [];
 
   const planById = (id: string): Plan | undefined => PLANS.find((p) => p.id === id);
-  const activeSubs = subs.filter((s) => s.status === 'active');
-  const countsByPlan = new Map<string, number>();
-  for (const s of activeSubs) countsByPlan.set(s.plan, (countsByPlan.get(s.plan) ?? 0) + 1);
+  const activeCount = activeCountResult.count ?? 0;
+  // Read on Plans only; the other tabs show no count.
+  const countsByPlan = new Map<string, number>(PLANS.map((p, i) => [p.id, planCountResults[i]?.count ?? 0]));
 
-  const mrr = activeSubs.reduce((sum, s) => sum + (planById(s.plan)?.priceMonthly ?? 0), 0);
+  const mrr = PLANS.reduce((sum, p) => sum + (countsByPlan.get(p.id) ?? 0) * p.priceMonthly, 0);
   const arr = mrr * 12;
 
-  const since30 = new Date(Date.now() - 30 * 86400000);
-  const canceledRecently = subs.filter((s) => s.status === 'canceled' && new Date(s.updated_at) >= since30).length;
-  const churnBase = activeSubs.length + canceledRecently;
+  const canceledRecently = canceledRecentlyResult.count ?? 0;
+  const churnBase = activeCount + canceledRecently;
   const churnRate = churnBase > 0 ? (canceledRecently / churnBase) * 100 : 0;
 
   // Real Stripe invoices (account-wide, no per-customer fan-out). Gracefully empty if Stripe isn't configured.
-  let invoices: { id: string; number: string | null; amountPaid: number; status: string; created: number; familyName: string; hostedUrl: string | null }[] = [];
+  let listed: Stripe.Invoice[] = [];
   let stripeError: string | null = null;
+  let customerToFamily = new Map<string, string>();
+  const customerOf = (inv: Stripe.Invoice) => (typeof inv.customer === 'string' ? inv.customer : inv.customer?.id);
   if (tab === 'billing') {
     try {
       const stripe = getStripe();
-      const list = await stripe.invoices.list({ limit: 20 });
-      invoices = list.data.map((inv) => {
-        const customerId = typeof inv.customer === 'string' ? inv.customer : inv.customer?.id;
-        const familyId = customerId ? customerToFamily.get(customerId) : undefined;
-        return {
-          id: inv.id ?? '', number: inv.number, amountPaid: inv.amount_paid, status: inv.status ?? 'unknown',
-          created: inv.created, familyName: familyId ? familyNameById.get(familyId) ?? 'Unknown family' : 'Unknown family',
-          hostedUrl: inv.hosted_invoice_url ?? null,
-        };
-      });
+      listed = (await stripe.invoices.list({ limit: 20 })).data;
     } catch (err) {
       stripeError = describeDbError(err, tr('subscriptions.stripeIsNotConfigured'));
     }
+    // Only the customers these invoices name. The whole billing_customers table
+    // was read unbounded, which PostgREST answers with at most `db-max-rows`
+    // (1,000) rows, so an invoice whose customer fell past them read "Unknown
+    // family".
+    const customerRefs = [...new Set(listed.map(customerOf).filter((ref): ref is string => !!ref))];
+    const billingCustomersResult = await readInChunks(customerRefs, (chunk) =>
+      supabase.from('billing_customers').select('family_id, customer_ref').in('customer_ref', chunk));
+    if (billingCustomersResult.error) {
+      console.error('[admin-subscriptions] billing customer read failed', billingCustomersResult.error);
+      return <AdminSubscriptionsReadError tab={tab} />;
+    }
+    customerToFamily = new Map(billingCustomersResult.data.filter((b) => b.customer_ref).map((b) => [b.customer_ref as string, b.family_id]));
   }
+  const familyOfInvoice = (inv: Stripe.Invoice) => {
+    const customerId = customerOf(inv);
+    return customerId ? customerToFamily.get(customerId) : undefined;
+  };
+
+  // Only the families this tab names: the recent subscriptions, every listed
+  // subscription, or the invoices' families, which need not have a
+  // subscription row at all.
+  const labelledFamilyIds = tab === 'plans' ? recentSubs.map((s) => s.family_id)
+    : tab === 'all' ? subs.map((s) => s.family_id)
+    : listed.map(familyOfInvoice).filter((id): id is string => !!id);
+  const familiesResult = await readInChunks([...new Set(labelledFamilyIds)], (chunk) =>
+    supabase.from('families').select('id, name').in('id', chunk));
+  if (familiesResult.error) {
+    console.error('[admin-subscriptions] family name read failed', familiesResult.error);
+    return <AdminSubscriptionsReadError tab={tab} />;
+  }
+  const familyNameById = new Map(familiesResult.data.map((f) => [f.id, f.name]));
+
+  const invoices = listed.map((inv) => {
+    const familyId = familyOfInvoice(inv);
+    return {
+      id: inv.id ?? '', number: inv.number, amountPaid: inv.amount_paid, status: inv.status ?? 'unknown',
+      created: inv.created, familyName: familyId ? familyNameById.get(familyId) ?? 'Unknown family' : 'Unknown family',
+      hostedUrl: inv.hosted_invoice_url ?? null,
+    };
+  });
 
   return (
     <div className="module-page">
@@ -150,6 +247,10 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
 
       {tab === 'plans' && (
         <>
+          <PartialReadBanner
+            title={tr('adminCeiling.figuresNotShown', { n: ROW_CEILING.toLocaleString() })}
+            failures={chartCeiling ? [tr('adminSubscriptions.subscriptionsOverTime')] : []}
+          />
           <div className="grid gap-4 sm:grid-cols-3">
             {PLANS.map((p) => (
               <Card key={p.id} className={p.featured ? 'ring-2 ring-brand' : undefined}>
@@ -169,7 +270,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
           </div>
 
           <div className="grid-stats">
-            <StatCard icon={Users} label={tr('adminSubscriptions.activeSubscriptions')} value={activeSubs.length.toLocaleString()} tone="bg-brand/10 text-brand-text" />
+            <StatCard icon={Users} label={tr('adminSubscriptions.activeSubscriptions')} value={activeCount.toLocaleString()} tone="bg-brand/10 text-brand-text" />
             <StatCard icon={DollarSign} label="MRR" value={fmtMoney(mrr)} tone="bg-success/10 text-success" />
             <StatCard icon={DollarSign} label="ARR" value={fmtMoney(arr)} tone="bg-accent/10 text-accent" />
             <StatCard icon={TrendingDown} label={tr('adminSubscriptions.churn30d')} value={`${churnRate.toFixed(1)}%`} tone="bg-danger/10 text-danger" />
@@ -178,21 +279,23 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
             <Card>
               <h2 className="mb-4 text-base font-semibold">{tr('adminSubscriptions.subscriptionsOverTime')} <span className="text-muted">{tr('adminSubscriptions.last30Days')}</span></h2>
-              <GrowthChart timestamps={subs.map((s) => s.created_at)} />
+              {chartCeiling
+                ? <p className="text-sm text-muted">{tr('strategyMetrics.unavailable')}</p>
+                : <GrowthChart timestamps={(chartResult.data ?? []).map((s) => s.created_at)} base={chartBaseResult.count ?? 0} />}
             </Card>
             <Card>
               <h2 className="mb-3 text-base font-semibold">{tr('adminSubscriptions.byPlan')}</h2>
-              <PlanDonut counts={countsByPlan} total={activeSubs.length} />
+              <PlanDonut counts={countsByPlan} total={activeCount} />
             </Card>
           </div>
 
           <Card>
             <h2 className="mb-4 text-base font-semibold">{tr('adminSubscriptions.recentSubscriptions')}</h2>
-            {subs.length === 0 ? (
+            {recentSubs.length === 0 ? (
               <EmptyState icon={CreditCard} title={tr('adminSubscriptions.noSubscriptionsYet')} />
             ) : (
               <ul className="space-y-2">
-                {subs.slice(0, 8).map((s) => (
+                {recentSubs.map((s) => (
                   <li key={s.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5 text-sm">
                     <span className="font-medium">{familyNameById.get(s.family_id) ?? 'Unknown family'}</span>
                     <Badge tone="neutral">{planById(s.plan)?.name ?? s.plan}</Badge>

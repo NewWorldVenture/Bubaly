@@ -6,6 +6,7 @@ import {
   Wallet, Users, Gift, ShieldCheck, TrendingUp, TrendingDown, Scale, Flag, ScrollText,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
+import { ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import { formatCents } from '@/lib/wallet/ledger';
 import { adminToggleFeatureFlagAction } from '@/app/(app)/admin/actions';
@@ -15,9 +16,10 @@ export type FlagRow = { key: string; enabled: boolean; description: string | nul
 export type AuditRow = {
   id: string; familyId: string; action: string; entityType: string | null; detail: string | null; createdAt: string;
 };
+/** null wherever its read failed (or, for the volume, reached its ceiling): it reads Unavailable. */
 type Stats = {
-  activeWallets: number; childWallets: number; pendingGifts: number; pendingApprovals: number;
-  creditVolumeCents: number; debitVolumeCents: number; netCents: number;
+  activeWallets: number | null; childWallets: number | null; pendingGifts: number | null; pendingApprovals: number | null;
+  creditVolumeCents: number | null; debitVolumeCents: number | null; netCents: number | null;
 };
 
 // Stripe flags require business/legal approval — flag them visually so an admin
@@ -27,12 +29,15 @@ const STRIPE_FLAGS = new Set([
   'stripe_issuing_enabled', 'physical_cards_enabled', 'custom_card_designs_enabled',
 ]);
 
-export function AdminWalletClient({ stats, flags, audit }: { stats: Stats; flags: FlagRow[]; audit: AuditRow[] }) {
+/** `flags` and `audit` are null when their read failed: each is the read-error state, not an empty list. */
+export function AdminWalletClient({ stats, flags, audit }: { stats: Stats; flags: FlagRow[] | null; audit: AuditRow[] | null }) {
   const locale = useLocale().code;
   const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const volume = (cents: number | null) => (cents === null ? t('strategyMetrics.unavailable') : formatCents(cents));
+  const count = (n: number | null) => (n === null ? t('strategyMetrics.unavailable') : String(n));
 
   async function toggle(flag: FlagRow) {
     if (busyKey) return;
@@ -45,10 +50,10 @@ export function AdminWalletClient({ stats, flags, audit }: { stats: Stats; flags
   }
 
   const STAT_CARDS = [
-    { label: 'Active Wallets', value: String(stats.activeWallets), icon: Wallet, color: 'text-brand-text' },
-    { label: 'Child Wallets', value: String(stats.childWallets), icon: Users, color: 'text-blue-400' },
-    { label: 'Pending Gifts', value: String(stats.pendingGifts), icon: Gift, color: 'text-pink-400' },
-    { label: 'Pending Approvals', value: String(stats.pendingApprovals), icon: ShieldCheck, color: 'text-amber-400' },
+    { label: 'Active Wallets', value: count(stats.activeWallets), icon: Wallet, color: 'text-brand-text' },
+    { label: 'Child Wallets', value: count(stats.childWallets), icon: Users, color: 'text-blue-400' },
+    { label: 'Pending Gifts', value: count(stats.pendingGifts), icon: Gift, color: 'text-pink-400' },
+    { label: 'Pending Approvals', value: count(stats.pendingApprovals), icon: ShieldCheck, color: 'text-amber-400' },
   ];
 
   return (
@@ -68,15 +73,15 @@ export function AdminWalletClient({ stats, flags, audit }: { stats: Stats; flags
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-border bg-surface/40 p-4">
           <div className="flex items-center gap-2 text-xs text-muted"><TrendingUp className="h-4 w-4 text-green-400" /> {t('adminWalletAdminWalletClient.totalCredits')}</div>
-          <div className="mt-1 text-xl font-bold text-green-400">{formatCents(stats.creditVolumeCents)}</div>
+          <div className="mt-1 text-xl font-bold text-green-400">{volume(stats.creditVolumeCents)}</div>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-4">
           <div className="flex items-center gap-2 text-xs text-muted"><TrendingDown className="h-4 w-4 text-rose-400" /> {t('adminWalletAdminWalletClient.totalDebits')}</div>
-          <div className="mt-1 text-xl font-bold text-rose-400">{formatCents(stats.debitVolumeCents)}</div>
+          <div className="mt-1 text-xl font-bold text-rose-400">{volume(stats.debitVolumeCents)}</div>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-4">
           <div className="flex items-center gap-2 text-xs text-muted"><Scale className="h-4 w-4 text-brand-text" /> {t('adminWalletAdminWalletClient.netOutstanding')}</div>
-          <div className="mt-1 text-xl font-bold">{formatCents(stats.netCents)}</div>
+          <div className="mt-1 text-xl font-bold">{volume(stats.netCents)}</div>
         </div>
       </div>
       <p className="-mt-3 text-[11px] text-muted">
@@ -87,6 +92,7 @@ export function AdminWalletClient({ stats, flags, audit }: { stats: Stats; flags
       {/* Feature flags */}
       <div>
         <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Flag className="h-4 w-4" /> {t('adminWalletAdminWalletClient.featureFlags')}</h2>
+        {flags === null ? <ErrorState message={t('wallet.couldNotLoadWalletOversight')} /> : (
         <div className="overflow-hidden rounded-2xl border border-border bg-surface/40 divide-y divide-border/50">
           {flags.map((flag) => {
             const isStripe = STRIPE_FLAGS.has(flag.key);
@@ -111,12 +117,15 @@ export function AdminWalletClient({ stats, flags, audit }: { stats: Stats; flags
             );
           })}
         </div>
+        )}
       </div>
 
       {/* Recent audit */}
       <div>
         <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><ScrollText className="h-4 w-4" /> {t('adminWalletAdminWalletClient.recentWalletActivity')}</h2>
-        {audit.length === 0 ? (
+        {audit === null ? (
+          <ErrorState message={t('wallet.couldNotLoadWalletOversight')} />
+        ) : audit.length === 0 ? (
           <p className="rounded-2xl border border-border bg-surface/40 p-4 text-sm text-muted">{t('adminWalletAdminWalletClient.noWalletAuditActivityYet')}</p>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-border bg-surface/40 divide-y divide-border/50">

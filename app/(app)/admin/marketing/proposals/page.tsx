@@ -3,8 +3,11 @@ import Link from 'next/link';
 import { FileText, Send, CheckCircle2, Percent } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { fmtDate } from '@/lib/utils/format';
 import { contactDisplayName, formatCents } from '@/lib/marketing/crm';
 import {
@@ -22,6 +25,8 @@ type Quote = Tables<'crm_quotes'>;
 type Contact = Tables<'crm_contacts'>;
 
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
+/** Quotes the tiles may page through before they are reported as not shown (one round trip per 1,000). */
+const SUM_ROW_CEILING = 25_000;
 const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
 
 const STATUS_TINT: Record<QuoteStatus, string> = {
@@ -33,11 +38,29 @@ const STATUS_TINT: Record<QuoteStatus, string> = {
 export default async function ProposalsPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const [quotesResult, contactsResult] = await settleAll([
+  // The table is the newest 500 quotes and the contact picker the newest 500
+  // contacts; the tiles are every quote. Summed from the table, Quotes,
+  // Outstanding, Accepted and Accept rate left out every older quote. Quotes
+  // is an exact `head: true` count; the other three are summed from the quotes
+  // paged on the id to a real ceiling, and past it they say they are not shown
+  // rather than adding up part of them.
+  // Neither said it was part: the table now says when it lists part of the
+  // quotes, and the picker, against a head:true count of the contacts, when it
+  // offers part of them (coverage sweep round 9).
+  const [quotesResult, contactsResult, quoteCountResult, summaryResult, contactCountResult] = await settleAll([
     supabase.from('crm_quotes').select('*').order('created_at', { ascending: false }).limit(500),
     supabase.from('crm_contacts').select('id, first_name, last_name, email').order('created_at', { ascending: false }).limit(500),
+    supabase.from('crm_quotes').select('id', { count: 'exact', head: true }),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('crm_quotes').select('id, status, amount_cents, valid_until');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
+    supabase.from('crm_contacts').select('id', { count: 'exact', head: true }),
   ]);
-  const readError = quotesResult.error ?? contactsResult.error;
+  const summaryCeiling = 'truncated' in summaryResult && summaryResult.truncated;
+  const readError = quotesResult.error ?? contactsResult.error ?? quoteCountResult.error ?? (summaryCeiling ? null : summaryResult.error)
+    ?? contactCountResult.error;
   if (readError) {
     console.error('[admin-marketing-proposals] proposal read failed', readError);
     return <AdminProposalsReadError />;
@@ -47,18 +70,32 @@ export default async function ProposalsPage() {
 
   const list = (quotes ?? []) as Quote[];
   const contactList = (contacts ?? []) as Pick<Contact, 'id' | 'first_name' | 'last_name' | 'email'>[];
-  const contactName = new Map(contactList.map((c) => [c.id, contactDisplayName(c)]));
-  const summary = summarizeQuotes(list.map((q) => ({ status: q.status as QuoteStatus, amount_cents: q.amount_cents, valid_until: q.valid_until })));
+  // A quote is named from ITS contact, not from the newest 500 contacts.
+  const listedContactIds = [...new Set(list.map((q) => q.contact_id).filter((id): id is string => !!id))];
+  const labelsResult = await readInChunks(listedContactIds, (chunk) =>
+    supabase.from('crm_contacts').select('id, first_name, last_name, email').in('id', chunk));
+  if (labelsResult.error) {
+    console.error('[admin-marketing-proposals] proposal read failed', labelsResult.error);
+    return <AdminProposalsReadError />;
+  }
+  const contactName = new Map(labelsResult.data.map((c) => [c.id, contactDisplayName(c)]));
+  const summary = summarizeQuotes((summaryResult.data ?? []).map((q) => ({ status: q.status as QuoteStatus, amount_cents: q.amount_cents, valid_until: q.valid_until })));
+  const unavailable = t('strategyMetrics.unavailable');
+  const tile = (value: string) => (summaryCeiling ? unavailable : value);
 
   const stats = [
-    { label: 'Quotes', value: summary.total, icon: FileText, tint: 'text-violet-400 bg-violet-500/15' },
-    { label: 'Outstanding', value: formatCents(summary.outstandingCents), icon: Send, tint: 'text-blue-400 bg-blue-500/15' },
-    { label: 'Accepted', value: formatCents(summary.acceptedCents), icon: CheckCircle2, tint: 'text-emerald-400 bg-emerald-500/15' },
-    { label: 'Accept rate', value: `${Math.round(summary.acceptRate * 100)}%`, icon: Percent, tint: 'text-amber-400 bg-amber-500/15' },
+    { label: 'Quotes', value: quoteCountResult.count ?? 0, summed: false, icon: FileText, tint: 'text-violet-400 bg-violet-500/15' },
+    { label: 'Outstanding', value: tile(formatCents(summary.outstandingCents)), summed: true, icon: Send, tint: 'text-blue-400 bg-blue-500/15' },
+    { label: 'Accepted', value: tile(formatCents(summary.acceptedCents)), summed: true, icon: CheckCircle2, tint: 'text-emerald-400 bg-emerald-500/15' },
+    { label: 'Accept rate', value: tile(`${Math.round(summary.acceptRate * 100)}%`), summed: true, icon: Percent, tint: 'text-amber-400 bg-amber-500/15' },
   ];
 
   return (
     <div className="space-y-5">
+      <PartialReadBanner
+        title={t('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
+        failures={summaryCeiling ? stats.filter((s) => s.summed).map((s) => s.label) : []}
+      />
       <p className="text-sm text-muted">{t('adminMarketingProposals.quotesAndProposalsThatConvertQualified')}</p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -85,10 +122,16 @@ export default async function ProposalsPage() {
           <input name="valid_until" type="date" aria-label={t('adminMarketingProposals.validUntil')} className={inputCls} />
           <SubmitButton className={btnCls}>{t('adminMarketingProposals.createQuote')}</SubmitButton>
         </form>
+        {(contactCountResult.count ?? 0) > contactList.length && (
+          <p className="mt-2 text-xs text-muted">{t('adminCeiling.pickerOffersTheNewest', { picker: t('adminMarketingProposals.contact'), shown: contactList.length.toLocaleString(), total: (contactCountResult.count ?? 0).toLocaleString() })}</p>
+        )}
       </Card>
 
       <Card>
         <h2 className="mb-4 text-base font-semibold">{t('adminMarketingProposals.proposals')}</h2>
+        {(quoteCountResult.count ?? 0) > list.length && (
+          <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsTheNewest', { shown: list.length.toLocaleString(), total: (quoteCountResult.count ?? 0).toLocaleString() })}</p>
+        )}
         {list.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">{t('adminMarketingProposals.noProposalsYet')}</p>
         ) : (

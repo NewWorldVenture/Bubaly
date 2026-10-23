@@ -2,6 +2,9 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { LogOut, Eye, EyeOff } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/states';
@@ -21,6 +24,10 @@ export const dynamic = 'force-dynamic';
 type Offer = Tables<'marketing_exit_intent'>;
 
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
+/** The offers the list holds. */
+const LISTED = 200;
+/** Offers the summary may page through before it says it is not shown. */
+const SUM_ROW_CEILING = 10_000;
 const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
 
 async function ReadFailure() {
@@ -48,19 +55,47 @@ function matchSummary(m: AudienceMatch): string {
 export default async function ExitIntentPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
+  // The four tiles were summed from the list, the first 200 by priority, so
+  // past them each was the list's total presented as every offer's (coverage
+  // sweep round 9, class B). Offers is a head:true count now, and the others
+  // are summed over every offer, paged on the id (impressions tick up while
+  // this reads) to a ceiling past which they say they are not shown. Started
+  // before the list is awaited; any of them that fails is the read-error state.
+  const summaryRead = settleAll([
+    supabase.from('marketing_exit_intent').select('id', { count: 'exact', head: true }).is('deleted_at', null),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('marketing_exit_intent').select('id, status, impressions, conversions').is('deleted_at', null);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
+  ]);
   const { data, error } = await supabase
     .from('marketing_exit_intent')
     .select('*')
     .is('deleted_at', null)
     .order('priority', { ascending: false })
     .order('created_at', { ascending: false })
-    .limit(200);
+    .limit(LISTED);
   if (error) {
     console.error('[admin-marketing-exit-intent] offer read failed', error);
     return <ReadFailure />;
   }
+  const [countResult, summaryResult] = await summaryRead;
+  const summaryCeiling = 'truncated' in summaryResult && summaryResult.truncated;
+  const summaryError = countResult.error ?? (summaryCeiling ? null : summaryResult.error);
+  if (summaryError) {
+    console.error('[admin-marketing-exit-intent] offer summary read failed', summaryError);
+    return <ReadFailure />;
+  }
   const offers = (data ?? []) as Offer[];
-  const stats = summarizeExitIntent(offers);
+  const offerCount = countResult.count ?? 0;
+  const stats = summarizeExitIntent(summaryResult.data ?? []);
+  const unavailable = t('strategyMetrics.unavailable');
+  const summed = (value: string | number) => (summaryCeiling ? unavailable : value);
+  const tiles = [
+    ['Offers', offerCount], ['Active', summed(stats.active)],
+    ['Impressions', summed(stats.impressions)], ['Conversion rate', summed(`${stats.conversionRate}%`)],
+  ];
 
   return (
     <div className="space-y-5">
@@ -68,11 +103,13 @@ export default async function ExitIntentPage() {
         Show a targeted offer when a visitor is about to leave (mouseleave) or scrolls past a threshold. Shown at most once per visitor per week; impressions/conversions are tracked.
       </p>
 
+      <PartialReadBanner
+        title={t('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
+        failures={summaryCeiling ? tiles.slice(1).map(([label]) => String(label)) : []}
+      />
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          ['Offers', stats.offers], ['Active', stats.active],
-          ['Impressions', stats.impressions], ['Conversion rate', `${stats.conversionRate}%`],
-        ].map(([label, val]) => (
+        {tiles.map(([label, val]) => (
           <Card key={String(label)} className="py-3">
             <p className="text-xs text-muted">{label}</p>
             <p className="text-xl font-semibold">{val}</p>
@@ -121,6 +158,9 @@ export default async function ExitIntentPage() {
         </form>
       </Card>
 
+      {offerCount > offers.length && (
+        <p className="text-xs text-muted">{t('adminCeiling.listShowsPart', { shown: offers.length.toLocaleString(), total: offerCount.toLocaleString() })}</p>
+      )}
       {offers.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted">{t('adminMarketingExitIntent.noExitIntentOffersYet')}</p>
       ) : (

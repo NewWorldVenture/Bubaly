@@ -210,6 +210,9 @@ export async function assertAIAllowance(
   return meterMonthlyAllowance({ db: opts.db, familyId, planLevel: plan.planLevel, superAdmin, now: opts.now ?? new Date() });
 }
 
+/** The one sentence a closed account is refused with, here and by the bearer context's refusal below. */
+const ACCOUNT_CLOSED_MESSAGE = 'This Bubaly account is closed. Reopen it to continue.';
+
 /** The family's plan level, or the refusal for a lapsed trial, a closed account or a plan that cannot be read. */
 async function familyPlanLevel(
   db: DB,
@@ -227,7 +230,7 @@ async function familyPlanLevel(
       return {
         ok: false, status: 403, code: locked, needLevel: 1,
         error: locked === 'account_closed'
-          ? 'This Bubaly account is closed. Reopen it to continue.'
+          ? ACCOUNT_CLOSED_MESSAGE
           : 'Your free trial has ended. Choose Family Basic or Family+ to keep using Bubaly.',
       };
     }
@@ -320,6 +323,11 @@ export async function authenticateAI(req: NextRequest): Promise<AuthenticatedAI 
     if (bearer.reason === 'invalid_token') return unauthorized('Sign in to ask Bubaly.', 'invalid_token');
     if (bearer.reason === 'needs_family') {
       return NextResponse.json({ error: 'Finish setting up your family in Bubaly first.', code: 'needs_family' }, { status: 403 });
+    }
+    // The bearer context refuses a closed family itself (lib/supabase/bearer.ts):
+    // the same 403 and code assertAIAccess answers for a closed account.
+    if (bearer.reason === 'account_closed') {
+      return NextResponse.json({ error: ACCOUNT_CLOSED_MESSAGE, code: 'account_closed', needLevel: 1 }, { status: 403 });
     }
     return NextResponse.json({ error: 'Account context is temporarily unavailable.', code: 'unavailable' }, { status: 503 });
   }

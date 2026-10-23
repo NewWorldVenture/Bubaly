@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readUiSource } from './helpers/i18n-source';
+import { at } from './helpers/source-order';
 import fs from 'node:fs';
 
 const page = readUiSource('app/gift/[token]/page.tsx');
@@ -26,10 +27,10 @@ describe('gift/[token] page read boundary', () => {
 
   it('still treats a missing/expired link as inactive (no error path)', () => {
     // The not-found case (data null, no error) must fall through to the
-    // existing active/inactive logic, not the error branch.
-    expect(page).toContain('const active = !!link && link.is_active;');
-    const errIdx = page.indexOf('if (linkError) {');
-    const activeIdx = page.indexOf('const active = !!link && link.is_active;');
-    expect(activeIdx).toBeGreaterThan(errIdx);
+    // existing active/inactive logic, not the error branch. A link whose
+    // family closed its account is inactive too
+    // (tests/a-closed-familys-gift-link-takes-no-pledge.test.ts drives it).
+    const active = 'const active = !!link && link.is_active && !familyClosed;';
+    expect(at(page, active)).toBeGreaterThan(at(page, 'if (linkError) {'));
   });
 });

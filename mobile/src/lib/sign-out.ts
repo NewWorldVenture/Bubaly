@@ -59,6 +59,18 @@ export function createDeviceSignOut(deps: {
   };
 }
 
+/**
+ * A device sign-out, then the recording sweep (recordings.ts): the Keychain
+ * session and the spoken requests in the cache leave the device together. The
+ * sweep is best effort and never fails a sign-out that succeeded.
+ */
+export function signOutAndSweep(signOut: () => Promise<void>, sweep: () => Promise<unknown>): () => Promise<void> {
+  return async () => {
+    await signOut();
+    try { await sweep(); } catch (error) { console.warn('[mobile-sign-out] recording sweep failed', error); }
+  };
+}
+
 /** Matches the SDK's existing default, including projects with custom domains. */
 export function sessionStorageKey(supabaseUrl: string): string {
   return `sb-${new URL(supabaseUrl).hostname.split('.')[0]}-auth-token`;

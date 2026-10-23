@@ -192,7 +192,8 @@ export async function listAiActivity(
   };
 }
 
-export type AiActivitySummary = { failed: number; inFlight: number; total: number };
+/** Each count is null when its read failed: the strip says it is unavailable, not 0. */
+export type AiActivitySummary = { failed: number | null; inFlight: number | null; total: number | null };
 
 /**
  * Counts since `sinceIso`, for the strip at the top of the page.
@@ -212,11 +213,14 @@ export async function summarizeAiActivity(
     base(),
   ]);
   // A failed count is not worth an error page — the table below is the real
-  // content, and a dash beats a 500.
+  // content — and it is not 0 either: "Failed (last 24h): 0" because the count
+  // failed reads as an all-clear (coverage sweep round 9, class A). It is null,
+  // and the tile says Unavailable.
   for (const res of [failed, inFlight, total]) {
     if (res.error) console.error('[ai-activity] summary count failed', res.error);
   }
-  return { failed: failed.count ?? 0, inFlight: inFlight.count ?? 0, total: total.count ?? 0 };
+  const counted = (res: { count: number | null; error: unknown }) => (res.error ? null : res.count ?? 0);
+  return { failed: counted(failed), inFlight: counted(inFlight), total: counted(total) };
 }
 
 /**

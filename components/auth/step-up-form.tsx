@@ -24,7 +24,27 @@ import {
   type MfaFactor,
 } from '@/lib/auth/mfa';
 
-export function StepUpForm({ next, serverReadFailed }: { next: string; serverReadFailed: boolean }) {
+/**
+ * Two ways to use it. The /auth/step-up page passes `next`, and a verified code
+ * is a full navigation back there. The account gates (AccountClosedGate,
+ * TrialPaywallGate) render it IN PLACE instead, with `onVerified` and `onBack`:
+ * they replace every (app) route, /auth/step-up included, so sending a closed or
+ * locked family to that page only drew the gate again and the refused click
+ * looped. In place, a verified code hands back to the gate, which retries the
+ * click that asked for it.
+ */
+type StepUpFormProps = {
+  serverReadFailed: boolean;
+  /** Replaces the page's description, for a caller that knows what the code is for. */
+  description?: string;
+  /** The heading's id, for a dialog that is labelled by it. */
+  titleId?: string;
+} & (
+  | { next: string; onVerified?: undefined; onBack?: undefined }
+  | { next?: undefined; onVerified: () => void; onBack: () => void }
+);
+
+export function StepUpForm({ next, serverReadFailed, description, titleId, onVerified, onBack }: StepUpFormProps) {
   const t = useTranslations();
   const router = useRouter();
 
@@ -73,9 +93,17 @@ export function StepUpForm({ next, serverReadFailed }: { next: string; serverRea
       setBusy(false);
       return;
     }
+    // In place: the session is aal2 now, and the browser client has written
+    // its cookie, so the gate's retried server action reads the new level.
+    if (onVerified) {
+      setBusy(false);
+      setCode('');
+      onVerified();
+      return;
+    }
     // A full navigation, not a client transition: the new session cookie has
     // to reach the server before the return page's guard runs again.
-    window.location.assign(next);
+    window.location.assign(next ?? '/dashboard');
   }
 
   const showError = error ?? loadError;
@@ -83,8 +111,8 @@ export function StepUpForm({ next, serverReadFailed }: { next: string; serverRea
   return (
     <div className="rounded-2xl border border-border bg-surface/60 p-6">
       <div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-brand/10 text-brand-text"><KeyRound className="h-6 w-6" /></div>
-      <h1 className="text-xl font-bold tracking-tight">{t('stepUp.title')}</h1>
-      <p className="mt-1 text-sm text-muted">{t('stepUp.description')}</p>
+      <h1 id={titleId} className="text-xl font-bold tracking-tight">{t('stepUp.title')}</h1>
+      <p className="mt-1 text-sm text-muted">{description ?? t('stepUp.description')}</p>
 
       {serverReadFailed && (
         <p role="alert" className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-600">{t('stepUp.couldNotRead')}</p>
@@ -113,7 +141,9 @@ export function StepUpForm({ next, serverReadFailed }: { next: string; serverRea
         {factor && (
           <Button onClick={() => submit()} loading={busy} disabled={busy || !isValidTotpCode(code)}>{t('stepUp.continue')}</Button>
         )}
-        <Button variant="ghost" onClick={() => router.push('/dashboard')} disabled={busy}>{t('stepUp.back')}</Button>
+        {onBack
+          ? <Button variant="ghost" onClick={onBack} disabled={busy}>{t('stepUp.notNow')}</Button>
+          : <Button variant="ghost" onClick={() => router.push('/dashboard')} disabled={busy}>{t('stepUp.back')}</Button>}
         <SignOutForm className="ml-auto">
           {({ signingOut }) => <button type="submit" disabled={signingOut} className="text-xs text-muted hover:text-fg">{t('stepUp.signOut')}</button>}
         </SignOutForm>

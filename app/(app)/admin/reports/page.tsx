@@ -3,7 +3,7 @@ import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { Home, Users, CreditCard, DollarSign, FolderLock, Activity } from 'lucide-react';
 import { createServiceClient, describeConfiguredServiceKey } from '@/lib/supabase/server';
 import { settleAll, describeReadError, credentialHint } from '@/lib/supabase/settle';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { Donut, Bars } from '@/components/admin/charts';
@@ -69,7 +69,7 @@ export default async function AdminReportsPage() {
   // the Documents tile — which renders `docs.length` — pinned at exactly 1,000
   // forever, sitting beside family and subscription tiles that were exact.
   //
-  // `readAllAsQuery` pages to a REAL ceiling and, on reaching it, returns an
+  // `readAllByIdAsQuery` pages to a REAL ceiling and, on reaching it, returns an
   // error saying the rows are a prefix. That error joins `readFailures` below,
   // so passing the ceiling shows the incomplete-report banner instead of
   // quietly reporting a smaller platform than exists.
@@ -78,22 +78,42 @@ export default async function AdminReportsPage() {
   // the honest interim: the real fix for growth buckets and a byte total is a
   // database aggregate rather than reading every row into the page, which is a
   // larger change than this one. Recorded in audit/claude-1.md.
+  //
+  // Each of them pages on the id, not on offsets. Families sign up, upload and
+  // check out while this page reads; a row written between two offset pages
+  // pushed the last row of one page onto the next, and its bytes, its price or
+  // its month's bar was counted twice.
   const ROW_CEILING = 25_000;
   const [familyCountResult, userCountResult, activeSubCountResult, docCountResult, familiesResult, profilesResult, subscriptionsResult, docsResult, activityResult] = await settleAll([
     supabase.from('families').select('id', { count: 'exact', head: true }),
     supabase.from('profiles').select('id', { count: 'exact', head: true }),
     supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active'),
     supabase.from('documents').select('id', { count: 'exact', head: true }),
-    readAllAsQuery<{ created_at: string }>((from, to) =>
-      supabase.from('families').select('created_at').order('id').range(from, to), { max: ROW_CEILING }),
-    readAllAsQuery<{ created_at: string }>((from, to) =>
-      supabase.from('profiles').select('created_at').order('id').range(from, to), { max: ROW_CEILING }),
-    readAllAsQuery<{ plan: string | null; status: string | null; created_at: string }>((from, to) =>
-      supabase.from('subscriptions').select('plan, status, created_at').order('id').range(from, to), { max: ROW_CEILING }),
-    readAllAsQuery<{ size_bytes: number | null }>((from, to) =>
-      supabase.from('documents').select('size_bytes').order('id').range(from, to), { max: ROW_CEILING }),
-    readAllAsQuery<{ created_at: string }>((from, to) =>
-      supabase.from('audit_logs').select('created_at').gte('created_at', fourteenDaysAgo).order('id').range(from, to), { max: ROW_CEILING }),
+    readAllByIdAsQuery<{ id: string; created_at: string }>((after, limit) => {
+      let query = supabase.from('families').select('id, created_at');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
+    readAllByIdAsQuery<{ id: string; created_at: string }>((after, limit) => {
+      let query = supabase.from('profiles').select('id, created_at');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
+    readAllByIdAsQuery<{ id: string; plan: string | null; status: string | null; created_at: string }>((after, limit) => {
+      let query = supabase.from('subscriptions').select('id, plan, status, created_at');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
+    readAllByIdAsQuery<{ id: string; size_bytes: number | null }>((after, limit) => {
+      let query = supabase.from('documents').select('id, size_bytes');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
+    readAllByIdAsQuery<{ id: string; created_at: string }>((after, limit) => {
+      let query = supabase.from('audit_logs').select('id, created_at').gte('created_at', fourteenDaysAgo);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
   ]);
 
   // Awaited here, before any early return, so the in-flight read always has an
@@ -109,6 +129,7 @@ export default async function AdminReportsPage() {
   const subscriptions = subscriptionsResult.data;
   const docs = docsResult.data;
   const activity = activityResult.data;
+  const reachedCeiling = (res: object) => 'truncated' in res && res.truncated === true;
   const readFailures = ([
     ['family count', familyCountResult],
     ['user count', userCountResult],
@@ -121,7 +142,19 @@ export default async function AdminReportsPage() {
     ['activity', activityResult],
   ] as const)
     .filter(([, res]) => res.error)
+    // A read past its ceiling did not fail: what it feeds says it is not shown
+    // (each tile and chart answers from its own read, below) and the ceiling
+    // banner names it. Any other failure is still named here.
+    .filter(([, res]) => !reachedCeiling(res))
     .map(([label, res]) => `${label}: ${describeReadError(res.error)}`);
+  const figuresNotShown = [
+    ...(reachedCeiling(familiesResult) ? [tr('adminReports.newFamilies')] : []),
+    ...(reachedCeiling(profilesResult) ? [tr('adminReports.newUsers')] : []),
+    ...(reachedCeiling(subscriptionsResult) ? [tr('adminReports.monthlyRevenue'), tr('adminReports.newMrr'), tr('adminReports.subscriptionsByPlan')] : []),
+    ...(reachedCeiling(docsResult) ? [tr('adminReports.storageUsed')] : []),
+    ...(reachedCeiling(activityResult) ? [tr('adminReports.activityVolume')] : []),
+  ];
+  if (figuresNotShown.length > 0) console.warn('[admin-reports] a summed read reached its ceiling; not shown:', figuresNotShown.join(', '));
   const readError = readFailures.length > 0;
   if (readError) {
     // Degraded, not fatal: every consumer below defaults an absent read to an
@@ -186,6 +219,7 @@ export default async function AdminReportsPage() {
   return (
     <div className="module-page space-y-5">
       <PartialReadBanner title={"This report is incomplete — some reads failed:"} failures={readFailures} hint={credentialHint(readFailures, describeConfiguredServiceKey())} />
+      <PartialReadBanner title={tr('adminCeiling.figuresNotShown', { n: ROW_CEILING.toLocaleString() })} failures={figuresNotShown} />
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('adminReports.reportsAmpAnalytics')}</h1>
         <p className="mt-1 text-sm text-muted">{tr('adminReports.growthRevenueAndEngagementAcrossEvery')}</p>
@@ -206,19 +240,22 @@ export default async function AdminReportsPage() {
       <StrategyMetricTiles metrics={strategyMetrics} />
 
       <div className="grid gap-4 lg:grid-cols-3">
+        {/* A chart answers from its own read, as each tile does: a read that
+            failed, or reached its ceiling, says so rather than drawing zeros
+            beside the banner that names it. */}
         <Card>
           <h2 className="mb-3 text-base font-semibold">{tr('adminReports.newFamilies')}</h2>
-          <Bars data={familyGrowth} max={maxFamily} />
+          {familiesResult.error ? <p className="text-sm text-muted">{unavailable}</p> : <Bars data={familyGrowth} max={maxFamily} />}
           <p className="mt-2 text-xs text-muted">{tr('adminReports.last6Months')}</p>
         </Card>
         <Card>
           <h2 className="mb-3 text-base font-semibold">{tr('adminReports.newUsers')}</h2>
-          <Bars data={userGrowth} max={maxUser} />
+          {profilesResult.error ? <p className="text-sm text-muted">{unavailable}</p> : <Bars data={userGrowth} max={maxUser} />}
           <p className="mt-2 text-xs text-muted">{tr('adminReports.last6Months')}</p>
         </Card>
         <Card>
           <h2 className="mb-3 text-base font-semibold">{tr('adminReports.newMrr')}</h2>
-          <Bars data={revenueTrend} max={maxRevenue} money />
+          {subscriptionsResult.error ? <p className="text-sm text-muted">{unavailable}</p> : <Bars data={revenueTrend} max={maxRevenue} money />}
           <p className="mt-2 text-xs text-muted">{tr('adminReports.revenueAddedLast6Months')}</p>
         </Card>
       </div>
@@ -226,7 +263,9 @@ export default async function AdminReportsPage() {
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>
           <h2 className="mb-3 text-base font-semibold">{tr('adminReports.subscriptionsByPlan')}</h2>
-          {subSegments.length === 0 ? (
+          {subscriptionsResult.error ? (
+            <p className="text-sm text-muted">{unavailable}</p>
+          ) : subSegments.length === 0 ? (
             <EmptyState icon={CreditCard} title={tr('adminReports.noActiveSubscriptions')} />
           ) : (
             <div className="flex items-center gap-4">
@@ -245,7 +284,7 @@ export default async function AdminReportsPage() {
         </Card>
         <Card className="lg:col-span-2">
           <h2 className="mb-3 text-base font-semibold">{tr('adminReports.activityVolume')}</h2>
-          <Bars data={activityByDay} max={maxActivity} />
+          {activityResult.error ? <p className="text-sm text-muted">{unavailable}</p> : <Bars data={activityByDay} max={maxActivity} />}
           <p className="mt-2 text-xs text-muted">{tr('adminReports.auditedActionsPerDayLast14')}</p>
         </Card>
       </div>

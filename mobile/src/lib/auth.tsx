@@ -3,7 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
 import { supabase, signOutThisDevice } from './supabase';
 import { resolveActiveFamily, type ActiveFamily } from './family';
-import { friendlyAuthError } from './auth-core';
+import { friendlyAuthError, type RestoreIssue } from './auth-core';
 import { connectAuthSession } from './auth-session';
 import { FamilySession } from './family-session';
 import type { FreshFamily } from './voice-session';
@@ -20,6 +20,8 @@ export type AuthState = {
    * ask a signed-in person to sign in again.
    */
   restoring: boolean;
+  /** Why, and for how many reads, while `restoring`: a network blip, or a saved sign-in this device cannot read. */
+  restoreIssue: RestoreIssue | null;
   session: Session | null;
   accessToken: string | null;
   family: ActiveFamily | null;
@@ -37,6 +39,7 @@ type FamilyState = { owner: string | null; family: ActiveFamily | null; loading:
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [restoreIssue, setRestoreIssue] = useState<RestoreIssue | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [familyState, setFamilyState] = useState<FamilyState>({ owner: null, family: null, loading: false, error: null });
 
@@ -47,7 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data } = supabase.auth.onAuthStateChange(listener);
         return () => data.subscription.unsubscribe();
       },
-      session: setSession, restoring: setRestoring, ready: setReady,
+      session: setSession, restoring: setRestoring, ready: setReady, issue: setRestoreIssue,
     });
     const foreground = AppState.addEventListener('change', (state) => {
       if (state === 'active') void connection.retry();
@@ -102,8 +105,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [freshFamily]);
 
   const value = useMemo<AuthState>(() => ({
-    ready, restoring, session, accessToken: session?.access_token ?? null, family, familyLoading, familyError, signIn, signOut, refreshFamily, freshFamily,
-  }), [ready, restoring, session, family, familyLoading, familyError, signIn, signOut, refreshFamily, freshFamily]);
+    ready, restoring, restoreIssue, session, accessToken: session?.access_token ?? null, family, familyLoading, familyError, signIn, signOut, refreshFamily, freshFamily,
+  }), [ready, restoring, restoreIssue, session, family, familyLoading, familyError, signIn, signOut, refreshFamily, freshFamily]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -75,6 +75,17 @@ const FRIENDLY: Record<number, string> = {
 };
 
 /**
+ * Codes that say more than their status does. `family_changed` (409) means the
+ * server resolved another active family than this phone did, which a retry
+ * cannot fix; the standing gate's 403s are not "finish setting up your family".
+ */
+const BY_CODE: Record<string, string> = {
+  not_configured: 'mobileAssistant.voiceNotConfigured', unavailable: 'mobileAssistant.familyUnavailable',
+  family_changed: 'mobileAssistant.familyMismatch', invalid_family: 'mobileAssistant.contextChanged',
+  trial_expired: 'mobileAssistant.trialEnded', account_closed: 'mobileAssistant.accountClosed',
+};
+
+/**
  * Read the transcribe response. Failure is never dressed up as an empty
  * transcript. Configuration and an unavailable family read have distinct
  * codes even though both use 503; an unknown 503 retains its own error.
@@ -88,9 +99,7 @@ export function parseTranscribeResponse(status: number, body: unknown, t: Mobile
   }
   const serverError = typeof obj.error === 'string' && obj.error.trim() ? obj.error.trim() : null;
   const code = typeof obj.code === 'string' ? obj.code : undefined;
-  const key = code === 'not_configured' ? 'mobileAssistant.voiceNotConfigured'
-    : code === 'unavailable' ? 'mobileAssistant.familyUnavailable'
-      : code === 'family_changed' || code === 'invalid_family' ? 'mobileAssistant.contextChanged' : FRIENDLY[status];
+  const key = (code ? BY_CODE[code] : undefined) ?? FRIENDLY[status];
   return {
     ok: false,
     error: key ? t(key) : serverError ?? t('mobileAssistant.transcribeFailed'),

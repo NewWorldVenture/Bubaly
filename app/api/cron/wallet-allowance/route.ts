@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { creditChildWallet } from '@/lib/wallet/server';
-import { rollForward } from '@/lib/wallet/allowance';
+import { allowanceOccurrenceKey, rollForward } from '@/lib/wallet/allowance';
 import { planLevel } from '@/lib/constants/plans';
 import { walletTierForPlanLevel, walletFeatureEnabled } from '@/lib/wallet/tiers';
 import { isMissingRelationError } from '@/lib/supabase/errors';
@@ -10,6 +10,7 @@ import type { Split } from '@/lib/wallet/ledger';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { readAll, readAllAsQuery } from '@/lib/supabase/read-all';
 import { readInChunks } from '@/lib/supabase/chunked-in';
+import { dayKeyInTz } from '@/lib/services/scope';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -25,12 +26,18 @@ export async function GET(req: NextRequest) {
   }
   try {
     const supabase = createServiceClient();
-    // Platform-wide, so this stays the UTC day deliberately: the alternative is
-    // resolving every rule's family zone to decide whether its day has arrived,
-    // and the cost of not doing so is bounded at one day early for families west
-    // of UTC. Recorded rather than left looking overlooked — a per-family run
-    // date is the fix if allowance timing ever needs to be exact to the day.
-    const today = new Date().toISOString().slice(0, 10);
+    // "Due today" is the FAMILY's today. `next_run_on` is written on the
+    // family's day (wallet/actions.ts nextRunDate of dayKeyInTz), and "Run due
+    // now" pays on it, but this run decided on the UTC day: at 07:00 UTC a
+    // Pacific family is still on the evening before, so a rule due on its
+    // Saturday was paid on Friday night and stamped last_run_on Saturday. The
+    // read takes every rule due on the latest calendar day anywhere (UTC+14),
+    // a superset, and each rule is then decided, claimed and stamped on its
+    // own family's day. With one 07:00 UTC tick a rule west of UTC-7 is paid
+    // late on its due day instead of early; paying at its local midnight
+    // would take a later schedule, which is the owner's (vercel.json).
+    const now = new Date();
+    const latestDay = new Date(now.getTime() + 14 * 3_600_000).toISOString().slice(0, 10);
 
     // `.limit(N)` is not a bound — PostgREST caps a response at db-max-rows
     // whatever the client asked for, so this quietly read 1,000. `max` is the
@@ -40,10 +47,10 @@ export async function GET(req: NextRequest) {
     // paid allowances, whatever its subscription row still says.
     const { rows: rules, error } = await readAll((from, to) => supabase
       .from('allowance_rules')
-      .select('id, family_id, child_wallet_id, amount_cents, cadence, split, next_run_on, last_run_on, created_by, family:families!inner(closed_at)')
+      .select('id, family_id, child_wallet_id, amount_cents, cadence, split, next_run_on, last_run_on, created_by, family:families!inner(closed_at, timezone)')
       .is('family.closed_at', null)
       .eq('is_active', true)
-      .lte('next_run_on', today)
+      .lte('next_run_on', latestDay)
       .order('id')
       .range(from, to), { max: 2000 });
     // If the wallet migration hasn't reached this database yet, there's simply
@@ -117,7 +124,14 @@ export async function GET(req: NextRequest) {
     let paid = 0;
     let skippedFree = 0;
     let failed = 0;
+    let due = 0;
     for (const rule of rules ?? []) {
+      // The family's own day: a rule not yet due there is not this run's.
+      const family = rule.family as { timezone?: string | null } | null;
+      const today = dayKeyInTz(now, family?.timezone || 'UTC');
+      if ((rule.next_run_on ?? today) > today) continue;
+      due++;
+
       // A rule with no author predates the column or was written by the service
       // role; those are the seed/migration path and stay payable. A rule that
       // names an author who is not an active manager of that family does not.
@@ -175,6 +189,17 @@ export async function GET(req: NextRequest) {
       }
       if (!claimed) continue; // another concurrent run already claimed this rule — do not double-pay
 
+      // Keyed per OCCURRENCE (lib/wallet/allowance.ts allowanceOccurrenceKey):
+      // the rule and the day it is paid for, so the ledger can say whether THIS
+      // payment landed, and a unique key can refuse paying it twice. The key
+      // rides in `metadata.occurrence`; `related_id` is a uuid column and keeps
+      // the rule's id — the `<rule>:<day>` text there was refused with 22P02,
+      // and the claim above had already moved the schedule on: nobody was paid.
+      // The day is the one being PAID (the `next_run_on` this run claimed), not
+      // `today`: a run that catches up several missed periods pays the first
+      // one it claimed, and a run-day key (this run's day was once UTC, while
+      // "Run due now" counts in the family's zone) named one payment twice.
+      const occurrence = allowanceOccurrenceKey(rule.id, rule.next_run_on ?? today);
       const res = await creditChildWallet(supabase, {
         familyId: rule.family_id,
         childWalletId: rule.child_wallet_id,
@@ -184,9 +209,50 @@ export async function GET(req: NextRequest) {
         createdBy: null,
         relatedType: 'allowance_rules',
         relatedId: rule.id,
+        occurrence,
         splitOverride: rule.split as Partial<Split> | null,
       });
       if (!res.ok) {
+        // The ledger already holds this occurrence: the mirrored 07:00 run, or
+        // a retry after a lost answer, got there first. Paid, not failed, and
+        // the claim stands — rolling it back is what paid an allowance twice.
+        if (res.duplicate) {
+          paid++;
+          continue;
+        }
+        if (res.insertFailed) {
+          // The insert answered an error, but the ledger may hold the credit
+          // anyway (the server committed, the connection dropped). Rolling the
+          // schedule back on that answer re-credited the child next run, and
+          // nothing refused the second payment. Ask the ledger first, under the
+          // occurrence key — the rule's uuid in related_id, the day in metadata.
+          const { data: landed, error: landedError } = await supabase
+            .from('wallet_transactions')
+            .select('id')
+            .eq('family_id', rule.family_id)
+            .eq('related_type', 'allowance_rules')
+            .eq('related_id', rule.id)
+            .eq('metadata->>occurrence', occurrence)
+            .limit(1);
+          if (landedError) {
+            // Unknown outcome, and no way to find out this run: the claim stays
+            // in place, so the rule is NOT due again until its next date. Paid
+            // or not, the child is not paid twice; a run that cannot tell says
+            // so and leaves the ledger to a person.
+            failed++;
+            console.error('Allowance credit outcome unknown and the ledger could not be read; leaving the schedule advanced.', {
+              ruleId: rule.id, familyId: rule.family_id, occurrence, error: landedError,
+            });
+            continue;
+          }
+          if (landed?.length) {
+            paid++;
+            console.error('Allowance credit answered an error after it landed; counted as paid.', {
+              ruleId: rule.id, familyId: rule.family_id, occurrence, error: res.error,
+            });
+            continue;
+          }
+        }
         // Rows deliberately not checked: on the service role zero rows means the
         // rule was deleted mid-run, and a deleted rule has no schedule to restore
         // and no run to skip. Audit C1-S9-63.
@@ -228,7 +294,7 @@ export async function GET(req: NextRequest) {
     // active manager is not paid, and says so rather than vanishing).
     const ok = failed === 0;
     return NextResponse.json(
-      { ok, due: (rules ?? []).length, paid, skippedFree, skippedUnauthored, failed },
+      { ok, due, paid, skippedFree, skippedUnauthored, failed },
       { status: ok ? 200 : 502 },
     );
   } catch (err) {

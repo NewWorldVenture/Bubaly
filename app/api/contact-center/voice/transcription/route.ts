@@ -2,6 +2,10 @@
 // into the unified inbox, runs the AI concierge (summary + intent), and escalates
 // genuine urgencies to the family's human fallback. Fires asynchronously after
 // the call ends, so it returns 204 with no TwiML.
+//
+// Anyone who knows the number can leave a voicemail, so the concierge (one model
+// call) is budgeted per caller and per family over a day, as the email and SMS
+// lanes' are — lib/contact-center/inbound-budget.ts (audit RV1-N1-sibling-sms-voice).
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -11,6 +15,8 @@ import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { getOrCreateChannelResult, routeInboundToPlanner } from '@/lib/contact-center/server';
 import { captureInboundWithUrgency, attemptUrgentDelivery } from '@/lib/contact-center/urgent-delivery';
 import { runConcierge } from '@/lib/contact-center/concierge';
+import { withheldConcierge } from '@/lib/contact-center/inbound-mail';
+import { conciergeBudgetAllows } from '@/lib/contact-center/inbound-budget';
 import { appBaseUrl } from '@/lib/server/app-url';
 
 export const runtime = 'nodejs';
@@ -45,7 +51,16 @@ export async function POST(req: NextRequest) {
   }
   const familyLabel = familyResult.data?.name || 'the family';
 
-  const result = await runConcierge({ channel: 'voice', from: from ?? undefined, text, familyLabel });
+  // Budgeted per caller and per family BEFORE the model is asked; over budget
+  // the voicemail is still filed, with the deterministic classification the
+  // concierge itself falls back to (lib/contact-center/inbound-budget.ts).
+  const withinConciergeBudget = await conciergeBudgetAllows('voice', familyId, from);
+  if (!withinConciergeBudget) {
+    console.warn('[contact-center] voicemail over the concierge budget: filed with the deterministic classification', { familyId });
+  }
+  const result = withinConciergeBudget
+    ? await runConcierge({ channel: 'voice', from: from ?? undefined, text, familyLabel })
+    : withheldConcierge(text, familyLabel);
   let filed: Awaited<ReturnType<typeof captureInboundWithUrgency>>;
   try { filed = await captureInboundWithUrgency(admin, {
     familyId, channel: 'voice', from: from ?? undefined, to: params.To || channelResult.data?.phone_number || undefined, subject: 'Voicemail', body: text,

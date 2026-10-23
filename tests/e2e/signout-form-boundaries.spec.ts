@@ -13,8 +13,9 @@ const sources = Object.fromEntries([
   'components/app/trial-paywall-gate.tsx', 'components/ui/modal.tsx', 'components/ui/button.tsx', 'components/ui/card.tsx',
   'lib/hooks/use-lock-body-scroll.ts', 'lib/auth/mfa.ts', 'lib/auth/redirect.ts', 'lib/constants/roles.ts', 'lib/security/app-lock.ts',
   'lib/a11y/use-dialog-behavior.ts', 'lib/supabase/settle.ts',
-  // trial-paywall-gate routes a refused close through reportRefusal, which
-  // sends an aal1 session to the step-up page; it reads its path from lib/auth/mfa.
+  // Both gates route a refused close or reopen through reportRefusal (it reads
+  // the step-up path from lib/auth/mfa) and ask for the code in place with
+  // components/auth/step-up-form, listed above: the step-up page is behind them.
   'lib/auth/step-up-client.ts',
   // trial-paywall-gate prints the yearly price through formatCents in the
   // reader's locale (AQ-01); PLAN_CURRENCY comes from the mocked lib/marketing/value.
@@ -64,6 +65,9 @@ async function fixture(page: Page, control: Control = 'plain', locale = 'en-US')
       '@/components/ui/toast': { useToast: () => ({ success() {}, error() {} }) },
       '@/components/app/app-context': { useApp: () => ({ role: 'child', members: [], userEmail: 'fixture@example.invalid' }) },
       '@/app/(app)/account/actions': { reopenAccountAction: async () => { throw new Error('Unrelated action'); }, closeAccountAction: async () => { throw new Error('Unrelated action'); } },
+      // account-closed-gate offers a member's other, open families through the
+      // family switcher's action; no family is offered in this fixture.
+      '@/app/(app)/actions': { setActiveFamilyAction: async () => { throw new Error('Unrelated action'); } },
       '@/lib/constants/plans': { BASIC_ANNUAL_CENTS: 11988, PLUS_ANNUAL_CENTS: 23988 },
       '@/lib/utils/format': { fmtDateTime: value => value },
       // Formatting is not what this fixture is about (TIME-003 moved these

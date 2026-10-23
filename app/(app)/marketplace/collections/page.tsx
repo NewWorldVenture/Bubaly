@@ -9,6 +9,7 @@ import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/li
 import { ErrorState } from '@/components/ui/states';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { readAll } from '@/lib/supabase/read-all';
+import { readCircleListingsById } from '@/lib/marketplace/circle-reads';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -57,13 +58,23 @@ export default async function MarketplaceCollectionsPage({ searchParams }: { sea
 
   if (open) {
     const ids = (items ?? []).filter((i) => i.collection_id === open.id).map((i) => i.listing_id);
-    const { data: listings, error: listingsError } = ids.length
+    const { data: own, error: ownError } = ids.length
       ? await sb.from('marketplace_listings').select('id, title, kind, status, price_cents, rent_period, photo_url').in('id', ids).limit(200)
       : { data: [], error: null };
+    // An item can be another family's listing (0462 admits any listing the
+    // family can see), which the table stopped returning when 0483 dropped the
+    // circle read; it comes from the circle view (lib/marketplace/circle-reads.ts).
+    const found = new Set((own ?? []).map((l) => l.id));
+    const { data: shared, error: sharedError } = ownError
+      ? { data: [], error: null }
+      : await readCircleListingsById<{ id: string; title: string; kind: string; status: string; price_cents: number; rent_period: string | null; photo_url: string | null }>(
+        sb, ids.filter((listingId) => !found.has(listingId)), 'id, title, kind, status, price_cents, rent_period, photo_url');
+    const listingsError = ownError ?? sharedError;
     if (listingsError) {
       console.error('[marketplace-collections] Collection listings read failed', listingsError);
       dataWarnings.push('Collection listings');
     }
+    const listings = [...(own ?? []), ...(shared ?? [])].slice(0, 200);
     return (
       <div>
         <Link href="/marketplace/collections" className="mb-3 inline-flex items-center gap-1 text-xs text-muted hover:text-brand-text">

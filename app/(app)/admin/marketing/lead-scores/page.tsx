@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Flame, Target, Users, Sparkles } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { CONTACT_BAND_META, type ContactBand, type ContactScoreFactor } from '@/lib/marketing/contact-score';
 import { RecomputeButton, LeadRow } from './lead-scores-client';
@@ -51,6 +52,16 @@ export default async function LeadScoresPage() {
   }
   if (scoresResult.error) return <ReadFailure />;
 
+  // Qualified, Hot and Warm were tallied from the list, the 100 top scores, so
+  // past them each band counted only its share of the top 100 (coverage sweep
+  // round 9, class B). Each band is a head:true count now.
+  const bandCounted = (band: ContactBand) => supabase.from('crm_lead_scores').select('contact_id', { count: 'exact', head: true }).eq('band', band);
+  const [qualifiedResult, hotResult, warmResult] = await settleAll([bandCounted('qualified'), bandCounted('hot'), bandCounted('warm')]);
+  if (qualifiedResult.error || hotResult.error || warmResult.error) {
+    console.error('[admin-lead-scores] band count read failed', qualifiedResult.error ?? hotResult.error ?? warmResult.error);
+    return <ReadFailure />;
+  }
+
   const scores = scoresResult.data ?? [];
   const totalScored = scoresResult.count ?? 0;
 
@@ -77,12 +88,11 @@ export default async function LeadScoresPage() {
       };
   });
 
-  const bandCount = (b: ContactBand) => rows.filter((r) => r.band === b).length;
   const stats = [
     { label: 'Scored contacts', value: totalScored, icon: Users, tint: 'text-violet-400 bg-violet-500/15' },
-    { label: 'Qualified', value: bandCount('qualified'), icon: Target, tint: 'text-emerald-400 bg-emerald-500/15' },
-    { label: 'Hot', value: bandCount('hot'), icon: Flame, tint: 'text-orange-400 bg-orange-500/15' },
-    { label: 'Warm', value: bandCount('warm'), icon: Sparkles, tint: 'text-amber-400 bg-amber-500/15' },
+    { label: 'Qualified', value: qualifiedResult.count ?? 0, icon: Target, tint: 'text-emerald-400 bg-emerald-500/15' },
+    { label: 'Hot', value: hotResult.count ?? 0, icon: Flame, tint: 'text-orange-400 bg-orange-500/15' },
+    { label: 'Warm', value: warmResult.count ?? 0, icon: Sparkles, tint: 'text-amber-400 bg-amber-500/15' },
   ];
 
   return (
@@ -108,6 +118,10 @@ export default async function LeadScoresPage() {
           </Card>
         ))}
       </div>
+
+      {totalScored > rows.length && (
+        <p className="text-xs text-muted">{t('adminCeiling.listShowsPart', { shown: rows.length.toLocaleString(), total: totalScored.toLocaleString() })}</p>
+      )}
 
       <Card className="overflow-hidden p-0">
         {rows.length === 0 ? (

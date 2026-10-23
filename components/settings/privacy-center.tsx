@@ -182,6 +182,7 @@ export function PrivacyCenter() {
         <div className="mt-5 rounded-2xl border border-border bg-surface/40 p-4">
           <h3 className="text-sm font-semibold">{t('privacyCenter.exportTitle')}</h3>
           <p className="mt-1 text-xs text-muted">{t('privacyCenter.exportHelp')}</p>
+          <p className="mt-1 text-xs text-muted">{t('privacyCenter.exportNotIncluded')}</p>
           {exportError && (
             <div className="mt-3"><RetryNotice message={exportError} onRetry={downloadExport} /></div>
           )}

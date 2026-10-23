@@ -580,7 +580,10 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
       setSaving(false);
       if (!res) { toastError(t('errors.thatChangeWasNotSaved')); return; }
       if (!res.ok) { toastError(res.error); return; }
-      success(t('familyModule.memberUpdated'));
+      // The role change stands, but an invite they sent at a role they may no
+      // longer give could not be revoked: said, as a removal says it.
+      if (res.invitesRevoked === false) toastError(t('familyModule.roleChangedButInviteStillOpen'));
+      else success(t('familyModule.memberUpdated'));
       onSaved();
       return;
     }

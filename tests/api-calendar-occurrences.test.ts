@@ -3,6 +3,10 @@ import { NextRequest } from 'next/server';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 const context = vi.hoisted(() => ({ read: vi.fn() }));
 vi.mock('@/lib/supabase/bearer', async original => ({ ...await original<typeof import('@/lib/supabase/bearer')>(), getBearerUserContext: context.read }));
+// The account-standing gate (a closed or trial-ended family is refused) is
+// proved with the real standing read in tests/the-phone-calendar-refuses-a-locked-family.test.ts;
+// the family here is open, so the gate is answered rather than seeded.
+vi.mock('@/lib/server/route-feature-gate', () => ({ refuseIfLocked: async () => null }));
 import { GET } from '@/app/api/calendar/occurrences/route';
 let db: ReturnType<typeof createInMemorySupabase>;
 const row = (id: string, starts_at: string, extra = {}) => ({ id, family_id: 'family', title: id, starts_at, ends_at: null, all_day: false, recurrence: 'none', recurrence_until: null, location: null, category: 'family', ...extra });

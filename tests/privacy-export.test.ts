@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { NextRequest } from 'next/server';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 import type { UserContext } from '@/lib/supabase/auth';
 import type { ServiceScope } from '@/lib/services/types';
@@ -21,7 +22,13 @@ vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.createServer }));
 vi.mock('@/lib/trust/ledger', () => ({ ledgerWriter: mocks.ledgerWriter }));
 
 import { EXPORT_SECTIONS, buildFamilyExport, exportFilename, sectionsForRole, serializeExport } from '@/lib/privacy/export';
-import { GET } from '@/app/api/privacy/export/route';
+import { GET as route } from '@/app/api/privacy/export/route';
+
+// The Privacy Center's own fetch, as the browser marks it. A navigation or
+// another site's request is refused first (tests/an-export-is-not-a-cross-site-navigation.test.ts).
+const GET = () => route(new NextRequest('https://app.example.invalid/api/privacy/export', {
+  headers: { 'sec-fetch-site': 'same-origin', 'sec-fetch-mode': 'cors', 'sec-fetch-dest': 'empty', accept: 'application/json' },
+}));
 
 const FAMILY = 'fam-1';
 const FAMILY_TZ = 'America/New_York';

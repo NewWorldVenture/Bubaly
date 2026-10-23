@@ -12,14 +12,17 @@ import { PLANS } from '@/lib/constants/plans';
 import { fmtMoney } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
 import { getFormat } from '@/lib/utils/format-server';
-import { ADMIN_ZONE } from '@/lib/admin/clock';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { ADMIN_ZONE, lastUtcDays } from '@/lib/admin/clock';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
   return { title: t('system.systemOverview'), robots: { index: false } };
 }
 export const dynamic = 'force-dynamic';
+
+/** Rows a summed read may page through before it is reported as a prefix (one round trip per 1,000). */
+const SUM_ROW_CEILING = 25_000;
 
 function fmtBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -49,11 +52,17 @@ export default async function AdminSystemPage() {
   // in the host's locale, and an operator could not tell which.
   const { fmtDate } = await getFormat(ADMIN_ZONE);
   const supabase = createServiceClient();
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+  // The growth chart's first day. Every account older than it is one number,
+  // counted; only the accounts inside the chart are read row by row.
+  const chartStart = new Date(lastUtcDays(30)[0].start).toISOString();
 
   const [
     healthResults,
     userCountResult,
     familyCountResult,
+    newUsersResult,
+    chartBaseResult,
     profilesResult,
     subscriptionsResult,
     documentsResult,
@@ -61,20 +70,63 @@ export default async function AdminSystemPage() {
     Promise.all([checkDatabase(supabase), checkStorage(supabase), checkAuth(supabase), checkStripe(), Promise.resolve(checkEmail())]),
     settle(supabase.from('profiles').select('id', { count: 'exact', head: true })),
     settle(supabase.from('families').select('id', { count: 'exact', head: true })),
-    settle(readAllAsQuery((from, to) => supabase.from('profiles').select('created_at').order('created_at', { ascending: false }).order('id').range(from, to), { max: 2000 })),
-    settle(supabase.from('subscriptions').select('plan, status')),
-    settle(supabase.from('documents').select('size_bytes')),
+    // New users and the chart were taken from the 2,000 newest profiles, read
+    // on offsets while people sign up. Past 2,000 accounts that read reached
+    // its ceiling, so the banner never went away and both read zero; below
+    // it, a sign-up between two pages counted someone twice.
+    settle(supabase.from('profiles').select('id', { count: 'exact', head: true }).gte('created_at', thirtyDaysAgo)),
+    settle(supabase.from('profiles').select('id', { count: 'exact', head: true }).lt('created_at', chartStart)),
+    settle(readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('profiles').select('id, created_at').gte('created_at', chartStart);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING })),
+    // Summed below, so read to a REAL ceiling: an unbounded select is answered
+    // with at most `db-max-rows` (1,000) and no error, and these two tiles
+    // summed that prefix as the platform's revenue and storage while the
+    // profiles read beside them paged. Reaching the ceiling is an error, which
+    // joins readFailures and names itself in the banner instead of rendering
+    // a smaller platform than exists. Both page on the id, not on offsets:
+    // a checkout or an upload landing between two pages shifted every later
+    // offset by one, and one row's price or bytes was added twice.
+    settle(readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('subscriptions').select('id, plan, status');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING })),
+    settle(readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('documents').select('id, size_bytes');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING })),
   ]);
 
+  // A summed read that reached its ceiling did not fail: its figure says it is
+  // not shown and the ceiling banner names it, rather than $0 or 0 B beside the
+  // failure banner. Any other failure is still named in that banner.
+  const reachedCeiling = (res: object) => 'truncated' in res && res.truncated === true;
+  const chartCeiling = reachedCeiling(profilesResult);
+  const revenueCeiling = reachedCeiling(subscriptionsResult);
+  const storageCeiling = reachedCeiling(documentsResult);
   const readFailures = ([
     ['user count', userCountResult],
     ['family count', familyCountResult],
+    ['new user count', newUsersResult],
+    ['user count before the chart', chartBaseResult],
     ['profiles', profilesResult],
     ['subscriptions', subscriptionsResult],
     ['documents', documentsResult],
   ] as const)
     .filter(([, res]) => res.error)
+    .filter(([, res]) => !reachedCeiling(res))
     .map(([label, res]) => `${label}: ${describeReadError(res.error)}`);
+  const unavailable = t('strategyMetrics.unavailable');
+  const figuresNotShown = [
+    ...(revenueCeiling ? [t('adminSystem.monthlyRevenue')] : []),
+    ...(storageCeiling ? [t('adminSystem.documentStorageUsedAcrossEveryFamily')] : []),
+    ...(chartCeiling ? [t('adminSystem.userGrowth')] : []),
+  ];
+  if (figuresNotShown.length > 0) console.warn('[admin-system] a summed read reached its ceiling; not shown:', figuresNotShown.join(', '));
   const readError = readFailures.length > 0;
   if (readError) {
     // Degraded, not fatal: every consumer below defaults an absent read to an
@@ -96,7 +148,12 @@ export default async function AdminSystemPage() {
     .reduce((sum, s) => sum + (planById(s.plan)?.priceMonthly ?? 0), 0);
 
   const storageBytes = (documents ?? []).reduce((sum, d) => sum + (d.size_bytes ?? 0), 0);
-  const newUsers30d = (profiles ?? []).filter((p) => new Date(p.created_at) >= new Date(Date.now() - 30 * 86400000)).length;
+  const newUsers30d = newUsersResult.count ?? 0;
+  // A read that failed is named in the banner, and its own figure says so: it
+  // used to default to 0, $0.00 or 0 B beside the banner, each looking like
+  // the real thing. A read past its ceiling has an error too, so one test
+  // covers both.
+  const failed = (res: { error: unknown }) => !!res.error;
 
   const allHealthy = healthResults.every((h) => h.ok);
   const environment = process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? 'development';
@@ -105,6 +162,7 @@ export default async function AdminSystemPage() {
   return (
     <div className="module-page">
       <PartialReadBanner title={"System overview is incomplete — some reads failed:"} failures={readFailures} hint={credentialHint(readFailures, describeConfiguredServiceKey())} />
+      <PartialReadBanner title={t('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })} failures={figuresNotShown} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminSystem.systemOverview')}</h1>
@@ -115,9 +173,9 @@ export default async function AdminSystemPage() {
 
       <div className="grid-stats">
         <StatCard icon={allHealthy ? CheckCircle2 : XCircle} label={t('adminSystem.overallStatus')} value={allHealthy ? 'All systems go' : 'Degraded'} tone={allHealthy ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'} />
-        <StatCard icon={Users} label={t('adminSystem.totalUsers')} value={(userCount ?? 0).toLocaleString()} tone="bg-brand/10 text-brand-text" />
-        <StatCard icon={Home} label={t('adminSystem.activeFamilies')} value={(familyCount ?? 0).toLocaleString()} tone="bg-accent/10 text-accent" />
-        <StatCard icon={DollarSign} label={t('adminSystem.monthlyRevenue')} value={fmtMoney(mrr)} tone="bg-success/10 text-success" />
+        <StatCard icon={Users} label={t('adminSystem.totalUsers')} value={failed(userCountResult) ? unavailable : (userCount ?? 0).toLocaleString()} tone="bg-brand/10 text-brand-text" />
+        <StatCard icon={Home} label={t('adminSystem.activeFamilies')} value={failed(familyCountResult) ? unavailable : (familyCount ?? 0).toLocaleString()} tone="bg-accent/10 text-accent" />
+        <StatCard icon={DollarSign} label={t('adminSystem.monthlyRevenue')} value={failed(subscriptionsResult) ? unavailable : fmtMoney(mrr)} tone="bg-success/10 text-success" />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -140,14 +198,14 @@ export default async function AdminSystemPage() {
           <div className="flex items-center gap-3">
             <FolderLock className="h-5 w-5 text-brand-text" />
             <div>
-              <p className="text-xl font-bold leading-none">{fmtBytes(storageBytes)}</p>
+              <p className="text-xl font-bold leading-none">{failed(documentsResult) ? unavailable : fmtBytes(storageBytes)}</p>
               <p className="text-xs text-muted">{t('adminSystem.documentStorageUsedAcrossEveryFamily')}</p>
             </div>
           </div>
           <div className="mt-4 flex items-center gap-3">
             <Users className="h-5 w-5 text-accent" />
             <div>
-              <p className="text-xl font-bold leading-none">{newUsers30d.toLocaleString()}</p>
+              <p className="text-xl font-bold leading-none">{failed(newUsersResult) ? unavailable : newUsers30d.toLocaleString()}</p>
               <p className="text-xs text-muted">{t('adminSystem.newUsersInTheLast30')}</p>
             </div>
           </div>
@@ -156,7 +214,9 @@ export default async function AdminSystemPage() {
 
       <Card>
         <h2 className="mb-4 text-base font-semibold">{t('adminSystem.userGrowth')} <span className="text-muted">{t('adminSystem.last30DaysCumulative')}</span></h2>
-        <GrowthChart timestamps={(profiles ?? []).map((p) => p.created_at)} />
+        {failed(profilesResult) || failed(chartBaseResult)
+          ? <p className="text-sm text-muted">{unavailable}</p>
+          : <GrowthChart timestamps={(profiles ?? []).map((p) => p.created_at)} base={chartBaseResult.count ?? 0} />}
       </Card>
 
       <Card>

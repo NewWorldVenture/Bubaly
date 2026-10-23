@@ -143,17 +143,14 @@ const HOST_TODAY_KEY = /new Date\(\)\s*\.toISOString\(\)\s*\.\s*slice\(\s*0\s*,\
 
 // Still on the list, and NOT all for the same reason — which the `setHours`
 // list above gets to claim ("never a site that is fine as it is") and this one
-// cannot. Reading the six defects out of it and leaving three behind without
-// saying why would leave the next person to work this list "fixing" an
-// allowance cron and changing when money is paid.
+// cannot. Reading the six defects out of it and leaving the rest behind without
+// saying why would leave the next person to work this list unsure which are
+// decisions. The allowance cron was the third: it decided "due today" on the
+// UTC day, paying Pacific families on the eve of the due day, and now decides
+// on each rule's family day (app/api/cron/wallet-allowance/route.ts), so it is
+// off the list.
 //
 // EXAMINED AND DELIBERATE — do not convert without a decision to go with it:
-//
-//   app/api/cron/wallet-allowance/route.ts
-//     Platform-wide. Its own comment states the trade: resolving every rule's
-//     family zone to decide whether its day has arrived, against a cost bounded
-//     at one day early for families west of UTC. A per-family run date is the
-//     fix if allowance timing ever has to be exact.
 //
 //   app/api/admin/benchmarks/export/route.ts
 //     A day stamp on a site-admin export. There is no family in scope, so the
@@ -171,7 +168,6 @@ const HOST_TODAY_KEY = /new Date\(\)\s*\.toISOString\(\)\s*\.\s*slice\(\s*0\s*,\
 // moment for the rest of TODAY" and wrote tomorrow's row.
 const TRACKED_TODAY_KEY = new Set([
   'app/api/admin/benchmarks/export/route.ts',
-  'app/api/cron/wallet-allowance/route.ts',
   'lib/home/asset-detail.ts',
 ]);
 

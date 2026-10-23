@@ -27,7 +27,11 @@ vi.mock('@/lib/supabase/auth', () => ({
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => io.db }));
 vi.mock('@/lib/i18n/server', async () => {
   const { SOURCE_MESSAGES: messages, translate: tr } = await import('@/lib/i18n/messages');
-  return { getTranslations: async () => (key: string, params?: Record<string, string | number>) => tr(messages, key, params) };
+  return {
+    getTranslations: async () => (key: string, params?: Record<string, string | number>) => tr(messages, key, params),
+    // The page formats its rail in the reader's locale.
+    getLocaleContext: async () => ({ locale: { code: 'en-US' }, source: 'default', messages }),
+  };
 });
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: () => {}, error: () => {}, info: () => {} }) }));
 vi.mock('next/link', () => ({ default: ({ href, children, ...props }: { href: string; children: ReactNode }) => createElement('a', { ...props, href }, children) }));

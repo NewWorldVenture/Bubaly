@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Send, Plus } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settle } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -18,21 +19,36 @@ const STATUS_TONE: Record<string, 'neutral' | 'brand' | 'success' | 'warning'> =
 export default async function CampaignsPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
+  // "N campaigns" counted the list, an unbounded read PostgREST answers with at
+  // most db-max-rows and no error (coverage sweep round 9, class B). It is a
+  // head:true count now, started before the list is awaited, and the list says
+  // when it holds part of the campaigns.
+  const countRead = settle(supabase.from('marketing_campaigns').select('id', { count: 'exact', head: true }).is('deleted_at', null));
   const { data: campaigns, error: campaignsError } = await supabase.from('marketing_campaigns').select('*').is('deleted_at', null).order('created_at', { ascending: false });
   if (campaignsError) {
     console.error('[admin-marketing-campaigns] campaign read failed', campaignsError);
     return <AdminCampaignsReadError />;
   }
+  const countResult = await countRead;
+  if (countResult.error) {
+    console.error('[admin-marketing-campaigns] campaign count read failed', countResult.error);
+    return <AdminCampaignsReadError />;
+  }
+  const total = countResult.count ?? 0;
+  const listed = (campaigns ?? []).length;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted">{(campaigns ?? []).length} campaign{(campaigns ?? []).length === 1 ? '' : 's'}</p>
+        <p className="text-sm text-muted">{total.toLocaleString()} campaign{total === 1 ? '' : 's'}</p>
         <Link href="/admin/marketing/campaigns/new" className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90">
           <Plus className="h-4 w-4" /> {t('adminMarketingCampaigns.newCampaign')}
         </Link>
       </div>
 
+      {total > listed && (
+        <p className="text-xs text-muted">{t('adminCeiling.listShowsTheNewest', { shown: listed.toLocaleString(), total: total.toLocaleString() })}</p>
+      )}
       {(campaigns ?? []).length === 0 ? (
         <EmptyState icon={Send} title={t('adminMarketingCampaigns.noCampaignsYet')} description={t('campaigns.createYourFirstMarketingCampaign')} />
       ) : (
