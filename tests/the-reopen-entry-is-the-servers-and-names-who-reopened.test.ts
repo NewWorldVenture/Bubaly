@@ -78,6 +78,12 @@ describe('the account reopen is the server\'s entry, and the trail names who reo
       family_id: FAMILY, actor_id: null, action: 'update', resource: 'family', resource_id: FAMILY,
       metadata: { change: 'reopened', closed_at: CLOSED_AT, reopened_by: PARENT },
     })]);
+    // Round 7: and in the server-only ledger, the record the drain believes and
+    // the one that lets the activity page name the parent.
+    expect(state.db.table('social_audit_logs')).toEqual([expect.objectContaining({
+      family_id: FAMILY, actor_id: null, action: 'account.reopened', entity_type: 'family', entity_id: FAMILY,
+      summary: 'Account reopened', metadata: { closed_at: CLOSED_AT, reopened_by: PARENT },
+    })]);
   });
 
   it('/family/activity reads that entry as the parent\'s, not "Someone" and not "undefined"', async () => {

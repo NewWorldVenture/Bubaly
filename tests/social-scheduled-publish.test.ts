@@ -549,9 +549,15 @@ describe('scheduled X publishing through the installed SDK and private authority
       family_id: state.familyId, actor_id: null, action: 'update', resource: 'family', resource_id: state.familyId,
       metadata: { change: 'reopened', closed_at: closedAt, reopened_by: USER }, created_at: new Date(Date.parse(DUE) + 3 * 3_600_000).toISOString(),
     })]);
+    // Round 7: and in the server-only ledger, which is the record the drain believes.
+    expect(state.db.table('social_audit_logs')).toEqual([expect.objectContaining({
+      family_id: state.familyId, actor_id: null, action: 'account.reopened', entity_type: 'family', entity_id: state.familyId,
+      summary: 'Account reopened', metadata: { closed_at: closedAt, reopened_by: USER }, created_at: new Date(Date.parse(DUE) + 3 * 3_600_000).toISOString(),
+    })]);
     // A reopen of a family that is open already (a stale gate in another tab) reopens nothing and records nothing.
     expect(await reopenAccountAction()).toEqual({ ok: true });
     expect(state.db.table('audit_logs')).toHaveLength(1);
+    expect(state.db.table('social_audit_logs')).toHaveLength(1);
     // And a rename after the reopen does not move it: the post is still held for the reopen it waited through.
     await renameTheFamily();
     state.requestAuth = false;
@@ -577,6 +583,11 @@ describe('scheduled X publishing through the installed SDK and private authority
     ['a child, half a minute after the post came due', CHILD, new Date(Date.parse(DUE) + 30_000).toISOString()],
     ['the parent, in their own session, half a minute after the post came due', USER, new Date(Date.parse(DUE) + 30_000).toISOString()],
     ['no one, dated 2100, which no reopen writes (the database dates the server\'s entry)', null, '2100-01-01T00:00:00.000Z'],
+    // household-roles N6-R1-REOPEN-RESIDUAL-HAS-A-CODE-ONLY-LEDGER, round 7: a
+    // member's own entry loses its actor when their login is deleted (actor_id
+    // is `on delete set null`, 0002), and is then the server's entry to the
+    // letter. The drain now reads the server-only ledger instead.
+    ['a member whose login was since deleted, half a minute after the post came due', null, new Date(Date.parse(DUE) + 30_000).toISOString()],
   ])('a reopen entry written by %s does not hold the post of a family that never closed', async (_who, actorId, createdAt) => {
     await schedule();
     state.db.seed('family_members', [{ id: randomUUID(), family_id: state.familyId, user_id: CHILD, role: 'child', is_active: true }]);
@@ -608,13 +619,39 @@ describe('scheduled X publishing through the installed SDK and private authority
     vi.setSystemTime(new Date(Date.parse(DUE) + 3 * 3_600_000));
     expect(await reopenAccountAction()).toEqual({ ok: true });
     state.requestAuth = false;
-    state.fault = { table: 'audit_logs', method: 'GET', at: 1 };
+    state.fault = { table: 'social_audit_logs', method: 'GET', at: 1 };
     expect(await runScheduledPublishDrain()).toMatchObject({ attempted: 0, published: 0, failed: 1, held: 0 });
     expect(provider).not.toHaveBeenCalled();
     expect(receipt().outputs).toMatchObject({ phase: 'queued', errorKey: 'socialSchedule.storageUnavailable' });
     expect(await runScheduledPublishDrain()).toMatchObject({ attempted: 0, held: 1 });
     expect(receipt().outputs).toMatchObject({ phase: 'failed', errorKey: 'socialSchedule.cameDueWhileClosed' });
     expect(provider).not.toHaveBeenCalled();
+  });
+  it('a real reopen holds the post that came due while it was closed, and the cron answers ok with it held', async () => {
+    await schedule();
+    signedInAsAParent();
+    expect(await closeAccountAction()).toEqual({ ok: true });
+    vi.setSystemTime(new Date(Date.parse(DUE) + 3 * 3_600_000));
+    expect(await reopenAccountAction()).toEqual({ ok: true });
+    state.requestAuth = false;
+    const response = await cron();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, attempted: 0, published: 0, failed: 0, held: 1 });
+    expect(receipt().outputs).toMatchObject({ phase: 'failed', errorKey: 'socialSchedule.cameDueWhileClosed' });
+    expect(provider).not.toHaveBeenCalled();
+  });
+  it('a reopen whose ledger record was lost is not stood in for by its trail entry: the post is sent late, as before round 3', async () => {
+    await schedule();
+    signedInAsAParent();
+    expect(await closeAccountAction()).toEqual({ ok: true });
+    vi.setSystemTime(new Date(Date.parse(DUE) + 3 * 3_600_000));
+    state.fault = { table: 'social_audit_logs', method: 'POST', at: 1 };
+    expect(await reopenAccountAction()).toEqual({ ok: true });
+    expect(state.db.table('social_audit_logs')).toEqual([]);
+    expect(state.db.table('audit_logs')).toEqual([expect.objectContaining({ actor_id: null, action: 'update', resource: 'family' })]);
+    state.requestAuth = false;
+    expect(await runScheduledPublishDrain()).toMatchObject({ attempted: 1, published: 1, failed: 0, held: 0 });
+    expect(provider).toHaveBeenCalledOnce();
   });
   it.each([400, 500])('reports an unsuccessful provider HTTP%s attempt through the actual cron', async status => {
     await schedule(); vi.setSystemTime(new Date(DUE)); provider.mockResolvedValueOnce(Response.json({}, { status }));

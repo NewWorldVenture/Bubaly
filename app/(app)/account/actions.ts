@@ -164,7 +164,7 @@ export async function reopenAccountAction(): Promise<Result> {
     .eq('id', familyId).select('id');
   if (error) return actionFailure('reopen the account', t('account.couldNotReopenTheAccount'), error);
   if (wroteNoRows(reopened)) return { ok: false, error: t('account.couldNotReopenTheAccount') };
-  // When it reopened, in the family's audit trail: the social drain holds a
+  // When it reopened, in the family's audit trail and the server's ledger: the social drain holds a
   // post that came due before it rather than send it late, and no other trace
   // says when (lib/family/account-reopened.ts). A family that was open already
   // reopened nothing, and records nothing.

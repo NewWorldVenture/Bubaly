@@ -323,8 +323,8 @@ export async function runScheduledPublishDrain(options: { now?: Date; signal?: A
         // every such post was sent, however late. A post that became sendable
         // before the family's account was REOPENED, and is still unsent,
         // waited through the closure; one due after the reopen is sent at its
-        // time. The reopen is the audit entry the server writes for it
-        // (lib/family/account-reopened.ts), not families.updated_at: the
+        // time. The reopen is the record the server writes for it in a ledger
+        // no member writes (lib/family/account-reopened.ts), not families.updated_at: the
         // database stamps that on every change to the row, so an open family
         // that renamed itself after a post came due, before the drain reached
         // it, had the post held (N3-R1-CLOSED-FALSE-HOLD). The stamp is still

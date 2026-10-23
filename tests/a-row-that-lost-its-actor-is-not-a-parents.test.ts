@@ -11,8 +11,9 @@
 // "Dana Sent $200 to an outside account".
 //
 // The key is now read only on the server's reopen entry, by its exact shape
-// (no actor, update, family, change 'reopened'), and that line says only
-// "updated family". Every other row with no actor reads "Someone". Rendered
+// (no actor, update, family, change 'reopened') and, since round 7, beside the
+// server's ledger record of that reopen; that line says only "updated
+// family". Every other row with no actor reads "Someone". Rendered
 // through the REAL /family/activity page over the in-memory database; the
 // deleted login is the row's actor_id going null, as the foreign key does it.
 import { readFileSync } from 'node:fs';
@@ -99,13 +100,22 @@ describe('a row that lost its actor is not a parent\'s', () => {
     expect(line).not.toContain('Dana');
   });
 
-  it('the reopen\'s exact shape still names the parent, but only in the server\'s words, never a title planted in it', async () => {
-    childRowWhoseLoginWasDeleted({ action: 'update', resource: 'family', metadata: { change: 'reopened', reopened_by: PARENT, title: FRAMED } });
+  // Round 7 (N6-R1-REOPEN-RESIDUAL-HAS-A-CODE-ONLY-LEDGER): the exact shape is
+  // not enough either, since a member can write it and it is the server's to
+  // the letter once their login goes. The parent is named only beside the
+  // server's ledger record of the same reopen, and this family never reopened.
+  it.each([
+    ['with a planted title', { change: 'reopened', reopened_by: PARENT, title: FRAMED }],
+    ['to the letter, the close it names and all', { change: 'reopened', reopened_by: PARENT, closed_at: CLOSED_AT }],
+  ])('the reopen\'s exact shape %s reads "Someone", in the server\'s words, not the parent', async (_label, metadata) => {
+    childRowWhoseLoginWasDeleted({ action: 'update', resource: 'family', metadata });
 
     const html = renderToStaticMarkup(await ActivityPage());
 
     expect(html).not.toContain(FRAMED);
-    expect(lineOf(html, 'updated family')).toContain('Dana');
+    const line = lineOf(html, 'updated family');
+    expect(line).toContain('Someone');
+    expect(line).not.toContain('Dana');
   });
 
   it('control: the server\'s own reopen entry, written by the real reopenAccountAction, reads as the parent\'s', async () => {
