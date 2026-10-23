@@ -7,12 +7,13 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { createServer } from '@/lib/supabase/server';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { readFamilyOrders } from '@/lib/marketplace/schema-compat';
 import { cancelOrderPickup } from '@/lib/marketplace/pickup-server';
 import { ORDER_TRANSITIONS, SELLER_ONLY_ORDER_STEPS } from '@/lib/marketplace/order-lifecycle';
+import { readSellerStanding } from '@/lib/marketplace/seller-standing';
 
 type Failure = { ok: false; error: string };
 type Result = { ok: true } | Failure;
@@ -292,6 +293,12 @@ export async function makeOfferAction(listingId: string): Promise<Result> {
   if (listing.status !== 'available' && listing.status !== 'pending') {
     return { ok: false, error: t('actions.thisListingIsNoLonger') };
   }
+  // Not with a family that closed its account: it cannot see the offer, and
+  // every delivery cron skips its notices (lib/marketplace/seller-standing.ts).
+  // The read above already proved the listing is the caller's to see.
+  const seller = await readSellerStanding(createServiceClient(), listingId);
+  if (seller === 'unknown') return { ok: false, error: t('marketplace.couldNotSendTheOffer') };
+  if (seller === 'closed') return { ok: false, error: t('actions.thisFamilyHasClosedItsAccount') };
 
   const { data: existing, error: offerError } = await supabase
     .from('marketplace_offers')

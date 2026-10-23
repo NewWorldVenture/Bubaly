@@ -15,7 +15,15 @@ const mocks = vi.hoisted(() => ({
   secretKey: 'sk_test_x' as string | null,
 }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserContext }));
-vi.mock('@/lib/supabase/server', () => ({ createServiceClient: mocks.createServiceClient }));
+vi.mock('@/lib/supabase/server', () => ({
+  createServiceClient: mocks.createServiceClient,
+  // The assurance read behind the step-up gate: a family that never enrolled an
+  // authenticator (tests/closing-the-account-needs-the-code.test.ts has the rest).
+  createServer: async () => ({ auth: {
+    getSession: async () => ({ data: { session: { access_token: 'synthetic-assurance-token' } }, error: null }),
+    mfa: { getAuthenticatorAssuranceLevel: async () => ({ data: { currentLevel: 'aal1', nextLevel: 'aal1' }, error: null }) },
+  } }),
+}));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/stripe', () => ({ stripeFromKey: () => ({ subscriptions: { update: mocks.update, retrieve: mocks.retrieve } }) }));

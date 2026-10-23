@@ -72,6 +72,11 @@ async function authenticate(req: NextRequest): Promise<Authed | NextResponse> {
     if (bearer.reason === 'needs_family') {
       return NextResponse.json({ error: tr('ai.finishSettingUpYourFamily'), code: 'needs_family' }, { status: 403 });
     }
+    // The bearer context refuses a closed family itself (lib/supabase/bearer.ts),
+    // with the code and shape assertAIAccess answers for the same account.
+    if (bearer.reason === 'account_closed') {
+      return NextResponse.json({ error: tr('accountStanding.accountClosed'), code: 'account_closed', needLevel: 1 }, { status: 403 });
+    }
     return NextResponse.json({ error: tr('ai.accountContextIsTemporarilyUnavailable'), code: 'unavailable' }, { status: 503 });
   }
 

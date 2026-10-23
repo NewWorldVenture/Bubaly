@@ -111,7 +111,7 @@ export const calendarTools: ToolDefinition[] = [
     summarize: (_input, output) => `Added ${output.title} at ${output.when}`,
     resource: (output) => ({ table: 'calendar_events', id: output.id }),
     execute: async (scope, input) => {
-      const assignee = await resolveAssigneeId(scope, input);
+      const assignee = await resolveAssigneeId(scope, input, { requireActive: true });
       if (!assignee.ok) return assignee;
 
       const res = await createEvent(scope, {
@@ -187,7 +187,7 @@ export const calendarTools: ToolDefinition[] = [
     consequences: (input) => [`Changes the calendar event ${input.event_id} for everyone in the family.`],
     resource: (output) => ({ table: 'calendar_events', id: output.id }),
     execute: async (scope, input) => {
-      const assignee = await resolveAssigneeId(scope, input);
+      const assignee = await resolveAssigneeId(scope, input, { requireActive: true });
       if (!assignee.ok) return assignee;
 
       const res = await updateEvent(scope, input.event_id, {

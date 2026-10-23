@@ -9,12 +9,13 @@ import {
 import { memberHasAKidLogin, revokeRemovedChildLogin, type ChildLoginRevocation } from '@/lib/server/child-account';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { forgetMemberLocation } from '@/lib/location/retention';
-import { closePendingInvitesFor } from '@/lib/server/member-invites';
+import { closePendingInvitesFor, revokeInvitesIssuedBy } from '@/lib/server/member-invites';
 import { recordTrustChange } from '@/lib/trust/ledger';
+import { logAudit } from '@/lib/server/audit';
 
 type RemoveResult =
   /** `locationForgotten` false: the removal stands, but the member's last position could not be cleared and may still show on the family map. */
-  /** `invitesRevoked` false: the removal stands, but a pending invite to them may still let them back in. */
+  /** `invitesRevoked` false: the removal stands, but a pending invite to them may still let them back in, or one they sent may still enrol its invitee. */
   | { ok: true; loginRevocation: ChildLoginRevocation; locationForgotten: boolean; invitesRevoked: boolean }
   | { ok: false; error: string };
 
@@ -70,7 +71,24 @@ export async function removeFamilyMemberAction(input: { memberId: string }): Pro
   // And every pending invite to them is revoked, or any second invite they
   // still hold brings them straight back (accept_invite reactivates the row).
   // The removal stands if this fails; the failure is logged and returned.
-  const invitesRevoked = await closePendingInvitesFor(service, familyId, target, 'revoked');
+  const invitesToThemClosed = await closePendingInvitesFor(service, familyId, target, 'revoked');
+  // So are the pending invites THEY issued: accept_invite never asks whether
+  // the inviter is still an active manager, so a removed parent's invite kept
+  // enrolling its invitee at the role that parent chose. Both outcomes fold
+  // into the one answer the screen already reports.
+  const invitesByThemRevoked = await revokeInvitesIssuedBy(service, familyId, target.user_id);
+  const invitesRevoked = invitesToThemClosed && invitesByThemRevoked;
+  // The household's record of the removal: who removed whom, and whether each
+  // follow-up landed. The admin console's removal writes one; this path wrote
+  // none, so a partially failed removal survived only as a toast. Best-effort,
+  // after the fact: the removal has already happened.
+  await logAudit(service, {
+    familyId, actorId: ctx.user.id, action: 'update', resource: 'family_members', resourceId: target.id,
+    metadata: {
+      removed: true, previous_role: target.role, login_revocation: loginRevocation,
+      location_forgotten: forgotten.ok, invites_revoked: invitesRevoked, invites_they_issued_revoked: invitesByThemRevoked,
+    },
+  });
   return { ok: true, loginRevocation, locationForgotten: forgotten.ok, invitesRevoked };
 }
 

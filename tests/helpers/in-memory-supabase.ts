@@ -354,11 +354,15 @@ function splitSelect(list: string): string[] {
 }
 
 /**
- * The columns an embed may hang off: `<alias>_id`, `<table singular>_id` (both
- * the `-s` and the `-ies` plural: `families` → `family_id`), `<table>_id`.
+ * The row's column an embed joins through. A PostgREST hint naming a column on
+ * the row (`families!family_id!inner(...)`, the form a table with two foreign
+ * keys into one table needs) is that column; otherwise `<alias>_id`, then
+ * `<table singular>_id` (both the `-s` and the `-ies` plural: `families` →
+ * `family_id`), then `<table>_id`.
  */
-function foreignKeyCandidates(alias: string, table: string): string[] {
-  return [`${alias}_id`, `${table.replace(/s$/, '')}_id`, `${table.replace(/ies$/, 'y')}_id`, `${table}_id`];
+function embedForeignKey(row: Row, alias: string, table: string, hints: string): string | undefined {
+  const hinted = hints.split('!').filter((h) => h && h !== 'inner' && h !== 'left').find((h) => h in row);
+  return hinted ?? [`${alias}_id`, `${table.replace(/s$/, '')}_id`, `${table.replace(/ies$/, 'y')}_id`, `${table}_id`].find((c) => c in row);
 }
 
 /**
@@ -373,12 +377,12 @@ function project(db: InMemorySupabase, row: Row, select: string): Row {
   const out: Row = {};
   for (const part of parts) {
     if (part === '*') { Object.assign(out, row); continue; }
-    const embed = /^(?:([\w]+):)?([\w]+)(?:!\w+)?\((.*)\)$/.exec(part);
+    const embed = /^(?:([\w]+):)?([\w]+)((?:!\w+)*)\((.*)\)$/.exec(part);
     if (embed) {
       const alias = embed[1] ?? embed[2];
       const table = embed[2];
-      const inner = embed[3] || '*';
-      const fk = foreignKeyCandidates(alias, table).find((c) => c in row);
+      const inner = embed[4] || '*';
+      const fk = embedForeignKey(row, alias, table, embed[3]);
       const target = fk ? db.table(table).find((r) => looseEq(r.id, row[fk])) : undefined;
       out[alias] = target ? project(db, target, inner) : null;
       continue;
@@ -464,15 +468,16 @@ class QueryBuilder implements PromiseLike<Reply> {
     const dot = /^([\w]+)\.([\w]+)$/.exec(column);
     if (!dot || !this.selectList) return null;
     const part = splitSelect(this.selectList.replace(/\s+/g, ' '))
-      .map((p) => /^(?:([\w]+):)?([\w]+)(!inner)?\((.*)\)$/.exec(p))
+      .map((p) => /^(?:([\w]+):)?([\w]+)((?:!\w+)*)\((.*)\)$/.exec(p))
       .find((m) => m && (m[1] ?? m[2]) === dot[1]);
     if (!part) return null;
-    if (!part[3]) return () => true;
+    if (!part[3].split('!').includes('inner')) return () => true;
     const alias = part[1] ?? part[2];
     const table = part[2];
+    const hints = part[3];
     const inner = operatorPredicate(dot[2], op, value);
     return (row) => {
-      const fk = foreignKeyCandidates(alias, table).find((c) => c in row);
+      const fk = embedForeignKey(row, alias, table, hints);
       const target = fk ? this.db.table(table).find((r) => looseEq(r.id, row[fk])) : undefined;
       return target !== undefined && inner(target);
     };

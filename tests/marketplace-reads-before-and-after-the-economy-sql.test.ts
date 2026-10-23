@@ -29,7 +29,13 @@ vi.mock('@/lib/supabase/auth', () => ({
     active: { familyId: 'fam-buyer', role: harness.role, member: { id: harness.memberId, family_id: 'fam-buyer' } },
   }),
 }));
-vi.mock('@/lib/supabase/server', () => ({ createServer: async () => harness.db }));
+// The seller's standing is read with the service role, on its own client (no
+// listing there, so the RPC decides), so the relations logged here are the
+// caller's own reads alone.
+vi.mock('@/lib/supabase/server', async () => {
+  const { createInMemorySupabase } = await import('./helpers/in-memory-supabase');
+  return { createServer: async () => harness.db, createServiceClient: () => createInMemorySupabase() };
+});
 vi.mock('@/lib/i18n/server', async () => {
   const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
   return { getTranslations: async () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params) };

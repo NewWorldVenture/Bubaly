@@ -129,7 +129,7 @@ export const documentTools: ToolDefinition[] = [
     summarize: (_input, output) => (output.created ? `Attached "${output.title}" to the trip as ${output.kind.replace(/_/g, ' ')}` : `"${output.title}" was already on the trip`),
     resource: (output) => ({ table: 'vacation_documents', id: output.link_id }),
     execute: async (scope, input) => {
-      const member = await resolveAssigneeId(scope, { assignee: input.member, assignee_id: input.member_id });
+      const member = await resolveAssigneeId(scope, { assignee: input.member, assignee_id: input.member_id }, { requireActive: true });
       if (!member.ok) return member;
       const res = await linkToVacation(scope, {
         documentId: input.document_id, vacationId: input.vacation_id, kind: input.kind ?? null, memberId: member.data, expiresOn: input.expires_on ?? null,
