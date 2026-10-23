@@ -504,6 +504,8 @@ export type OccurrenceEdit = { occurrenceStartsAt: string | null };
 const SERIES_NEEDS_OCCURRENCE = 'That event repeats. Say which week this new time is for, and every week moves with it.';
 /** A week named but not readable: refused, never dropped (dropped, the new time restarted the series). */
 const UNREADABLE_OCCURRENCE = 'That week could not be understood. Give its start exactly as the calendar search returned it.';
+/** A move that would change which weeks a series has, refused before anything is written. */
+const WEEKS_WOULD_CHANGE = 'Moving every week there would change which weeks this event has before it ends, so nothing was moved.';
 /** A week the series does not have now: read before someone moved or ended it. */
 const STALE_OCCURRENCE = 'That week is not on this event\'s calendar any more; it may have been moved. Read the calendar again and say which week.';
 
@@ -517,9 +519,15 @@ function occursAt(row: SeriesState, instant: string, zone: string): boolean {
   try {
     const at = parseExactInstant(instant);
     const ms = exactInstantMilliseconds(at);
-    return expandEventsInZone([row], new Date(ms - 86_400_000), new Date(ms + 86_400_000), zone)
+    return expandEventsInZone([{ ...row, ends_at: null }], new Date(ms - 86_400_000), new Date(ms + 86_400_000), zone)
       .some((occurrence) => parseExactInstant(occurrence.starts_at) === at);
   } catch { return false; }
+}
+
+/** How many occurrences a series with an end has, as the calendar expands it; throws when it cannot count them whole. */
+function finiteCount(row: SeriesState & { recurrence_until: string }, zone: string): number {
+  return expandEventsInZone([{ ...row, ends_at: null }], new Date(row.starts_at), new Date(row.recurrence_until), zone, false,
+    { requireComplete: true, windowFrom: row.starts_at, windowTo: row.recurrence_until }).length;
 }
 
 function forSeriesOccurrence(
@@ -546,10 +554,17 @@ function forSeriesOccurrence(
  * and the week it moved to sit on different sides of a clock change. The end
  * keeps the length given for the occurrence.
  *
- * An unchanged start is the series' own start, exactly. A one-off row, the
- * first occurrence, and a series turned into a one-off (which stays where the
- * week was) are left as given. Anything unreadable, the week included, is
- * refused: never written as given, which would restart the series there.
+ * A series with an end (`recurrence_until`) moves its end by the same offset
+ * as its first week, so every week it had moves with it: kept where it was, a
+ * later move pushed the last week past the end and it silently went. The
+ * series as it would be written must then have the week asked for, and the
+ * same number of weeks; a move no offset can keep (a monthly 29th that a
+ * February lacks) is refused before anything is written.
+ *
+ * An unchanged start is the series' own start, exactly. A one-off row and a
+ * series turned into a one-off (which stays where the week was) are left as
+ * given. Anything unreadable, the week included, is refused: never written as
+ * given, which would restart the series there.
  */
 function onSeriesClock(
   stored: SeriesState,
@@ -568,17 +583,26 @@ function onSeriesClock(
   const end = patch.endsAt == null ? null : normalizeCalendarWriteInstant(patch.endsAt, timezone);
   if (!start) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
   if (patch.endsAt != null && !end) return fail('That end time could not be understood.', { code: SERVICE_CODES.invalidInput });
-  if (sameCalendarInstant(occurrence, stored.starts_at)) return ok(patch);
   try {
-    const seriesStart = sameCalendarInstant(start, occurrence)
-      ? stored.starts_at
-      : movedOnWallClock(stored.starts_at, occurrence, start, zone);
+    const seriesStart = sameCalendarInstant(occurrence, stored.starts_at) ? start
+      : sameCalendarInstant(start, occurrence) ? stored.starts_at
+        : movedOnWallClock(stored.starts_at, occurrence, start, zone);
     const mapped: UpdateEventPatch = { ...patch };
     if (patch.startsAt !== undefined) mapped.startsAt = seriesStart;
     if (end !== null) mapped.endsAt = formatExactInstant(parseExactInstant(seriesStart) + parseExactInstant(end) - parseExactInstant(start));
-    return ok(mapped);
+    if (stored.recurrence_until && patch.recurrenceUntil === undefined && !sameCalendarInstant(seriesStart, stored.starts_at)) {
+      mapped.recurrenceUntil = formatExactInstant(parseExactInstant(stored.recurrence_until) + parseExactInstant(seriesStart) - parseExactInstant(stored.starts_at));
+    }
+    // Its starts as they would be written (the end is checked by `applyEventUpdate`).
+    const written: SeriesState = {
+      ...stored, starts_at: seriesStart, recurrence: patch.recurrence ?? stored.recurrence,
+      recurrence_until: mapped.recurrenceUntil === undefined ? stored.recurrence_until : mapped.recurrenceUntil,
+    };
+    const kept = occursAt(written, start, zone) && (!stored.recurrence_until || !written.recurrence_until
+      || finiteCount({ ...written, recurrence_until: written.recurrence_until }, zone) === finiteCount({ ...stored, recurrence_until: stored.recurrence_until }, zone));
+    return kept ? ok(mapped) : fail(WEEKS_WOULD_CHANGE, { code: SERVICE_CODES.invalidInput });
   } catch {
-    return fail('That new time does not exist on this event\'s clock.', { code: SERVICE_CODES.invalidInput });
+    return fail('That new time could not be placed on this event\'s repeat schedule.', { code: SERVICE_CODES.invalidInput });
   }
 }
 

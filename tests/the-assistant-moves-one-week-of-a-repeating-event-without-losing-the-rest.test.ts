@@ -324,6 +324,97 @@ describe('a week is checked against the series as it is now', () => {
   });
 });
 
+describe('a series with an end keeps every week it had', () => {
+  // Every week moves with the one the assistant moved, the series' end
+  // included: moved by the same offset as its first week. Kept where it was, a
+  // later move pushed the last week past the end and it silently went (and an
+  // earlier one could pull a new week in). A move no offset can keep is
+  // refused before anything is written.
+  const throughNovember3 = () => { row(SWIM).recurrence_until = '2026-11-04T05:00:00.000Z'; };
+  const starts = (id: string, from: string, to: string) =>
+    expandEventsInZone([row(id)], new Date(from), new Date(to), TZ).map((o) => instant(o.starts_at));
+
+  it('its real last week moved to the Wednesday is still on the calendar', async () => {
+    throughNovember3();
+    const input = { event_id: SWIM, starts_at: '2026-11-04T16:00:00', occurrence_starts_at: '2026-11-03T21:00:00.000Z' };
+    const result = await tool('calendar.rescheduleEvent').execute(scope, input);
+    expect(result.ok, result.ok ? '' : result.error).toBe(true);
+    if (!result.ok) return;
+    const weeks = starts(SWIM, '2026-08-01T00:00:00Z', '2027-01-01T00:00:00Z');
+    expect(weeks, 'the series lost a week').toHaveLength(10);
+    expect(weeks.at(0)).toBe('2026-09-02T20:00:00.000Z');
+    expect(weeks.at(-1), 'the week that was moved is gone').toBe('2026-11-04T21:00:00.000Z');
+    expect(instant(row(SWIM).recurrence_until)).toBe('2026-11-05T05:00:00.000Z');
+    const check = await tool('calendar.rescheduleEvent').verify!(scope, input, result.data);
+    expect(check).toMatchObject({ ok: true, data: { verified: true } });
+  });
+
+  it.each([
+    ['its first week', '2026-09-01T20:00:00.000Z', '2026-09-02'],
+    ['a middle week', '2026-10-06T20:00:00.000Z', '2026-10-07'],
+  ])('%s moved a day later keeps the last week', async (_which, occurrence, day) => {
+    throughNovember3();
+    const result = await tool('calendar.updateEvent').execute(scope, {
+      event_id: SWIM, starts_at: `${day}T16:00:00`, ends_at: `${day}T17:30:00`, occurrence_starts_at: occurrence,
+    });
+    expect(result.ok, result.ok ? '' : result.error).toBe(true);
+    const weeks = starts(SWIM, '2026-08-01T00:00:00Z', '2027-01-01T00:00:00Z');
+    expect(weeks).toHaveLength(10);
+    expect(weeks.at(-1)).toBe('2026-11-04T21:00:00.000Z');
+  });
+
+  it('a series too long to count whole is refused, not written as given', async () => {
+    // Daily for nearly two years: more steps than the expander will take in
+    // one read, so its weeks cannot be checked.
+    db.seed('calendar_events', [{
+      ...row(SWIM), id: 'vitamins-1', title: 'Vitamins', starts_at: '2026-09-01T12:00:00.000Z', ends_at: null,
+      recurrence: 'daily', recurrence_until: '2028-06-01T04:00:00.000Z',
+    }]);
+    const writes = watchWrites();
+    const result = await tool('calendar.rescheduleEvent').execute(scope, {
+      event_id: 'vitamins-1', starts_at: '2026-11-03T09:00:00', occurrence_starts_at: '2026-11-03T13:00:00.000Z',
+    });
+    expect(result.ok).toBe(false);
+    expect(writes).toHaveLength(0);
+    expect(instant(row('vitamins-1').starts_at)).toBe('2026-09-01T12:00:00.000Z');
+  });
+
+  it('a monthly move onto a day February does not have is refused before anything is written', async () => {
+    // The 28th of December to March: four months. Moved to the 29th, 2027 has
+    // no 29 February, so the series would end with three.
+    db.seed('calendar_events', [{
+      ...row(SWIM), id: 'lesson-1', title: 'Music lesson', starts_at: '2026-12-28T21:00:00.000Z', ends_at: '2026-12-28T22:00:00.000Z',
+      recurrence: 'monthly', recurrence_until: '2027-04-01T04:00:00.000Z',
+    }]);
+    const writes = watchWrites();
+    const result = await tool('calendar.rescheduleEvent').execute(scope, {
+      event_id: 'lesson-1', starts_at: '2027-01-29T16:00:00', occurrence_starts_at: '2027-01-28T21:00:00.000Z',
+    });
+    expect(result.ok, 'a month was silently dropped').toBe(false);
+    expect(writes).toHaveLength(0);
+    expect(starts('lesson-1', '2026-12-01T00:00:00Z', '2027-05-01T00:00:00Z')).toHaveLength(4);
+  });
+});
+
+describe('the week asked for is a week of the series as written', () => {
+  it('a monthly week moved to a date the series would not land on is refused', async () => {
+    // Monthly on the 30th from 30 September. Moving October's to the 31st
+    // moves the first date a day, to 1 October: a series on the 1st, which has
+    // no 31 October, while the summary named it.
+    db.seed('calendar_events', [{
+      ...row(SWIM), id: 'club-1', title: 'Book club', starts_at: '2026-09-30T20:00:00.000Z', ends_at: '2026-09-30T21:00:00.000Z',
+      recurrence: 'monthly',
+    }]);
+    const writes = watchWrites();
+    const result = await tool('calendar.rescheduleEvent').execute(scope, {
+      event_id: 'club-1', starts_at: '2026-10-31T16:00:00', occurrence_starts_at: '2026-10-30T20:00:00.000Z',
+    });
+    expect(result.ok, 'the series was moved to a date that does not have the week asked for').toBe(false);
+    expect(writes).toHaveLength(0);
+    expect(instant(row('club-1').starts_at)).toBe('2026-09-30T20:00:00.000Z');
+  });
+});
+
 describe('the week reaches the tools through their input schemas', () => {
   it.each(['calendar.updateEvent', 'calendar.rescheduleEvent'])('%s keeps occurrence_starts_at', (name) => {
     const parsed = tool(name).input.parse({ event_id: SWIM, starts_at: '2026-11-03T17:00:00', occurrence_starts_at: '2026-11-03T21:00:00.000Z' });
