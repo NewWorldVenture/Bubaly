@@ -37,5 +37,13 @@ export function orderFeeBreakdown(
     subtotalCents: amountCents,
     policy: MARKETPLACE_COMMISSION_POLICY,
     serviceFeeCents,
+    // No card is charged for a marketplace order: nothing under lib/stripe or
+    // app/api takes payment for one. The engine's default 2.9% + 30¢ was netted
+    // out of the service fee anyway, so the seller read "Bubaly takes $0.00"
+    // beside the buyer's "$0.90 service fee" on the same $20 order. Until a
+    // payment path exists, there is no processing fee to allocate, and what the
+    // buyer pays less what the seller receives is what the page says Bubaly takes.
+    stripePercentBps: 0,
+    stripeFixedCents: 0,
   });
 }

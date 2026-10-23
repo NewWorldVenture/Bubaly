@@ -17145,5 +17145,10 @@
   "displayGrid.notesUnavailable": "Les notes sont indisponibles.",
   "feedback.couldNotLoadTheBoard": "Le tableau d’idées n’a pas pu être chargé pour le moment. Réessayez dans un instant.",
   "feedbackFeedbackBoard.yourVotesCouldNotBeRead": "Vos votes n’ont pas pu être lus pour le moment, le vote est donc en pause. Actualisez pour réessayer.",
-  "actions.tripRecommendationsInvalid": "Ces recommandations de voyage n’ont pas pu être enregistrées : elles n’ont pas la forme attendue ou sont trop volumineuses."
+  "actions.tripRecommendationsInvalid": "Ces recommandations de voyage n’ont pas pu être enregistrées : elles n’ont pas la forme attendue ou sont trop volumineuses.",
+  "handoff.theOtherPersonEntersTheCode": "C’est vous qui avez le code de remise : partagez-le lors de la rencontre, l’autre personne le saisit.",
+  "handoffPanel.pickedUpLoanStarted": "Récupéré — le prêt a commencé.",
+  "marketplace.reviewsAcrossHouseholdsAreNotOpenYet": "Les avis entre deux foyers ne sont pas encore ouverts.",
+  "marketplace.anAuctionTakesBidsNotInterest": "Ceci est une enchère : enchérissez plutôt.",
+  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Les questions entre deux foyers ne sont pas encore ouvertes."
 }

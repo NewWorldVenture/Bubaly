@@ -2,14 +2,18 @@
 
 // Pickup & hand-off server actions. One side proposes a time + safe meetup
 // spot; the OTHER side confirms (which drops it on the family calendar and mints
-// a short hand-off code); the exchange is completed in person by entering that
-// code, which also advances the order to 'completed'. Family-scoped via
-// requireUserContext + RLS on marketplace_handoffs.
+// a short hand-off code that only the confirmer holds); the exchange is
+// completed in person by the PROPOSER entering that code, which also advances
+// the order: to 'completed' for a sale, to 'active' for a rent or a borrow,
+// whose loan starts at the pickup. Family-scoped via requireUserContext + RLS
+// on marketplace_handoffs.
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { generateHandoffCode, type LocationKind } from '@/lib/marketplace/handoff';
+import {
+  codesMatch, generateHandoffCode, holdsHandoffCode, isLoanKind, type HandoffRole, type LocationKind,
+} from '@/lib/marketplace/handoff';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { readFamilyOrders } from '@/lib/marketplace/schema-compat';
@@ -53,7 +57,7 @@ async function loadOrderRole(orderId: string) {
   // read is the seller-family read it always was (readFamilyOrders).
   const { data: order, error: orderError } = await readFamilyOrders(ctx.active.familyId, (scope) => scope(sb
     .from('marketplace_orders')
-    .select('id, family_id, listing_id, buyer_member, seller_member, status')
+    .select('id, family_id, listing_id, buyer_member, seller_member, kind, status')
     .eq('id', orderId)).maybeSingle());
   // Only the two people in the exchange arrange its pickup. Anyone else in the
   // family used to be treated as the buyer here (`seller ? 'seller' : 'buyer'`),
@@ -143,8 +147,27 @@ export async function proposeHandoffAction(input: {
   return { ok: true };
 }
 
-/** The other party confirms the proposal → calendar event + hand-off code. */
-export async function confirmHandoffAction(orderId: string): Promise<Result<{ code: string }>> {
+/** The proposal a confirmer's screen showed: the time and place they agreed to. */
+export type SeenProposal = { meetAt: string | null; locationLabel: string | null };
+
+/** The same meeting: one instant (however the timestamp is spelled) and one place. */
+function sameProposal(row: { meet_at: string | null; location_label: string | null }, seen: SeenProposal): boolean {
+  const at = (iso: string | null) => (iso === null ? null : Date.parse(iso));
+  return at(row.meet_at) === at(seen.meetAt) && (row.location_label ?? null) === (seen.locationLabel ?? null);
+}
+
+/**
+ * The other party confirms the proposal → calendar event + hand-off code.
+ *
+ * `seen` is the proposal the confirmer's screen showed. A reschedule rewrites
+ * meet_at and location_label and leaves the pickup 'proposed', so the status
+ * alone cannot tell the proposal they read from the one stored now: pressed
+ * after the proposer moved it, Confirm agreed to a time and place the
+ * confirmer never saw. What was seen is checked against the row, and the claim
+ * is predicated on the time and place this read returned, so the calendar
+ * event and the confirmed row always describe the same meeting.
+ */
+export async function confirmHandoffAction(orderId: string, seen?: SeenProposal): Promise<Result<{ code: string }>> {
   const t = await getTranslations();
   const loaded = await loadOrderRole(orderId);
   const { ctx, sb, order, orderError, role } = loaded;
@@ -161,6 +184,7 @@ export async function confirmHandoffAction(orderId: string): Promise<Result<{ co
   if (!handoff) return { ok: false, error: t('actions.noPickupToConfirm') };
   if (handoff.status !== 'proposed') return { ok: false, error: t('actions.thisPickupCanTBe') };
   if (role === handoff.proposer_role) return { ok: false, error: t('actions.waitForTheOtherPerson') };
+  if (seen && !sameProposal(handoff, seen)) return { ok: false, error: t('handoff.pickupChangedRefresh') };
 
   const code = generateHandoffCode();
 
@@ -190,10 +214,16 @@ export async function confirmHandoffAction(orderId: string): Promise<Result<{ co
   // validates against the STORED `confirm_code`, so the two of them would meet
   // in person, for a marketplace pickup with a stranger, holding a code that
   // could never work. Audit C1-S9-23.
+  // The time and place are predicated too: a reschedule keeps the status
+  // 'proposed', and one landing after the read above would otherwise be
+  // confirmed under the event made from the superseded time.
   const { data: confirmed, error } = await sb.from('marketplace_handoffs').update({
     status: 'confirmed', confirmed_at: new Date().toISOString(), confirm_code: code,
     calendar_event_id: calendarEventId,
-  }).eq('order_id', orderId).eq('family_id', order.family_id).eq('status', 'proposed').select('id');
+  }).eq('order_id', orderId).eq('family_id', order.family_id)
+    .filter('meet_at', handoff.meet_at === null ? 'is' : 'eq', handoff.meet_at)
+    .filter('location_label', handoff.location_label === null ? 'is' : 'eq', handoff.location_label)
+    .eq('status', 'proposed').select('id');
   if (error) return actionFailure('confirm the pickup', t('handoff.couldNotConfirmThePickup'), error);
   if (wroteNoRows(confirmed)) {
     // The event above went in before this claim, and the claim matched nothing:
@@ -234,8 +264,67 @@ export async function cancelHandoffAction(orderId: string): Promise<Result> {
   return { ok: true };
 }
 
-/** Complete the hand-off in person by entering the code → order completed. */
-export async function completeHandoffAction(input: { orderId: string; code: string }): Promise<Result> {
+type LoadedOrder = NonNullable<Awaited<ReturnType<typeof loadOrderRole>>['order']>;
+type ConfirmedHandoff = { id: string; confirm_code: string | null };
+
+/**
+ * A rent or a borrow STARTS at its pickup: the hand-off code moves the order
+ * from 'confirmed' to 'active' (the Orders page's "Start"), and the loan runs
+ * until the lender marks it returned or complete. marketplace_complete_handoff
+ * (0483) writes 'completed' for every kind, which recorded the loan as over
+ * the moment it began: the return was never tracked, the lender had no
+ * "Mark returned" left, and the return-reminder cron never selected the order
+ * again. Until the owner's SQL makes the function start a loan instead, the
+ * app does not call it for one. Both writes are claimed on the state they were
+ * decided from; either party may start an order (0518 leaves 'active' to both).
+ */
+async function startLoanAtPickup(
+  sb: Awaited<ReturnType<typeof loadOrderRole>>['sb'],
+  t: Awaited<ReturnType<typeof getTranslations>>,
+  order: LoadedOrder, handoff: ConfirmedHandoff, code: string,
+): Promise<Result<{ loanStarted: boolean }>> {
+  if (order.status !== 'confirmed' && order.status !== 'active') return { ok: false, error: t(COMPLETE_REASON.order_not_open) };
+  const stored = handoff.confirm_code;
+  if (!stored || !codesMatch(code, stored)) return { ok: false, error: t(COMPLETE_REASON.code_mismatch) };
+
+  if (order.status === 'confirmed') {
+    const { data: started, error } = await sb.from('marketplace_orders').update({ status: 'active' })
+      .eq('id', order.id).eq('family_id', order.family_id).eq('status', 'confirmed').select('id');
+    if (error) return actionFailure('start the loan', t('actions.couldNotCompleteThePickup'), error);
+    if (wroteNoRows(started)) return { ok: false, error: t('handoff.pickupChangedRefresh') };
+  }
+  const { data: picked, error } = await sb.from('marketplace_handoffs')
+    .update({ status: 'completed', completed_at: new Date().toISOString() })
+    .eq('id', handoff.id).eq('family_id', order.family_id).eq('status', 'confirmed').eq('confirm_code', stored)
+    .select('id');
+  if (error) return actionFailure('complete the pickup', t('actions.couldNotCompleteThePickup'), error);
+  if (wroteNoRows(picked)) {
+    // The pickup was cancelled or finished a moment ago, so nothing was handed
+    // over here: the loan this call started goes back to waiting for it.
+    if (order.status === 'confirmed') {
+      const { data: undone, error: undoError } = await sb.from('marketplace_orders').update({ status: 'confirmed' })
+        .eq('id', order.id).eq('family_id', order.family_id).eq('status', 'active').select('id');
+      if (undoError || wroteNoRows(undone)) console.error('[marketplace-handoff] could not put the order back to confirmed', undoError ?? order.id);
+    }
+    return { ok: false, error: t('handoff.pickupChangedRefresh') };
+  }
+  return { ok: true, data: { loanStarted: true } };
+}
+
+/**
+ * Complete the hand-off in person: the PROPOSER enters the code → the order
+ * moves on (a sale completes; a rent or a borrow starts).
+ *
+ * The code is minted when the other party confirms, returned to them and shown
+ * on their screen alone, so it proves the two met only if the party entering
+ * it is the one who did NOT confirm. Both used to see it and either could
+ * enter it, so either one alone "completed in person": a borrower closed a
+ * loan, and silenced its overdue reminders, with the item still in hand. The
+ * handoffs SELECT policy (0483) still hands confirm_code to both parties over
+ * PostgREST and the RPC still accepts either party; narrowing both is the
+ * owner's SQL.
+ */
+export async function completeHandoffAction(input: { orderId: string; code: string }): Promise<Result<{ loanStarted: boolean }>> {
   const t = await getTranslations();
   // The RPC checks only that the caller is in the order's family, and the
   // hand-off code is readable family-wide, so a sibling who is neither party
@@ -245,6 +334,21 @@ export async function completeHandoffAction(input: { orderId: string; code: stri
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
   if (!role) return { ok: false, error: t(COMPLETE_REASON.forbidden) };
+
+  const { data: handoff, error: handoffError } = await sb.from('marketplace_handoffs')
+    .select('id, proposer_role, status, confirm_code').eq('order_id', order.id).eq('family_id', order.family_id).maybeSingle();
+  if (handoffError) return actionFailure('load the pickup', t('handoff.couldNotLoadThePickup'), handoffError);
+  if (!handoff) return { ok: false, error: t(COMPLETE_REASON.handoff_not_found) };
+  if (handoff.status !== 'confirmed') return { ok: false, error: t(COMPLETE_REASON.handoff_not_ready) };
+  // The confirmer holds the code; the proposer enters it.
+  if (holdsHandoffCode(role, handoff.proposer_role as HandoffRole)) return { ok: false, error: t('handoff.theOtherPersonEntersTheCode') };
+
+  if (isLoanKind(order.kind)) {
+    const started = await startLoanAtPickup(sb, t, order, handoff, input.code);
+    if (started.ok) revalidatePath('/marketplace/orders');
+    return started;
+  }
+
   const { data, error } = await sb.rpc('marketplace_complete_handoff', {
     p_order_id: input.orderId,
     p_code: input.code,

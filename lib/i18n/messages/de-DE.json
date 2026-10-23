@@ -17145,5 +17145,10 @@
   "displayGrid.notesUnavailable": "Notizen sind nicht verfügbar.",
   "feedback.couldNotLoadTheBoard": "Die Ideentafel konnte gerade nicht geladen werden. Versuchen Sie es gleich noch einmal.",
   "feedbackFeedbackBoard.yourVotesCouldNotBeRead": "Ihre Stimmen konnten gerade nicht gelesen werden, daher ist das Abstimmen pausiert. Aktualisieren Sie die Seite, um es erneut zu versuchen.",
-  "actions.tripRecommendationsInvalid": "Diese Reiseempfehlungen konnten nicht gespeichert werden: Sie haben nicht die erwartete Form oder sind zu groß."
+  "actions.tripRecommendationsInvalid": "Diese Reiseempfehlungen konnten nicht gespeichert werden: Sie haben nicht die erwartete Form oder sind zu groß.",
+  "handoff.theOtherPersonEntersTheCode": "Sie haben den Übergabecode: Teilen Sie ihn beim Treffen, die andere Person gibt ihn ein.",
+  "handoffPanel.pickedUpLoanStarted": "Abgeholt – die Ausleihe hat begonnen.",
+  "marketplace.reviewsAcrossHouseholdsAreNotOpenYet": "Bewertungen zwischen zwei Haushalten sind noch nicht möglich.",
+  "marketplace.anAuctionTakesBidsNotInterest": "Dies ist eine Auktion: Geben Sie stattdessen ein Gebot ab.",
+  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Fragen zwischen zwei Haushalten sind noch nicht möglich."
 }

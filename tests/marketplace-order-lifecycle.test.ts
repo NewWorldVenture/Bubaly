@@ -35,20 +35,22 @@ describe('resolveOfferAcceptance', () => {
 });
 
 describe('order transitions', () => {
-  it('allows the buy/sell flow and blocks illegal jumps', () => {
-    expect(canOrderTransition('pending', 'sold')).toBe(true);
-    expect(canOrderTransition('sold', 'refunded')).toBe(true);
-    expect(canOrderTransition('refunded', 'sold')).toBe(false);
-    expect(canOrderTransition('canceled', 'completed')).toBe(false);
+  // In the database's vocabulary (0151); the old table's pending/sold/refunded
+  // were statuses marketplace_orders cannot hold.
+  it('allows the order flow and blocks illegal jumps', () => {
+    expect(canOrderTransition('requested', 'confirmed')).toBe(true);
+    expect(canOrderTransition('active', 'returned')).toBe(true);
+    expect(canOrderTransition('completed', 'active')).toBe(false);
+    expect(canOrderTransition('cancelled', 'completed')).toBe(false);
   });
 
-  it('marks terminal + paid states', () => {
-    expect(isOrderTerminal('refunded')).toBe(true);
-    expect(isOrderTerminal('canceled')).toBe(true);
-    expect(isOrderTerminal('pending')).toBe(false);
-    expect(isOrderPaid('sold')).toBe(true);
+  it('marks terminal + finished states', () => {
+    expect(isOrderTerminal('completed')).toBe(true);
+    expect(isOrderTerminal('cancelled')).toBe(true);
+    expect(isOrderTerminal('requested')).toBe(false);
     expect(isOrderPaid('completed')).toBe(true);
-    expect(isOrderPaid('pending')).toBe(false);
+    expect(isOrderPaid('returned')).toBe(false);
+    expect(isOrderPaid('requested')).toBe(false);
   });
 
   it('has no dangling edges', () => {
