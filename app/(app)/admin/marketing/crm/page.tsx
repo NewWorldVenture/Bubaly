@@ -2,8 +2,11 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Users, UserPlus, Building2, Star } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { fmtDate } from '@/lib/utils/format';
 import {
   contactDisplayName, LEAD_STATUSES, LIFECYCLE_STAGES, LIFECYCLE_LABELS,
@@ -19,35 +22,60 @@ export const dynamic = 'force-dynamic';
 type Contact = Tables<'crm_contacts'>;
 
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
+/** Contacts the Companies tile may page through before it is reported as not shown (one round trip per 1,000). */
+const SUM_ROW_CEILING = 25_000;
 const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
 
 export default async function CrmPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const { data: contacts, error: contactsError } = await supabase
-    .from('crm_contacts')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(500);
-  if (contactsError) {
-    console.error('[admin-marketing-crm] contact read failed', contactsError);
+  // The list is the newest 500 contacts; the tiles are the whole CRM. Every
+  // onboarded account holder files a contact (lib/marketing/onboarding-contact.ts),
+  // so counted from the list, Contacts stopped at 500 and Customers, Qualified
+  // and Companies counted only the newest 500. The three counts are exact
+  // `head: true` counts; Companies is distinct, so it pages the named
+  // companies on the id to a real ceiling, and past it the tile says it is
+  // not shown rather than counting some of them.
+  const counted = () => supabase.from('crm_contacts').select('id', { count: 'exact', head: true });
+  const [
+    { data: contacts, error: contactsError },
+    contactCountResult, customerCountResult, qualifiedCountResult, companiesResult,
+  ] = await settleAll([
+    supabase.from('crm_contacts').select('*').order('created_at', { ascending: false }).limit(500),
+    counted(),
+    counted().eq('lifecycle_stage', 'customer'),
+    counted().in('lifecycle_stage', ['mql', 'sql']),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('crm_contacts').select('id, company').not('company', 'is', null);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
+  ]);
+  const companiesCeiling = 'truncated' in companiesResult && companiesResult.truncated;
+  const tilesError = contactCountResult.error ?? customerCountResult.error ?? qualifiedCountResult.error
+    ?? (companiesCeiling ? null : companiesResult.error);
+  if (contactsError || tilesError) {
+    console.error('[admin-marketing-crm] contact read failed', contactsError ?? tilesError);
     return <AdminCrmReadError />;
   }
 
   const list = (contacts ?? []) as Contact[];
-  const customers = list.filter((c) => c.lifecycle_stage === 'customer').length;
-  const companies = new Set(list.map((c) => c.company).filter(Boolean)).size;
-  const mqls = list.filter((c) => c.lifecycle_stage === 'mql' || c.lifecycle_stage === 'sql').length;
+  const companies = new Set((companiesResult.data ?? []).map((c) => c.company).filter(Boolean)).size;
+  const unavailable = t('strategyMetrics.unavailable');
 
   const stats = [
-    { label: 'Contacts', value: list.length, icon: Users, tint: 'text-violet-400 bg-violet-500/15' },
-    { label: 'Customers', value: customers, icon: Star, tint: 'text-emerald-400 bg-emerald-500/15' },
-    { label: 'Qualified (M/SQL)', value: mqls, icon: UserPlus, tint: 'text-amber-400 bg-amber-500/15' },
-    { label: 'Companies', value: companies, icon: Building2, tint: 'text-blue-400 bg-blue-500/15' },
+    { label: 'Contacts', value: contactCountResult.count ?? 0, icon: Users, tint: 'text-violet-400 bg-violet-500/15' },
+    { label: 'Customers', value: customerCountResult.count ?? 0, icon: Star, tint: 'text-emerald-400 bg-emerald-500/15' },
+    { label: 'Qualified (M/SQL)', value: qualifiedCountResult.count ?? 0, icon: UserPlus, tint: 'text-amber-400 bg-amber-500/15' },
+    { label: 'Companies', value: companiesCeiling ? unavailable : companies, ceiling: companiesCeiling, icon: Building2, tint: 'text-blue-400 bg-blue-500/15' },
   ];
 
   return (
     <div className="space-y-5">
+      <PartialReadBanner
+        title={t('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
+        failures={stats.filter((s) => s.ceiling).map((s) => s.label)}
+      />
       <p className="text-sm text-muted">
         {t('adminMarketingCrm.yourSingleSourceOfTruthFor')}
       </p>

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { DollarSign, CreditCard, Users, RefreshCw, AlertCircle } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settle, settleAll } from '@/lib/supabase/settle';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import type { Tables } from '@/lib/database.types';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -28,7 +28,7 @@ const PLAN_COLORS = ['#7c5dff', '#22c55e', '#60a5fa', '#fbbf24', '#f87171', '#64
 /** Exactly the columns the select below asks for, taken from the generated row. */
 type SubscriptionRow = Pick<
   Tables<'subscriptions'>,
-  'family_id' | 'plan' | 'status' | 'created_at' | 'current_period_end'
+  'id' | 'family_id' | 'plan' | 'status' | 'created_at' | 'current_period_end'
 >;
 
 export default async function AdminBillingPage() {
@@ -47,10 +47,16 @@ export default async function AdminBillingPage() {
   // Reaching the ceiling returns an error, which this page already turns into a
   // read-error state. On a revenue page, refusing to show a number beats showing
   // a smaller one with no way to tell.
+  //
+  // It pages on the id, not on offsets: a checkout landing between two pages
+  // shifted every later offset by one, and one plan's price was added to the
+  // MRR twice.
   const [subscriptionsResult, billingCustomersResult] = await settleAll([
-    readAllAsQuery<SubscriptionRow>((from, to) => supabase.from('subscriptions')
-      .select('family_id, plan, status, created_at, current_period_end')
-      .order('id').range(from, to), { max: 50_000 }),
+    readAllByIdAsQuery<SubscriptionRow>((after, limit) => {
+      let query = supabase.from('subscriptions').select('id, family_id, plan, status, created_at, current_period_end');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: 50_000 }),
     supabase.from('billing_customers').select('id', { count: 'exact', head: true }),
   ]);
 

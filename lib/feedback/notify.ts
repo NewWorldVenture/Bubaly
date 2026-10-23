@@ -115,12 +115,50 @@ type IdeaForIssue = {
 };
 
 /**
+ * How long one sync's claim on an unsynced idea stands. Longer than a GitHub
+ * call can take; short enough that a sync killed between the claim and the
+ * link leaves the idea unfiled for minutes, not for good.
+ */
+export const GITHUB_SYNC_CLAIM_MS = 10 * 60_000;
+
+/** Claims older than this are a sync that died, and may be taken over. */
+export function githubClaimCutoff(now: Date = new Date()): string {
+  return new Date(now.getTime() - GITHUB_SYNC_CLAIM_MS).toISOString();
+}
+
+/**
  * Mirror a feedback idea into the GitHub tracker (the right list by label) and
  * store the issue link back on the row. No-op (returns skipped) when GitHub
  * isn't configured, so submissions never depend on it.
+ *
+ * The idea is CLAIMED before the issue is created. Nothing was written between
+ * reading an idea as unsynced and creating its issue, so two syncs that both
+ * read it unsynced — the cron's backfill overlapping itself (both schedulers
+ * fire the route in the same minute), or the on-submit sync beside a backfill
+ * that read the just-inserted row — both filed an issue; the later link
+ * overwrote the earlier, and the first issue was never linked to anything.
+ * `github_synced_at` on an idea with no issue number is the claim: a
+ * compare-and-set that only one caller can win, fenced on the stamp being
+ * absent or older than GITHUB_SYNC_CLAIM_MS. The link that follows a created
+ * issue overwrites the stamp; a create that fails clears it, so the next pass
+ * tries again. No new column.
  */
 export async function syncIdeaToGithub(admin: Admin, idea: IdeaForIssue): Promise<{ ok: true; issue: GithubIssue } | { ok: false; skipped: boolean; error?: string }> {
   if (!isGithubConfigured()) return { ok: false, skipped: true };
+  const claimedAt = new Date().toISOString();
+  const { data: claimed, error: claimError } = await admin.from('feedback_ideas')
+    .update({ github_synced_at: claimedAt })
+    .eq('id', idea.id)
+    .is('github_issue_number', null)
+    .or(`github_synced_at.is.null,github_synced_at.lt.${githubClaimCutoff()}`)
+    .select('id');
+  if (claimError) {
+    console.error('[feedback-notify] the idea could not be claimed for the tracker', { ideaId: idea.id, error: claimError });
+    return { ok: false, skipped: false, error: 'The idea could not be claimed for the tracker.' };
+  }
+  // Linked since it was read, or another sync holds it: that sync's issue is
+  // the idea's. Skipped, not failed — nothing here went wrong.
+  if (wroteNoRows(claimed)) return { ok: false, skipped: true };
   try {
     const issue = await createIssue({
       title: issueTitle(idea),
@@ -148,6 +186,17 @@ export async function syncIdeaToGithub(admin: Admin, idea: IdeaForIssue): Promis
     return { ok: true, issue };
   } catch (e) {
     console.error('[feedback-notify] GitHub issue create failed', e);
+    // Nothing was created: give the claim back, fenced on this call's own
+    // stamp, so the next pass (or the backfill) files the issue rather than
+    // waiting out GITHUB_SYNC_CLAIM_MS. A claim another sync has since taken
+    // over is left as it is.
+    const { data: released, error: releaseError } = await admin.from('feedback_ideas')
+      .update({ github_synced_at: null })
+      .eq('id', idea.id).is('github_issue_number', null).eq('github_synced_at', claimedAt)
+      .select('id');
+    if (releaseError || wroteNoRows(released)) {
+      console.error('[feedback-notify] the tracker claim could not be released', { ideaId: idea.id, error: releaseError ?? 'no rows updated' });
+    }
     return { ok: false, skipped: false, error: e instanceof Error ? e.message : 'GitHub error' };
   }
 }

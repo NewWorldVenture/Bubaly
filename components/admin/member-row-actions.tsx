@@ -44,7 +44,8 @@ export function MemberRowActions({ memberId, displayName, role }: { memberId: st
     const res = await adminUpdateMemberAction(memberId, { displayName: newName, role: newRole });
     setBusy(false);
     if (!res.ok) return toastError(res.error);
-    success(t('memberRowActions.memberUpdated'));
+    if (res.data?.warning) toastError(res.data.warning);
+    else success(t('memberRowActions.memberUpdated'));
     setEditing(false);
     router.refresh();
   }

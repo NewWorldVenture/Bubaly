@@ -7,6 +7,9 @@ import {
 } from 'lucide-react';
 import { createServiceClient, describeConfiguredServiceKey } from '@/lib/supabase/server';
 import { settleAll, describeReadError, credentialHint } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { readInChunks } from '@/lib/supabase/chunked-in';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { adminNoteKindMeta, type AdminNotificationRow } from '@/lib/admin/notifications';
 import { checkDatabase, checkStorage, checkEmail, checkAI } from '@/lib/server/health';
 import { Card } from '@/components/ui/card';
@@ -25,6 +28,8 @@ export const dynamic = 'force-dynamic';
 
 const MS_DAY = 86_400_000;
 const STORAGE_CAP_BYTES = 5 * 1024 ** 4; // 5 TB soft cap for the usage gauge
+/** Rows a paged read may go through before it is reported as a prefix (one round trip per 1,000). */
+const ROW_CEILING = 25_000;
 
 const planLabel = (plan: string | null): string => planName(plan);
 
@@ -57,31 +62,93 @@ export default async function AdminDashboardPage() {
     checkStorage(supabase).catch((cause) => ({ ok: false as const, detail: String(cause) })),
   ]);
 
+  // The revenue trend's rows start at the first of its six admin-zone months.
+  const revenueSince = new Date(lastUtcMonths(6)[0].start).toISOString();
+
+  // Every tile below used to be reduced from a plain select with no bound.
+  // PostgREST answers one with at most `db-max-rows` (1,000) and no error, so
+  // past a thousand rows Monthly revenue read "from 1000 active plans", the
+  // storage gauge summed the first thousand documents, the plan donut and Top
+  // families saw the first thousand families and members, the trend the first
+  // thousand subscriptions and Support the first thousand tickets — each shown
+  // as the platform's total. /admin/subscriptions and /admin/system fixed the
+  // same reads; this page now reads the same way:
+  //
+  //   - what is only COUNTED is a `head: true` count — exact, and no response
+  //     cap touches it: the new-this-month figures and each support status;
+  //   - what is SUMMED or tallied pages on the id (readAllByIdAsQuery) to a
+  //     real ceiling. Families upload documents and check out subscriptions
+  //     while this page reads, and an offset read repeats or skips a row when
+  //     one lands between its pages; paging on `id > last` reads each row at
+  //     most once. Reaching the ceiling costs that figure alone: it says it is
+  //     not shown, and the ceiling banner names it, instead of rendering a
+  //     smaller platform than exists. Any other failure joins loadErrors;
+  //   - each paged read asks for the rows its figure needs and no more: active
+  //     subscriptions for revenue and the donut, the trend's six months of new
+  //     subscriptions, active members for Top families;
+  //   - a listed row's family is named from its own family, by the ids Top
+  //     families and Recent activities list (readInChunks). Their names came
+  //     from the donut's read of every family, so past its ceiling the thirteen
+  //     listed rows read "Unknown" (review R5-SIB-HOME-FAMILY-NAMES).
   const [
     familyCountResult,
     activeMemberCountResult,
     activeSubCountResult,
+    newFamilyCountResult,
+    newMemberCountResult,
     familiesResult,
     activeMembersResult,
     subscriptionsResult,
+    newSubscriptionsResult,
     docsResult,
     newMembersResult,
     recentLogsResult,
-    ticketsResult,
+    openTicketCountResult,
+    pendingTicketCountResult,
+    resolvedTicketCountResult,
     adminNotesResult,
     unreadNoteCountResult,
   ] = await settleAll([
     supabase.from('families').select('id', { count: 'exact', head: true }),
     supabase.from('family_members').select('id', { count: 'exact', head: true }).eq('is_active', true),
     supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-    supabase.from('families').select('id, name, created_at').order('created_at', { ascending: false }),
-    supabase.from('family_members').select('family_id, created_at').eq('is_active', true),
-    supabase.from('subscriptions').select('family_id, plan, status, created_at'),
-    supabase.from('documents').select('size_bytes'),
-    supabase.from('family_members').select('created_at').eq('is_active', true).gte('created_at', thirtyDaysAgo),
+    supabase.from('families').select('id', { count: 'exact', head: true }).gte('created_at', monthStart),
+    supabase.from('family_members').select('id', { count: 'exact', head: true }).eq('is_active', true).gte('created_at', monthStart),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('families').select('id, name');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('family_members').select('id, family_id').eq('is_active', true);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('subscriptions').select('id, family_id, plan').eq('status', 'active');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('subscriptions').select('id, plan, created_at').gte('created_at', revenueSince);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('documents').select('id, size_bytes');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('family_members').select('id, created_at').eq('is_active', true).gte('created_at', thirtyDaysAgo);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: ROW_CEILING }),
     supabase.from('audit_logs').select('id, family_id, actor_id, action, resource, created_at')
       .order('created_at', { ascending: false }).limit(8),
-    supabase.from('support_tickets').select('status'),
+    supabase.from('support_tickets').select('id', { count: 'exact', head: true }).eq('status', 'open'),
+    supabase.from('support_tickets').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabase.from('support_tickets').select('id', { count: 'exact', head: true }).in('status', ['resolved', 'closed']),
     supabase.from('admin_notifications').select('id, kind, title, body, url, is_read, created_at')
       .order('created_at', { ascending: false }).limit(5),
     supabase.from('admin_notifications').select('id', { count: 'exact', head: true }).eq('is_read', false),
@@ -100,36 +167,63 @@ export default async function AdminDashboardPage() {
   // Nothing here is load-bearing: every tile and list has an empty state. So
   // there is no bail at all now — the failures are named in a banner instead,
   // which is more useful than an error page because it says WHICH read failed.
+  //
+  // A summed read that reached its ceiling did not fail: its figure says it is
+  // not shown and the ceiling banner names it, rather than a zero beside a
+  // banner.
+  const reachedCeiling = (res: object) => 'truncated' in res && res.truncated === true;
+  const familiesCeiling = reachedCeiling(familiesResult);
+  const membersCeiling = reachedCeiling(activeMembersResult);
+  const subscriptionsCeiling = reachedCeiling(subscriptionsResult);
+  const trendCeiling = reachedCeiling(newSubscriptionsResult);
+  const docsCeiling = reachedCeiling(docsResult);
+  const growthCeiling = reachedCeiling(newMembersResult);
   const loadErrors = ([
     ['families (count)', familyCountResult],
     ['active members (count)', activeMemberCountResult],
     ['active subscriptions (count)', activeSubCountResult],
+    ['families new this month (count)', newFamilyCountResult],
+    ['members new this month (count)', newMemberCountResult],
     ['families', familiesResult],
     ['active members', activeMembersResult],
-    ['subscriptions', subscriptionsResult],
+    ['active subscriptions', subscriptionsResult],
+    ['new subscriptions (last 6 months)', newSubscriptionsResult],
     ['documents', docsResult],
     ['new members', newMembersResult],
     ['recent audit logs', recentLogsResult],
-    ['support tickets', ticketsResult],
+    ['support tickets (open count)', openTicketCountResult],
+    ['support tickets (pending count)', pendingTicketCountResult],
+    ['support tickets (resolved count)', resolvedTicketCountResult],
     ['admin notifications', adminNotesResult],
     ['unread notifications (count)', unreadNoteCountResult],
   ] as const)
     .filter(([, res]) => res.error)
+    // A read past its ceiling is a figure not shown (below), not a failed read.
+    .filter(([, res]) => !reachedCeiling(res))
     .map(([label, res]) => `${label}: ${describeReadError(res.error)}`);
-  if (loadErrors.length > 0) {
-    console.error('[admin-dashboard] partial read — rendering degraded', loadErrors.join('; '));
-  }
+  const unavailable = tr('strategyMetrics.unavailable');
+  const figuresNotShown = [
+    ...(subscriptionsCeiling ? [tr('admin.monthlyRevenue')] : []),
+    ...(growthCeiling ? [tr('admin.userGrowth')] : []),
+    ...(docsCeiling ? [tr('admin.storageUsage')] : []),
+    ...(membersCeiling ? [tr('admin.topFamilies')] : []),
+    ...(familiesCeiling || subscriptionsCeiling ? [tr('admin.planDistribution')] : []),
+    ...(trendCeiling ? [tr('admin.revenueOverview')] : []),
+  ];
+  if (figuresNotShown.length > 0) console.warn('[admin-dashboard] a summed read reached its ceiling; not shown:', figuresNotShown.join(', '));
 
   const { count: familyCount } = familyCountResult;
   const { count: activeMemberCount } = activeMemberCountResult;
   const { count: activeSubCount } = activeSubCountResult;
+  const { count: newFamilyCount } = newFamilyCountResult;
+  const { count: newMemberCount } = newMemberCountResult;
   const { data: families } = familiesResult;
   const { data: activeMembers } = activeMembersResult;
-  const { data: subscriptions } = subscriptionsResult;
+  const { data: activeSubscriptions } = subscriptionsResult;
+  const { data: newSubscriptions } = newSubscriptionsResult;
   const { data: docs } = docsResult;
   const { data: newMembers } = newMembersResult;
   const { data: recentLogs } = recentLogsResult;
-  const { data: tickets } = ticketsResult;
   const { data: adminNotes } = adminNotesResult;
   const { count: unreadNoteCount } = unreadNoteCountResult;
 
@@ -141,10 +235,10 @@ export default async function AdminDashboardPage() {
   // including account-less ones — not just rows in `profiles` (people who've
   // created a login). Counting profiles alone understates active families.
   const userCount = activeMemberCount;
-  const newFamiliesThisMonth = (families ?? []).filter((f) => f.created_at >= monthStart).length;
-  const activeSubs = (subscriptions ?? []).filter((s) => s.status === 'active');
+  const newFamiliesThisMonth = newFamilyCount ?? 0;
+  const activeSubs = activeSubscriptions ?? [];
   const monthlyRevenueCents = activeSubs.reduce((sum, s) => sum + planMonthlyCents(s.plan), 0);
-  const newUsersThisMonth = (newMembers ?? []).filter((p) => p.created_at >= monthStart).length;
+  const newUsersThisMonth = newMemberCount ?? 0;
 
   // ── System status (real probes + configuration readiness) ──
   const statuses = [
@@ -175,10 +269,8 @@ export default async function AdminDashboardPage() {
   // ── Top families by active members ──
   const memberCounts = new Map<string, number>();
   for (const m of activeMembers ?? []) memberCounts.set(m.family_id, (memberCounts.get(m.family_id) ?? 0) + 1);
-  const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
-  const topFamilies = [...memberCounts.entries()]
-    .map(([id, count]) => ({ id, name: familyNameById.get(id) ?? 'Unknown', count }))
-    .sort((a, b) => b.count - a.count)
+  const topFamilyCounts = [...memberCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
 
   // ── Plan distribution across every family (not just paid subscriptions) ──
@@ -204,7 +296,7 @@ export default async function AdminDashboardPage() {
 
   // ── Revenue overview (last 6 months of new MRR) ──
   const months = lastUtcMonths(6).map((w) => {
-    const cents = (subscriptions ?? [])
+    const cents = (newSubscriptions ?? [])
       .filter((s) => inWindow(s.created_at, w))
       .reduce((sum, s) => sum + planMonthlyCents(s.plan), 0);
     return { label: new Date(w.start).toLocaleDateString(locale, { month: 'short', timeZone: ADMIN_ZONE }), cents };
@@ -212,22 +304,38 @@ export default async function AdminDashboardPage() {
   const maxRevenue = Math.max(...months.map((m) => m.cents), 1);
 
   // ── Support overview ──
-  const ticketCounts = { open: 0, pending: 0, resolved: 0 };
-  for (const t of tickets ?? []) {
-    if (t.status === 'open') ticketCounts.open++;
-    else if (t.status === 'pending') ticketCounts.pending++;
-    else if (t.status === 'resolved' || t.status === 'closed') ticketCounts.resolved++;
-  }
+  // One exact count per status; "Resolved" has always included closed tickets.
+  const ticketCounts = {
+    open: openTicketCountResult.count ?? 0,
+    pending: pendingTicketCountResult.count ?? 0,
+    resolved: resolvedTicketCountResult.count ?? 0,
+  };
 
-  // ── Recent activity actors ──
+  // ── Recent activity actors, and the families the listed rows name ──
   const actorIds = [...new Set((recentLogs ?? []).map((l) => l.actor_id).filter((x): x is string => !!x))];
-  const actorsResult = actorIds.length
-    ? await supabase.from('profiles').select('id, full_name, email').in('id', actorIds)
-    : { data: [] as { id: string; full_name: string | null; email: string | null }[] };
+  const namedFamilyIds = [...new Set([
+    ...topFamilyCounts.map(([id]) => id),
+    ...(recentLogs ?? []).map((l) => l.family_id).filter((x): x is string => !!x),
+  ])];
+  const [actorsResult, familyNamesResult] = await settleAll([
+    actorIds.length
+      ? supabase.from('profiles').select('id, full_name, email').in('id', actorIds)
+      : Promise.resolve({ data: [] as { id: string; full_name: string | null; email: string | null }[], error: null }),
+    readInChunks(namedFamilyIds, (chunk) => supabase.from('families').select('id, name').in('id', chunk)),
+  ]);
+  // A failed name read costs the names, like the actors below; it is named in the banner.
+  if (familyNamesResult.error) loadErrors.push(`family names: ${describeReadError(familyNamesResult.error)}`);
+  if (loadErrors.length > 0) {
+    console.error('[admin-dashboard] partial read — rendering degraded', loadErrors.join('; '));
+  }
+  const familyNameById = new Map((familyNamesResult.data ?? []).map((f) => [f.id, f.name]));
+  const topFamilies = topFamilyCounts.map(([id, count]) => ({ id, name: familyNameById.get(id) ?? 'Unknown', count }));
   // A failed actor lookup costs the NAMES beside audit-log entries, nothing
   // more: actorById is consulted with `actorById.get(log.actor_id)` and the
   // render already handles a miss. Returning an error page for it meant the
-  // dashboard vanished because it could not label a row.
+  // dashboard vanished because it could not label a row. Settled, because a
+  // transport failure REJECTS the query instead of resolving { data, error },
+  // and that rejection took the route's error boundary in place of the page.
   if ('error' in actorsResult && actorsResult.error) {
     console.warn('[admin-dashboard] actor profile read failed — activity rows lose their names', actorsResult.error);
   }
@@ -253,6 +361,7 @@ export default async function AdminDashboardPage() {
           </ul>
         </div>
       )}
+      <PartialReadBanner title={tr('adminCeiling.figuresNotShown', { n: ROW_CEILING.toLocaleString() })} failures={figuresNotShown} />
 
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Main column */}
@@ -261,7 +370,7 @@ export default async function AdminDashboardPage() {
             <StatCard icon={Home} tint="text-violet-400 bg-violet-500/15" label={tr('admin.totalFamilies')} value={familyCount?.toLocaleString() ?? '0'} sub={tr('admin.newThisMonth', { n: newFamiliesThisMonth })} />
             <StatCard icon={Users} tint="text-blue-400 bg-blue-500/15" label={tr('admin.activeUsers')} value={userCount?.toLocaleString() ?? '0'} sub={tr('admin.newThisMonth', { n: newUsersThisMonth })} />
             <StatCard icon={CreditCard} tint="text-emerald-400 bg-emerald-500/15" label={tr('admin.subscriptions')} value={activeSubCount?.toLocaleString() ?? '0'} sub={`${activeMemberCount?.toLocaleString() ?? 0} active members`} />
-            <StatCard icon={DollarSign} tint="text-amber-400 bg-amber-500/15" label={tr('admin.monthlyRevenue')} value={fmtMoney(monthlyRevenueCents)} sub={`from ${activeSubs.length} active plans`} />
+            <StatCard icon={DollarSign} tint="text-amber-400 bg-amber-500/15" label={tr('admin.monthlyRevenue')} value={subscriptionsCeiling ? unavailable : fmtMoney(monthlyRevenueCents)} sub={subscriptionsCeiling ? '' : `from ${activeSubs.length} active plans`} />
           </div>
 
           {/* System overview */}
@@ -269,9 +378,9 @@ export default async function AdminDashboardPage() {
             <Card>
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-sm font-semibold">{tr('admin.userGrowth')}</p>
-                <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-emerald-400"><TrendingUp className="h-3.5 w-3.5" />+{newUsers30}</span>
+                {!growthCeiling && <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-emerald-400"><TrendingUp className="h-3.5 w-3.5" />+{newUsers30}</span>}
               </div>
-              <Sparkline data={growthByDay} />
+              {growthCeiling ? <p className="text-sm text-muted">{unavailable}</p> : <Sparkline data={growthByDay} />}
               <p className="mt-2 text-xs text-muted">{tr('admin.newUsersLast30Days')}</p>
             </Card>
             <Card>
@@ -284,7 +393,7 @@ export default async function AdminDashboardPage() {
             <Card>
               <p className="mb-2 text-sm font-semibold">{tr('admin.storageUsage')}</p>
               <div className="flex items-center justify-center py-1">
-                <Gauge pct={storagePct} color="#7c5dff" centerLabel={fmtBytes(usedBytes)} />
+                {docsCeiling ? <p className="text-sm text-muted">{unavailable}</p> : <Gauge pct={storagePct} color="#7c5dff" centerLabel={fmtBytes(usedBytes)} />}
               </div>
               <p className="mt-1 text-center text-xs text-muted">of {fmtBytes(STORAGE_CAP_BYTES)} capacity</p>
             </Card>
@@ -385,7 +494,9 @@ export default async function AdminDashboardPage() {
               <h2 className="text-base font-semibold">{tr('admin.topFamilies')}</h2>
               <Link href="/admin/users" className="text-xs font-medium text-brand-text hover:underline">{tr('admin.viewAll')}</Link>
             </div>
-            {topFamilies.length === 0 ? (
+            {membersCeiling ? (
+              <p className="text-sm text-muted">{unavailable}</p>
+            ) : topFamilies.length === 0 ? (
               <EmptyState icon={Home} title={tr('admin.noFamiliesYet')} />
             ) : (
               <ul className="space-y-2.5">
@@ -407,7 +518,9 @@ export default async function AdminDashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <h2 className="mb-3 text-base font-semibold">{tr('admin.planDistribution')}</h2>
-          {subSegments.length === 0 ? (
+          {familiesCeiling || subscriptionsCeiling ? (
+            <p className="text-sm text-muted">{unavailable}</p>
+          ) : subSegments.length === 0 ? (
             <EmptyState icon={CreditCard} title={tr('admin.noFamiliesYet')} />
           ) : (
             <div className="flex items-center gap-4">
@@ -427,7 +540,9 @@ export default async function AdminDashboardPage() {
 
         <Card>
           <h2 className="mb-3 text-base font-semibold">{tr('admin.revenueOverview')}</h2>
-          <Bars data={months.map((m) => ({ label: m.label, value: m.cents }))} max={maxRevenue} money />
+          {trendCeiling
+            ? <p className="text-sm text-muted">{unavailable}</p>
+            : <Bars data={months.map((m) => ({ label: m.label, value: m.cents }))} max={maxRevenue} money />}
           <p className="mt-2 text-xs text-muted">{tr('admin.newMrrLast6Months')}</p>
         </Card>
 

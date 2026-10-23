@@ -64,11 +64,32 @@ async function saveRow(
   if (id && wroteNoRows(data)) throw refusalError(label, 'notSaved');
 }
 
+/**
+ * The identifying columns a soft delete blanks in the same UPDATE as its
+ * `deleted_at` stamp. Nothing purges a `deleted_at` row — no code path, no cron
+ * — and the 0037 select policies carry no `deleted_at is null` clause, so a
+ * "deleted" licence kept its number, a policy its policy number, a plate its
+ * plate, served by `GET /rest/v1/<table>` to any member's session for good
+ * while every screen hid it. The row stays (the app's readers filter on
+ * `deleted_at`); what identified it does not. The scheduled purge and the
+ * policy clause are the owner's SQL to add.
+ */
+const SCRUBBED_ON_DELETE: Record<string, Record<string, null>> = {
+  vehicles: { vin: null, license_plate: null, notes: null },
+  driver_licenses: { license_number: null, notes: null },
+  vehicle_registrations: { plate: null, notes: null },
+  vehicle_inspections: { station: null, notes: null },
+  auto_insurance_policies: { policy_number: null, agent_name: null, agent_phone: null, notes: null },
+  rental_cars: { confirmation_number: null, notes: null },
+  auto_service_records: { provider: null, description: null },
+};
+
 async function softDelete(supabase: Client, table: string, id: string, familyId: string, userId: string, label = 'Could not delete that record.') {
   // A soft delete is an UPDATE, so it carries the same zero-rows hazard as
   // `saveRow` above — and the consequence is sharper, because the caller has
   // already told the family the record is gone.
-  const { data, error } = await supabase.from(table as 'vehicles').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId).select('id');
+  const patch = { ...SCRUBBED_ON_DELETE[table], deleted_at: new Date().toISOString(), updated_by: userId };
+  const { data, error } = await supabase.from(table as 'vehicles').update(patch).eq('id', id).eq('family_id', familyId).select('id');
   if (error) throw refusalError(describeActionError(error, label), refusalForError(error));
   if (wroteNoRows(data)) throw refusalError(label, 'notSaved');
 }

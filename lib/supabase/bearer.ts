@@ -34,9 +34,23 @@ export function createBearerClient(token: string): DB {
   );
 }
 
+export type BearerRefusal = 'invalid_token' | 'needs_family' | 'unavailable' | 'account_closed';
+
 export type BearerContext =
   | { ok: true; supabase: DB; ctx: UserContext; user: { id: string; email: string | null } }
-  | { ok: false; reason: 'invalid_token' | 'needs_family' | 'unavailable'; supabase?: DB; user?: { id: string; email: string | null } };
+  | { ok: false; reason: BearerRefusal; supabase?: DB; user?: { id: string; email: string | null } };
+
+/**
+ * The HTTP status a bearer refusal answers with: a token that does not prove
+ * who is calling is 401; a caller we know but may not serve — no family yet,
+ * or a family that closed its account — is 403; a provider we could not reach
+ * is 503, never presented as an expired session.
+ */
+export function bearerRefusalStatus(reason: BearerRefusal): 401 | 403 | 503 {
+  if (reason === 'invalid_token') return 401;
+  if (reason === 'needs_family' || reason === 'account_closed') return 403;
+  return 503;
+}
 
 /**
  * Validate a bearer token and resolve the same user + active-family context the
@@ -87,5 +101,13 @@ export async function getBearerUserContext(token: string): Promise<BearerContext
   }
   const activeRow = chooseActiveMembership(memberships.map((m) => m.member), prefs?.active_family_id);
   const active = memberships.find((m) => m.member === activeRow) ?? memberships[0];
+  // A closed family (families.closed_at) is refused here, for every bearer
+  // route at once. closeAccountAction stamps closed_at and revokes no session,
+  // and the web app's lock is the layout overlay — which is not in front of
+  // the phone. /api/ai refused 'account_closed' through assertAIAccess while
+  // the calendar kept serving, so the phone read a closed family's calendar
+  // for as long as its JWT lived. The family row is already loaded above;
+  // nothing more is read.
+  if (active.family.closed_at) return { ok: false, reason: 'account_closed', supabase, user };
   return { ok: true, supabase, user, ctx: { user, memberships, active } };
 }

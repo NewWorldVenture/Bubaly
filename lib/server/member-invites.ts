@@ -1,6 +1,6 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '@/lib/database.types';
+import type { Database, MemberRole } from '@/lib/database.types';
 import { literalCaseInsensitivePattern } from '@/lib/supabase/escape-like';
 
 type DB = SupabaseClient<Database>;
@@ -70,6 +70,45 @@ export async function closePendingInvitesFor(
       console.error('[member-invites] pending invites were not closed', { familyId, status, error });
       return false;
     }
+  }
+  return true;
+}
+
+/**
+ * Revoke this family's PENDING invites the removed (or demoted) member ISSUED.
+ *
+ * `closePendingInvitesFor` closes the invites addressed TO a removed member;
+ * the ones they sent stood. accept_invite (0136) checks the token, status,
+ * expiry and address, never whether `invited_by` is still an active manager,
+ * so an invite a removed parent sent kept enrolling its invitee at the role
+ * that parent chose — 'parent' included — for up to 14 days (0482's clamp).
+ * The SQL re-check in accept_invite is the recorded owner action (AUD16-O02);
+ * this closes the rows the moment the member is removed. A member with no
+ * account (`user_id` null) issued nothing, so there is nothing to revoke.
+ * Returns false when the update failed; the caller folds it into the same
+ * `invitesRevoked` the screen already reports.
+ *
+ * `roles` narrows it to the invites at those roles — what a demotion takes
+ * away (inviteRolesLostOnRoleChange): a parent made an adult may still have
+ * invited a guest, but no longer stands behind an invite at 'parent'. An
+ * empty list revokes nothing.
+ */
+export async function revokeInvitesIssuedBy(
+  service: DB, familyId: string, issuerUserId: string | null, roles?: readonly MemberRole[],
+): Promise<boolean> {
+  if (!issuerUserId || roles?.length === 0) return true;
+  // Zero rows is the ordinary answer (they invited nobody), so the selection
+  // is read for errors only.
+  let revoke = service.from('invites')
+    .update({ status: 'revoked' })
+    .eq('family_id', familyId)
+    .eq('status', 'pending')
+    .eq('invited_by', issuerUserId);
+  if (roles) revoke = revoke.in('role', [...roles]);
+  const { error } = await revoke.select('id');
+  if (error) {
+    console.error('[member-invites] the invites the member issued were not revoked', { familyId, issuerUserId, roles, error });
+    return false;
   }
   return true;
 }

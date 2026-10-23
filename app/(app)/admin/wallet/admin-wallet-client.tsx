@@ -17,7 +17,8 @@ export type AuditRow = {
 };
 type Stats = {
   activeWallets: number; childWallets: number; pendingGifts: number; pendingApprovals: number;
-  creditVolumeCents: number; debitVolumeCents: number; netCents: number;
+  /** null: the ledger volume was past its ceiling, and is not shown. */
+  creditVolumeCents: number | null; debitVolumeCents: number | null; netCents: number | null;
 };
 
 // Stripe flags require business/legal approval — flag them visually so an admin
@@ -33,6 +34,7 @@ export function AdminWalletClient({ stats, flags, audit }: { stats: Stats; flags
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const volume = (cents: number | null) => (cents === null ? t('strategyMetrics.unavailable') : formatCents(cents));
 
   async function toggle(flag: FlagRow) {
     if (busyKey) return;
@@ -68,15 +70,15 @@ export function AdminWalletClient({ stats, flags, audit }: { stats: Stats; flags
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-border bg-surface/40 p-4">
           <div className="flex items-center gap-2 text-xs text-muted"><TrendingUp className="h-4 w-4 text-green-400" /> {t('adminWalletAdminWalletClient.totalCredits')}</div>
-          <div className="mt-1 text-xl font-bold text-green-400">{formatCents(stats.creditVolumeCents)}</div>
+          <div className="mt-1 text-xl font-bold text-green-400">{volume(stats.creditVolumeCents)}</div>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-4">
           <div className="flex items-center gap-2 text-xs text-muted"><TrendingDown className="h-4 w-4 text-rose-400" /> {t('adminWalletAdminWalletClient.totalDebits')}</div>
-          <div className="mt-1 text-xl font-bold text-rose-400">{formatCents(stats.debitVolumeCents)}</div>
+          <div className="mt-1 text-xl font-bold text-rose-400">{volume(stats.debitVolumeCents)}</div>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-4">
           <div className="flex items-center gap-2 text-xs text-muted"><Scale className="h-4 w-4 text-brand-text" /> {t('adminWalletAdminWalletClient.netOutstanding')}</div>
-          <div className="mt-1 text-xl font-bold">{formatCents(stats.netCents)}</div>
+          <div className="mt-1 text-xl font-bold">{volume(stats.netCents)}</div>
         </div>
       </div>
       <p className="-mt-3 text-[11px] text-muted">

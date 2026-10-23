@@ -2,7 +2,7 @@ import { createServer } from '@/lib/supabase/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { AppLockGate } from '@/components/app/app-lock-gate';
 import { isAppLockConfig } from '@/lib/security/app-lock';
-import { resolveEntitlement } from '@/lib/server/entitlement';
+import { closedFamilyStanding, resolveEntitlement } from '@/lib/server/entitlement';
 import { isSuperAdmin } from '@/lib/supabase/auth';
 import { TrialPaywallGate } from '@/components/app/trial-paywall-gate';
 import { AccountClosedGate } from '@/components/app/account-closed-gate';
@@ -73,7 +73,13 @@ async function GatedShell({
   // grandfathered existing free families pass; resolveEntitlement fails open).
   if (!superAdmin) {
     const ent = await resolveEntitlement(supabase, user.id, { isSuperAdmin: false });
-    if (ent.closed) return <AccountClosedGate />;
+    if (ent.closed) {
+      // The gate replaces every route below, switcher included, so a member of
+      // two households is handed their open ones here, and a non-parent is not
+      // offered a reopen the action would refuse (closedFamilyStanding).
+      const standing = await closedFamilyStanding(supabase, user.id, ent.familyId);
+      return <AccountClosedGate canReopen={standing.canReopen} otherFamilies={standing.openFamilies} />;
+    }
     if (ent.locked) return <TrialPaywallGate trialEndsAt={ent.trialEndsAt} />;
   }
 

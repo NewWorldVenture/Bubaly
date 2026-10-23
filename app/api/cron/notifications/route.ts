@@ -8,8 +8,29 @@ import { deliverNotificationEmails } from '@/lib/server/notification-emails';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { deliverMorningBriefs } from '@/lib/briefing/deliver';
 import { expireStale, remindPendingApprovals, resumeSettledRuns } from '@/lib/services/approvals';
+import { sweepFamilies } from '@/lib/server/cron-family-sweep';
+import { claimGenerationLease } from '@/lib/server/notification-generation-lease';
 
 export const runtime = 'nodejs';
+// Chosen rather than inherited from the platform default. The generation loop
+// below is where the time goes — a dozen round trips per family — and push and
+// email dispatch run only after it, so a run killed at the platform's limit
+// delivered nothing that day and answered with nothing to count.
+export const maxDuration = 300;
+// Generation stops STARTING families once this much is spent, leaving the rest
+// of maxDuration for the approval sweeps, the morning briefs, push dispatch
+// (its own PUSH_DISPATCH_BUDGET_MS) and the email digests — so the rows already
+// queued are always delivered, whatever generation managed.
+const GENERATION_BUDGET_MS = 150_000;
+// The morning briefs stop STARTING families this long after the run began
+// (lib/briefing/deliver.ts MorningDeliveryBudget): with the family timeout
+// below that leaves push dispatch its PUSH_DISPATCH_BUDGET_MS and the email
+// digests the rest of maxDuration, however slow the brief pass is.
+const BRIEF_BUDGET_MS = 200_000;
+// One family's reads outliving this are that family's failure, not the run's.
+const FAMILY_TIMEOUT_MS = 20_000;
+const FAMILY_CONCURRENCY = 4;
+const DAY_MS = 86_400_000;
 
 // Runs a few times a day via Vercel Cron. Generates "who needs to know"
 // notifications for every family, then delivers them across both channels:
@@ -38,22 +59,54 @@ export async function GET(req: NextRequest) {
 
   let total = 0;
   let generationFailures = 0;
-  for (const f of families ?? []) {
+  // Families another generator holds right now (the push scan on its mirrored
+  // minute, a member's Scan button): skipped, not failed — that generator is
+  // writing the same rows (lib/server/notification-generation-lease.ts).
+  let generationHeld = 0;
+  const startedAt = Date.now();
+  // Rotated, bounded and budgeted (lib/server/cron-family-sweep.ts): the loop
+  // used to await every family in `order('id')` with no budget and no timeout,
+  // so a run killed at the platform's limit served the same prefix every day
+  // and never reached the delivery steps below. `counted.current` is false once
+  // the pass stopped waiting for this family: a result that arrives after its
+  // timeout was already counted as one.
+  const swept = await sweepFamilies(families ?? [], {
+    // Daily: the day is the run's index, so consecutive runs start apart.
+    budgetMs: GENERATION_BUDGET_MS, itemTimeoutMs: FAMILY_TIMEOUT_MS, concurrency: FAMILY_CONCURRENCY, startedAt, runIndex: Math.floor(startedAt / DAY_MS),
+  }, async (f, counted) => {
     try {
-      // A family whose source reads did not all answer is a failure of this
-      // tick, not a quiet family: it used to answer 200 ok however many reads
-      // had failed, because only a throw was counted.
-      const report: NotificationGenerationReport = { failedSources: [] };
-      total += await generateFamilyNotifications(supabase, f.id, report);
-      if (report.failedSources.length) {
-        generationFailures += 1;
-        console.error(`Notification generation incomplete for family ${f.id}:`, report.failedSources);
+      const lease = await claimGenerationLease(supabase, f.id);
+      if (lease.state === 'held') { if (counted.current) generationHeld += 1; return; }
+      if (lease.state === 'error') { if (counted.current) generationFailures += 1; return; }
+      const { release } = lease;
+      try {
+        // A family whose source reads did not all answer is a failure of this
+        // tick, not a quiet family: it used to answer 200 ok however many reads
+        // had failed, because only a throw was counted.
+        const report: NotificationGenerationReport = { failedSources: [] };
+        const created = await generateFamilyNotifications(supabase, f.id, report);
+        if (!counted.current) return;
+        total += created;
+        if (report.failedSources.length) {
+          generationFailures += 1;
+          console.error(`Notification generation incomplete for family ${f.id}:`, report.failedSources);
+        }
+      } finally {
+        await release();
       }
     } catch (e) {
-      generationFailures += 1;
+      if (counted.current) generationFailures += 1;
       console.error(`Notification generation failed for family ${f.id}:`, e);
     }
+  });
+  for (const f of swept.timedOut) {
+    generationFailures += 1;
+    console.error(`Notification generation gave up waiting for family ${f.id} after ${FAMILY_TIMEOUT_MS} ms`);
   }
+  // Families this run never STARTED: the budget ran out first. A failed run,
+  // decided below — an unserved tail must not look like a clean one.
+  const unserved = swept.unreached.length;
+  if (unserved > 0) console.error(`[notifications] budget reached with ${unserved} families unserved`, swept.unreached.slice(0, 50).map((f) => f.id));
 
   // AI approvals (0251): expire the ones nobody answered so their runs stop
   // honestly, then remind each manager once about the ones still open. Both
@@ -86,10 +139,13 @@ export async function GET(req: NextRequest) {
   // The morning brief (§49): one notification per family per family-local
   // day, to the managers, with the headline and what needs deciding. Filed
   // before push dispatch so it rides this tick's pushes; a family it failed
-  // for is a notification this tick did not generate, and is counted as one.
+  // for is a notification this tick did not generate, and is counted as one,
+  // as is a family the brief pass's budget never reached or gave up on.
   let briefs = { delivered: 0, families: 0, skipped: 0, failed: 0 };
   try {
-    briefs = await deliverMorningBriefs(supabase);
+    briefs = await deliverMorningBriefs(supabase, new Date(), {
+      startedAt, budgetMs: BRIEF_BUDGET_MS, familyTimeoutMs: FAMILY_TIMEOUT_MS, concurrency: FAMILY_CONCURRENCY,
+    });
     generationFailures += briefs.failed;
   } catch (e) {
     generationFailures += 1;
@@ -117,10 +173,10 @@ export async function GET(req: NextRequest) {
     console.error('Notification email delivery failed:', e);
   }
 
-  const failed = generationFailures + pushDispatchFailures + pushed.result.failed + pushed.result.skipped + emailDeliveryFailures + emailed.failed;
+  const failed = generationFailures + pushDispatchFailures + pushed.result.failed + pushed.result.skipped + emailDeliveryFailures + emailed.failed + unserved;
   const ok = failed === 0;
   return NextResponse.json(
-    { ok, families: families?.length ?? 0, created: total, approvals, briefs, pushed, emailed: emailed.sent, emailFailures: emailed.failed, emailSkipped: emailed.skipped, failed },
+    { ok, families: families?.length ?? 0, created: total, generationHeld, unserved, approvals, briefs, pushed, emailed: emailed.sent, emailFailures: emailed.failed, emailSkipped: emailed.skipped, failed },
     { status: ok ? 200 : 502 },
   );
 }

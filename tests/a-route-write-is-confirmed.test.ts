@@ -226,7 +226,9 @@ describe('ai-runs counts a run as returned only when it was (C1-S9-63)', () => {
     // One requeue, shared by the out-of-tick return and the closed-family
     // deferral: it answers true only for a write that landed and matched.
     expect(aiRuns).toContain(".eq('state', 'executing')\n      .select('id');");
-    expect(aiRuns).toContain('return !error && !wroteNoRows(requeued);');
+    // ...and a refused hand-back is counted (`requeueFailures`), so a stuck
+    // lease reaches the tick's status rather than only its log.
+    expect(aiRuns).toContain('const ok = !error && !wroteNoRows(requeued);\n    if (!ok) requeueFailures += 1;\n    return ok;');
     expect(aiRuns).toContain('if (await requeue(run, new Date())) returned += 1;');
     expect(code(aiRuns)).not.toMatch(/^\s*returned \+= 1;/m);
   });
@@ -238,7 +240,8 @@ describe('the abandoned-checkout claim is guarded on pending and confirmed', () 
   // claimed it) after the read.
   it('claims before the nudge, only a pending row, and reads the claimed rows back', () => {
     const src = read('app/api/cron/checkout-abandoned/route.ts');
-    const stmt = src.slice(at(src, ".update({ status: 'abandoned', abandoned_at: new Date().toISOString() })"));
+    // `claimedAt` is the stamp the hand-back (a nudge that did not go out) is fenced on.
+    const stmt = src.slice(at(src, ".update({ status: 'abandoned', abandoned_at: claimedAt })"));
     const write = stmt.slice(0, stmt.indexOf(';'));
     expect(write).toContain(".eq('status', 'pending')");
     expect(write).toContain(".select('session_id')");
@@ -247,9 +250,24 @@ describe('the abandoned-checkout claim is guarded on pending and confirmed', () 
   });
 });
 
+describe('the return-reminder stamps are claims taken before the send, and confirmed', () => {
+  // They used to be the first ungated cron below: written after the send, and
+  // zero rows meant the order was gone. The stamp is now taken BEFORE the send,
+  // fenced on the column being unset — so of two overlapping runs only one
+  // sends — and its rows decide whether this run sends at all; a send that did
+  // not go out hands the stamp back. tests/cron-return-reminders-boundary.test.ts
+  // pins the shape; this keeps the ratchet's inventory honest.
+  it('both stamps read their rows back', () => {
+    const src = read('app/api/cron/return-reminders/route.ts');
+    const claim = src.slice(at(src, '.update(stampPatch(column, nowIso))'));
+    expect(claim.slice(0, claim.indexOf(';'))).toContain(".is(column, null).select('id')");
+    const restore = src.slice(at(src, '.update(stampPatch(column, null))'));
+    expect(restore.slice(0, restore.indexOf(';'))).toContain(".eq(column, nowIso).select('id')");
+  });
+});
+
 describe('crons whose zero rows means the row is gone stay ungated (C1-S9-63)', () => {
   const cases = [
-    ['app/api/cron/return-reminders/route.ts', "update({ overdue_notified_at: nowIso }).eq('id', o.id)", 'which no run will sweep'],
     ['app/api/cron/wallet-allowance/route.ts', ".from('allowance_rules')\n          .update({ next_run_on: rule.next_run_on", 'no schedule to restore'],
     ['app/api/cron/guardian-learning/route.ts', ".update({ status: 'auto_dismissed' })", 'ordinary "nothing expired" tick'],
   ] as const;

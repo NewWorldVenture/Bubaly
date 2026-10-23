@@ -2,6 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { getResend, FROM_EMAIL, emailEnabled, APP_URL } from '@/lib/email';
+import { withEmailDeadline } from '@/lib/email-deadline';
 import type { Copy } from '@/lib/marketing/automation-triggers';
 import { unsubUrl } from '@/lib/marketing/unsubscribe';
 import { canonicalMailbox } from '@/lib/server/canonical-mailbox';
@@ -14,6 +15,13 @@ export type Step = { action: string; subject?: string; body?: string };
 export type Recipient = { email: string | null; name?: string | null };
 /** Asked once per mail, just before it is sent: may one more go to this recipient? */
 export type SendAdmission = () => Promise<boolean>;
+/** The provider idempotency key for the send at step `index` of this run: the same on every attempt. */
+export type SendKey = (index: number) => string;
+
+/** The key both runners send a run's step under: its run and its position, which a retry keeps (retryOf). */
+export function automationSendKey(runId: string): SendKey {
+  return (index) => `marketing-automation/${runId}/${index}`;
+}
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] ?? char));
@@ -232,6 +240,7 @@ export async function runSteps(
   supabase: DB,
   admit?: SendAdmission,
   previous: readonly string[] = [],
+  sendKey?: SendKey,
 ): Promise<string[]> {
   const done: string[] = [];
   for (const [i, step] of steps.entries()) {
@@ -290,13 +299,22 @@ export async function runSteps(
           }
           try {
             const unsubscribe = unsubUrl(APP_URL, recipient.email);
-            const { error } = await getResend().emails.send({
+            const message = {
               from: FROM_EMAIL,
               to: recipient.email,
               subject,
               html: `${html}${unsubscribeFooter(unsubscribe)}`,
               headers: { 'List-Unsubscribe': `<${unsubscribe}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
-            });
+            };
+            // Bounded (lib/email-deadline.ts): a provider that never answers
+            // is this step's failure, not a runner held until its kill. A
+            // timed-out send may still have been accepted, and a failed step
+            // is retried, so the retry goes under the run's own key for this
+            // step and the provider folds it rather than mailing twice.
+            const key = sendKey?.(i);
+            const { error } = await withEmailDeadline(key
+              ? getResend().emails.send(message, { idempotencyKey: key })
+              : getResend().emails.send(message));
             done.push(error ? 'send_email:failed' : 'send_email');
           } catch (error) {
             console.error('[marketing automation] email provider call failed', error);

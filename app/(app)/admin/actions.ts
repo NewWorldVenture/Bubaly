@@ -12,7 +12,7 @@ import { InviteEmail } from '@/lib/emails/invite';
 import { emailSchema } from '@/lib/validation';
 import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { stripeFromKey } from '@/lib/stripe';
-import { REMOVED_MEMBER_PATCH, isManager, type MemberRole } from '@/lib/constants/roles';
+import { REMOVED_MEMBER_PATCH, inviteRolesLostOnRoleChange, isManager, type MemberRole } from '@/lib/constants/roles';
 import { REMOVED_CHILD_BAN_MARKER, isChildLoginAccount, memberHasAKidLogin, revokeRemovedChildLogin } from '@/lib/server/child-account';
 import type { PlanId } from '@/lib/constants/plans';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
@@ -20,7 +20,7 @@ import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isValidTimezone } from '@/lib/time/zoned';
 import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
 import { forgetMemberLocation } from '@/lib/location/retention';
-import { closePendingInvitesFor } from '@/lib/server/member-invites';
+import { closePendingInvitesFor, revokeInvitesIssuedBy } from '@/lib/server/member-invites';
 import { recordTrustChange } from '@/lib/trust/ledger';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
@@ -267,9 +267,13 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result<
   if (!forgotten.ok) console.error('[admin-action] removed member location was not cleared', { memberId, failures: forgotten.failures });
   // Every pending invite to them is revoked too, or a second one they hold
   // brings them back (accept_invite reactivates the row). Stands if it fails.
-  const invitesRevoked = await closePendingInvitesFor(supabase, member.family_id, member, 'revoked');
+  // So are the pending invites THEY issued, which accept_invite would still
+  // honour at the role they chose (revokeInvitesIssuedBy).
+  const invitesToThemClosed = await closePendingInvitesFor(supabase, member.family_id, member, 'revoked');
+  const invitesByThemRevoked = await revokeInvitesIssuedBy(supabase, member.family_id, member.user_id);
+  const invitesRevoked = invitesToThemClosed && invitesByThemRevoked;
 
-  await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name, login_revocation: loginRevocation, location_forgotten: forgotten.ok, invites_revoked: invitesRevoked } });
+  await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name, login_revocation: loginRevocation, location_forgotten: forgotten.ok, invites_revoked: invitesRevoked, invites_they_issued_revoked: invitesByThemRevoked } });
   revalidatePath('/admin/users');
   const warning = loginRevocation === 'failed'
     ? t('familyModule.removedButLoginStillActive')
@@ -279,7 +283,7 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result<
 }
 
 /** Updates a member's display name and role. */
-export async function adminUpdateMemberAction(memberId: string, input: { displayName: string; role: MemberRole }): Promise<Result> {
+export async function adminUpdateMemberAction(memberId: string, input: { displayName: string; role: MemberRole }): Promise<Result<{ warning?: string }>> {
   const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
@@ -316,9 +320,15 @@ export async function adminUpdateMemberAction(memberId: string, input: { display
       context: { memberId, from: target.role, to: input.role, by: 'super_admin' },
     });
   }
-  await adminAuditLog({ familyId: member.family_id, action: 'update', resource: 'family_members', resourceId: memberId, metadata: { display_name: displayName, role: input.role } });
+  // A demotion revokes the pending invites they sent at a role they may no
+  // longer give, as the household's editor does (updateFamilyMemberAction).
+  // The role change stands if it fails; the audit row and the console say so.
+  const invitesRevoked = !roleChanges || await revokeInvitesIssuedBy(
+    supabase, member.family_id, target.user_id, inviteRolesLostOnRoleChange(target.role, input.role),
+  );
+  await adminAuditLog({ familyId: member.family_id, action: 'update', resource: 'family_members', resourceId: memberId, metadata: { display_name: displayName, role: input.role, invites_they_issued_revoked: invitesRevoked } });
   revalidatePath('/admin/users');
-  return { ok: true };
+  return invitesRevoked ? { ok: true } : { ok: true, data: { warning: t('familyModule.roleChangedButInviteStillOpen') } };
 }
 
 /** Plans a super-admin can assign from the console (free + the paid tiers). */

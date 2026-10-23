@@ -57,6 +57,14 @@ export async function GET(req: NextRequest) {
   let claimedTotal = 0;
   let returned = 0;
   let claimFailures = 0;
+  // Runs that threw inside `runGraph`, or that the executor could not load
+  // (`status: 'error'`). They were listed in `results` and never reached `ok`,
+  // so a tick in which every claimed run threw was recorded as OK 200 by the
+  // dispatcher. The lease machinery retries them; the status says so.
+  let runFailures = 0;
+  // Refused hand-backs: a run that should have returned to the queue and did
+  // not is a stuck lease, invisible while only successes were counted.
+  let requeueFailures = 0;
   let deferredClosed = 0;
   let deferredUnentitled = 0;
   // The admin tier map, read once per tick and only when there is a run to judge.
@@ -92,7 +100,9 @@ export async function GET(req: NextRequest) {
       .eq('state', 'executing')
       .select('id');
     if (error) console.error('[cron/ai-runs] failed to return a run to the queue', error);
-    return !error && !wroteNoRows(requeued);
+    const ok = !error && !wroteNoRows(requeued);
+    if (!ok) requeueFailures += 1;
+    return ok;
   };
 
   try {
@@ -163,6 +173,7 @@ export async function GET(req: NextRequest) {
         try {
           const result = await runGraph(run.id, { budgetMs: Math.min(PER_RUN_BUDGET_MS, remaining - 2_000), db, replan: replanPortFor(db) });
           results.push({ runId: run.id, status: result.status, completed: result.completed, failed: result.failed });
+          if (result.status === 'error') runFailures += 1;
         } catch (error) {
           // One bad run must not take the tick down: the lease is shortened so
           // the recovery pass in `claim_ai_runs` retries it on the NEXT tick (or
@@ -173,21 +184,29 @@ export async function GET(req: NextRequest) {
           // a repeatable throw would burn every attempt in seconds (releaseRun).
           console.error('[cron/ai-runs] run threw', run.id, error);
           results.push({ runId: run.id, status: 'error', completed: 0, failed: 0 });
+          runFailures += 1;
           if (run.leaseOwner) await releaseRun(db, run.id, run.leaseOwner);
         }
       }
     }
 
+    // A tick whose runs threw, or whose hand-backs were refused, did not do its
+    // work: 502, so the dispatcher records it and a persistently throwing
+    // executor is visible. The 85 s box above still keeps the tick inside the
+    // dispatcher's abort; what changes is that its failures are no longer OK.
+    const ok = claimFailures === 0 && runFailures === 0 && requeueFailures === 0;
     return NextResponse.json({
-      ok: claimFailures === 0,
+      ok,
       claimed: claimedTotal,
       executed: results.length,
+      runFailures,
+      requeueFailures,
       returnedToQueue: returned,
       deferredClosed,
       deferredUnentitled,
       elapsedMs: Date.now() - startedAt,
       results,
-    }, { status: claimFailures === 0 ? 200 : 502 });
+    }, { status: ok ? 200 : 502 });
   } catch (error) {
     console.error('[cron/ai-runs] tick failed', error);
     return NextResponse.json({ error: t('aiRuns.aiRunContinuationFailed') }, { status: 500 });

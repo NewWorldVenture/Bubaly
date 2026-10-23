@@ -41,6 +41,8 @@ export type AssistantLink = {
   timezone: string;
 };
 
+type AssistantLinkFamily = { timezone: string; closed_at?: string | null };
+
 export type AssistantOutcome = 'answered' | 'captured' | 'refused' | 'error';
 export type AssistantReply = { speech: string; outcome: AssistantOutcome; intent: string };
 
@@ -54,7 +56,7 @@ const UTTERANCE_LOG_CHARS = 240;
  * What a presented token resolved to.
  *
  * `not_linked` covers every answer about the TOKEN — unknown, revoked, owner
- * gone, owner no longer a parent — and the caller must treat those
+ * gone, owner no longer a parent, family closed — and the caller must treat those
  * identically, because distinguishing them would turn this into an oracle for
  * guessing tokens. `unavailable` is not an answer about the token at all: a
  * read failed, so nothing is known either way. It is still a refusal (never
@@ -81,7 +83,7 @@ export async function resolveAssistantLink(supabase: Client, token: string): Pro
 export async function lookupAssistantLink(supabase: Client, token: string): Promise<AssistantLinkLookup> {
   const { data, error } = await supabase
     .from('assistant_links')
-    .select('id, family_id, user_id, created_by, provider, scopes, revoked_at, families(timezone)')
+    .select('id, family_id, user_id, created_by, provider, scopes, revoked_at, families!family_id(timezone, closed_at)')
     .eq('token_hash', hashAssistantToken(token))
     .is('revoked_at', null)
     .maybeSingle();
@@ -92,7 +94,7 @@ export async function lookupAssistantLink(supabase: Client, token: string): Prom
   if (!data) return { status: 'not_linked' };
   const row = data as unknown as {
     id: string; family_id: string; user_id: string; created_by: string | null; provider: string; scopes: string[] | null;
-    families: { timezone: string } | { timezone: string }[] | null;
+    families: AssistantLinkFamily | AssistantLinkFamily[] | null;
   };
 
   // A key is minted by a parent FOR THEMSELVES — the only minting path
@@ -107,6 +109,12 @@ export async function lookupAssistantLink(supabase: Client, token: string): Prom
   if (!row.created_by || row.created_by !== row.user_id) return { status: 'not_linked' };
 
   const family = Array.isArray(row.families) ? row.families[0] : row.families;
+  // A family that closed its account (families.closed_at) is served by no
+  // bearer grant: getBearerUserContext refuses it as account_closed, and a
+  // speaker key is the same kind of standing grant. Without this a linked
+  // speaker kept reading the closed family's day aloud and, with `capture`,
+  // filing into it. It is "not linked" like every other answer about the key.
+  if (family?.closed_at) return { status: 'not_linked' };
   const link: AssistantLink = {
     id: row.id,
     family_id: row.family_id,

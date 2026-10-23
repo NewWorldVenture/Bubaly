@@ -43,7 +43,6 @@ const BASELINE = new Map<string, number>([
   ['app/api/blog/save/route.ts', 1],
   ['app/api/cron/family-routines/route.ts', 3],
   ['app/api/cron/guardian-learning/route.ts', 1],
-  ['app/api/cron/return-reminders/route.ts', 2],
   ['app/api/cron/wallet-allowance/route.ts', 1],
   ['app/api/guardian/inbound/whatsapp/route.ts', 1],
   ['app/api/guardian/status/voicemail/route.ts', 1],
@@ -156,7 +155,10 @@ describe('the unconfirmed-write class outside server actions only shrinks (C1-S9
     // 48 since the abandoned-checkout claim became guarded and confirmed (its
     // rows decide whether anyone is nudged); finalaudit.md is the owner's to
     // update.
+    // 46 since the return-reminder stamps became claims taken before the send
+    // and confirmed by their rows (a refused or lost claim decides whether the
+    // family is told); finalaudit.md is the owner's to update.
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(48);
+    expect(total).toBe(46);
   });
 });

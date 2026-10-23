@@ -3,7 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getAdapter } from '@/lib/sync/registry';
-import { runProviderSync } from '@/lib/sync/engine/generic';
+import { runLeasedProviderSync } from '@/lib/sync/account-lease';
 import type { Json, SyncProviderEnum } from '@/lib/database.types';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
@@ -71,7 +71,9 @@ export async function POST(req: Request) {
 
   const results = [];
   for (const account of accounts) {
-    const result = await runProviderSync(admin, account, adapter);
+    // Under the account's lease (lib/sync/account-lease.ts): a press while the
+    // scheduled sync holds the account is `busy`, not a second export.
+    const result = await runLeasedProviderSync(admin, account, adapter);
     results.push(result);
     await logSyncAudit(admin, {
       user_id: ctx.user.id, family_id: ctx.active.familyId, provider, action: 'sync',
@@ -80,5 +82,9 @@ export async function POST(req: Request) {
   }
   const result = combineRunResults(results);
 
+  // Every account was held by a sync already in flight (the scheduled run, or
+  // a second press): nothing was done here, and nothing failed — that sync is
+  // applying a snapshot at least as fresh as this one would. Said as such.
+  if (result.busy) return NextResponse.json({ ...result, error: t('sync.syncAlreadyRunning') }, { status: 409 });
   return NextResponse.json(result, { status: result.error ? 502 : 200 });
 }
