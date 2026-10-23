@@ -14,11 +14,30 @@ import { listAllAuthUsers } from './list-all-auth-users';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
 import { isChildLoginEmail } from '@/lib/onboarding/child-login';
 import { readAllInChunks, readInChunks, writeInChunks } from '@/lib/supabase/chunked-in';
+import { latestCreatedAt, readFairBatch, recipientList } from '@/lib/notifications/fair-batch';
 
 type DB = SupabaseClient<Database>;
 export type NotificationEmailResult = { sent: number; failed: number; skipped: number };
 
 const emptyResult = (): NotificationEmailResult => ({ sent: 0, failed: 0, skipped: 0 });
+
+/** The most pending rows one run reads. */
+const EMAIL_BATCH = 500;
+
+/**
+ * The most rows of a run's batch a single recipient takes while anyone else's
+ * are waiting (lib/notifications/fair-batch.ts). A member's session may insert
+ * notifications addressed to themselves, any number, dated 1970 so they sort
+ * first (0388), and a kid login's are settled unsent 500 at a time: until such
+ * a flood drained, no family was emailed. A recipient with nobody else waiting
+ * still gets their whole backlog in one digest.
+ */
+export const EMAIL_ROWS_PER_RECIPIENT = 50;
+
+/** A refused read of one pending page, told apart from a thrown transport failure. */
+class PendingReadError extends Error {
+  constructor(readonly failure: unknown) { super('Pending notification read failed.'); }
+}
 
 function digestIdempotencyKey(userId: string, notificationIds: string[]): string {
   return `notification-digest/v1/${createHash('sha256')
@@ -34,27 +53,48 @@ function digestIdempotencyKey(userId: string, notificationIds: string[]): string
 export async function deliverNotificationEmails(supabase: DB): Promise<NotificationEmailResult> {
   if (!emailEnabled()) return emptyResult();
 
-  const nowIso = new Date().toISOString();
-  const { data: pending, error: pendingError } = await supabase
-    .from('notifications')
-    // OPEN families only (families.closed_at): a closed account is not emailed.
-    // In the query, before the limit, so a closed family's queue cannot fill it.
-    .select('id, family_id, user_id, type, title, body, family:families!inner(closed_at)')
-    .is('family.closed_at', null)
-    .is('sent_at', null)
-    // Chat notices are in-app only; do not turn every message into an email.
-    .or('related_type.is.null,related_type.neq.family_message')
-    .not('user_id', 'is', null)
-    .lte('send_at', nowIso)
-    .order('created_at', { ascending: true })
-    .order('id', { ascending: true })
-    .limit(500);
+  const now = new Date();
+  const nowIso = now.toISOString();
+  // Nothing dated after now: no writer sets created_at, so only a member's
+  // own planted row can be.
+  const createdBy = latestCreatedAt(now);
+  const pendingPage = async (size: number, excluded: readonly string[]) => {
+    let query = supabase
+      .from('notifications')
+      // OPEN families only (families.closed_at): a closed account is not emailed.
+      // In the query, before the limit, so a closed family's queue cannot fill it.
+      .select('id, family_id, user_id, type, title, body, family:families!inner(closed_at)')
+      .is('family.closed_at', null)
+      .is('sent_at', null)
+      // Chat notices are in-app only; do not turn every message into an email.
+      .or('related_type.is.null,related_type.neq.family_message')
+      .not('user_id', 'is', null)
+      .lte('send_at', nowIso)
+      .lte('created_at', createdBy)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(size);
+    // Recipients who already hold their share of this run (user_id is never
+    // null here, so NOT IN leaves out nobody else).
+    if (excluded.length) query = query.not('user_id', 'in', recipientList(excluded));
+    const { data, error } = await query;
+    if (error) throw new PendingReadError(error);
+    return data ?? [];
+  };
+  let pending: Awaited<ReturnType<typeof pendingPage>> = [];
+  let pendingError: unknown = null;
+  try {
+    pending = await readFairBatch(pendingPage, EMAIL_BATCH, EMAIL_ROWS_PER_RECIPIENT);
+  } catch (error) {
+    if (!(error instanceof PendingReadError)) throw error;
+    pendingError = error.failure ?? error;
+  }
   if (pendingError) {
     console.error('[notification-email] pending notification read failed', pendingError);
     return { sent: 0, failed: 1, skipped: 0 };
   }
 
-  if (!pending?.length) return emptyResult();
+  if (!pending.length) return emptyResult();
 
   // A queued notification can outlive the recipient's membership. The service
   // client still knows their email, so authorize each family/user pair before

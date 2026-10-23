@@ -18,6 +18,7 @@ import { childrenBlockedOn } from '@/lib/notifications/child-channels';
 import { isMissingRelationError } from '@/lib/supabase/errors';
 import { readAll } from '@/lib/supabase/read-all';
 import { readAllInChunks } from '@/lib/supabase/chunked-in';
+import { latestCreatedAt, NOTIFICATION_CLOCK_SKEW_MS, readFairBatch, recipientList } from '@/lib/notifications/fair-batch';
 
 type DB = SupabaseClient<Database>;
 
@@ -35,6 +36,18 @@ type DB = SupabaseClient<Database>;
  * attempts before the row is stamped and the failure is logged at error level.
  */
 export const PUSH_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The most rows of one dispatch batch a single recipient takes while anyone
+ * else's are waiting in the same range (lib/notifications/fair-batch.ts).
+ *
+ * A member's session may still insert notifications addressed to themselves,
+ * any number of them, dated whenever they like (0388), so a child's flood
+ * ahead of the cursor held back every family's pushes for as many ticks as it
+ * took to drain at 200 rows a tick. Now it takes this many of them, and the
+ * room it leaves goes to everyone else first.
+ */
+export const PUSH_ROWS_PER_RECIPIENT = 20;
 
 import { isDeliverablePushEndpoint } from '@/lib/server/push-endpoint';
 import { MAX_PUSH_DEVICES_PER_USER } from '@/lib/push/device-cap';
@@ -581,6 +594,24 @@ export function pushConfigured(): { web: boolean; native: boolean } {
 
 type PushCursor = { version: 1; createdAt: string; id: string };
 
+/**
+ * created_at then id, as the pending-push query orders them, to the
+ * microsecond PostgreSQL keeps (Date.parse stops at the millisecond). A fair
+ * batch is gathered over several reads, so it is put back in traversal order
+ * before it is sent and before the cursor is taken from its last row.
+ */
+function traversalOrder(a: { created_at: string; id: string }, b: { created_at: string; id: string }): number {
+  const instant = (value: string): [number, number] => {
+    const ms = Date.parse(value);
+    return [Number.isFinite(ms) ? ms : Infinity, Number((/\.\d{3}(\d{1,3})/.exec(value)?.[1] ?? '').padEnd(3, '0'))];
+  };
+  const [aMs, aMicro] = instant(a.created_at);
+  const [bMs, bMicro] = instant(b.created_at);
+  if (aMs !== bMs) return aMs < bMs ? -1 : 1;
+  if (aMicro !== bMicro) return aMicro - bMicro;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
 function parsePushCursor(value: unknown): PushCursor | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const cursor = value as Record<string, unknown>;
@@ -619,6 +650,13 @@ function parsePushCursor(value: unknown): PushCursor | null {
  * scheduled for 8am tomorrow buzzed the phone on the next two-hourly scan —
  * tonight. `send_at` is `not null default now()` (0002_tables.sql:415), so this
  * withholds nothing that was due.
+ *
+ * A batch is shared fairly by recipient (PUSH_ROWS_PER_RECIPIENT), and a row
+ * dated after now is not read: a member may plant rows addressed to
+ * themselves with any created_at (lib/notifications/fair-batch.ts). No writer
+ * sets created_at, so the date bound leaves out only planted rows, and the
+ * share holds back only a recipient's own surplus, only while someone else's
+ * rows are waiting.
  */
 export async function dispatchPendingPushes(
   supabase: DB,
@@ -641,14 +679,19 @@ export async function dispatchPendingPushes(
   const cursor = stored ? parsePushCursor(stored.value) : null;
   if (stored && !cursor) throw new Error('Push cursor is invalid.');
   const dueAt = (opts.now ?? new Date()).toISOString();
-  async function page(size: number, wrap = false) {
+  // Nothing dated after now: only a member's own planted row can be, and one
+  // dated in the future never aged out of the retry window below. Wall-clock,
+  // like the budget: `opts.now` decides what is due, and no row is created
+  // after the real now.
+  const createdBy = latestCreatedAt(new Date());
+  async function page(size: number, wrap: boolean, excluded: readonly string[]) {
     let q = supabase.from('notifications')
       // Rows of OPEN families only (families.closed_at): a closed account's
       // devices are not buzzed. In the query, before the page limit, so queued
       // rows of a closed family cannot fill the page ahead of everyone else's.
       .select('id, family_id, user_id, title, body, related_type, related_id, created_at, family:families!inner(closed_at)')
       .is('family.closed_at', null)
-      .is('pushed_at', null).lte('send_at', dueAt)
+      .is('pushed_at', null).lte('send_at', dueAt).lte('created_at', createdBy)
       // Chat notices have not opted into external delivery. Filter before the
       // page limit so a busy conversation cannot starve other notifications.
       .or('related_type.is.null,related_type.neq.family_message')
@@ -658,6 +701,9 @@ export async function dispatchPendingPushes(
       // Strictly validated timestamp/UUID values cannot inject filter syntax.
       q = q.or(`created_at.${wrap ? 'lt' : 'gt'}.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.${wrap ? 'lte' : 'gt'}.${cursor.id})`);
     }
+    // Recipients who already hold their share of this batch. Whole-family rows
+    // (user_id null) are never left out: a member cannot plant one.
+    if (excluded.length) q = q.or(`user_id.is.null,user_id.not.in.${recipientList(excluded)}`);
     const { data, error } = await q;
     if (error) {
       console.error('[push] pending-push read failed', { familyId: opts.familyId ?? null, error });
@@ -665,8 +711,12 @@ export async function dispatchPendingPushes(
     }
     return data ?? [];
   }
-  const rows = await page(limit);
-  if (cursor && rows.length < limit) rows.push(...await page(limit - rows.length, true));
+  const rows = (await readFairBatch((size, excluded) => page(size, false, excluded), limit, PUSH_ROWS_PER_RECIPIENT))
+    .sort(traversalOrder);
+  if (cursor && rows.length < limit) {
+    rows.push(...(await readFairBatch((size, excluded) => page(size, true, excluded), limit - rows.length, PUSH_ROWS_PER_RECIPIENT))
+      .sort(traversalOrder));
+  }
   if (rows.length === 0) return { notifications: 0, result: { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 } };
   const last = rows[rows.length - 1];
   const nextPosition = parsePushCursor({ version: 1, createdAt: last.created_at, id: last.id });
@@ -783,7 +833,12 @@ export async function dispatchPendingPushes(
     // repaired; a dead endpoint does not. Expiring those too would silently
     // drop every notification raised during a misconfiguration, and nothing is
     // being sent meanwhile, so none of them can be buzzing anyone twice.
-    const expired = r.failed > 0 && !r.familyReadFailed && ageMs >= PUSH_RETRY_WINDOW_MS;
+    // A row dated after now is past any window too: no writer sets created_at,
+    // so only a member's planted row can be, and its age stayed negative, so it
+    // was retried for good. The read above leaves those out; this holds if it
+    // ever does not. Against the wall clock, as that read is.
+    const datedAhead = !Number.isNaN(createdMs) && createdMs > Date.now() + NOTIFICATION_CLOCK_SKEW_MS;
+    const expired = r.failed > 0 && !r.familyReadFailed && (ageMs >= PUSH_RETRY_WINDOW_MS || datedAhead);
     if (incomplete && !expired) {
       console.warn('[push] delivery incomplete; leaving pushed_at null to retry', {
         notificationId: n.id, failed: r.failed, skipped: r.skipped, ageMs,
