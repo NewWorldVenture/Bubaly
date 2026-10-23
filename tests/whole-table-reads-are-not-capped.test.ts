@@ -168,7 +168,8 @@ describe('network aggregation', () => {
     const families = ids('fam', OVER);
     // Open families: the consent read inner-joins families and skips closed ones.
     db.seed('families', families.map((id) => ({ id, closed_at: null })));
-    db.seed('network_consent', families.map((id) => ({ family_id: id, enabled: true, scopes: {} })));
+    // Consenting to benchmarks: a consent with no scope on contributes nothing (N14).
+    db.seed('network_consent', families.map((id) => ({ family_id: id, enabled: true, scopes: { benchmarks: true } })));
     // Every opted-in family already has a contribution row from an earlier run.
     db.seed('network_contributions', families.map((id) => ({
       family_id: id, cohort_key: 'k', features: {}, metrics: {}, scopes: {},
@@ -295,7 +296,8 @@ describe('network contributions', () => {
     const families = ids('fam', 400);
     // Open families: the consent read inner-joins families and skips closed ones.
     db.seed('families', families.map((id) => ({ id, closed_at: null })));
-    db.seed('network_consent', families.map((id) => ({ family_id: id, enabled: true, scopes: {} })));
+    // Consenting to benchmarks: a consent with no scope on is not read at all (N14).
+    db.seed('network_consent', families.map((id) => ({ family_id: id, enabled: true, scopes: { benchmarks: true } })));
     db.seed('family_members', families.flatMap((familyId, f) => [
       { id: `m-${f}-0`, family_id: familyId, role: 'parent', is_active: true, birthday: '1990-01-01' },
       { id: `m-${f}-1`, family_id: familyId, role: 'adult', is_active: true, birthday: '1991-01-01' },

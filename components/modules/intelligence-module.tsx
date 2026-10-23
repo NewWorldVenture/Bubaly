@@ -18,8 +18,8 @@ import { PageHeader } from '@/components/app/page-header';
 import { ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import {
-  CONSENT_SCOPES, K_ANONYMITY_FLOOR, visibleInsights, isContributing,
-  type ConsentScope, type ConsentState, type InsightCandidate,
+  CONSENT_SCOPES, K_ANONYMITY_FLOOR, consentedInsights, isContributing,
+  type ConsentScope, type ConsentState, type NetworkInsight,
 } from '@/lib/network/insights';
 import type { ContributionBucket } from '@/lib/network/contribution';
 import type { Tables } from '@/lib/database.types';
@@ -33,7 +33,8 @@ export function IntelligenceModule({
   benchmarksPublished = false,
 }: {
   contribution?: ContributionBucket[];
-  candidates?: InsightCandidate[];
+  /** Already past the k-floor on the server (publishableInsights): noised counts only, no true size. */
+  candidates?: NetworkInsight[];
   /** Read server-side from the marketing_settings publication flag. False means
    *  /resources/benchmarks does not exist right now, so nothing links to it. */
   benchmarksPublished?: boolean;
@@ -59,8 +60,9 @@ export function IntelligenceModule({
   }), [row]);
 
   // Candidates come from the aggregation cron (server-fetched for this family's
-  // cohort); visibleInsights re-checks consent + the k-floor as defense in depth.
-  const insights = useMemo(() => visibleInsights(candidates, consent), [candidates, consent]);
+  // cohort), already past the k-floor on the server, which is where the true
+  // band size stays; consent is re-checked here against the row on screen.
+  const insights = useMemo(() => consentedInsights(candidates, consent), [candidates, consent]);
   const contributing = isContributing(consent);
 
   // `network_consent` is not in REALTIME_TABLES, so no channel ever moves this
@@ -69,13 +71,25 @@ export function IntelligenceModule({
   // the page-load row instead, a tap after "Leave network" rejoined the family
   // and a second scope switched off turned the first one back on — consent the
   // nightly aggregation then honours. `saving` holds every toggle until then.
-  async function save(write: () => PromiseLike<{ data: Consent[] | null; error: unknown }>, done: string) {
+  async function save(write: () => PromiseLike<{ data: Consent[] | null; error: unknown }>, done: string, narrows = false) {
     setSaving(true);
     try {
       const { data: saved, error } = await write();
       if (error) { toastError(describeDbError(error)); return; }
       if (wroteNoRows(saved)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
       setData(saved as Consent[]);
+      // Leaving, or switching a scope off, takes the family's stored
+      // contribution with it now (design doc §2.7), as "Left the network —
+      // nothing is shared" says. The nightly aggregation only re-reads
+      // consent, so until a run got all the way to its prune the row stayed,
+      // and every aggregate built from it with it. The next run rebuilds
+      // whatever is still consented. Zero rows is the ordinary answer for a
+      // family that has not contributed yet.
+      if (narrows) {
+        const { error: forgetError } = await createClient().from('network_contributions')
+          .delete().eq('family_id', familyId).select('family_id');
+        if (forgetError) { toastError(describeDbError(forgetError)); return; }
+      }
       success(done);
     } finally {
       setSaving(false);
@@ -90,14 +104,14 @@ export function IntelligenceModule({
       scopes: next.scopes,
       consented_by: next.enabled ? userId : null,
       consented_at: next.enabled ? new Date().toISOString() : null,
-    }, { onConflict: 'family_id' }).select('*'), next.enabled ? t('intelligence.preferencesSaved') : t('intelligence.leftTheNetwork'));
+    }, { onConflict: 'family_id' }).select('*'), next.enabled ? t('intelligence.preferencesSaved') : t('intelligence.leftTheNetwork'), !next.enabled);
   };
   // A scope switch changes the scopes and nothing else. Joining or leaving is
   // the master switch's decision alone, so this never writes `enabled`.
   const toggleScope = (k: ConsentScope) =>
     save(() => createClient().from('network_consent')
       .update({ scopes: { ...consent.scopes, [k]: !consent.scopes[k] } })
-      .eq('family_id', familyId).select('*'), t('intelligence.preferencesSaved'));
+      .eq('family_id', familyId).select('*'), t('intelligence.preferencesSaved'), consent.scopes[k] === true);
 
   if (loading) return <div className="rounded-xl border border-border bg-surface/40 p-4 text-sm text-muted">{t('intelligence.loadingIntelligencePreferences')}</div>;
   if (error) return <ErrorState message={t('intelligenceModule.couldNotLoadIntelligencePreferences')} onRetry={refresh} />;
@@ -177,7 +191,9 @@ export function IntelligenceModule({
                 <li key={i.id} className="rounded-lg border border-border p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">{i.title}</span>
-                    <span className="text-[10px] uppercase text-muted">{i.confidence} · {t('intelligence.familiesCount', { count: i.cohortSize })}</span>
+                    {/* The confidence only: the one family count is the noised one in the
+                        detail below. The true band size beside it cancelled the noise. */}
+                    <span className="text-[10px] uppercase text-muted">{i.confidence}</span>
                   </div>
                   <p className="text-sm text-muted">{i.detail}</p>
                 </li>

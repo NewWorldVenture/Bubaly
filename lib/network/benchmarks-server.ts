@@ -18,8 +18,9 @@ import { createServiceClient } from '@/lib/supabase/server';
 import type { Database } from '@/lib/database.types';
 import { BENCHMARKS_PUBLICATION_KEY, isBenchmarksPublished } from './benchmarks';
 import { K_ANONYMITY_FLOOR, type ConsentScope } from './insights';
-import type { NetworkAggregate } from './aggregate';
+import { freshAggregatesSince, type NetworkAggregate } from './aggregate';
 import { readAll } from '@/lib/supabase/read-all';
+import { readAllInChunks } from '@/lib/supabase/chunked-in';
 
 type DB = SupabaseClient<Database>;
 
@@ -58,8 +59,18 @@ export async function benchmarksPageIsPublished(): Promise<boolean> {
 
 export type AggregatesRead = { ok: true; aggregates: NetworkAggregate[]; computedAt: string | null } | { ok: false };
 
-/** Every published benchmark row at or above the floor, newest computation first. */
-export async function readBenchmarkAggregates(sb: DB): Promise<AggregatesRead> {
+/**
+ * Every published benchmark row at or above the floor, newest computation first.
+ *
+ * Only FRESH rows count as published (`freshAggregatesSince`). The table keeps
+ * whatever the last successful run wrote, and every run that fails before its
+ * republish leaves it in place — with a family that withdrew since still inside
+ * it — for as long as the cron keeps failing. Past the age limit the page, the
+ * export and the report fall to their empty state instead. `computedAt` is
+ * still the newest row's, stale or not, so the report can say when the
+ * aggregation last wrote anything.
+ */
+export async function readBenchmarkAggregates(sb: DB, now: Date = new Date()): Promise<AggregatesRead> {
   // `.limit(2000)` never was 2,000 — PostgREST caps at db-max-rows — and
   // `cohort_size` is far from unique, so it also needs a tiebreak for two pages
   // not to overlap or skip.
@@ -95,12 +106,51 @@ export async function readBenchmarkAggregates(sb: DB): Promise<AggregatesRead> {
   }
   const rows = data ?? [];
   const computedAt = rows.reduce<string | null>((latest, r) => (!latest || r.computed_at > latest ? r.computed_at : latest), null);
+  const since = Date.parse(freshAggregatesSince(now));
   return {
     ok: true,
     computedAt,
-    aggregates: rows.map((a) => ({
+    aggregates: rows.filter((a) => Date.parse(a.computed_at) >= since).map((a) => ({
       scope: a.scope as ConsentScope, cohortKey: a.cohort_key, metric: a.metric,
       value: a.value, count: a.count, cohortSize: a.cohort_size,
     })),
   };
+}
+
+export type TrueSizesRead = { ok: true; sizes: Map<string, number> } | { ok: false };
+
+/**
+ * The TRUE family count behind each of these aggregate rows, by id — for the
+ * k-floor on the server and for nothing else.
+ *
+ * A family's own view reads its cohort's rows through RLS, and `cohort_size`
+ * is not a column that read names: it is the un-noised figure beside the
+ * noised `count`, and through RLS any member of any consenting family can
+ * select it for every cohort and difference it night over night until the
+ * column grant (an owner's migration) takes it away from `authenticated`. The
+ * floor is re-checked here instead, with the service role, on exactly the
+ * rows RLS already let the family see, and the number never leaves the server.
+ *
+ * `{ ok: false }` for every uncertainty — unconfigured, refused, unreachable —
+ * and the caller then shows no insight rather than an unchecked one.
+ */
+export async function readTrueCohortSizes(ids: readonly string[]): Promise<TrueSizesRead> {
+  if (ids.length === 0) return { ok: true, sizes: new Map() };
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('[benchmarks] the k-floor re-check needs the service role, which is not configured');
+    return { ok: false };
+  }
+  try {
+    const sb = createServiceClient();
+    const { data, error } = await readAllInChunks<{ id: string; cohort_size: number }>(ids, (chunk, from, to) => sb
+      .from('network_aggregates').select('id, cohort_size').in('id', chunk).order('id').range(from, to));
+    if (error || !data) {
+      console.error('[benchmarks] true band size read failed', error);
+      return { ok: false };
+    }
+    return { ok: true, sizes: new Map(data.map((r) => [r.id, r.cohort_size])) };
+  } catch (cause) {
+    console.error('[benchmarks] true band size read failed', cause);
+    return { ok: false };
+  }
 }

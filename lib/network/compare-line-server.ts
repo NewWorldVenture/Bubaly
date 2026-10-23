@@ -10,11 +10,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { compareLine, type CompareLine } from './compare-line';
 import type { ConsentState, ConsentScope } from './insights';
-import type { NetworkAggregate } from './aggregate';
+import { freshAggregatesSince, type NetworkAggregate } from './aggregate';
 
 type DB = SupabaseClient<Database>;
 
-export async function loadCompareLine(sb: DB, familyId: string): Promise<CompareLine | null> {
+export async function loadCompareLine(sb: DB, familyId: string, now: Date = new Date()): Promise<CompareLine | null> {
   const { data: consent, error: consentError } = await sb.from('network_consent')
     .select('enabled, scopes').eq('family_id', familyId).maybeSingle();
   if (consentError) {
@@ -37,9 +37,12 @@ export async function loadCompareLine(sb: DB, familyId: string): Promise<Compare
   }
   if (!contribution) return null;
 
+  // Fresh rows only: aggregates a run that kept failing left behind still hold
+  // the families who withdrew since, and are no longer the network's answer.
   const { data: rows, error: aggregateError } = await sb.from('network_aggregates')
     .select('scope, cohort_key, metric, value, count, cohort_size')
-    .eq('cohort_key', contribution.cohort_key).eq('scope', 'benchmarks').limit(500);
+    .eq('cohort_key', contribution.cohort_key).eq('scope', 'benchmarks')
+    .gte('computed_at', freshAggregatesSince(now)).limit(500);
   if (aggregateError) {
     console.error(`[network] compare line aggregate read failed for ${familyId}`, aggregateError);
     return null;

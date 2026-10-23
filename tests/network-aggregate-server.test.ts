@@ -63,11 +63,19 @@ function seedFamily(id: string, opts: { scopes?: Record<string, boolean>; enable
     { family_id: id, amount: 9999, type: 'income', date: day(-1) },      // not an expense
     { family_id: id, amount: 9999, type: 'expense', date: day(-40) },    // outside the window
   ]);
+  // Two reminders still to fire this coming week: one in the Reminders module's
+  // table and one in the legacy table, which still has writers. The rest do not
+  // count — done, snoozed past the week, outside it, or already past.
+  db.seed('family_reminders', [
+    { family_id: id, status: 'active', remind_at: iso(1), snoozed_until: null },
+    { family_id: id, status: 'completed', remind_at: iso(2), snoozed_until: null },  // done
+    { family_id: id, status: 'snoozed', remind_at: iso(3), snoozed_until: iso(10) }, // back after the week
+  ]);
   db.seed('reminders', [
-    { family_id: id, remind_at: iso(1) },
-    { family_id: id, remind_at: iso(6) },
-    { family_id: id, remind_at: iso(12) },   // outside the week
-    { family_id: id, remind_at: iso(-1) },   // already past
+    { family_id: id, remind_at: iso(6), is_done: false },
+    { family_id: id, remind_at: iso(5), is_done: true },    // done
+    { family_id: id, remind_at: iso(12), is_done: false },  // outside the week
+    { family_id: id, remind_at: iso(-1), is_done: false },  // already past
   ]);
 }
 
@@ -113,10 +121,13 @@ describe('CONTRIBUTE — one banded row per consenting family', () => {
     expect(Object.keys(row.metrics as Record<string, string>).sort()).toEqual(['activities', 'dinner_habit', 'reminders_per_week']);
   });
 
+  // A timing-only family has no metric to give, so it gives nothing at all:
+  // not an empty row, and not a count toward the launch gate (N14/N17).
   it('honours granular consent at write time: a timing-only family contributes no benchmark metric', async () => {
     seedFamily('timing-only', { scopes: { timing: true } });
-    await runNetworkAggregation(db, NOW);
-    expect(db.table('network_contributions')[0]!.metrics).toEqual({});
+    const result = await runNetworkAggregation(db, NOW);
+    expect(result).toMatchObject({ ok: true, contributors: 0 });
+    expect(db.table('network_contributions').filter((r) => r.family_id === 'timing-only')).toEqual([]);
   });
 
   it('prunes the row of a family that opted out and skips a disabled consent', async () => {
@@ -141,7 +152,8 @@ describe('CONTRIBUTE — one banded row per consenting family', () => {
           // inside each chunk, so the stub has to answer the same builder the
           // real one does or it fails on the missing method instead of on the
           // transport error this test is about.
-          for (const m of ['select', 'in', 'eq', 'gte', 'lte', 'order', 'range']) builder[m] = chain;
+          // So do `gt` and `lt`: the windows are end-exclusive (N15).
+          for (const m of ['select', 'in', 'eq', 'gt', 'gte', 'lt', 'lte', 'order', 'range']) builder[m] = chain;
           builder.then = (resolve: (v: unknown) => void) => resolve({ data: null, error: { message: 'connection reset' } });
           return builder;
         };
@@ -167,13 +179,17 @@ describe('AGGREGATE — the launch gate and the k-floor, on real tables', () => 
   });
 
   it('past the gate, publishes each of the six metrics only where ≥ K distinct families share a band', async () => {
-    // 110 families share every band; 10 spend far more → their spend band is suppressed,
-    // and the rest of their metrics still count toward the shared bands.
+    // 110 families share every band; 10 spend far more and 10 somewhat more →
+    // their spend bands are suppressed, and the rest of their metrics still
+    // count toward the shared bands. (The two withheld bands hide 20 between
+    // them; one band of 10 alone would take "100–250" with it — complementary
+    // suppression, N10, driven below.)
     for (let i = 0; i < 110; i++) seedFamily(`f-${i}`);
     for (let i = 0; i < 10; i++) seedFamily(`rich-${i}`, { spend: 8000 });
+    for (let i = 0; i < 10; i++) seedFamily(`comfy-${i}`, { spend: 1200 });
     const result = await runNetworkAggregation(db, NOW);
     expect(result.ok).toBe(true);
-    expect(result.contributors).toBe(120);
+    expect(result.contributors).toBe(130);
 
     const rows = db.table('network_aggregates');
     expect(rows.length).toBe(result.aggregates);
@@ -187,9 +203,20 @@ describe('AGGREGATE — the launch gate and the k-floor, on real tables', () => 
     const byMetric = new Map(rows.map((r) => [r.metric, r]));
     expect(byMetric.get('weekly_spend_band')).toMatchObject({ value: '100–250', cohort_size: 110 });
     expect(rows.some((r) => r.metric === 'weekly_spend_band' && r.value === '1,000+')).toBe(false); // 10 < K
+    expect(rows.some((r) => r.metric === 'weekly_spend_band' && r.value === '250–500')).toBe(false); // 10 < K
     for (const metric of ['chores_per_child', 'bedtime_band', 'reminders_per_week', 'dinner_habit', 'activities']) {
-      expect(byMetric.get(metric)?.cohort_size, metric).toBe(120);
+      expect(byMetric.get(metric)?.cohort_size, metric).toBe(130);
     }
+  });
+
+  it('withholds a metric whole when its only withheld band is under K (complementary suppression)', async () => {
+    for (let i = 0; i < 110; i++) seedFamily(`f-${i}`);
+    for (let i = 0; i < 10; i++) seedFamily(`rich-${i}`, { spend: 8000 });
+    expect((await runNetworkAggregation(db, NOW)).ok).toBe(true);
+    // "100–250" (110) beside a cohort everyone can total (120 report dinner)
+    // would say exactly ten households spend more.
+    expect(db.table('network_aggregates').filter((r) => r.metric === 'weekly_spend_band')).toEqual([]);
+    expect(db.table('network_aggregates').find((r) => r.metric === 'dinner_habit')?.cohort_size).toBe(120);
   });
 
   it('republishes on the natural key and prunes rows the run did not touch', async () => {

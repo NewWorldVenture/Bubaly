@@ -347,7 +347,8 @@ describe('a closed family is left alone by the scheduled jobs', () => {
   });
 
   it('network aggregation takes nothing from a closed family, and prunes what it gave before closing', async () => {
-    for (const family of FAMILIES) db.seed('network_consent', [{ family_id: family, enabled: true, scopes: {} }]);
+    // Both consent to benchmarks: with no scope on, an open family contributes nothing either (N14).
+    for (const family of FAMILIES) db.seed('network_consent', [{ family_id: family, enabled: true, scopes: { benchmarks: true } }]);
     db.seed('network_contributions', [{ family_id: CLOSED, cohort_key: 'x', features: {}, metrics: {}, scopes: {} }]);
     await runNetworkAggregation(asDb(), new Date(NOW_ISO));
     expect(db.table('network_contributions').map((c) => c.family_id)).toEqual([OPEN]);

@@ -38,7 +38,8 @@ export async function generateMetadata(): Promise<Metadata> {
 
 // Public research page. Renders ONLY rows that the nightly aggregation already
 // made safe (k-anonymity + DP noise + launch gate), re-checks the floor here,
-// and exists only while the admin publication flag is on — otherwise 404, so
+// shows the noised count and never the true one beside it, and exists only
+// while the admin publication flag is on — otherwise 404, so
 // an unpublished page is indistinguishable from one that never existed. The
 // service-role read is deliberate: network_aggregates is RLS-gated to
 // consenting families and this page has no viewer to gate on.
@@ -114,7 +115,11 @@ export default async function BenchmarksPage() {
                           ? t('benchmarksPage.familiesWithKids', { bands: r.childBands.map((b) => bandFamilyLabel('age', b, t)).join(', ') })
                           : t('benchmarksPage.familiesWithoutKids')}
                         {' · '}{t('benchmarksPage.householdOf', { size: bandFamilyLabel('size', r.sizeBand, t) })}
-                        {' · '}{t('benchmarksPage.cohortOf', { n: r.cohortSize })}
+                        {/* No "cohort of {n}" here: `cohortSize` is the TRUE number of
+                            families behind this band (not the cohort's size), and printed
+                            beside the noised count it cancelled the noise — two nights'
+                            difference was exactly who joined, left or changed band. It
+                            stays on the server, for the floor. */}
                       </p>
                       <p className="mt-1 text-[11px] text-muted">{t('benchmarksPage.aggregatedNotice')}</p>
                     </li>

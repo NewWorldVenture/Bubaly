@@ -1,24 +1,30 @@
 // Intelligence Network aggregation — service-callable core (no request context).
-// Called by the network-aggregate cron with the service client. Two phases:
-//   1. CONTRIBUTE — for every consenting family, recompute its coarse feature row
-//      from its OWN data and upsert network_contributions (opted-out families are
-//      deleted). This is the only place raw family data is read, and only banded
-//      features leave the family row.
-//   2. AGGREGATE — read all contributions, run the pure k-anonymity + DP + gating
-//      core, and replace network_aggregates with the publish-safe rows.
+// Called by the network-aggregate cron with the service client. Three phases:
+//   1. FORGET — prune the stored contribution of every family no longer
+//      contributing (withdrawn, closed, no contributing scope, or a consent a
+//      non-manager wrote), FIRST, so a failure anywhere later can never keep a
+//      withdrawn family's row in place.
+//   2. CONTRIBUTE — for every contributing family, recompute its coarse row
+//      from its OWN data and upsert network_contributions. This is the only
+//      place raw family data is read, and only bands leave the family row.
+//   3. AGGREGATE — run the pure k-anonymity + DP + gating core over the
+//      contributions, and replace network_aggregates with the publish-safe rows.
 // Nothing here can bypass aggregate.ts's guarantees.
 
+import { createHmac } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
 import { readAll } from '@/lib/supabase/read-all';
 import { readAllInChunks, writeInChunks } from '@/lib/supabase/chunked-in';
 import type { Database } from '@/lib/database.types';
+import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
+import { isManager } from '@/lib/constants/roles';
 import {
   contributionFeatures, bedtimeToMinutes, typicalWeeklySpend, type ContributionInput,
 } from './contribution';
 import {
-  aggregateContributions, cohortKey, laplaceNoise, filterMetricsByScopes,
-  AGG_DEFAULTS, type Contribution,
+  aggregateContributions, cohortKey, contributesToNetwork, laplaceNoise, filterMetricsByScopes,
+  AGG_DEFAULTS, type Contribution, type NoiseCell, type NoiseFn,
 } from './aggregate';
 import type { ConsentScope } from './insights';
 import { describeActionError } from '@/lib/supabase/errors';
@@ -33,6 +39,21 @@ export const CHILD_ROLES = new Set(['child', 'teen']);
 export const OPEN_CHORE_STATUSES = ['todo', 'in_progress', 'submitted'] as const;
 /** Trailing window the weekly-spend band is smoothed over (four weeks → one). */
 export const SPEND_WINDOW_DAYS = 28;
+/**
+ * family_reminders statuses that can still fire — the reminders services' own
+ * reading: a snoozed reminder comes back, a completed one does not.
+ */
+export const OPEN_REMINDER_STATUSES = ['active', 'snoozed'] as const;
+
+/**
+ * A snoozed reminder counts for the week only when its snooze ends inside it —
+ * the reminders services list a snoozed row as due once `snoozed_until` has
+ * passed. An active row carries no snooze. One spelling for the nightly
+ * aggregation and the consent preview, so the preview shows what is sent.
+ */
+export function remindersStillDueBy(weekEndIso: string): string {
+  return `snoozed_until.is.null,snoozed_until.lte.${weekEndIso}`;
+}
 
 /**
  * A family's banded features → the metric row it contributes. Only bands leave
@@ -52,20 +73,35 @@ export const featuresToContribution = (familyId: string, input: ContributionInpu
   return { familyId, features, metrics };
 };
 
+/** A contributing family and the zone its calendar days are read in. */
+type FamilyDay = { id: string; tz: string };
+
 /**
- * Build every opted-in family's coarse contribution in EIGHT queries total (one
- * per source table, `.in(family_ids)`) rather than eight-per-family — so the
+ * Build every contributing family's coarse contribution in NINE queries total
+ * (one per source table, `.in(family_ids)`) rather than nine-per-family — so the
  * nightly cron scales past the ≥100-family launch gate without N+1 round-trips.
  * Returns a map keyed by family_id; a family with no rows still gets a valid
  * (empty-household) contribution. Returns null only on a hard read error.
+ *
+ * Every window is the FAMILY's: its seven days of dinners starting today,
+ * [today, today + 7), and its 28 days of spending ending today, (today − 28,
+ * today], on its own calendar (families.timezone). Both ends inclusive was an
+ * eight-day week and a 29-day month — a household planning Monday to Friday
+ * read as "most nights" five days in seven, and one spending 98 a week as
+ * "100–250" — and Greenwich's day was the family's only for families in it.
+ * The reads take the union of the families' windows; each family keeps only
+ * its own.
  */
-async function buildContributionsBatch(sb: DB, familyIds: string[], now: Date): Promise<Map<string, Contribution> | null> {
-  if (familyIds.length === 0) return new Map();
-  const todayKey = now.toISOString().slice(0, 10);
-  const weekEndKey = new Date(now.getTime() + 7 * 86_400_000).toISOString().slice(0, 10);
-  const spendStartKey = new Date(now.getTime() - SPEND_WINDOW_DAYS * 86_400_000).toISOString().slice(0, 10);
+async function buildContributionsBatch(sb: DB, families: FamilyDay[], now: Date): Promise<Map<string, Contribution> | null> {
+  if (families.length === 0) return new Map();
+  const familyIds = families.map((f) => f.id);
+  const todayOf = new Map(families.map((f) => [f.id, dayKeyInTz(now, f.tz)]));
+  const todays = [...new Set(todayOf.values())].sort();
+  const earliestToday = todays[0];
+  const latestToday = todays[todays.length - 1];
+  const nowIso = now.toISOString();
   const weekEndIso = new Date(now.getTime() + 7 * 86_400_000).toISOString();
-  // Eight reads, each chunked by family AND paged inside the chunk.
+  // Nine reads, each chunked by family AND paged inside the chunk.
   //
   // One `.in()` over every opted-in family is short on both counts. The URL
   // outgrows the gateway's request line, and — the one that bites first — the
@@ -82,17 +118,23 @@ async function buildContributionsBatch(sb: DB, familyIds: string[], now: Date): 
   //
   // Each read orders by `id` rather than `family_id`: paging needs a unique
   // order, and the column being filtered on is the least unique one there is.
-  const [members, dinners, teams, classes, chores, bedtimes, spend, reminders] = await settleAll([
+  //
+  // Reminders are the Reminders module's: `family_reminders` is canonical (the
+  // reminders services' D4), and a household with ten reminders due this week
+  // there read as "none" while only the legacy table was counted. The legacy
+  // table still has writers, so its OPEN rows count too.
+  const [members, dinners, teams, classes, chores, bedtimes, spend, reminders, legacyReminders] = await settleAll([
     readAllInChunks(familyIds, (chunk, from, to) => sb.from('family_members').select('id, family_id, birthday, role').in('family_id', chunk).eq('is_active', true).order('id').range(from, to)),
-    readAllInChunks(familyIds, (chunk, from, to) => sb.from('meal_plans').select('family_id, plan_date').in('family_id', chunk).eq('meal_type', 'dinner').gte('plan_date', todayKey).lte('plan_date', weekEndKey).order('id').range(from, to)),
+    readAllInChunks(familyIds, (chunk, from, to) => sb.from('meal_plans').select('family_id, plan_date').in('family_id', chunk).eq('meal_type', 'dinner').gte('plan_date', earliestToday).lt('plan_date', addDaysToDayKey(latestToday, 7)).order('id').range(from, to)),
     readAllInChunks(familyIds, (chunk, from, to) => sb.from('teams').select('family_id').in('family_id', chunk).eq('is_active', true).order('id').range(from, to)),
     readAllInChunks(familyIds, (chunk, from, to) => sb.from('school_classes').select('family_id').in('family_id', chunk).order('id').range(from, to)),
     readAllInChunks(familyIds, (chunk, from, to) => sb.from('chore_assignments').select('family_id, member_id').in('family_id', chunk).in('status', [...OPEN_CHORE_STATUSES]).order('id').range(from, to)),
     readAllInChunks(familyIds, (chunk, from, to) => sb.from('bedtime_routines').select('family_id, member_id, target_bedtime').in('family_id', chunk).eq('is_active', true).order('id').range(from, to)),
-    readAllInChunks(familyIds, (chunk, from, to) => sb.from('transactions').select('family_id, amount').in('family_id', chunk).eq('type', 'expense').gte('date', spendStartKey).lte('date', todayKey).order('id').range(from, to)),
-    readAllInChunks(familyIds, (chunk, from, to) => sb.from('reminders').select('family_id').in('family_id', chunk).gte('remind_at', now.toISOString()).lte('remind_at', weekEndIso).order('id').range(from, to)),
+    readAllInChunks(familyIds, (chunk, from, to) => sb.from('transactions').select('family_id, amount, date').in('family_id', chunk).eq('type', 'expense').gt('date', addDaysToDayKey(earliestToday, -SPEND_WINDOW_DAYS)).lte('date', latestToday).order('id').range(from, to)),
+    readAllInChunks(familyIds, (chunk, from, to) => sb.from('family_reminders').select('family_id').in('family_id', chunk).in('status', [...OPEN_REMINDER_STATUSES]).gte('remind_at', nowIso).lte('remind_at', weekEndIso).or(remindersStillDueBy(weekEndIso)).order('id').range(from, to)),
+    readAllInChunks(familyIds, (chunk, from, to) => sb.from('reminders').select('family_id').in('family_id', chunk).eq('is_done', false).gte('remind_at', nowIso).lte('remind_at', weekEndIso).order('id').range(from, to)),
   ]);
-  const readError = [members, dinners, teams, classes, chores, bedtimes, spend, reminders].map((r) => r.error).find(Boolean);
+  const readError = [members, dinners, teams, classes, chores, bedtimes, spend, reminders, legacyReminders].map((r) => r.error).find(Boolean);
   if (readError) {
     console.error('[network] family contribution source read failed', readError);
     return null;
@@ -111,8 +153,10 @@ async function buildContributionsBatch(sb: DB, familyIds: string[], now: Date): 
   }
   const dinnerDatesByFam = new Map<string, Set<string>>();
   for (const d of dinners.data ?? []) {
+    const today = todayOf.get(d.family_id);
+    if (!today || !d.plan_date || d.plan_date < today || d.plan_date >= addDaysToDayKey(today, 7)) continue;
     const set = dinnerDatesByFam.get(d.family_id) ?? new Set<string>();
-    if (d.plan_date) set.add(d.plan_date); dinnerDatesByFam.set(d.family_id, set);
+    set.add(d.plan_date); dinnerDatesByFam.set(d.family_id, set);
   }
   const countBy = (rows: { family_id: string }[] | null): Map<string, number> => {
     const m = new Map<string, number>();
@@ -121,7 +165,7 @@ async function buildContributionsBatch(sb: DB, familyIds: string[], now: Date): 
   };
   const teamsByFam = countBy(teams.data);
   const classesByFam = countBy(classes.data);
-  const remindersByFam = countBy(reminders.data);
+  const remindersByFam = countBy([...(reminders.data ?? []), ...(legacyReminders.data ?? [])]);
   // Only chores and bedtimes that belong to a CHILD member count — an adult's
   // own to-do or wind-down routine is not a "chores per child" or "kids' bedtime" signal.
   const openChoresByFam = countBy((chores.data ?? []).filter((c) => childMemberIds.has(c.member_id)));
@@ -135,6 +179,8 @@ async function buildContributionsBatch(sb: DB, familyIds: string[], now: Date): 
   }
   const expensesByFam = new Map<string, number[]>();
   for (const t of spend.data ?? []) {
+    const today = todayOf.get(t.family_id);
+    if (!today || !t.date || t.date <= addDaysToDayKey(today, -SPEND_WINDOW_DAYS) || t.date > today) continue;
     const arr = expensesByFam.get(t.family_id) ?? [];
     arr.push(Number(t.amount)); expensesByFam.set(t.family_id, arr);
   }
@@ -158,61 +204,127 @@ async function buildContributionsBatch(sb: DB, familyIds: string[], now: Date): 
   return out;
 }
 
+type ConsentRow = {
+  family_id: string;
+  enabled: boolean;
+  scopes: Database['public']['Tables']['network_consent']['Row']['scopes'];
+  consented_by: string | null;
+  /** The `families!inner(closed_at, timezone)` embed; the generated types do not model the relation. */
+  family: unknown;
+};
+
+/** The family's zone from the consent read's embed, UTC when it has none. */
+function familyZone(c: ConsentRow): string {
+  const zone = (c.family as { timezone?: unknown } | null)?.timezone;
+  return typeof zone === 'string' && zone.trim() !== '' ? zone : 'UTC';
+}
+
+/**
+ * Families whose consent was written by a member who may not give it.
+ *
+ * Joining shares the household's data, so it is a manager's decision — the
+ * database has refused anyone else's write since 0353. But 0353 changed the
+ * policies and left the rows: a consent a child, teen, guest or caregiver
+ * switched on before it is still `enabled`, and nothing here asked who wrote
+ * it. A consent whose author is an ACTIVE member of that family in a
+ * non-manager role is not honoured. An author who is no longer a member (or
+ * whose account is gone, `consented_by` null) cannot be judged from here and is
+ * left to the owner's re-consent sweep, as are scope switches, which record no
+ * author at all.
+ */
+async function consentsByNonManagers(sb: DB, consents: ConsentRow[]): Promise<{ error: unknown; families: Set<string> }> {
+  const authorOf = new Map(consents.filter((c) => c.consented_by).map((c) => [c.family_id, c.consented_by as string]));
+  // Chunked by family with the author ids beside them: both lists travel in the
+  // URL, so fifty of each keeps the request line near the one a hundred ids make.
+  const { data, error } = await readAllInChunks<{ id: string; family_id: string; user_id: string | null; role: string }>(
+    [...authorOf.keys()],
+    (chunk, from, to) => sb.from('family_members').select('id, family_id, user_id, role')
+      .in('family_id', chunk).in('user_id', chunk.map((familyId) => authorOf.get(familyId) as string))
+      .eq('is_active', true).order('id').range(from, to),
+    { chunkSize: 50 },
+  );
+  if (error || !data) return { error: error ?? { message: 'consent author read returned no rows' }, families: new Set() };
+  const families = new Set<string>();
+  for (const m of data) {
+    if (m.user_id && authorOf.get(m.family_id) === m.user_id && !isManager(m.role)) families.add(m.family_id);
+  }
+  return { error: null, families };
+}
+
+/** Domain separation for the one HMAC this module computes. */
+const NOISE_DOMAIN = 'network-aggregate-noise\0';
+const DEV_NOISE_KEY = 'bubaly-dev-network-noise';
+
+/**
+ * The secret the sticky noise is keyed on: the server's internal secret, or
+ * the service-role key the cron already needs. Production without either is
+ * refused (null) rather than keyed on a constant anyone can read here — with a
+ * public key the draws could be recomputed and subtracted.
+ */
+function noiseKey(): string | null {
+  const configured = [process.env.INTERNAL_SECRET, process.env.SUPABASE_SERVICE_ROLE_KEY]
+    .find((value) => typeof value === 'string' && value.trim() !== '');
+  if (configured) return configured;
+  return process.env.NODE_ENV === 'production' ? null : DEV_NOISE_KEY;
+}
+
+/**
+ * STICKY Laplace noise: the draw is a keyed hash of the cell and its TRUE count.
+ *
+ * `Math.random()` drew afresh for every cell on every nightly run, so an
+ * unchanged band published a new sample of the same number each night; at
+ * scale 1.5 (sd ≈ 2.1) the mean of a month of /resources/benchmarks scrapes is
+ * within 0.4 of the true count, and one family joining shows as a step of 1 in
+ * it. Keyed on (cell, true count), a night that changed nothing republishes the
+ * same figure, and a count that returns to an earlier value returns to that
+ * value's figure: repetition adds nothing. A change in the true count still
+ * draws anew, independent of the last, so the size of the change stays hidden.
+ */
+export function stickyNoise(key: string): NoiseFn {
+  return (scale, cell) => laplaceNoise(scale, () => cellUniform(key, cell));
+}
+
+function cellUniform(key: string, cell: NoiseCell): number {
+  const digest = createHmac('sha256', key).update(NOISE_DOMAIN)
+    .update(JSON.stringify([cell.scope, cell.cohortKey, cell.metric, cell.value, cell.cohortSize]))
+    .digest();
+  // 48 bits, strictly inside (0, 1): the Laplace inverse never meets log(0).
+  return (digest.readUIntBE(0, 6) + 0.5) / 2 ** 48;
+}
+
 export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Promise<AggregateResult> {
   // 1. Which families are opted in (master toggle on)?
   // Read whole, by paging. A short read here is not just a smaller
-  // aggregation: `keepIds` below is built from this list and drives a
-  // `not in` DELETE, so an opted-in family beyond PostgREST's db-max-rows
-  // would have its contribution DELETED as if it had opted out — and then be
-  // missing from the aggregates it consented to feed.
-  const { rows: consents, error: cErr } = await readAll<{
-    family_id: string; enabled: boolean; scopes: Database['public']['Tables']['network_consent']['Row']['scopes'];
-  }>((from, to) => sb.from('network_consent')
+  // aggregation: `keep` below is built from this list and drives the prune, so
+  // an opted-in family beyond PostgREST's db-max-rows would have its
+  // contribution DELETED as if it had opted out — and then be missing from the
+  // aggregates it consented to feed.
+  const { rows: consents, error: cErr } = await readAll<ConsentRow>((from, to) => sb.from('network_consent')
     // OPEN families only (families.closed_at): a closed account stops feeding
     // the network, and the prune below removes its stored contribution as it
     // does a withdrawn consent's. Reopening contributes again the next night.
-    .select('family_id, enabled, scopes, family:families!inner(closed_at)').is('family.closed_at', null)
+    .select('family_id, enabled, scopes, consented_by, family:families!inner(closed_at, timezone)').is('family.closed_at', null)
     .eq('enabled', true).order('family_id').range(from, to));
   if (cErr) return { ok: false, error: describeActionError(cErr), contributors: 0, aggregates: 0 };
 
-  const optedIn = consents;
+  // Granular consent decides who contributes at all. A family with no scope a
+  // metric belongs to is not read, not stored and not counted toward the
+  // launch gate: switched on with every scope off, it was the 70 of "30
+  // benchmark families plus 70 who only flipped the master switch" that
+  // opened publication for the other 30.
+  const optedIn = consents.filter((c) => contributesToNetwork(c.scopes as Partial<Record<ConsentScope, boolean>> | null));
+  const unauthorised = await consentsByNonManagers(sb, optedIn);
+  const contributing = optedIn.filter((c) => !unauthorised.families.has(c.family_id));
 
-  // 2. CONTRIBUTE — refresh each opted-in family's coarse row; drop everyone else's.
-  // Granular consent is enforced HERE: only metrics whose scope the family
-  // toggled on are kept, so an opt-in to (say) 'timing' alone never feeds the
-  // 'benchmarks' aggregates.
-  const built = await buildContributionsBatch(sb, optedIn.map((c) => c.family_id), now);
-  if (built === null) return { ok: false, error: 'failed to read family data', contributors: 0, aggregates: 0 };
-
-  const contributions: Contribution[] = [];
-  let contributionFailures = 0;
-  for (const c of optedIn) {
-    // Per-family isolation: one family's bad data or a transient write error must
-    // never abort the whole nightly aggregation for everyone else.
-    try {
-      const contrib = built.get(c.family_id);
-      if (!contrib) continue;
-      const scopes = (c.scopes ?? {}) as Partial<Record<ConsentScope, boolean>>;
-      contrib.metrics = filterMetricsByScopes(contrib.metrics, scopes);
-      const { error: upErr } = await sb.from('network_contributions').upsert({
-        family_id: c.family_id,
-        cohort_key: cohortKey(contrib.features),
-        features: contrib.features as unknown as Database['public']['Tables']['network_contributions']['Insert']['features'],
-        metrics: contrib.metrics,
-        scopes: c.scopes,
-      }, { onConflict: 'family_id' });
-      if (upErr) {
-        contributionFailures++;
-        console.error(`network_contributions upsert failed for ${c.family_id}:`, upErr.message);
-        continue;
-      }
-      contributions.push(contrib);
-    } catch (err) {
-      contributionFailures++;
-      console.error(`network contribution failed for family ${c.family_id}:`, err);
-    }
-  }
-  // Right-to-be-forgotten: remove contributions for families no longer opted in.
+  // 2. FORGET, before anything else can fail.
+  //
+  // The prune used to run after the eight source reads and the per-family
+  // upserts, so a run that failed in either returned with the withdrawn
+  // family's row still stored — and the previous aggregates, with that family
+  // inside them, still published — for as long as the failures repeated. It
+  // depends on nothing but the consent read now. (When the author read above
+  // fails, `contributing` is every opted-in family: the prune is then no
+  // narrower than it was, and the run reports the failure after it.)
   //
   // The natural spelling is one `not in (keepIds)` delete, and it is the wrong
   // one at this scale. A PostgREST filter travels in the query string, so that
@@ -233,13 +345,13 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
   // remainder is also the far smaller list — the families who withdrew since
   // the last run, not the whole network — and it subsumes the old empty-keep
   // branch, since nobody opted in makes every stored row stale.
-  const keep = new Set(optedIn.map((c) => c.family_id));
+  const keep = new Set(contributing.map((c) => c.family_id));
   const { rows: stored, error: storedError } = await readAll<{ family_id: string }>((from, to) => sb
     .from('network_contributions').select('family_id').order('family_id').range(from, to));
   // A short read here would leave a withdrawn family's contribution in place,
   // which is the one failure this block exists to prevent, so it fails the run
   // rather than pruning what it happened to see.
-  if (storedError) return { ok: false, error: 'failed to prune contributions', contributors: contributions.length, aggregates: 0 };
+  if (storedError) return { ok: false, error: 'failed to prune contributions', contributors: 0, aggregates: 0 };
   const staleIds = [...new Set(stored.map((r) => r.family_id))].filter((id) => !keep.has(id));
   // A family that withdraws between this read and the delete is pruned by the
   // next run — the old delete had the same window, one statement narrower.
@@ -247,17 +359,70 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
   // zero rows means nobody opted out since the last one. Audit C1-S9-69.
   const { error: contributionDeleteError } = await writeInChunks(staleIds, (chunk) => sb
     .from('network_contributions').delete().in('family_id', chunk));
-  if (contributionDeleteError) return { ok: false, error: 'failed to prune contributions', contributors: contributions.length, aggregates: 0 };
+  if (contributionDeleteError) return { ok: false, error: 'failed to prune contributions', contributors: 0, aggregates: 0 };
+  if (unauthorised.error) {
+    console.error('[network] consent author read failed', unauthorised.error);
+    return { ok: false, error: 'failed to read who consented', contributors: 0, aggregates: 0 };
+  }
+
+  const key = noiseKey();
+  if (!key) {
+    console.error('[network] no INTERNAL_SECRET or SUPABASE_SERVICE_ROLE_KEY: refusing to publish with noise keyed on a public constant');
+    return { ok: false, error: 'network noise key is not configured', contributors: 0, aggregates: 0 };
+  }
+
+  // 3. CONTRIBUTE — refresh each contributing family's coarse row.
+  // Granular consent is enforced HERE as well: only metrics whose scope the
+  // family toggled on are kept, so an opt-in to (say) 'timing' alone never
+  // feeds the 'benchmarks' aggregates.
+  const built = await buildContributionsBatch(
+    sb, contributing.map((c) => ({ id: c.family_id, tz: familyZone(c) })), now,
+  );
+  if (built === null) return { ok: false, error: 'failed to read family data', contributors: 0, aggregates: 0 };
+
+  const contributions: Contribution[] = [];
+  let contributionFailures = 0;
+  for (const c of contributing) {
+    // Per-family isolation: one family's bad data or a transient write error must
+    // never abort the whole nightly aggregation for everyone else.
+    try {
+      const contrib = built.get(c.family_id);
+      if (!contrib) continue;
+      const scopes = (c.scopes ?? {}) as Partial<Record<ConsentScope, boolean>>;
+      contrib.metrics = filterMetricsByScopes(contrib.metrics, scopes);
+      // Unreachable while dinner and activities are always banded, and kept
+      // that way: a family whose consent leaves it no metric contributes no row.
+      if (Object.keys(contrib.metrics).length === 0) continue;
+      const { error: upErr } = await sb.from('network_contributions').upsert({
+        family_id: c.family_id,
+        cohort_key: cohortKey(contrib.features),
+        // The cohort's two dimensions and nothing else: every band the family
+        // consented to share is in `metrics`, and one it did not is nowhere.
+        features: { childBands: contrib.features.childBands, sizeBand: contrib.features.sizeBand },
+        metrics: contrib.metrics,
+        scopes: c.scopes,
+      }, { onConflict: 'family_id' });
+      if (upErr) {
+        contributionFailures++;
+        console.error(`network_contributions upsert failed for ${c.family_id}:`, upErr.message);
+        continue;
+      }
+      contributions.push(contrib);
+    } catch (err) {
+      contributionFailures++;
+      console.error(`network contribution failed for family ${c.family_id}:`, err);
+    }
+  }
   if (contributionFailures > 0) return { ok: false, error: 'failed to persist family contributions', contributors: contributions.length, aggregates: 0 };
 
-  // 3. AGGREGATE — pure k-anonymity + DP noise + launch gate.
+  // 4. AGGREGATE — pure k-anonymity + sticky DP noise + launch gate.
   const aggregates = aggregateContributions(contributions, {
     minCohort: AGG_DEFAULTS.minCohort,
     globalMinFamilies: AGG_DEFAULTS.globalMinFamilies,
-    noise: (scale) => laplaceNoise(scale),
+    noise: stickyNoise(key),
   });
 
-  // 4. Republish: upsert the new set on the natural key, THEN prune rows this run
+  // 5. Republish: upsert the new set on the natural key, THEN prune rows this run
   //    didn't touch (stale computed_at). Avoids the delete-all-then-insert window
   //    where a failed insert would leave the table silently empty.
   if (aggregates.length) {

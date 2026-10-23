@@ -14,6 +14,7 @@ import { fmtDate } from '@/lib/utils/format';
 import { setBenchmarksPublicationAction } from './actions';
 import { SubmitButton } from '@/components/ui/submit-button';
 import { settle } from '@/lib/supabase/settle';
+import { requireSuperAdminPage } from '@/lib/auth/super-admin-page';
 
 export const metadata: Metadata = { title: 'Household Benchmarks', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -24,7 +25,13 @@ export const dynamic = 'force-dynamic';
 // can be checked against the guarantee it was made under. Service-role read:
 // network_aggregates is RLS-gated to consenting families, and the admin
 // console is not one. Rows are already k-anonymized and DP-noised.
+//
+// The page gates itself before that read: an RSC navigation that names
+// another /admin page as where it came from is rendered from this segment
+// down, and the /admin layout's super-admin and step-up checks do not run
+// (lib/auth/super-admin-page.ts).
 export default async function AdminBenchmarksPage() {
+  await requireSuperAdminPage();
   const t = await getTranslations();
   const supabase = createServiceClient();
   const [publication, aggregates, contributorsResult, optedInResult] = await Promise.all([
