@@ -9,9 +9,13 @@
 // pattern cron/wallet-allowance uses; the listing stays `available` and the
 // first run after the family reopens settles it. placeBidAction and
 // buyNowAction refuse a closed seller before their RPCs run, so the app takes
-// no bid and creates no Buy-It-Now order for one either. (That the circle view
-// still shows the listing, and a direct RPC call still reaches it, is the
-// owner's SQL to close: the view and marketplace_listing_visible_to.)
+// no bid and creates no Buy-It-Now order for one either. The other ways a
+// buyer commits to a seller are held to the same rule: opening a negotiation,
+// countering or accepting one (an accepted thread is a confirmed order, and
+// the seller accepting commits them to the buyer's household in turn), and the
+// listing page's offer. (That the circle view still shows the listing, and a
+// direct RPC call still reaches it, is the owner's SQL to close: the view and
+// marketplace_listing_visible_to.)
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpers/in-memory-supabase';
@@ -35,6 +39,8 @@ vi.mock('@/lib/i18n/server', async () => {
 
 const { GET } = await import('@/app/api/cron/close-auctions/route');
 const { placeBidAction, buyNowAction } = await import('@/app/(app)/marketplace/auctions/actions');
+const negotiations = await import('@/app/(app)/marketplace/negotiations/actions');
+const listingPage = await import('@/app/(app)/marketplace/actions');
 const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
 const t = (key: string) => translate(SOURCE_MESSAGES, key);
 const run = () => GET(new NextRequest('http://localhost/api/cron/close-auctions'));
@@ -81,6 +87,11 @@ beforeEach(() => {
       marketplace_close_auction: closeAuction,
       marketplace_place_bid: () => { harness.rpcs.push('marketplace_place_bid'); return { ok: true, leading: true, current_cents: 5_500 }; },
       marketplace_buy_now: () => { harness.rpcs.push('marketplace_buy_now'); return { ok: true, order_id: 'order-bin' }; },
+      marketplace_negotiation_offer: () => { harness.rpcs.push('marketplace_negotiation_offer'); return { ok: true, negotiation_id: 'neg-new', countered: false }; },
+      marketplace_negotiation_respond: (args: Record<string, unknown>) => {
+        harness.rpcs.push(`marketplace_negotiation_respond:${String(args.p_action)}`);
+        return args.p_action === 'accept' ? { ok: true, status: 'agreed', order_id: 'order-agreed' } : { ok: true, status: 'open' };
+      },
     },
   });
   db.seed('families', [
@@ -150,5 +161,97 @@ describe('bidding on, or buying, a closed family\'s listing', () => {
     expect(await placeBidAction({ listingId: 'live-open', maxCents: 6_000 })).toEqual({ ok: false, error: t('actions.couldNotPlaceThatBid') });
     expect(await buyNowAction('live-open')).toEqual({ ok: false, error: t('actions.couldNotCompleteBuyIt') });
     expect(harness.rpcs).toEqual([]);
+  });
+});
+
+describe('negotiating with a closed family, or offering on its listing', () => {
+  const closedNotice = () => t('actions.thisFamilyHasClosedItsAccount');
+  const fixed = (id: string, familyId: string): Row => ({
+    id, title: `Desk ${id}`, family_id: familyId, member_id: `seller-member-${id}`, kind: 'sell', sale_format: 'fixed',
+    status: 'available', price_cents: 8_000, bid_count: 0, highest_bidder_family_id: null,
+  });
+  /** A thread the buyer opened and the seller countered: the buyer's turn, so the buyer may accept. */
+  const thread = (id: string, listingId: string, sellerFamily: string, buyerFamily = 'fam-buyer'): Row => ({
+    id, family_id: sellerFamily, listing_id: listingId, buyer_member_id: 'm-buyer', buyer_family_id: buyerFamily,
+    status: 'open', current_amount_cents: 7_000, last_actor: 'seller', rounds_count: 2,
+  });
+  beforeEach(() => {
+    db.seed('families', [{ id: 'fam-buyer', name: 'Buyer House', closed_at: null }]);
+    db.seed('marketplace_listings', [fixed('desk-open', OPEN_SELLER), fixed('desk-closed', CLOSED_SELLER)]);
+    db.seed('marketplace_negotiations', [
+      thread('neg-open', 'desk-open', OPEN_SELLER),
+      thread('neg-closed', 'desk-closed', CLOSED_SELLER),
+    ]);
+  });
+
+  it('refuses to open a negotiation on a closed seller\'s listing before the RPC runs', async () => {
+    expect(await negotiations.makeOfferAction({ listingId: 'desk-closed', amountCents: 7_000 })).toEqual({ ok: false, error: closedNotice() });
+    expect(harness.rpcs).toEqual([]);
+    expect(db.table('marketplace_negotiations').map((n) => n.id)).toEqual(['neg-open', 'neg-closed']);
+  });
+
+  it('refuses the buyer\'s accept — a confirmed order — and their counter, with a closed seller', async () => {
+    expect(await negotiations.respondToOfferAction({ negotiationId: 'neg-closed', action: 'accept' })).toEqual({ ok: false, error: closedNotice() });
+    expect(await negotiations.respondToOfferAction({ negotiationId: 'neg-closed', action: 'counter', amountCents: 7_500 }))
+      .toEqual({ ok: false, error: closedNotice() });
+    expect(harness.rpcs).toEqual([]);
+  });
+
+  it('refuses the seller\'s accept of a buyer whose household closed', async () => {
+    db.table('families').find((f) => f.id === 'fam-buyer')!.closed_at = new Date(Date.now() - HOUR).toISOString();
+    expect(await negotiations.respondToOfferAction({ negotiationId: 'neg-open', action: 'accept' })).toEqual({ ok: false, error: closedNotice() });
+    expect(harness.rpcs).toEqual([]);
+  });
+
+  it('still lets either side end the thread: decline and withdraw reach the RPC', async () => {
+    expect((await negotiations.respondToOfferAction({ negotiationId: 'neg-closed', action: 'withdraw' })).ok).toBe(true);
+    expect((await negotiations.respondToOfferAction({ negotiationId: 'neg-closed', action: 'decline' })).ok).toBe(true);
+    expect(harness.rpcs).toEqual(['marketplace_negotiation_respond:withdraw', 'marketplace_negotiation_respond:decline']);
+  });
+
+  it('an open seller\'s listing takes the offer, the counter and the accept, as before (control)', async () => {
+    expect(await negotiations.makeOfferAction({ listingId: 'desk-open', amountCents: 7_000 }))
+      .toEqual({ ok: true, data: { negotiationId: 'neg-new', countered: false } });
+    expect((await negotiations.respondToOfferAction({ negotiationId: 'neg-open', action: 'counter', amountCents: 7_500 })).ok).toBe(true);
+    expect(await negotiations.respondToOfferAction({ negotiationId: 'neg-open', action: 'accept' }))
+      .toEqual({ ok: true, data: { status: 'agreed', orderId: 'order-agreed' } });
+    expect(harness.rpcs).toEqual(['marketplace_negotiation_offer', 'marketplace_negotiation_respond:counter', 'marketplace_negotiation_respond:accept']);
+  });
+
+  it('a standing that cannot be read is not an open one: refused, retryably', async () => {
+    const refused = { data: null, error: { code: 'XX000', message: 'down' } };
+    const broken: Record<string, unknown> = new Proxy({}, {
+      get: (_target, key) => (key === 'maybeSingle' ? async () => refused : () => broken),
+    });
+    harness.service = { from: () => broken };
+    expect(await negotiations.makeOfferAction({ listingId: 'desk-open', amountCents: 7_000 })).toEqual({ ok: false, error: t('marketplace.couldNotSendTheOffer') });
+    expect(await negotiations.respondToOfferAction({ negotiationId: 'neg-open', action: 'accept' }))
+      .toEqual({ ok: false, error: t('negotiations.couldNotRespondToTheOffer') });
+    expect(harness.rpcs).toEqual([]);
+  });
+
+  it('asks nothing of the service client about a listing or a thread the caller\'s own session does not return', async () => {
+    const service = vi.fn(() => db.from('families'));
+    harness.service = { from: service };
+    // Not a listing this session reads, and not a thread on the caller's side: the RPCs answer for both.
+    db.table('marketplace_negotiations').push(thread('neg-strangers', 'desk-open', OPEN_SELLER, 'fam-stranger'));
+    await negotiations.makeOfferAction({ listingId: 'listing-nobody-shared', amountCents: 7_000 });
+    await negotiations.respondToOfferAction({ negotiationId: 'neg-strangers', action: 'accept' });
+    expect(service).not.toHaveBeenCalled();
+    expect(harness.rpcs).toEqual(['marketplace_negotiation_offer', 'marketplace_negotiation_respond:accept']);
+  });
+
+  it('the listing page\'s offer is refused for a family that closed, and makes no offer row', async () => {
+    // That offer is within the caller's own family (makeOfferAction reads the
+    // listing with family_id = theirs), so the closed family is the caller's:
+    // a Next-Action POST from behind the closed gate.
+    db.seed('marketplace_listings', [fixed('lamp', 'fam-buyer')]);
+    db.table('families').find((f) => f.id === 'fam-buyer')!.closed_at = new Date(Date.now() - HOUR).toISOString();
+    expect(await listingPage.makeOfferAction('lamp')).toEqual({ ok: false, error: closedNotice() });
+    expect(db.table('marketplace_offers')).toEqual([]);
+
+    db.table('families').find((f) => f.id === 'fam-buyer')!.closed_at = null;
+    expect(await listingPage.makeOfferAction('lamp')).toEqual({ ok: true });
+    expect(db.table('marketplace_offers')).toHaveLength(1);
   });
 });

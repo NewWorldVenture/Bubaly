@@ -3,6 +3,12 @@
 // Shown over the whole app when a family's 5-day free trial has ended and they
 // haven't subscribed. Offers Family Basic or Family+ (no downgrade to free), a
 // link to full pricing, log out, and soft account closure. Nothing is deleted.
+//
+// Checkout, the portal and closing all touch the billing, so a password-only
+// session of a parent who enrolled an authenticator is asked for the two-step
+// code first — HERE, in the paywall. /auth/step-up is an (app) route, and this
+// gate replaces every one of them, so sending the parent there drew the paywall
+// again and the refused click looped. Once the code is in, the click is retried.
 import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { Crown, Sparkles, Check, Lock } from 'lucide-react';
@@ -16,8 +22,13 @@ import { cn } from '@/lib/utils/cn';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { SignOutForm } from '@/components/auth/sign-out-form';
+import { StepUpForm } from '@/components/auth/step-up-form';
 import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 import { reportRefusal } from '@/lib/auth/step-up-client';
+
+type Plan = 'basic_annual' | 'plus_annual';
+/** The click that was refused for want of the code, retried once it is entered. */
+type AwaitingCode = Plan | 'close';
 
 export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -30,13 +41,14 @@ export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null 
   const locale = useLocale();
   const perYear = (cents: number) => t('trialPaywallGate.pricePerYear', { amount: formatCents(cents, PLAN_CURRENCY, locale.code) });
   const [busy, setBusy] = useState<string | null>(null);
+  const [awaitingCode, setAwaitingCode] = useState<AwaitingCode | null>(null);
   const { error: toastError, success } = useToast();
 
   // Blocking full-screen paywall: lock the page behind it so it can't be
   // scrolled out from under on mobile.
   useLockBodyScroll(true);
 
-  async function checkout(plan: 'basic_annual' | 'plus_annual') {
+  async function checkout(plan: Plan) {
     if (busy) return;
     setBusy(plan);
     try {
@@ -45,7 +57,7 @@ export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null 
       });
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.url) { window.location.href = json.url as string; return; }
-      if (typeof json.stepUp === 'string') { reportRefusal({ error: json.error || t('trialPaywallGate.couldNotStartCheckoutPlease'), stepUp: json.stepUp }, toastError); return; }
+      if (typeof json.stepUp === 'string') { reportRefusal({ error: json.error || t('trialPaywallGate.couldNotStartCheckoutPlease'), stepUp: json.stepUp }, toastError, () => setAwaitingCode(plan)); return; }
       if (res.status === 409) {
         // Stripe already holds a live subscription the local row has not caught
         // up with. The billing page sits behind this same paywall, so sending
@@ -53,7 +65,7 @@ export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null 
         // (and a failing card) is actually managed.
         const portal = await fetch('/api/billing/portal', { method: 'POST' }).then(r => r.json()).catch(() => ({}));
         if (typeof portal.url === 'string') { window.location.href = portal.url; return; }
-        if (typeof portal.stepUp === 'string') { reportRefusal({ error: portal.error || t('trialPaywallGate.couldNotStartCheckoutPlease'), stepUp: portal.stepUp }, toastError); return; }
+        if (typeof portal.stepUp === 'string') { reportRefusal({ error: portal.error || t('trialPaywallGate.couldNotStartCheckoutPlease'), stepUp: portal.stepUp }, toastError, () => setAwaitingCode(plan)); return; }
         if (typeof json.review === 'string' && json.review.startsWith('/')) { window.location.href = json.review; return; }
       }
       toastError(json.error || t('trialPaywallGate.couldNotStartCheckoutPlease'));
@@ -66,52 +78,69 @@ export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null 
 
   async function close() {
     if (!window.confirm(t('trialPaywallGate.closeYourAccountNothingIs'))) return;
+    await closeConfirmed();
+  }
+
+  // The close the family already confirmed: a retry after the code does not ask twice.
+  async function closeConfirmed() {
     setBusy('close');
     const res = await closeAccountAction();
     setBusy(null);
     if (res.ok) { success(t('trialPaywallGate.yourAccountIsClosedYour')); window.location.reload(); }
     // Closing cancels the billing, so a password-only session of a parent with
-    // an authenticator is sent for the code first, as checkout above is.
-    else reportRefusal(res, toastError);
+    // an authenticator is asked for the code first, as checkout above is.
+    else reportRefusal(res, toastError, () => setAwaitingCode('close'));
+  }
+
+  function retryAfterCode(click: AwaitingCode) {
+    setAwaitingCode(null);
+    void (click === 'close' ? closeConfirmed() : checkout(click));
   }
 
   return (
-    <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="paywall-title"
+    <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={awaitingCode ? 'paywall-step-up-title' : 'paywall-title'}
       className="fixed inset-0 z-[200] grid place-items-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-surface p-6 shadow-2xl sm:p-8">
-        <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-violet-500/15 text-violet-400 ring-1 ring-violet-400/30">
-          <Lock className="h-6 w-6" />
+      {awaitingCode ? (
+        <div className="w-full max-w-md rounded-3xl bg-surface shadow-2xl">
+          <StepUpForm serverReadFailed={false} titleId="paywall-step-up-title" description={t('stepUp.billingDescription')}
+            onVerified={() => retryAfterCode(awaitingCode)} onBack={() => setAwaitingCode(null)} />
         </div>
-        <h1 id="paywall-title" className="mt-4 text-center text-2xl font-black text-fg">{t('trialPaywallGate.yourFreeTrialHasEnded')}</h1>
-        <p className="mx-auto mt-2 max-w-sm text-center text-sm text-muted">
-          {t('trialPaywallGate.chooseAPlanToUnlockBubaly')}
-        </p>
+      ) : (
+        <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-surface p-6 shadow-2xl sm:p-8">
+          <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-violet-500/15 text-violet-400 ring-1 ring-violet-400/30">
+            <Lock className="h-6 w-6" />
+          </div>
+          <h1 id="paywall-title" className="mt-4 text-center text-2xl font-black text-fg">{t('trialPaywallGate.yourFreeTrialHasEnded')}</h1>
+          <p className="mx-auto mt-2 max-w-sm text-center text-sm text-muted">
+            {t('trialPaywallGate.chooseAPlanToUnlockBubaly')}
+          </p>
 
-        <div className="mt-6 space-y-3">
-          <PlanRow
-            icon={<Crown className="h-5 w-5 text-yellow-400" />}
-            name={t('trialPaywallGate.familyBasic')} price={perYear(BASIC_ANNUAL_CENTS)} tagline={t('trialPaywallGate.basicTagline')}
-            busy={busy === 'basic_annual'} onClick={() => checkout('basic_annual')} featured
-          />
-          <PlanRow
-            icon={<Sparkles className="h-5 w-5 text-violet-400" />}
-            name={t('trialPaywallGate.familyPlus')} price={perYear(PLUS_ANNUAL_CENTS)} tagline={t('trialPaywallGate.plusTagline')}
-            busy={busy === 'plus_annual'} onClick={() => checkout('plus_annual')}
-          />
-        </div>
+          <div className="mt-6 space-y-3">
+            <PlanRow
+              icon={<Crown className="h-5 w-5 text-yellow-400" />}
+              name={t('trialPaywallGate.familyBasic')} price={perYear(BASIC_ANNUAL_CENTS)} tagline={t('trialPaywallGate.basicTagline')}
+              busy={busy === 'basic_annual'} onClick={() => checkout('basic_annual')} featured
+            />
+            <PlanRow
+              icon={<Sparkles className="h-5 w-5 text-violet-400" />}
+              name={t('trialPaywallGate.familyPlus')} price={perYear(PLUS_ANNUAL_CENTS)} tagline={t('trialPaywallGate.plusTagline')}
+              busy={busy === 'plus_annual'} onClick={() => checkout('plus_annual')}
+            />
+          </div>
 
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
-          <Link href="/pricing" className="text-brand-text hover:underline">{t('trialPaywallGate.seeAllPlansMonthlyPricing')}</Link>
-          <span className="text-muted">·</span>
-          <SignOutForm className="contents">
-            {({ signingOut }) => <button type="submit" disabled={signingOut} className="text-muted hover:text-fg">{t('trialPaywallGate.logOut')}</button>}
-          </SignOutForm>
-          <span className="text-muted">·</span>
-          <button type="button" onClick={close} disabled={!!busy} className="text-muted hover:text-fg disabled:opacity-50">
-            {t('trialPaywallGate.closeAccount')}
-          </button>
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
+            <Link href="/pricing" className="text-brand-text hover:underline">{t('trialPaywallGate.seeAllPlansMonthlyPricing')}</Link>
+            <span className="text-muted">·</span>
+            <SignOutForm className="contents">
+              {({ signingOut }) => <button type="submit" disabled={signingOut} className="text-muted hover:text-fg">{t('trialPaywallGate.logOut')}</button>}
+            </SignOutForm>
+            <span className="text-muted">·</span>
+            <button type="button" onClick={close} disabled={!!busy} className="text-muted hover:text-fg disabled:opacity-50">
+              {t('trialPaywallGate.closeAccount')}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

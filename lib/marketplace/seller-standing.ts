@@ -7,7 +7,10 @@
 // reopened — and Buy-It-Now created the order on the spot. The circle view and
 // marketplace_listing_visible_to still serve and admit such a listing (closing
 // that is the owner's SQL); the auction actions refuse the commitment with
-// this, as cron/close-auctions refuses to settle one.
+// this, as cron/close-auctions refuses to settle one. So do the other ways a
+// buyer commits to a seller: opening a negotiation, and countering or
+// accepting one (an accepted thread is a confirmed order) — and, for the same
+// reason, a seller accepting a buyer whose household has closed.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 
@@ -35,10 +38,20 @@ export async function readSellerStanding(service: Client, listingId: string): Pr
     return 'unknown';
   }
   if (!listing) return 'open';
-  const { data: family, error: familyError } = await service
-    .from('families').select('id, closed_at').eq('id', listing.family_id).maybeSingle();
-  if (familyError) {
-    console.error('[marketplace] seller standing read failed', { listingId, error: familyError });
+  return readFamilyStanding(service, listing.family_id);
+}
+
+/**
+ * One household's standing, by id, with the SERVICE client — for a party the
+ * caller already deals with (a negotiation's buyer family, which the thread
+ * the caller's own session read names). 'open' for a family this read does not
+ * find; 'unknown' when the read fails.
+ */
+export async function readFamilyStanding(service: Client, familyId: string): Promise<SellerStanding> {
+  const { data: family, error } = await service
+    .from('families').select('id, closed_at').eq('id', familyId).maybeSingle();
+  if (error) {
+    console.error('[marketplace] family standing read failed', { familyId, error });
     return 'unknown';
   }
   return family?.closed_at ? 'closed' : 'open';

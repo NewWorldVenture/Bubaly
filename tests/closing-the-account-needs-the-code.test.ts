@@ -14,8 +14,11 @@
 //
 // Pinned: with the code not yet entered nothing changes at Stripe or on the
 // family row, and the answer says where the code goes; the three callers hand
-// that answer to reportRefusal, so the family is taken to the code page and
-// back rather than shown a dead-end toast; with the code entered, or for a
+// that answer to reportRefusal rather than show a dead-end toast — the billing
+// card takes the family to the code page and back, and the two gates, which
+// cover that page (it is an (app) route), ask for the code in place
+// (tests/a-parent-behind-the-account-gate-enters-the-code-there.test.ts drives
+// the code through to the retried click); with the code entered, or for a
 // family that never enrolled an authenticator, the same clicks work as before.
 // The components below drive the REAL action through the harness.
 import { readFileSync } from 'node:fs';
@@ -24,7 +27,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
-import { byName, render } from './helpers/module-harness';
+import { byName, has, render } from './helpers/module-harness';
 import { resetHookSlots } from './helpers/hook-slots';
 
 const STEP_UP = '/auth/step-up?next=%2Fdashboard%2Fbilling';
@@ -57,6 +60,12 @@ vi.mock('@/components/ui/toast', async () => (await import('./helpers/module-har
 vi.mock('@/components/i18n/locale-provider', async () => (await import('./helpers/module-harness')).localeProviderModule(h));
 vi.mock('@/components/ui/button', async () => (await import('./helpers/module-harness')).ui);
 vi.mock('next/link', async () => ({ default: (await import('./helpers/module-harness')).ui.Link }));
+// The gates' in-place code form (components/auth/step-up-form.tsx): its router
+// and its read of the enrolled factor.
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }) }));
+vi.mock('@/lib/supabase/client', () => ({
+  createClient: () => ({ auth: { mfa: { listFactors: async () => ({ data: { all: [{ id: 'factor-1', factor_type: 'totp', status: 'verified', created_at: '2026-01-01T00:00:00Z' }] }, error: null }) } } }),
+}));
 vi.mock('@/components/auth/sign-out-form', () => ({
   SignOutForm: ({ children }: { children: (s: { signingOut: boolean }) => unknown }) => children({ signingOut: false }),
 }));
@@ -153,12 +162,16 @@ describe('what the family SEES: each caller hands the refusal to reportRefusal',
     expect(mocks.update).not.toHaveBeenCalled();
   });
 
+  // The gates replace every (app) route, /auth/step-up included, so a trip
+  // there only drew the gate again: they ask for the code where they stand.
   it('the paywall gate\'s Close account link — the path with no step-up anywhere above it', async () => {
     const { click, localeProviderModule } = await import('./helpers/module-harness');
     const t = localeProviderModule(h).useTranslations();
-    await click(byName(render(h.hooks, createElement(TrialPaywallGate, { trialEndsAt: null })), t('trialPaywallGate.closeAccount')));
+    const gate = createElement(TrialPaywallGate, { trialEndsAt: null });
+    await click(byName(render(h.hooks, gate), t('trialPaywallGate.closeAccount')));
     expect(h.toasts.error).toEqual([NEEDS_CODE]);
-    expect(mocks.assign).toHaveBeenCalledWith(STEP_UP);
+    expect(mocks.assign).not.toHaveBeenCalled();
+    expect(has(render(h.hooks, gate), t('stepUp.title'))).toBe(true);
     expect(family().closed_at).toBeNull();
     expect(mocks.update).not.toHaveBeenCalled();
   });
@@ -167,9 +180,11 @@ describe('what the family SEES: each caller hands the refusal to reportRefusal',
     family().closed_at = '2026-09-01T12:00:00.000Z';
     const { click, localeProviderModule } = await import('./helpers/module-harness');
     const t = localeProviderModule(h).useTranslations();
-    await click(byName(render(h.hooks, createElement(AccountClosedGate)), t('accountClosedGate.reopenMyAccount')));
+    const gate = createElement(AccountClosedGate);
+    await click(byName(render(h.hooks, gate), t('accountClosedGate.reopenMyAccount')));
     expect(h.toasts.error).toEqual([NEEDS_CODE]);
-    expect(mocks.assign).toHaveBeenCalledWith(STEP_UP);
+    expect(mocks.assign).not.toHaveBeenCalled();
+    expect(has(render(h.hooks, gate), t('stepUp.title'))).toBe(true);
     expect(family().closed_at).toBe('2026-09-01T12:00:00.000Z');
   });
 });
