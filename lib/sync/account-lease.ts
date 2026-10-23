@@ -20,11 +20,17 @@
 // it changes nothing the engine already settled. No new column: `updated_at`,
 // kept by the table's trigger and written here too, dates the claim.
 //
-// Taken by the two entry points that run a sync for a person's account —
-// app/api/cron/provider-sync and app/api/sync/run — around `runProviderSync`
-// rather than inside it, so the engine's item-level claims (the adoption
-// fences in lib/sync/persistence.ts) keep covering the case this lease cannot:
-// a stale takeover while the sync that died turns out to be alive.
+// Taken by every entry point that runs a sync for a person's account, around
+// the engine rather than inside it: app/api/cron/provider-sync and
+// app/api/sync/run around `runProviderSync` (runLeasedProviderSync), and the
+// Google account page's "Sync now", app/api/sync/google/sync, around
+// `runGoogleSync` (runUnderAccountLease). That page renders its own control,
+// and its route ran the Google engine with no claim: a press during the
+// scheduled run synced the account twice at once, and its success stamp
+// released the scheduled sync's lease mid-run. Outside the engine so the
+// engine's item-level claims (the adoption fences in lib/sync/persistence.ts)
+// keep covering the case this lease cannot: a stale takeover while the sync
+// that died turns out to be alive.
 import type { Database, SyncStatusEnum } from '@/lib/database.types';
 import type { SyncProviderAdapter } from '@/lib/sync/adapter';
 import { runProviderSync, type RunResult } from '@/lib/sync/engine/generic';
@@ -104,14 +110,19 @@ export async function releaseAccountLease(admin: Admin, account: Account, outcom
   if (error) console.error('[sync] could not release the account lease', { accountId: account.id, error });
 }
 
-/** `runProviderSync` under the account's lease; `busy` when another sync holds it. */
-export async function runLeasedProviderSync(admin: Admin, account: Account, adapter: SyncProviderAdapter): Promise<LeasedRunResult> {
+/**
+ * One engine's sync of `account` under the account's lease; `busy`, with
+ * nothing run, when another sync holds it. `sync` reports a refusal by its
+ * policy as `refused`, as both engines do, so a sync that never started gives
+ * the account back as it found it.
+ */
+export async function runUnderAccountLease(admin: Admin, account: Account, sync: () => Promise<RunResult>): Promise<LeasedRunResult> {
   const lease = await claimAccountLease(admin, account);
   if (lease === 'busy') {
     return { imported: 0, exported: 0, skipped: 0, conflicts: 0, busy: true };
   }
   try {
-    const result = await runProviderSync(admin, account, adapter);
+    const result = await sync();
     // A sync the account's policy refused (turned off, an import still to be
     // finished, an owner no longer in the family) never started: it gives the
     // account back as it found it. Stamping it `error` told the dashboards
@@ -124,4 +135,9 @@ export async function runLeasedProviderSync(admin: Admin, account: Account, adap
     await releaseAccountLease(admin, account, 'error');
     throw e;
   }
+}
+
+/** `runProviderSync` under the account's lease; `busy` when another sync holds it. */
+export function runLeasedProviderSync(admin: Admin, account: Account, adapter: SyncProviderAdapter): Promise<LeasedRunResult> {
+  return runUnderAccountLease(admin, account, () => runProviderSync(admin, account, adapter));
 }
