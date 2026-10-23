@@ -6,7 +6,7 @@ import type {ServiceScope} from '@/lib/services/types';
 vi.mock('@/lib/i18n/server',()=>({getTranslations:async()=> (key:string)=>key}));
 vi.mock('@/lib/services/documents',()=>({listDocuments:async()=>({ok:true,data:[]})}));
 vi.mock('@/lib/services/family',()=>({getMembers:async()=>({ok:true,data:[]}),getPreferences:async()=>({ok:true,data:{familyId:'10000000-0000-4000-8000-000000000001',familyName:'Synthetic',timezone:'UTC'}})}));
-vi.mock('@/lib/services/finances',()=>({listTransactions:async()=>({ok:true,data:{transactions:[]}})}));
+vi.mock('@/lib/services/finances',()=>({listTransactions:async(_scope:ServiceScope,input:{from:string;to:string})=>({ok:true,data:{range:{from:input.from,to:input.to},transactions:[],total:0,complete:true}})}));
 vi.mock('@/lib/services/groceries',()=>({listOpen:async()=>({ok:true,data:{items:[]}})}));
 vi.mock('@/lib/services/memory',()=>({listMemories:async()=>({ok:true,data:{facts:[],pending:[]}}),PENDING_SUGGESTION_LIMIT:200}));
 vi.mock('@/lib/services/routines',()=>({listAllRoutines:async()=>({ok:true,data:[]})}));
@@ -30,7 +30,9 @@ function fixture(rows:Row[],options:Options={}){
  const db=createClient<Database>('https://synthetic-calendar-review.invalid','synthetic',{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:async(input,init)=>{
   const url=new URL(String(input));calls.push(url);expect(url.origin).toBe('https://synthetic-calendar-review.invalid');
   if(url.pathname==='/rest/v1/rpc/calendar_read_occurrence_inputs'){expect(init?.method).toBe('POST');expect(JSON.parse(String(init?.body))).toEqual({p_family_id:'10000000-0000-4000-8000-000000000001'});return Response.json({code:'42501',message:'Synthetic snapshot refused'},{status:403});}
-  const method=init?.method??'GET';expect(['GET','HEAD']).toContain(method);const table=url.pathname.split('/').at(-1);expect(['calendar_events','sports_events','school_events','family_facts','family_playbook_suggestions','documents']).toContain(table);if(method==='HEAD')expect(url.searchParams.get('select')).toBe('id');expect(url.searchParams.get('family_id')).toBe('eq.10000000-0000-4000-8000-000000000001');
+  const method=init?.method??'GET';expect(['GET','HEAD']).toContain(method);const table=url.pathname.split('/').at(-1);expect(['calendar_events','sports_events','school_events','family_facts','family_playbook_suggestions','documents','transactions']).toContain(table);if(method==='HEAD')expect(url.searchParams.get('select')).toBe('id');expect(url.searchParams.get('family_id')).toBe('eq.10000000-0000-4000-8000-000000000001');
+  // The empty finance section still performs its real family/window completeness count.
+  if(table==='transactions'){expect(method).toBe('HEAD');expect(url.searchParams.get('select')).toBe('id');expect(new Headers(init?.headers).get('prefer')).toContain('count=exact');expect(url.searchParams.get('or')).toBe('(date.lt.2024-10-08,date.gt.2026-10-08)');return new Response(null,{headers:{'Content-Range':'*/0'}});}
   const offset=Number(url.searchParams.get('offset')??0);
   if(options.failTable===table&&(!options.failLater||offset>0))return Response.json({code:'42501',message:'Synthetic read refused'},{status:403});
   // The export's memories and documents sections HEAD-count their tables (U4); this fixture holds none.
