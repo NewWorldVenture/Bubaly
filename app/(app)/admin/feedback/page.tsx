@@ -2,13 +2,15 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { MessagesSquare, ExternalLink, Github } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
-import { settle } from '@/lib/supabase/settle';
-import type { IdeaRow } from '@/lib/feedback/board';
+import { settle, settleAll } from '@/lib/supabase/settle';
+import { FILTERABLE_STATUSES, type FeedbackStatus, type IdeaRow } from '@/lib/feedback/board';
+import type { FeedbackBoardCounts } from '@/lib/feedback/admin';
 import { githubRepoStatus } from '@/lib/integrations/github';
 import { FeedbackAdmin, type AdminComment, type AdminNotification } from '@/components/admin/feedback-admin';
 import { ErrorState } from '@/components/ui/states';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { getTranslations } from '@/lib/i18n/server';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllAsQuery, readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { signFeedbackAttachments } from '@/lib/storage/feedback-attachment-signing';
 
 export const metadata: Metadata = { title: 'Admin · Feedback & Ideas', robots: { index: false } };
@@ -16,12 +18,22 @@ export const dynamic = 'force-dynamic';
 
 /** Comments the threads' paged read may go through before it is reported as a prefix. */
 const COMMENT_CEILING = 3000;
+/** Ideas the Total votes tile may page through before it says it is not shown (one round trip per 1,000). */
+const VOTE_ROW_CEILING = 25_000;
 
 export default async function AdminFeedbackPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
 
-  const [ideasResult, commentsResult, notesResult, gh] = await Promise.all([
+  // The tiles (Needs review, Active, Shipped, Total ideas, Total votes) and the
+  // status chips were tallied from the listed ideas, which are the newest 1,000
+  // at most, so past 1,000 ideas they were the listed ideas' totals with
+  // nothing to say so (review R7B-FEEDBACK-IDEAS-LIMIT-FEEDS-SUMMED-TILES). The
+  // board is counted now: head:true counts of every idea and of each status,
+  // and every idea's votes added up, paged on the id so a vote cast between
+  // two pages cannot add an idea twice. Past VOTE_ROW_CEILING ideas Total
+  // votes alone says it is not shown. The list itself is as it was.
+  const [ideasResult, commentsResult, notesResult, gh, totalResult, votesResult, statusCountResults] = await Promise.all([
     settle(supabase.from('feedback_ideas')
       .select('id, title, problem, body, category, impact, audience, kind, status, admin_note, image_url, author_name, vote_count, comment_count, pinned, github_issue_number, github_issue_url, created_at')
       .order('pinned', { ascending: false })
@@ -39,6 +51,14 @@ export default async function AdminFeedbackPage() {
       .order('created_at', { ascending: false })
       .limit(50)),
     githubRepoStatus(),
+    settle(supabase.from('feedback_ideas').select('id', { count: 'exact', head: true })),
+    settle(readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('feedback_ideas').select('id, vote_count');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: VOTE_ROW_CEILING })),
+    settleAll(FILTERABLE_STATUSES.map((status) =>
+      supabase.from('feedback_ideas').select('id', { count: 'exact', head: true }).eq('status', status))),
   ]);
 
   // The comment rows only fill the threads. Past the ceiling they are a prefix,
@@ -49,11 +69,20 @@ export default async function AdminFeedbackPage() {
   // still the read-error state.
   const threadsCeiling = 'truncated' in commentsResult && commentsResult.truncated;
   if (threadsCeiling) console.warn('[admin-feedback] the comment read reached its ceiling; the threads are not shown');
-  const readError = ideasResult.error ?? (threadsCeiling ? null : commentsResult.error) ?? notesResult.error;
+  const votesCeiling = 'truncated' in votesResult && votesResult.truncated;
+  if (votesCeiling) console.warn('[admin-feedback] the vote read reached its ceiling; Total votes is not shown');
+  const readError = ideasResult.error ?? (threadsCeiling ? null : commentsResult.error) ?? notesResult.error
+    ?? totalResult.error ?? (votesCeiling ? null : votesResult.error) ?? statusCountResults.find((r) => r.error)?.error;
   if (readError) {
     console.error('[admin-feedback] feedback read failed', readError);
     return <AdminFeedbackReadError />;
   }
+
+  const counts: FeedbackBoardCounts = {
+    total: totalResult.count ?? 0,
+    byStatus: Object.fromEntries(FILTERABLE_STATUSES.map((status, i) => [status, statusCountResults[i]?.count ?? 0])) as Record<FeedbackStatus, number>,
+    totalVotes: votesCeiling ? null : (votesResult.data ?? []).reduce((n, i) => n + (i.vote_count || 0), 0),
+  };
 
   // `feedback-attachments` is private as of 0450, so the stored value — a bare
   // path on new rows, an old public URL on rows written before it — is not
@@ -89,8 +118,14 @@ export default async function AdminFeedbackPage() {
         </div>
       </div>
 
+      <PartialReadBanner
+        title={t('adminCeiling.figuresNotShown', { n: VOTE_ROW_CEILING.toLocaleString() })}
+        failures={votesCeiling ? [t('feedbackAdmin.totalVotes')] : []}
+      />
+
       <FeedbackAdmin
         ideas={(ideas ?? []) as IdeaRow[]}
+        counts={counts}
         comments={threadsCeiling ? null : (comments ?? []) as AdminComment[]}
         notifications={(notes ?? []) as AdminNotification[]}
         githubConfigured={gh.ok}

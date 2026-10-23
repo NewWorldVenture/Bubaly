@@ -17,7 +17,7 @@ import {
   categoryMeta, statusMeta, kindMeta,
   type IdeaRow, type FeedbackStatus, type FeedbackKind,
 } from '@/lib/feedback/board';
-import { feedbackAdminSummary, filterIdeasForAdmin, type AdminFeedbackFilter } from '@/lib/feedback/admin';
+import { feedbackBoardSummary, filterIdeasForAdmin, type AdminFeedbackFilter, type FeedbackBoardCounts } from '@/lib/feedback/admin';
 import {
   updateIdeaAction, setIdeaPinnedAction, deleteIdeaAction, postTeamReplyAction,
   syncGithubNowAction, markAdminNotificationsReadAction,
@@ -39,9 +39,12 @@ const fmtIn = (locale: LocaleCode) => (iso: string) => {
  * `comments` is null when the page could not read every comment on the board:
  * each thread then says it is not shown, rather than showing part of itself as
  * the whole, and everything else on a card still works.
+ *
+ * `counts` are the board's own (lib/feedback/admin.ts), not a tally of
+ * `ideas`, which is the listed newest 1,000 at most.
  */
-export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfigured = false }: {
-  ideas: IdeaRow[]; comments: AdminComment[] | null; notifications?: AdminNotification[]; githubConfigured?: boolean;
+export function FeedbackAdmin({ ideas, counts, comments, notifications = [], githubConfigured = false }: {
+  ideas: IdeaRow[]; counts: FeedbackBoardCounts; comments: AdminComment[] | null; notifications?: AdminNotification[]; githubConfigured?: boolean;
 }) {
   const locale = useLocale();
   const fmt = fmtIn(locale.code);
@@ -54,7 +57,7 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
   const [syncing, startSync] = useTransition();
   const [marking, startMark] = useTransition();
 
-  const summary = useMemo(() => feedbackAdminSummary(ideas), [ideas]);
+  const summary = useMemo(() => feedbackBoardSummary(counts), [counts]);
   const unreadNotes = notifications.filter((n) => !n.is_read);
 
   function runSync() {
@@ -83,12 +86,12 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
     return q ? base.filter((i) => i.title.toLowerCase().includes(q) || (i.body ?? '').toLowerCase().includes(q) || (i.problem ?? '').toLowerCase().includes(q)) : base;
   }, [ideas, filter, kindFilter, q]);
 
-  const cards: { label: string; value: number; tone: string }[] = [
+  const cards: { label: string; value: number | null; tone: string }[] = [
     { label: 'Needs review', value: summary.needsReview, tone: 'text-amber-500' },
     { label: 'Active', value: summary.active, tone: 'text-purple-500' },
     { label: 'Shipped', value: summary.shipped, tone: 'text-emerald-500' },
     { label: 'Total ideas', value: summary.total, tone: 'text-fg' },
-    { label: 'Total votes', value: summary.totalVotes, tone: 'text-brand-text' },
+    { label: t('feedbackAdmin.totalVotes'), value: summary.totalVotes, tone: 'text-brand-text' },
   ];
 
   return (
@@ -97,7 +100,7 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {cards.map((c) => (
           <div key={c.label} className="rounded-2xl border border-border bg-surface/40 p-4">
-            <p className={cn('text-2xl font-black tabular-nums', c.tone)}>{c.value}</p>
+            <p className={cn('text-2xl font-black tabular-nums', c.tone)}>{c.value ?? t('strategyMetrics.unavailable')}</p>
             <p className="mt-0.5 text-xs text-muted">{c.label}</p>
           </div>
         ))}

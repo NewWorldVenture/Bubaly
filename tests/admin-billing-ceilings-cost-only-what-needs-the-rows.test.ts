@@ -172,6 +172,34 @@ describe('/admin/billing past 50,000 subscriptions', () => {
     expect(html).not.toContain('New family');
   });
 
+  // One count of each family, told apart by its own filter. The case above
+  // that faults every head:true read reaches the read-error state through the
+  // other-plans count alone, so it held with the plan and status counts' error
+  // check deleted, and a single failing count then read as `count ?? 0`: the
+  // 'plus' count timing out left every Family+ subscription out of Est. MRR,
+  // Active and the donut, and said nothing (review
+  // R7B-BILLING-COUNT-FAILS-CONTROL-NOT-ISOLATED). Each case faults exactly one.
+  const ONE_COUNT: [string, (calls: FaultCall[]) => boolean][] = [
+    ['one plan\'s count, Family+', (calls) => calls.some((c) => c.method === 'eq' && c.args[0] === 'plan' && c.args[1] === 'plus')],
+    ['one status\'s count, trialing', (calls) => calls.some((c) => c.method === 'eq' && c.args[0] === 'status' && c.args[1] === 'trialing')],
+    ['the other plans\' count', (calls) => calls.some((c) => c.method === 'not')],
+  ];
+
+  it.each(ONE_COUNT)('one count that FAILS (%s) is the read-error state, not a zero', async (_, failing) => {
+    seedPastTheCeiling();
+    let faulted = 0;
+    h.db = withFaults(db, (table, calls) => {
+      if (table !== 'subscriptions' || !failing(calls)) return null;
+      faulted += 1;
+      return { message: 'subscriptions unavailable' };
+    });
+    const html = await render();
+    expect(faulted).toBe(1);
+    expect(html).toContain(readError());
+    expect(html).not.toContain('Est. MRR');
+    expect(html).not.toContain('New family');
+  });
+
   it('the control: under the ceiling the trend draws and nothing is said to be missing', async () => {
     db.seed('subscriptions', Array.from({ length: CAP + 300 }, (_, k) =>
       sub(`s-${pad(k)}`, 'plus', 'active', new Date(Date.UTC(2026, 9, 1) + k * 60_000).toISOString())));

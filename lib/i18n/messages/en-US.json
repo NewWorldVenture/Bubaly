@@ -6804,6 +6804,7 @@
   "feedbackAdmin.syncGithubNow": "Sync GitHub now",
   "feedbackAdmin.team": "Team",
   "feedbackAdmin.toMirrorBugsAmpIdeasNotifications": "to mirror bugs & ideas. Notifications still work.",
+  "feedbackAdmin.totalVotes": "Total votes",
   "feedbackAttachment.uploadFailedTryAgain": "Upload failed. Please try again.",
   "feedbackAttachmentUpload.pleaseChooseAJpegPng": "Please choose a JPEG, PNG, WebP, GIF or AVIF image.",
   "feedbackAttachmentUpload.thatImageIsOver10": "That image is over 10 MB — pick a smaller one.",

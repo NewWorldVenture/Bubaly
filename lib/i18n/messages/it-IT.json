@@ -6620,6 +6620,7 @@
   "feedbackAdmin.syncGithubNow": "Sincronizza GitHub ora",
   "feedbackAdmin.team": "Squadra",
   "feedbackAdmin.toMirrorBugsAmpIdeasNotifications": "per rispecchiare bug e idee. Le notifiche continuano a funzionare.",
+  "feedbackAdmin.totalVotes": "Voti totali",
   "feedbackAttachment.uploadFailedTryAgain": "Caricamento non riuscito. Riprova.",
   "feedbackAttachmentUpload.pleaseChooseAJpegPng": "Scegli un’immagine JPEG, PNG, WebP, GIF o AVIF.",
   "feedbackAttachmentUpload.thatImageIsOver10": "Quell’immagine supera i 10 MB: scegline una più piccola.",
