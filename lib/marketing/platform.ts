@@ -295,10 +295,28 @@ async function savedSinceRead(supabase: MarketingPlatformDb, read: Pick<Marketin
   return data !== null && data.version !== read.version;
 }
 
+/**
+ * The result of a job for a page archived since the job was queued, or null for
+ * a live page (admin reach RV51-ARCHIVED-PAGE-JOB-DEAD-LETTERS). The three
+ * runners below read live rows only and threw "not found", so every job still
+ * queued at the archive (the publish's regeneration behind the create's, the
+ * old mirror a legacy rename retires, a page's questions and embedding jobs)
+ * failed each cron run until it dead-lettered, behind a Retry that could never
+ * succeed. There is nothing left for it to do: an archive queues no job (0237's
+ * trigger skips a deleted row) and the save that brings a page back queues its
+ * own. So it is superseded, as a raced regeneration is, with no failure. A row
+ * that is gone is still not found.
+ */
+function archivedSinceQueued(page: { id: string; deleted_at: string | null }): { pageId: string; superseded: true; archived: true } | null {
+  return page.deleted_at === null ? null : { pageId: page.id, superseded: true, archived: true };
+}
+
 async function runRegeneration(supabase: MarketingPlatformDb, job: Tables<'marketing_generation_jobs'>) {
   if (!job.target_id) throw new Error('Regeneration job is missing target_id.');
-  const { data: page, error: pageError } = await supabase.from('marketing_pages').select('*').eq('id', job.target_id).is('deleted_at', null).maybeSingle();
+  const { data: page, error: pageError } = await supabase.from('marketing_pages').select('*').eq('id', job.target_id).maybeSingle();
   if (pageError || !page) throw pageError ?? new Error('Marketing page not found.');
+  const archived = archivedSinceQueued(page);
+  if (archived) return archived;
   const [templateResult, rulesResult] = await settleAll([
     supabase.from('marketing_content_templates').select('instructions, defaults').eq('page_type', page.page_type).eq('status', 'active').eq('is_default', true).maybeSingle(),
     supabase.from('marketing_brand_rules').select('name, instructions, value').eq('active', true).order('name'),
@@ -413,8 +431,10 @@ export async function retireAeoQuestionsForPath(
 
 async function runQuestions(supabase: MarketingPlatformDb, job: Tables<'marketing_generation_jobs'>) {
   if (!job.target_id) throw new Error('Question job is missing target_id.');
-  const { data: page, error } = await supabase.from('marketing_pages').select('id, path, title, summary, aeo, status').eq('id', job.target_id).is('deleted_at', null).maybeSingle();
+  const { data: page, error } = await supabase.from('marketing_pages').select('id, path, title, summary, aeo, status, deleted_at').eq('id', job.target_id).maybeSingle();
   if (error || !page) throw error ?? new Error('Marketing page not found.');
+  const archived = archivedSinceQueued(page);
+  if (archived) return archived;
   const aeo = jsonObject(page.aeo);
   const raw = Array.isArray(aeo.questions) ? aeo.questions : [];
   const questions = raw.slice(0, 12).map((item) => {
@@ -430,11 +450,28 @@ async function runQuestions(supabase: MarketingPlatformDb, job: Tables<'marketin
   // prior set. Rows deliberately not checked. Audit C1-S9-67.
   const { error: deleteError } = await supabase.from('marketing_aeo_questions').delete().eq('source_path', page.path).contains('metadata', { source: 'marketing_platform' });
   if (deleteError) throw deleteError;
-  if (rows.length) {
-    const { error: insertError } = await supabase.from('marketing_aeo_questions').insert(rows);
-    if (insertError) throw insertError;
-  }
-  return { pageId: page.id, questions: rows.length };
+  if (!rows.length) return { pageId: page.id, questions: 0 };
+  const { data: inserted, error: insertError } = await supabase.from('marketing_aeo_questions').insert(rows).select('id, status');
+  if (insertError) throw insertError;
+  const published = (inserted ?? []).filter((row) => row.status === 'published').map((row) => row.id);
+  if (!published.length) return { pageId: page.id, questions: rows.length };
+  // Admin reach RV51-QUESTIONS-RENAME-RACE. The delete and insert key on the
+  // path READ above. A console rename, unpublish or archive landing between
+  // that read and the delete retired the answers at that path first
+  // (updatePlatformPage, archivePlatformPage, 0383's trigger); the delete then
+  // removed them and the insert published them again, at a path the page had
+  // left, and the newer version's questions job only touches the page's new
+  // path. So look again now they are in, and take back what this run published
+  // if the page no longer holds the path, published and live. A save after
+  // this read retires them itself: it lands after the insert.
+  const { data: now, error: nowError } = await supabase.from('marketing_pages').select('path, status, deleted_at').eq('id', page.id).maybeSingle();
+  if (nowError) throw nowError;
+  if (now && now.path === page.path && now.status === 'published' && now.deleted_at === null) return { pageId: page.id, questions: rows.length };
+  const { data: retired, error: retireError } = await supabase.from('marketing_aeo_questions')
+    .update({ status: 'answered', last_reviewed: new Date().toISOString() })
+    .in('id', published).eq('status', 'published').select('id');
+  if (retireError) throw retireError;
+  return { pageId: page.id, questions: rows.length, superseded: true, retired: retired?.length ?? 0 };
 }
 
 async function openAIEmbeddings(textInputs: string[], configuredKey?: string | null): Promise<{ vectors: number[][]; model: string }> {
@@ -456,12 +493,18 @@ async function openAIEmbeddings(textInputs: string[], configuredKey?: string | n
   return { vectors: validVectors, model };
 }
 
+/** A page's title, summary and body, chunked as runEmbedding embeds them. */
+function embeddableChunks(page: Pick<MarketingPage, 'title' | 'summary' | 'body'>): string[] {
+  return chunkMarketingText([page.title, page.summary ?? '', page.body ?? ''].filter(Boolean).join('\n\n'));
+}
+
 async function runEmbedding(supabase: MarketingPlatformDb, job: Tables<'marketing_generation_jobs'>) {
   if (!job.target_id) throw new Error('Embedding job is missing target_id.');
-  const { data: page, error } = await supabase.from('marketing_pages').select('id, title, summary, body, version').eq('id', job.target_id).is('deleted_at', null).maybeSingle();
+  const { data: page, error } = await supabase.from('marketing_pages').select('id, title, summary, body, version, deleted_at').eq('id', job.target_id).maybeSingle();
   if (error || !page) throw error ?? new Error('Marketing page not found.');
-  const source = [page.title, page.summary ?? '', page.body ?? ''].filter(Boolean).join('\n\n');
-  const chunks = chunkMarketingText(source);
+  const archived = archivedSinceQueued(page);
+  if (archived) return archived;
+  const chunks = embeddableChunks(page);
   if (!chunks.length) throw new Error('Marketing page has no embeddable content.');
   const hashes = chunks.map(contentHash);
   const { data: existingRows, error: existingError } = await supabase.from('marketing_embeddings')
@@ -481,17 +524,36 @@ async function runEmbedding(supabase: MarketingPlatformDb, job: Tables<'marketin
   if (!missing.length) return { pageId: page.id, chunks: chunks.length, embedded: 0, reused: reusable.size };
   const aiConfig = await getAIConfig(supabase);
   let embedded = 0;
+  const inserted: { id: string; content_hash: string }[] = [];
   for (let offset = 0; offset < missing.length; offset += 32) {
     const batch = missing.slice(offset, offset + 32);
     const { vectors, model } = await openAIEmbeddings(batch.map((row) => row.content), aiConfig.openaiKey);
-    const { error: insertError } = await supabase.from('marketing_embeddings').insert(batch.map((row, index) => ({
+    const { data: landed, error: insertError } = await supabase.from('marketing_embeddings').insert(batch.map((row, index) => ({
       source_type: 'page', source_id: page.id, chunk_index: row.index, content_hash: row.hash, content: row.content,
       embedding: JSON.stringify(vectors[index]) as unknown as Json, model, dimensions: vectors[index].length, status: 'ready',
-    })));
+    }))).select('id, content_hash');
     if (insertError) throw insertError;
+    inserted.push(...(landed ?? []));
     embedded += batch.length;
   }
-  return { pageId: page.id, chunks: chunks.length, embedded, reused: reusable.size };
+  const done = { pageId: page.id, chunks: chunks.length, embedded, reused: reusable.size };
+  // Admin reach F5-EMBED-STALE-CHUNKS. These chunks are the page as READ, and
+  // the model call can take a minute. A save landing inside it queues the newer
+  // version's own embedding, which an overlapping cron run can finish first: it
+  // marked stale what it found, and these then landed 'ready' after it, beside
+  // its own, until the page was embedded again. So once the version has moved
+  // on, what this run added that the page no longer has is stale. With the
+  // version unmoved nothing newer is queued to embed the page again, so its
+  // chunks stay as they are.
+  const { data: now, error: nowError } = await supabase.from('marketing_pages').select('version, title, summary, body').eq('id', page.id).maybeSingle();
+  if (nowError) throw nowError;
+  if (now?.version === page.version) return done;
+  const kept = new Set((now ? embeddableChunks(now) : []).map(contentHash));
+  const outdated = inserted.filter((row) => !kept.has(row.content_hash)).map((row) => row.id);
+  if (!outdated.length) return done;
+  const { data: marked, error: markError } = await supabase.from('marketing_embeddings').update({ status: 'stale' }).in('id', outdated).select('id');
+  if (markError) throw markError;
+  return { ...done, superseded: true, staled: marked?.length ?? 0 };
 }
 
 async function runJob(supabase: MarketingPlatformDb, job: Tables<'marketing_generation_jobs'>) {
