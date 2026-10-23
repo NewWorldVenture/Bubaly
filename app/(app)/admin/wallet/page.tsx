@@ -107,18 +107,23 @@ export default async function AdminWalletPage() {
           <ShieldCheck className="h-4 w-4" /> {tr('adminWallet.reconciliation')}
         </Link>
       </div>
+      {/* A read that failed is named in the banner above, and what it fed is
+          not shown as a value: a count reads Unavailable rather than 0, the
+          ledger volume rather than $0.00, and the flags and the activity are
+          the read-error state rather than no flags to toggle and "No wallet
+          audit activity yet". A volume past its ceiling has an error too. */}
       <AdminWalletClient
         stats={{
-          activeWallets: activeWallets ?? 0,
-          childWallets: childWallets ?? 0,
-          pendingGifts: pendingGifts ?? 0,
-          pendingApprovals: pendingApprovals ?? 0,
-          creditVolumeCents: volumeCeiling ? null : creditVolumeCents,
-          debitVolumeCents: volumeCeiling ? null : debitVolumeCents,
-          netCents: volumeCeiling ? null : creditVolumeCents - debitVolumeCents,
+          activeWallets: activeWalletsResult.error ? null : activeWallets ?? 0,
+          childWallets: childWalletsResult.error ? null : childWallets ?? 0,
+          pendingGifts: pendingGiftsResult.error ? null : pendingGifts ?? 0,
+          pendingApprovals: pendingApprovalsResult.error ? null : pendingApprovals ?? 0,
+          creditVolumeCents: creditAggResult.error ? null : creditVolumeCents,
+          debitVolumeCents: creditAggResult.error ? null : debitVolumeCents,
+          netCents: creditAggResult.error ? null : creditVolumeCents - debitVolumeCents,
         }}
-        flags={flagRows}
-        audit={auditRows}
+        flags={flagsResult.error ? null : flagRows}
+        audit={auditResult.error ? null : auditRows}
       />
     </div>
   );

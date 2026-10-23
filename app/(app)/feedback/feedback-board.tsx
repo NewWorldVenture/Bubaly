@@ -13,7 +13,7 @@ import {
 } from '@/lib/feedback/board';
 import { submitIdeaAction, toggleVoteAction, addCommentAction, setIdeaStatusAction } from './actions';
 import { FeedbackAttachmentUpload } from './feedback-attachment-upload';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { useFormat } from '@/components/i18n/use-format';
 import type { Format } from '@/lib/utils/format';
@@ -371,12 +371,16 @@ function IdeaCard({ idea, voted, votesUnavailable, onVote, isSuperAdmin, onStatu
 }
 
 // ── The board ────────────────────────────────────────────────────────────────
-export function FeedbackBoard({ initialIdeas, votedIds, votesUnavailable = false, userId, isSuperAdmin }: {
-  initialIdeas: IdeaRow[]; votedIds: string[];
+export function FeedbackBoard({ initialIdeas, totalIdeas = null, votedIds, votesUnavailable = false, userId, isSuperAdmin }: {
+  initialIdeas: IdeaRow[];
+  /** Every idea on the board, counted; null when the count could not be read. `initialIdeas` is the top 400 at most. */
+  totalIdeas?: number | null;
+  votedIds: string[];
   /** The votes read failed on the server: voting is paused and no pill claims a state. */
   votesUnavailable?: boolean; userId: string; isSuperAdmin: boolean;
 }) {
   const t = useTranslations();
+  const locale = useLocale().code;
   const [ideas, setIdeas] = useState<IdeaRow[]>(initialIdeas);
   const [voted, setVoted] = useState<string[]>(votedIds);
   const [sort, setSort] = useState<FeedbackSort>('top');
@@ -481,6 +485,10 @@ export function FeedbackBoard({ initialIdeas, votedIds, votesUnavailable = false
           <button key={c} onClick={() => setCategoryFilter(c)} className={pill(categoryFilter === c)}>{CATEGORY_META[c].emoji} {CATEGORY_META[c].label}</button>
         ))}
       </div>
+
+      {totalIdeas !== null && totalIdeas > initialIdeas.length && (
+        <p className="mt-4 text-xs text-muted">{t('feedbackFeedbackBoard.theBoardListsTheTop', { shown: initialIdeas.length.toLocaleString(locale), total: totalIdeas.toLocaleString(locale) })}</p>
+      )}
 
       {votesUnavailable && (
         <p role="status" className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/5 px-4 py-2 text-xs text-amber-600">{t('feedbackFeedbackBoard.yourVotesCouldNotBeRead')}</p>

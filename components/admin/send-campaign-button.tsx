@@ -14,13 +14,23 @@ export function SendCampaignButton({ id, disabled }: { id: string; disabled?: bo
 
   async function onSend() {
     if (busy) return;
-    // Confirm with a real recipient count before sending.
-    let count = 0;
+    // Confirm with a real recipient count before sending. A preflight that
+    // failed is not "No eligible recipients": the count was not read, so the
+    // route's own answer is shown and nothing is asked (review
+    // R9-SEND-CAMPAIGN-FAILED-PREFLIGHT-IS-NO-RECIPIENTS).
+    let count: number;
     try {
       const pre = await fetch(`/api/admin/marketing/email/send?id=${id}`);
-      const pj = await pre.json();
-      count = pj.recipients ?? 0;
-    } catch { /* fall through to confirm without count */ }
+      const pj = await pre.json().catch(() => ({})) as { recipients?: unknown; error?: unknown };
+      if (!pre.ok || pj.error || typeof pj.recipients !== 'number') {
+        toastError(typeof pj.error === 'string' && pj.error ? pj.error : t('send.couldNotLoadCampaignRecipients'));
+        return;
+      }
+      count = pj.recipients;
+    } catch {
+      toastError(t('send.couldNotLoadCampaignRecipients'));
+      return;
+    }
 
     const ok = window.confirm(count > 0
       ? (count === 1 ? t('sendCampaignButton.confirmOne') : t('sendCampaignButton.confirmMany', { n: count }))

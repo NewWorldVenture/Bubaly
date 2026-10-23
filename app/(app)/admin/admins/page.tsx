@@ -6,6 +6,7 @@ import {
   Shield, ShieldCheck, UserCog, UserPlus, Users,
 } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settle, settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -95,6 +96,19 @@ export default async function AdminManagementPage({ searchParams }: Params) {
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key as TabKey) ?? 'users';
   const supabase = createServiceClient();
 
+  // The tiles, the donut and each role's "N user(s)" were tallied from the
+  // list, an unbounded read that PostgREST answers with at most db-max-rows
+  // and no error, so past them each was a count of the list presented as the
+  // whole team (coverage sweep round 9, class B). They are head:true counts
+  // now, started before the list is awaited; any that fails is the read-error
+  // state, and the list says when it holds only part of the team.
+  const counted = () => supabase.from('admin_users').select('id', { count: 'exact', head: true });
+  const roles = Object.keys(ROLE_META);
+  const countsRead = Promise.all([
+    settle(counted()),
+    settleAll(roles.map((role) => counted().eq('admin_role', role))),
+    settle(counted().eq('status', 'pending')),
+  ]);
   const { data: allAdmins, error } = await supabase
     .from('admin_users')
     .select('*')
@@ -103,18 +117,22 @@ export default async function AdminManagementPage({ searchParams }: Params) {
     console.error('[admin-admins] administrator read failed', error);
     return <ReadFailure />;
   }
+  const [totalResult, roleResults, pendingResult] = await countsRead;
+  const countError = totalResult.error ?? roleResults.find((r) => r.error)?.error ?? pendingResult.error;
+  if (countError) {
+    console.error('[admin-admins] administrator count read failed', countError);
+    return <ReadFailure />;
+  }
 
   const admins = allAdmins ?? [];
 
   // ── Stats ──────────────────────────────────────────────────────────
-  const total         = admins.length;
-  const superAdmins   = admins.filter((a) => a.admin_role === 'super_administrator').length;
-  const administrators = admins.filter((a) => a.admin_role === 'administrator').length;
-  const pendingInvites = admins.filter((a) => a.status === 'pending').length;
-
-  // Role distribution for donut
-  const roleCounts = new Map<string, number>();
-  for (const a of admins) roleCounts.set(a.admin_role, (roleCounts.get(a.admin_role) ?? 0) + 1);
+  // Role distribution for donut and the Roles tab
+  const roleCounts = new Map<string, number>(roles.map((role, i) => [role, roleResults[i]?.count ?? 0]));
+  const total         = totalResult.count ?? 0;
+  const superAdmins   = roleCounts.get('super_administrator') ?? 0;
+  const administrators = roleCounts.get('administrator') ?? 0;
+  const pendingInvites = pendingResult.count ?? 0;
   const donutSegments = Object.entries(ROLE_META).map(([role, meta]) => ({
     label: meta.label, count: roleCounts.get(role) ?? 0, color: meta.donutColor,
   })).filter((s) => s.count > 0);
@@ -190,6 +208,9 @@ export default async function AdminManagementPage({ searchParams }: Params) {
                   { value: 'pending',  label: 'Pending' },
                 ]} />
               </FilterForm>
+              {total > admins.length && (
+                <p className="mt-3 text-xs text-muted">{tr('adminCeiling.listAndFiltersShowTheNewest', { shown: admins.length.toLocaleString(), total: total.toLocaleString() })}</p>
+              )}
 
               {pageRows.length === 0 ? (
                 <div className="mt-6"><EmptyState icon={UserCog} title={tr('admins.noAdminsMatchTheseFilters')} /></div>
@@ -378,7 +399,7 @@ export default async function AdminManagementPage({ searchParams }: Params) {
                     ))}
                   </ul>
                   <p className="mt-3 text-xs text-muted">
-                    {admins.filter((a) => a.admin_role === role).length} user(s)
+                    {roleCounts.get(role) ?? 0} user(s)
                   </p>
                 </div>
               );

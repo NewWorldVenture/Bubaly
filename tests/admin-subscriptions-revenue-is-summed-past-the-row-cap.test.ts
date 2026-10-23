@@ -6,7 +6,7 @@ import { SOURCE_MESSAGES } from '@/lib/i18n/messages';
 import { translate } from '@/lib/i18n/translate';
 import { PLUS_MONTHLY_CENTS } from '@/lib/constants/plans';
 import { fmtMoney } from '@/lib/utils/format';
-import { createInMemorySupabase, withFaults, type InMemorySupabase } from './helpers/in-memory-supabase';
+import { createInMemorySupabase, withFaults, type FaultCall, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { renderServerPage, statCardValue } from './helpers/render-server-page';
 import { at } from './helpers/source-order';
 
@@ -138,6 +138,37 @@ describe('/admin/subscriptions reduces over every subscription, not the newest t
     expect(html).toContain(`<span class="font-medium">Family ${ACTIVE - 1}</span>`);
     expect(html).toContain(`<span class="font-medium">Family ${ACTIVE - 20}</span>`);
     expect(html).not.toContain('Unknown family');
+  });
+
+  // One head:true count of each kind, told apart by its own filter. No test
+  // faulted exactly one of them, so deleting any one count's error check left
+  // every test green, and the count then read as `count ?? 0`: a timed-out
+  // plan count dropped that plan from MRR and ARR, a failed active count
+  // zeroed Active and skewed churn (review R8B-SUBSCRIPTIONS-COUNT-FAILS-CONTROL-NOT-ISOLATED).
+  // Each case faults exactly one.
+  const head = (calls: FaultCall[]) => calls.some((c) => c.method === 'select' && (c.args[1] as { head?: boolean } | undefined)?.head === true);
+  const eq = (calls: FaultCall[], column: string, value?: string) =>
+    calls.some((c) => c.method === 'eq' && c.args[0] === column && (value === undefined || c.args[1] === value));
+  const ONE_COUNT: [string, (calls: FaultCall[]) => boolean][] = [
+    ['one plan\'s count, Family+', (calls) => head(calls) && eq(calls, 'plan', 'plus')],
+    ['the active count', (calls) => head(calls) && eq(calls, 'status', 'active') && !eq(calls, 'plan')],
+    ['the cancelled-recently count', (calls) => head(calls) && eq(calls, 'status', 'canceled') && calls.some((c) => c.method === 'gte' && c.args[0] === 'updated_at')],
+    ['the chart\'s base count', (calls) => head(calls) && calls.some((c) => c.method === 'lt' && c.args[0] === 'created_at')],
+  ];
+
+  it.each(ONE_COUNT)('one count that FAILS (%s) is the read-error state, not a zero', async (_, failing) => {
+    seedPlatform();
+    let faulted = 0;
+    h.db = withFaults(db, (table, calls) => {
+      if (table !== 'subscriptions' || !failing(calls)) return null;
+      faulted += 1;
+      return { message: 'subscriptions unavailable' };
+    });
+    const html = await render();
+    expect(faulted).toBe(1);
+    expect(html).toContain(SOURCE_MESSAGES['subscriptions.couldNotLoadSubscriptionData']);
+    expect(html).not.toContain('MRR');
+    expect(html).not.toContain(`Family ${ACTIVE - 1}`);
   });
 
   it('a billing customer read that fails is the read-error state, not "Unknown family"', async () => {
