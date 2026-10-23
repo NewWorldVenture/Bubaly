@@ -82,14 +82,19 @@ const HOUSEHOLD_SLOTS: { key: string; label: string; labelKey: string; href: str
 ];
 
 /**
- * The household slots a viewer's own reads cannot answer, by role.
+ * The household slots left out of a viewer's score, by role.
  *
  * The score is read on the viewer's session, so a table RLS returns empty to
- * them reads as "missing". A guest is returned no family_places (0481's
- * family_places_select) and no financial_accounts, so for a guest "Where home
- * is" and "Where the money sits" were asked for, linking to pages a guest is
- * sent away from, while the family had both. Those slots are left out of a
- * guest's score instead of scored as gaps.
+ * them reads as "missing". For a guest, two slots go:
+ * - "Where home is": 0481's family_places_select returns a guest no places,
+ *   so a family with a saved home was asked for one, linking to
+ *   /dashboard/locator, a page a guest is sent away from.
+ * - "Where the money sits": the guest's session does read financial_accounts
+ *   on the released schema (financial_accounts_select is membership only;
+ *   the held 0509 closes it). But the slot links to /dashboard/family-cfo,
+ *   which a guest is also sent away from (GUEST_WITHHELD_PREFIXES,
+ *   lib/auth/guest-scope.ts), so a guest is not asked to fill it.
+ * Both are left out of a guest's score instead of scored as gaps.
  */
 export function slotsUnreadBy(role: string | null | undefined): readonly string[] {
   return role === 'guest' ? ['home_place', 'accounts'] : [];

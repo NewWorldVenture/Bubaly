@@ -1,15 +1,19 @@
 // N15 — the Reasoning Graph page scores how complete the household model is
 // on the VIEWER's session. 0481's family_places_select returns a guest no
-// places, and financial_accounts returns a guest none either, so for a guest
-// in a family with a saved home the card said Bubaly did not know "Where home
-// is" (linking to /dashboard/locator, which a guest is sent away from) and
-// "Where the money sits", and lowered the score. lib/twin/completeness-
-// server.ts's own comment names this misreport as the one thing it must not
-// do. A slot the viewer cannot read is now left out of their score.
+// places, so for a guest in a family with a saved home the card said Bubaly
+// did not know "Where home is" (linking to /dashboard/locator, which a guest is
+// sent away from) and lowered the score. lib/twin/completeness-server.ts's own
+// comment names this misreport as the one thing it must not do. "Where the
+// money sits" is left out of a guest's score too, but for a different reason:
+// the released schema DOES return a guest the household's financial_accounts
+// (financial_accounts_select is membership only; the held 0509 would close
+// it), and the slot links to /dashboard/family-cfo, which a guest is also sent
+// away from (GUEST_WITHHELD_PREFIXES).
 //
 // Driven through the real page and the real loader over the in-memory
-// database, which stands in for each viewer's session: for the guest it holds
-// the rows RLS returns them (no places, no accounts).
+// database, which stands in for each viewer's session. For the guest it holds
+// the rows RLS returns them on the released schema: no places, and the
+// household's account.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SOURCE_MESSAGES } from '@/lib/i18n/messages';
 import { translate } from '@/lib/i18n/translate';
@@ -47,13 +51,16 @@ beforeEach(() => {
 const page = async () => textOf(await renderServerPage(await GraphPage()));
 
 describe('the graph completeness card', () => {
-  it('does not ask a guest for the home place or the accounts their session cannot read', async () => {
+  it('does not ask a guest for the home place their session cannot read, nor score them on the accounts', async () => {
     h.role = 'guest';
+    // What the guest's session reads of financial_accounts on 0001-0486.
+    db.seed('financial_accounts', [{ id: 'acct-1', family_id: FAMILY }]);
     const text = await page();
 
     expect(text).not.toContain(t('graphCompleteness.whereHomeIs'));
     expect(text).not.toContain(t('graphCompleteness.whereTheMoneySits'));
-    // Scored on what the guest reads: members and routines (2), and one member's three.
+    // Scored without both slots: members and routines (2), and one member's
+    // three. Not 6 of 6: the account the guest reads does not score either.
     expect(text).toContain(t('graphCompleteness.nOfNFactsFilledIn', { filled: 5, expected: 5 }));
   });
 

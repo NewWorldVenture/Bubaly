@@ -40,12 +40,16 @@ export function ExpensesModule() {
   const locale = useLocale();
   const usd = (cents: number) => usdIn(cents, locale.code);
   const { familyId, userId, members, family, role } = useApp();
-  // 0481 refuses a caregiver every share write: expense_split_shares_insert and
-  // _update both exclude 'caregiver'. A split a caregiver started was rolled
-  // back with an RLS error and a settle came back "not saved", on every try.
-  // The screen offers a caregiver what the database lets them do: read the
-  // household's splits. (Whether a caregiver should settle a share they owe
-  // or paid is the owner's call on that policy.)
+  // 0481 refuses a caregiver every share write: expense_split_shares_insert,
+  // _update and _delete all exclude 'caregiver'. A split a caregiver started was
+  // rolled back with an RLS error, and a settle came back "not saved", on every
+  // try. Deleting a split is a share delete too: its shares go with it
+  // (expense_split_shares.split_id is ON DELETE CASCADE). 0481 still lets any
+  // member but a guest delete a split, so the cascade does what 0481 refuses a
+  // caregiver directly. So the screen offers a caregiver only reading the household's
+  // splits: no Split, no Settle, no Trash. (Narrowing expense_splits to match,
+  // and whether a caregiver should settle a share they owe or paid, are the
+  // owner's calls on those policies.)
   const writesShares = role !== 'caregiver';
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
@@ -141,7 +145,7 @@ export function ExpensesModule() {
         // no shares it says never happens, and said nothing.
         // A refused rollback is also no error and zero rows, which is the same
         // orphan and said nothing either. Audit C1-S9-82.
-        const { data: rolledBack, error: rollbackError } = await supabase.from('expense_splits').delete().eq('id', split.id).select('id');
+        const { data: rolledBack, error: rollbackError } = await supabase.from('expense_splits').delete().eq('id', split.id).eq('family_id', familyId).select('id');
         if (rollbackError) console.error('[expenses] split rollback failed; a split without shares remains', { splitId: split.id, error: rollbackError });
         else if (wroteNoRows(rolledBack)) console.error('[expenses] split rollback matched no row; a split without shares remains', { splitId: split.id });
         toastError(describeDbError(sErr));
@@ -170,7 +174,7 @@ export function ExpensesModule() {
   function removeSplit(id: string) {
     if (!confirm(tr('expensesModule.deleteThisExpenseAndIts'))) return;
     return run(`remove:${id}`, async () => {
-      const { data: removed, error } = await createClient().from('expense_splits').delete().eq('id', id).select('id');
+      const { data: removed, error } = await createClient().from('expense_splits').delete().eq('id', id).eq('family_id', familyId).select('id');
       if (error) throw error;
       if (wroteNoRows(removed)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
       success(tr('expensesModule.deleted'));
@@ -232,9 +236,11 @@ export function ExpensesModule() {
                   <p className="font-medium">{sp.description} <span className="text-muted">· {usd(sp.total_cents)}</span></p>
                   <p className="text-xs text-muted">{categoryLabel(tr, sp.category)} {tr('expenses.paidBy')} {memberName(sp.paid_by)} · {fmtDate(sp.spent_on)}</p>
                 </div>
-                <button onClick={() => removeSplit(sp.id)} disabled={isPending(`remove:${sp.id}`)} className="text-muted transition hover:text-danger disabled:opacity-50" aria-label={tr('expenses.delete')}>
-                  {isPending(`remove:${sp.id}`) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                </button>
+                {writesShares && (
+                  <button onClick={() => removeSplit(sp.id)} disabled={isPending(`remove:${sp.id}`)} className="text-muted transition hover:text-danger disabled:opacity-50" aria-label={tr('expenses.delete')}>
+                    {isPending(`remove:${sp.id}`) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  </button>
+                )}
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {sh.map((s) => !writesShares ? (

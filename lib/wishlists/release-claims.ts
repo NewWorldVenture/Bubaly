@@ -6,9 +6,13 @@
 // is_self_member, which a removed member no longer passes. A gift they had
 // claimed stayed "Claimed" for every remaining giver (lib/wishlists/gifts.ts:
 // claimed_by_other, never toggleable), and no member, a parent included, could
-// free it. Both removal paths now release the claims the way the hard delete's
-// SET NULL would have, with the service role (the guard admits it). Claims of a
-// member removed before this existed are the owner's guard change to free.
+// free it. Both removal paths now release the claims with the service role
+// (the guard admits it), as the hard delete's SET NULL would have: the claimer
+// is cleared (with the time of the claim) and is_purchased is kept. A gift the
+// removed member already bought still reads "Bought" (claimState 'purchased')
+// and is not offered to be bought a second time; an unbought claim goes back
+// on the list. Claims of a member removed before this existed are the owner's
+// guard change and repair to free.
 
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -16,7 +20,7 @@ import { describeActionError } from '@/lib/supabase/errors';
 
 export type GiftClaimRelease = { ok: true; released: number } | { ok: false };
 
-/** Unclaim every wish in `familyId` that `memberId` had claimed (and so marked bought). */
+/** Release every claim on a wish in `familyId` that `memberId` held; a gift they bought stays bought. */
 export async function releaseRemovedMembersGiftClaims(
   service: SupabaseClient,
   familyId: string,
@@ -25,7 +29,7 @@ export async function releaseRemovedMembersGiftClaims(
   // Zero rows is the ordinary answer (most members claimed nothing); the
   // select reports what was released, and the error is what is checked.
   const { data, error } = await service.from('wishlist_items')
-    .update({ claimed_by: null, claimed_at: null, is_purchased: false })
+    .update({ claimed_by: null, claimed_at: null })
     .eq('family_id', familyId).eq('claimed_by', memberId)
     .select('id');
   if (error) {

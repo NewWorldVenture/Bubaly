@@ -8,6 +8,13 @@
 // Both removal paths now release the removed member's claims with the service
 // role, the way the hard delete's SET NULL would have.
 //
+// N12-purchased: round 1's release also cleared is_purchased, which the hard
+// delete's SET NULL (wishlist_items_claimed_by_fkey) keeps. A gift the removed
+// member had already bought went back on the list as 'unclaimed' and could be
+// bought a second time. The release now clears the claimer and keeps
+// is_purchased: a bought gift still reads 'purchased', an unbought claim goes
+// back on the list.
+//
 // Driven through the real removal actions against the in-memory database.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, withFaults, type InMemorySupabase } from './helpers/in-memory-supabase';
@@ -57,6 +64,8 @@ beforeEach(() => {
   db.seed('wishlist_items', [
     // Sib's wish, claimed (and bought) by the carer about to be removed.
     { id: 'wish-carer', family_id: C.FAMILY, member_id: C.SIB, title: 'Telescope', ...claimed, claimed_by: C.CARER, is_purchased: true },
+    // Sib's other wish, claimed by the carer and not bought yet.
+    { id: 'wish-carer-unbought', family_id: C.FAMILY, member_id: C.SIB, title: 'Puzzle', ...claimed, claimed_by: C.CARER, is_purchased: false },
     // Controls: another giver's claim in the family, and the same member id's claim elsewhere.
     { id: 'wish-kid', family_id: C.FAMILY, member_id: C.SIB, title: 'Kite', ...claimed, claimed_by: C.KID, is_purchased: false },
     { id: 'wish-elsewhere', family_id: C.OTHER_FAMILY, member_id: 'other-kid', title: 'Bike', ...claimed, claimed_by: C.CARER, is_purchased: false },
@@ -65,10 +74,15 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); });
 
 const expectReleased = () => {
-  expect(wish('wish-carer')).toMatchObject({ claimed_by: null, claimed_at: null, is_purchased: false });
-  // Back on the list: another giver sees it unclaimed and may claim it.
-  expect(claimState(wish('wish-carer'), C.KID)).toBe('unclaimed');
-  expect(canToggleClaim(wish('wish-carer'), C.KID)).toBe(true);
+  // The bought gift: the claimer goes, as the hard delete's SET NULL clears
+  // claimed_by, and it stays bought, as SET NULL keeps is_purchased. Another
+  // giver reads it as bought, not as a gift still to buy.
+  expect(wish('wish-carer')).toMatchObject({ claimed_by: null, claimed_at: null, is_purchased: true });
+  expect(claimState(wish('wish-carer'), C.KID)).toBe('purchased');
+  // The unbought claim: back on the list, and another giver may claim it.
+  expect(wish('wish-carer-unbought')).toMatchObject({ claimed_by: null, claimed_at: null, is_purchased: false });
+  expect(claimState(wish('wish-carer-unbought'), C.KID)).toBe('unclaimed');
+  expect(canToggleClaim(wish('wish-carer-unbought'), C.KID)).toBe(true);
   // Nothing else moves.
   expect(wish('wish-kid')).toMatchObject({ claimed_by: C.KID });
   expect(wish('wish-elsewhere')).toMatchObject({ claimed_by: C.CARER });
