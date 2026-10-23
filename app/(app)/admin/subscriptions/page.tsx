@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { CreditCard, Users, DollarSign, TrendingDown, ExternalLink, Receipt } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
-import { readAllAsQuery, readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 import type Stripe from 'stripe';
 import { getStripe } from '@/lib/stripe';
@@ -33,6 +33,8 @@ type Params = { searchParams: Promise<{ tab?: string }> };
 
 /** Rows a paged read may go through before it is reported as a prefix (one round trip per 1,000). */
 const ROW_CEILING = 25_000;
+/** The Plans tab lists this many of the newest subscriptions. */
+const RECENT_SHOWN = 8;
 
 async function PlanDonut({ counts, total }: { counts: Map<string, number>; total: number }) {
   const tr = await getTranslations();
@@ -104,8 +106,14 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
   // The subscription rows are counted (the growth chart, the All tab's total),
   // so they page on the id, not on offsets: a checkout between two pages
   // shifted every later offset by one and counted one subscription twice.
+  //
+  // The family names only label rows. They were one read of every family,
+  // paged to the same ceiling with reaching it an error, so past 25,000
+  // families the page lost every tile and row to the read-error state for a
+  // label (review R5-FAMILIES-LABEL-CEILING-LOCKS-PAGES). Each listed row is
+  // now named from its own family, below.
   const since30 = new Date(Date.now() - 30 * 86400000);
-  const [[subscriptionsResult, activeCountResult, canceledRecentlyResult, familiesResult], planCountResults] = await Promise.all([
+  const [[subscriptionsResult, activeCountResult, canceledRecentlyResult], planCountResults] = await Promise.all([
     settleAll([
       readAllByIdAsQuery((after, limit) => {
         let query = supabase.from('subscriptions').select('*');
@@ -114,13 +122,12 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
       }, { max: ROW_CEILING }),
       supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active'),
       supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'canceled').gte('updated_at', since30.toISOString()),
-      readAllAsQuery((from, to) => supabase.from('families').select('id, name').order('id').range(from, to), { max: ROW_CEILING }),
     ]),
     settleAll(PLANS.map((p) =>
       supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active').eq('plan', p.id))),
   ]);
 
-  const readError = subscriptionsResult.error ?? familiesResult.error
+  const readError = subscriptionsResult.error
     ?? activeCountResult.error ?? canceledRecentlyResult.error ?? planCountResults.find((r) => r.error)?.error;
   if (readError) {
     console.error('[admin-subscriptions] subscription read failed', readError);
@@ -128,11 +135,10 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
   }
 
   const { data: subscriptions } = subscriptionsResult;
-  const { data: families } = familiesResult;
 
   // Newest first, as the lists below have always read; the paged read was ordered by id.
   const subs = [...(subscriptions ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
-  const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
+  const recentSubs = subs.slice(0, RECENT_SHOWN);
 
   const planById = (id: string): Plan | undefined => PLANS.find((p) => p.id === id);
   const activeCount = activeCountResult.count ?? 0;
@@ -146,17 +152,17 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
   const churnRate = churnBase > 0 ? (canceledRecently / churnBase) * 100 : 0;
 
   // Real Stripe invoices (account-wide, no per-customer fan-out). Gracefully empty if Stripe isn't configured.
-  let invoices: { id: string; number: string | null; amountPaid: number; status: string; created: number; familyName: string; hostedUrl: string | null }[] = [];
+  let listed: Stripe.Invoice[] = [];
   let stripeError: string | null = null;
+  let customerToFamily = new Map<string, string>();
+  const customerOf = (inv: Stripe.Invoice) => (typeof inv.customer === 'string' ? inv.customer : inv.customer?.id);
   if (tab === 'billing') {
-    let listed: Stripe.Invoice[] = [];
     try {
       const stripe = getStripe();
       listed = (await stripe.invoices.list({ limit: 20 })).data;
     } catch (err) {
       stripeError = describeDbError(err, tr('subscriptions.stripeIsNotConfigured'));
     }
-    const customerOf = (inv: Stripe.Invoice) => (typeof inv.customer === 'string' ? inv.customer : inv.customer?.id);
     // Only the customers these invoices name. The whole billing_customers table
     // was read unbounded, which PostgREST answers with at most `db-max-rows`
     // (1,000) rows, so an invoice whose customer fell past them read "Unknown
@@ -168,17 +174,35 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
       console.error('[admin-subscriptions] billing customer read failed', billingCustomersResult.error);
       return <AdminSubscriptionsReadError tab={tab} />;
     }
-    const customerToFamily = new Map(billingCustomersResult.data.filter((b) => b.customer_ref).map((b) => [b.customer_ref as string, b.family_id]));
-    invoices = listed.map((inv) => {
-      const customerId = customerOf(inv);
-      const familyId = customerId ? customerToFamily.get(customerId) : undefined;
-      return {
-        id: inv.id ?? '', number: inv.number, amountPaid: inv.amount_paid, status: inv.status ?? 'unknown',
-        created: inv.created, familyName: familyId ? familyNameById.get(familyId) ?? 'Unknown family' : 'Unknown family',
-        hostedUrl: inv.hosted_invoice_url ?? null,
-      };
-    });
+    customerToFamily = new Map(billingCustomersResult.data.filter((b) => b.customer_ref).map((b) => [b.customer_ref as string, b.family_id]));
   }
+  const familyOfInvoice = (inv: Stripe.Invoice) => {
+    const customerId = customerOf(inv);
+    return customerId ? customerToFamily.get(customerId) : undefined;
+  };
+
+  // Only the families this tab names: the recent subscriptions, every listed
+  // subscription, or the invoices' families, which need not have a
+  // subscription row at all.
+  const labelledFamilyIds = tab === 'plans' ? recentSubs.map((s) => s.family_id)
+    : tab === 'all' ? subs.map((s) => s.family_id)
+    : listed.map(familyOfInvoice).filter((id): id is string => !!id);
+  const familiesResult = await readInChunks([...new Set(labelledFamilyIds)], (chunk) =>
+    supabase.from('families').select('id, name').in('id', chunk));
+  if (familiesResult.error) {
+    console.error('[admin-subscriptions] family name read failed', familiesResult.error);
+    return <AdminSubscriptionsReadError tab={tab} />;
+  }
+  const familyNameById = new Map(familiesResult.data.map((f) => [f.id, f.name]));
+
+  const invoices = listed.map((inv) => {
+    const familyId = familyOfInvoice(inv);
+    return {
+      id: inv.id ?? '', number: inv.number, amountPaid: inv.amount_paid, status: inv.status ?? 'unknown',
+      created: inv.created, familyName: familyId ? familyNameById.get(familyId) ?? 'Unknown family' : 'Unknown family',
+      hostedUrl: inv.hosted_invoice_url ?? null,
+    };
+  });
 
   return (
     <div className="module-page">
@@ -239,7 +263,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
               <EmptyState icon={CreditCard} title={tr('adminSubscriptions.noSubscriptionsYet')} />
             ) : (
               <ul className="space-y-2">
-                {subs.slice(0, 8).map((s) => (
+                {recentSubs.map((s) => (
                   <li key={s.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5 text-sm">
                     <span className="font-medium">{familyNameById.get(s.family_id) ?? 'Unknown family'}</span>
                     <Badge tone="neutral">{planById(s.plan)?.name ?? s.plan}</Badge>
