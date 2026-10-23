@@ -2,6 +2,9 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Image as ImageIcon, FileText, Film, Palette, UploadCloud } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
@@ -31,21 +34,45 @@ const KIND_LABEL: Record<AssetKind, string> = {
   image: 'Images', video: 'Video', document: 'Documents', brand: 'Brand',
 };
 const BUCKET = 'marketing-assets';
+/** The newest assets the library lists. */
+const LISTED = 300;
+/** Assets the total size may page through before it says it is not shown (one round trip per 1,000). */
+const SUM_ROW_CEILING = 10_000;
 
 export default async function AssetsPage() {
   const tr = await getTranslations();
   const supabase = createServiceClient();
-  const { data, error: assetsError } = await supabase
-    .from('marketing_assets')
-    .select('*')
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false })
-    .limit(300);
+  // "N assets · size" and each kind's "(N)" were counted and summed from the
+  // list, the newest 300, so past them each was the list's total presented as
+  // the library's (coverage sweep round 9, class B). The counts are head:true
+  // counts now, the size is summed over every asset, paged on the id (uploads
+  // land while this reads) to a ceiling past which it says it is not shown,
+  // and the library says when it lists part of the assets.
+  const counted = () => supabase.from('marketing_assets').select('id', { count: 'exact', head: true }).is('deleted_at', null);
+  const [[listResult, totalResult, bytesResult], kindResults] = await Promise.all([settleAll([
+    supabase
+      .from('marketing_assets')
+      .select('*')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(LISTED),
+    counted(),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('marketing_assets').select('id, size_bytes').is('deleted_at', null);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
+  ]), settleAll(ASSET_KINDS.map((kind) => counted().eq('kind', kind)))]);
+  const { data, error: listError } = listResult;
+  const bytesCeiling = 'truncated' in bytesResult && bytesResult.truncated;
+  const assetsError = listError ?? totalResult.error ?? (bytesCeiling ? null : bytesResult.error) ?? kindResults.find((r) => r.error)?.error;
   if (assetsError) {
     console.error('[admin-marketing-assets] asset read failed', assetsError);
     return <AdminAssetsReadError />;
   }
   const assets = (data ?? []) as Asset[];
+  const totalAssets = totalResult.count ?? 0;
+  const countByKind = new Map(ASSET_KINDS.map((kind, i) => [kind, kindResults[i]?.count ?? 0]));
 
   // Mint short-lived signed URLs for image previews (private bucket).
   const imagePaths = assets.filter((a) => isImageMime(a.mime_type)).map((a) => a.storage_path);
@@ -60,10 +87,14 @@ export default async function AssetsPage() {
   }
 
   const grouped = assetsByKind(assets);
-  const totalBytes = assets.reduce((sum, a) => sum + (a.size_bytes ?? 0), 0);
+  const totalBytes = (bytesResult.data ?? []).reduce((sum, a) => sum + (a.size_bytes ?? 0), 0);
 
   return (
     <div className="space-y-5">
+      <PartialReadBanner
+        title={tr('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
+        failures={bytesCeiling ? [tr('adminMarketingAssets.totalSize')] : []}
+      />
       <p className="text-sm text-muted">
         {tr('adminMarketingAssets.centralLibraryForImagesVideoDocuments')}
       </p>
@@ -87,8 +118,11 @@ export default async function AssetsPage() {
           <SubmitButton className={btnCls}>{tr('adminMarketingAssets.upload')}</SubmitButton>
         </form>
         <p className="mt-3 text-xs text-muted">
-          {assets.length} asset{assets.length === 1 ? '' : 's'} · {formatBytes(totalBytes)} {tr('adminMarketingAssets.total50MbPerFile')}
+          {totalAssets.toLocaleString()} asset{totalAssets === 1 ? '' : 's'} · {bytesCeiling ? tr('strategyMetrics.unavailable') : formatBytes(totalBytes)} {tr('adminMarketingAssets.total50MbPerFile')}
         </p>
+        {totalAssets > assets.length && (
+          <p className="mt-1 text-xs text-muted">{tr('adminCeiling.listShowsTheNewest', { shown: assets.length.toLocaleString(), total: totalAssets.toLocaleString() })}</p>
+        )}
       </Card>
 
       {assets.length === 0 ? (
@@ -100,7 +134,7 @@ export default async function AssetsPage() {
             <Card key={kind}>
               <h2 className="mb-3 flex items-center gap-2 text-base font-semibold">
                 <Icon className="h-4 w-4 text-brand-text" /> {KIND_LABEL[kind]}
-                <span className="text-xs font-normal text-muted">({grouped[kind].length})</span>
+                <span className="text-xs font-normal text-muted">({(countByKind.get(kind) ?? grouped[kind].length).toLocaleString()})</span>
               </h2>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {grouped[kind].map((a) => {

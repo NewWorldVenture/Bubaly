@@ -32,7 +32,11 @@ export default async function MarketingPlatformPage() {
     settle(supabase.from('marketing_generation_jobs').select('*').order('created_at', { ascending: false }).limit(30)),
     settle(supabase.from('marketing_provider_syncs').select('*').order('provider')),
   ]);
-  const [jobCountResults, staleJobsResult, latestSuccessResult, observationStats, embeddingCountResults] = await Promise.all([
+  // The Pages, Published and Templates metrics counted the registry's list,
+  // which is the 40 most recently updated pages, and the templates' unbounded
+  // read (db-max-rows), so past them each was the list's count (coverage sweep
+  // round 9, class B). They are head:true counts now.
+  const [jobCountResults, staleJobsResult, latestSuccessResult, observationStats, embeddingCountResults, inventoryCounts] = await Promise.all([
     Promise.all(jobStatuses.map(async (status) => ({
       status,
       result: await settle(supabase.from('marketing_generation_jobs').select('id', { count: 'exact', head: true }).eq('status', status)),
@@ -50,7 +54,16 @@ export default async function MarketingPlatformPage() {
       status,
       result: await settle(supabase.from('marketing_embeddings').select('id', { count: 'exact', head: true }).eq('status', status)),
     }))),
+    settleAll([
+      supabase.from('marketing_pages').select('id', { count: 'exact', head: true }).is('deleted_at', null),
+      supabase.from('marketing_pages').select('id', { count: 'exact', head: true }).is('deleted_at', null).eq('status', 'published'),
+      supabase.from('marketing_content_templates').select('id', { count: 'exact', head: true }).neq('status', 'archived'),
+      // The brand rules card's badge counted its unbounded list (db-max-rows),
+      // as the Templates card's did (review R9-PARTIAL-LISTS-THAT-DO-NOT-SAY-SO).
+      supabase.from('marketing_brand_rules').select('id', { count: 'exact', head: true }),
+    ]),
   ]);
+  const [pageCountResult, publishedCountResult, templateCountResult, ruleCountResult] = inventoryCounts;
   const error = pagesResult.error ?? templatesResult.error ?? rulesResult.error ?? jobsResult.error ?? syncResult.error;
   const observationError = observationStats.find(({ countResult, latestResult }) => countResult.error ?? latestResult.error);
   const embeddingError = embeddingCountResults.find(({ result }) => result.error)?.result.error;
@@ -59,7 +72,8 @@ export default async function MarketingPlatformPage() {
     ?? latestSuccessResult.error
     ?? observationError?.countResult.error
     ?? observationError?.latestResult.error
-    ?? embeddingError;
+    ?? embeddingError
+    ?? pageCountResult.error ?? publishedCountResult.error ?? templateCountResult.error ?? ruleCountResult.error;
   if (error || operationsError) return <ErrorState message={t('platform.couldNotLoadTheMarketing')} />;
   const pages = pagesResult.data ?? [];
   const templates = templatesResult.data ?? [];
@@ -77,7 +91,10 @@ export default async function MarketingPlatformPage() {
     latestStatus: latestResult.data?.source_status ?? null,
   }]));
   const embeddingCounts = Object.fromEntries(embeddingCountResults.map(({ status, result }) => [status, result.count ?? 0])) as Record<(typeof embeddingStatuses)[number], number>;
-  const published = pages.filter((page) => page.status === 'published').length;
+  const pageCount = pageCountResult.count ?? 0;
+  const published = publishedCountResult.count ?? 0;
+  const templateCount = templateCountResult.count ?? 0;
+  const ruleCount = ruleCountResult.count ?? 0;
 
   return (
     <div className="space-y-5">
@@ -91,9 +108,9 @@ export default async function MarketingPlatformPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-        <Metric icon={FileText} label={t('adminMarketingPlatform.pages')} value={pages.length} />
+        <Metric icon={FileText} label={t('adminMarketingPlatform.pages')} value={pageCount} />
         <Metric icon={Sparkles} label={t('adminMarketingPlatform.published')} value={published} />
-        <Metric icon={Layers3} label={t('adminMarketingPlatform.templates')} value={templates.length} />
+        <Metric icon={Layers3} label={t('adminMarketingPlatform.templates')} value={templateCount} />
         <Metric icon={Activity} label={t('adminMarketingPlatform.jobsActive')} value={activeJobs} />
         <Metric icon={RefreshCw} label={t('adminMarketingPlatform.jobsNeedingReview')} value={failed} />
         <Metric icon={Layers3} label={t('adminMarketingPlatform.vectorChunksReady')} value={embeddingCounts.ready} />
@@ -102,6 +119,7 @@ export default async function MarketingPlatformPage() {
       <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
         <Card>
           <div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">{t('adminMarketingPlatform.pageRegistry')}</h3><p className="text-xs text-muted">{t('adminMarketingPlatform.theCanonicalPublicPageInventory')}</p></div><Badge tone="neutral">{pages.length} loaded</Badge></div>
+          {pageCount > pages.length && <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsPart', { shown: pages.length.toLocaleString(), total: pageCount.toLocaleString() })}</p>}
           {pages.length === 0 ? <EmptyState icon={FileText} title={t('adminMarketingPlatform.noPlatformPagesYet')} description={t('platform.createTheFirstPageAnd')} /> : (
             <div className="space-y-3">{pages.map((page) => <PageEditor key={page.id} page={page} />)}</div>
           )}
@@ -143,9 +161,9 @@ export default async function MarketingPlatformPage() {
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">{t('adminMarketingPlatform.templates')}</h3><p className="text-xs text-muted">{t('adminMarketingPlatform.reusablePageInstructionsAndDefaults')}</p></div><Badge tone="neutral">{templates.length}</Badge></div><div className="space-y-3">{templates.map((template) => <TemplateEditor key={template.id} template={template} />)}</div><form action={saveMarketingTemplate} className="mt-4 grid gap-2 border-t border-border pt-4 sm:grid-cols-2"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted sm:col-span-2">{t('platform.addATemplate')}</p><input name="name" required placeholder={t('adminMarketingPlatform.templateName')} className={inputCls} /><select name="page_type" aria-label={t('platform.pageType')} className={inputCls}>{PAGE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select><input name="description" placeholder={t('adminMarketingPlatform.description')} className={inputCls} /><input name="cta_label" placeholder={t('adminMarketingPlatform.defaultCta')} className={inputCls} /><input name="section_count" type="number" min="1" max="12" defaultValue="3" placeholder={t('adminMarketingPlatform.sections')} className={inputCls} /><label className="flex items-center gap-2 text-sm"><input type="checkbox" name="is_default" /> {t('adminMarketingPlatform.defaultForThisType')}</label><textarea name="instructions" rows={3} placeholder={t('adminMarketingPlatform.generationInstructions')} className={`${areaCls} sm:col-span-2`} /><SubmitButton className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-elevated sm:col-span-2">{t('adminMarketingPlatform.saveTemplate')}</SubmitButton></form></Card>
+        <Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">{t('adminMarketingPlatform.templates')}</h3><p className="text-xs text-muted">{t('adminMarketingPlatform.reusablePageInstructionsAndDefaults')}</p></div><Badge tone="neutral">{templateCount.toLocaleString()}</Badge></div>{templateCount > templates.length && <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsPart', { shown: templates.length.toLocaleString(), total: templateCount.toLocaleString() })}</p>}<div className="space-y-3">{templates.map((template) => <TemplateEditor key={template.id} template={template} />)}</div><form action={saveMarketingTemplate} className="mt-4 grid gap-2 border-t border-border pt-4 sm:grid-cols-2"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted sm:col-span-2">{t('platform.addATemplate')}</p><input name="name" required placeholder={t('adminMarketingPlatform.templateName')} className={inputCls} /><select name="page_type" aria-label={t('platform.pageType')} className={inputCls}>{PAGE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select><input name="description" placeholder={t('adminMarketingPlatform.description')} className={inputCls} /><input name="cta_label" placeholder={t('adminMarketingPlatform.defaultCta')} className={inputCls} /><input name="section_count" type="number" min="1" max="12" defaultValue="3" placeholder={t('adminMarketingPlatform.sections')} className={inputCls} /><label className="flex items-center gap-2 text-sm"><input type="checkbox" name="is_default" /> {t('adminMarketingPlatform.defaultForThisType')}</label><textarea name="instructions" rows={3} placeholder={t('adminMarketingPlatform.generationInstructions')} className={`${areaCls} sm:col-span-2`} /><SubmitButton className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-elevated sm:col-span-2">{t('adminMarketingPlatform.saveTemplate')}</SubmitButton></form></Card>
 
-        <Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">{t('adminMarketingPlatform.brandRules')}</h3><p className="text-xs text-muted">{t('adminMarketingPlatform.factsAndConstraintsEveryGeneratedPage')}</p></div><Badge tone="neutral">{rules.length}</Badge></div><div className="space-y-3">{rules.map((rule) => <BrandRuleEditor key={rule.id} rule={rule} />)}</div><form action={saveMarketingBrandRule} className="mt-4 space-y-2 border-t border-border pt-4"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">{t('platform.addABrandRule')}</p><div className="grid gap-2 sm:grid-cols-2"><input name="rule_key" required placeholder="brand_voice" className={inputCls} /><input name="name" required placeholder={t('adminMarketingPlatform.brandVoice')} className={inputCls} /></div><textarea name="instructions" rows={3} required placeholder={t('adminMarketingPlatform.writeTheRuleInPlainLanguage')} className={areaCls} /><input name="examples" placeholder={t('adminMarketingPlatform.approvedExamplesOrFacts')} className={inputCls} /><label className="flex items-center gap-2 text-sm"><input type="checkbox" name="active" defaultChecked /> {t('platform.activeFedToEveryGeneration')}</label><SubmitButton className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-elevated">{t('adminMarketingPlatform.saveBrandRule')}</SubmitButton></form></Card>
+        <Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">{t('adminMarketingPlatform.brandRules')}</h3><p className="text-xs text-muted">{t('adminMarketingPlatform.factsAndConstraintsEveryGeneratedPage')}</p></div><Badge tone="neutral">{ruleCount.toLocaleString()}</Badge></div>{ruleCount > rules.length && <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsPart', { shown: rules.length.toLocaleString(), total: ruleCount.toLocaleString() })}</p>}<div className="space-y-3">{rules.map((rule) => <BrandRuleEditor key={rule.id} rule={rule} />)}</div><form action={saveMarketingBrandRule} className="mt-4 space-y-2 border-t border-border pt-4"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">{t('platform.addABrandRule')}</p><div className="grid gap-2 sm:grid-cols-2"><input name="rule_key" required placeholder="brand_voice" className={inputCls} /><input name="name" required placeholder={t('adminMarketingPlatform.brandVoice')} className={inputCls} /></div><textarea name="instructions" rows={3} required placeholder={t('adminMarketingPlatform.writeTheRuleInPlainLanguage')} className={areaCls} /><input name="examples" placeholder={t('adminMarketingPlatform.approvedExamplesOrFacts')} className={inputCls} /><label className="flex items-center gap-2 text-sm"><input type="checkbox" name="active" defaultChecked /> {t('platform.activeFedToEveryGeneration')}</label><SubmitButton className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-elevated">{t('adminMarketingPlatform.saveBrandRule')}</SubmitButton></form></Card>
       </div>
 
       <Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">{t('adminMarketingPlatform.generationQueue')}</h3><p className="text-xs text-muted">{t('adminMarketingPlatform.claimedByTheFiveMinuteWorker')}</p></div><Badge tone={failed || staleJobs ? 'danger' : 'success'}>{failed ? `${failed} attention` : staleJobs ? `${staleJobs} stale` : 'Healthy'}</Badge></div>

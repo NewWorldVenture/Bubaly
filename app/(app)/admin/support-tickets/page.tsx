@@ -252,6 +252,13 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
                 <Filter className="h-4 w-4" /> {tr('adminSupportTickets.filters')}
               </button>
             </FilterForm>
+            {/* The tiles, the donut and the categories count every ticket; the
+                list is the unbounded read PostgREST caps at db-max-rows, and its
+                tabs, filters and "of N tickets" go through those rows only, so
+                it says when it holds part of the queue (coverage sweep round 9). */}
+            {total > tickets.length && (
+              <p className="mt-3 text-xs text-muted">{tr('adminCeiling.listAndFiltersShowPart', { shown: tickets.length.toLocaleString(), total: total.toLocaleString() })}</p>
+            )}
 
             {pageRows.length === 0 ? (
               <div className="mt-6"><EmptyState icon={TicketCheck} title={tr('adminSupportTickets.noTicketsMatchTheseFilters')} /></div>
