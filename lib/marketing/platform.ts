@@ -60,11 +60,29 @@ function safeJson(value: unknown): Json {
 /**
  * The `content` keys that say whose row a page is: the legacy landing and blog
  * bridges (lib/marketing/legacy-bridge.ts) and scripts/backfill-marketing-pages.mjs
- * stamp them on the mirrors they write, and the bridges find their own row by
- * them before they publish, draft, rename or archive it (admin reach N12-R1,
- * N12-S1).
+ * stamp them on the mirrors they write, the platform console on its own pages
+ * (CONSOLE_PAGE_SOURCE), and the bridges find their own row by them before they
+ * publish, draft, rename or archive it (admin reach N12-R1, N12-S1).
  */
 const PROVENANCE_KEYS = ['source', 'source_id'] as const;
+
+/**
+ * The `content.source` of a page the platform console owns: one it made, or a
+ * mirror it moved to another path (admin reach N12-REGEN-REPAIR-SPEC,
+ * N12-REGEN-CONSOLE-MOVE). The legacy bridges read a row with no source at all
+ * by path, as main did, until the owner's repair re-marks the mirrors main's
+ * regeneration stripped. So the console stamps its own pages, and the
+ * regeneration keeps the stamp like any other source, so they can be told from
+ * a mirror by the row and are never the bridges' to write.
+ */
+export const CONSOLE_PAGE_SOURCE = 'platform_console';
+
+/** A page's `content` with the console as its source and no other row's provenance. */
+export function consoleOwnedContent(content: Json | null | undefined): Json {
+  const owned = { ...jsonObject(content) };
+  for (const key of PROVENANCE_KEYS) delete owned[key];
+  return { ...owned, source: CONSOLE_PAGE_SOURCE } as Json;
+}
 
 /**
  * Generated content, with the stored page's provenance keys in place of any the

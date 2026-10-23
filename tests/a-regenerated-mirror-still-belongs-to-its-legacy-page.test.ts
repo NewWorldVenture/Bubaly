@@ -198,7 +198,8 @@ describe('a regenerated mirror keeps the marker that says whose row it is', () =
     await theCronRegenerates('/lp/spring');
 
     expect(pageAt('/lp/spring')!.id).toBe(consolePage.id);
-    expect(pageAt('/lp/spring')!.content).not.toHaveProperty('source');
+    // The console's own stamp (admin reach N12-REGEN-REPAIR-SPEC), not the model's claim.
+    expect(pageAt('/lp/spring')!.content).toHaveProperty('source', 'platform_console');
     expect(pageAt('/lp/spring')!.content).not.toHaveProperty('source_id');
     expect(await digestOf(updateLandingPage(form({ id: legacy.id, title: 'Spring', slug: 'spring', headline: 'Legacy spring' }))))
       .toBe(`${REFUSAL_DIGEST_PREFIX}duplicate`);

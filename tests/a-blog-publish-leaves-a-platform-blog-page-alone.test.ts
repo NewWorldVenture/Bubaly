@@ -54,7 +54,8 @@ const post = () => db.table('blog_posts').find((row) => row.slug === SLUG);
 async function aConsoleBlogPageAtThePath(): Promise<Row> {
   await createPlatformPage(form({ page_type: 'blog', title: 'Spring cleaning (editorial)', slug: SLUG, summary: 'Our editors’ take', body: 'Console body' }));
   const created = pageAt(PATH)!;
-  expect(created.content).toEqual({});
+  // The console's own stamp, not a legacy blog source (admin reach N12-REGEN-REPAIR-SPEC).
+  expect(created.content).toEqual({ source: 'platform_console' });
   await updatePlatformPage(form({
     id: created.id, page_type: 'blog', title: 'Spring cleaning (editorial)', slug: SLUG, summary: 'Our editors’ take', body: 'Console body', status: 'published',
   }));

@@ -563,8 +563,8 @@ export async function setLandingPublished(formData: FormData) {
   const { data: current, error: currentError } = await supabase.from('marketing_landing_pages')
     .select('slug').eq('id', id).is('deleted_at', null).maybeSingle();
   if (currentError || !current) marketingActionFailure('update the landing page', currentError ?? new Error('Landing page not found'));
-  if (publish) await assertLegacyLandingPathFree(supabase, current.slug, id);
-  const writeMirror = publish || !await legacyLandingPathTaken(supabase, current.slug, id);
+  if (publish) await assertLegacyLandingPathFree(supabase, current.slug, { id, slug: current.slug });
+  const writeMirror = publish || !await legacyLandingPathTaken(supabase, current.slug, { id, slug: current.slug });
   const { data, error } = await supabase.from('marketing_landing_pages')
     .update({ published: publish, status: publish ? 'published' : 'draft' })
     .eq('id', id).eq('slug', current.slug).is('deleted_at', null).select('id, slug').maybeSingle();
@@ -600,7 +600,7 @@ export async function updateLandingPage(formData: FormData) {
   const { data: existing, error: readError } = await supabase.from('marketing_landing_pages')
     .select('id, slug, metadata, published, status').eq('id', id).is('deleted_at', null).maybeSingle();
   if (readError || !existing) marketingActionFailure('find the landing page', readError ?? new Error('Landing page not found.'));
-  await assertLegacyLandingPathFree(supabase, slug, id);
+  await assertLegacyLandingPathFree(supabase, slug, { id, slug: existing.slug });
 
   const currentMetadata = (existing.metadata ?? {}) as Record<string, unknown>;
   const ctaLabel = str(formData.get('cta_label'));
