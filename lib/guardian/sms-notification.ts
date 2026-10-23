@@ -41,12 +41,16 @@ export async function notifyGuardianSms(scope: ServiceScope, input: NotifyInput,
   // copy of it. Other notifications legitimately share the communication: a
   // screened call writes its own "📞 Call from …" row against it, and a
   // voicemail that then found that row read it as a mismatched copy of itself
-  // and failed forever, 503 on every retry.
+  // and failed forever, 503 on every retry. Only family-wide rows are read:
+  // this notice is one (user_id null), and since 0388 a member's session can
+  // file a notification addressed only to themselves, so their rows under this
+  // communication (eleven of any title, or one with this title) made the read
+  // refuse on every retry, and the family was never told of the text.
   const read = async (): Promise<string | null> => {
     const result = await smsStep(signal, current => scope.db.from('notifications')
       .select('id,family_id,user_id,type,title,body,related_type,related_id,send_at', { count: 'exact' })
       .eq('family_id', scope.familyId).eq('related_type', expected.related_type).eq('related_id', expected.related_id)
-      .limit(RELATED_NOTIFICATIONS).retry(false).abortSignal(current));
+      .is('user_id', null).limit(RELATED_NOTIFICATIONS).retry(false).abortSignal(current));
     if (result.error || !Array.isArray(result.data) || result.count !== result.data.length) return unavailable();
     const mine = result.data.filter(candidate => candidate.title === expected.title);
     if (mine.length > 1) return unavailable();

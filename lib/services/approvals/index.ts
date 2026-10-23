@@ -1833,7 +1833,7 @@ const AI_APPROVAL_REMINDER_READER: NeedsReader = {
  *
  * "Once" is enforced twice over: the notify service refuses a second unread
  * row for the same `(type, related_id, user_id)`, and this sweep first checks
- * the dedupe key against every notification ever written for the family — so
+ * the dedupe key against every notification ever written to that manager — so
  * a reminder the parent already read is not sent again on the next tick.
  */
 export async function remindPendingApprovals(db: DB, now: Date = new Date()): Promise<{ reminded: number; families: number; failures: number }> {
@@ -1879,10 +1879,10 @@ export async function remindPendingApprovals(db: DB, now: Date = new Date()): Pr
     // of them overflow the request line and the read fails `URI too long` —
     // which, per the branch below, skips the family every tick.
     const { data: existing, error: existingError } = await readInChunks<
-      { related_id: string | null }, { message: string }
+      { related_id: string | null; user_id: string | null }, { message: string }
     >(candidates.map((c) => c.dedupe_key), (chunk) => db
       .from('notifications')
-      .select('related_id')
+      .select('related_id, user_id')
       .eq('family_id', familyId)
       .eq('related_type', 'approval_requests')
       .in('related_id', chunk), 50);
@@ -1893,12 +1893,19 @@ export async function remindPendingApprovals(db: DB, now: Date = new Date()): Pr
       failures += 1;
       continue;
     }
-    const seen = new Set((existing ?? []).map((n) => n.related_id));
+    // A reminder already sent is one addressed to the manager its key names.
+    // The key alone used to be enough, and 0388 lets any member file a
+    // notification addressed to themselves under any related_id, while every
+    // member may read the approvals and the members a key is built from: a
+    // child's own row under a parent's key stood in for the parent's reminder,
+    // so the parent was never told. A member's own row now answers for that
+    // member alone.
+    const seen = new Set((existing ?? []).map((n) => `${n.related_id}\u0000${n.user_id}`));
 
     const scope = scopeForSystem(db, { id: familyId, timezone: family?.timezone ?? null }, { now });
     let sent = 0;
     for (const c of candidates) {
-      if (seen.has(c.dedupe_key)) continue;
+      if (seen.has(`${c.dedupe_key}\u0000${c.user_id}`)) continue;
       const res = await notify(scope, {
         recipients: [c.member_id],
         type: c.type,

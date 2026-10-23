@@ -138,12 +138,20 @@ const UNREADABLE_CAP: InboundCap = { sender: false, family: false, unreadable: t
  * pipeline said otherwise, still announced.
  */
 async function overInboundCap(client: Client, input: GuardianSmsReceiptInput, signal: AbortSignal): Promise<InboundCap> {
-  const since = new Date(Date.now() - GUARDIAN_INBOUND_WINDOW_MS).toISOString();
+  // The last hour, and nothing dated after now. Only the provider webhooks
+  // write this table (service role, started_at defaulting to now()), but 0453
+  // still lets a parent or an adult insert a record with any started_at, and a
+  // record dated in the future counted in every window until that date: a
+  // family cap's worth dated 2100 held every routine text to the family,
+  // unannounced, for good.
+  const nowMs = Date.now();
+  const since = new Date(nowMs - GUARDIAN_INBOUND_WINDOW_MS).toISOString();
+  const until = new Date(nowMs).toISOString();
   const count = async (sender: boolean): Promise<number | null> => {
     try {
       const result = resultEnvelope(await smsStep(signal, current => {
         let query = table(client, 'guardian_communications').select('id', { count: 'exact', head: true })
-          .eq('family_id', input.familyId).eq('comm_type', 'sms_inbound').gte('started_at', since);
+          .eq('family_id', input.familyId).eq('comm_type', 'sms_inbound').gte('started_at', since).lte('started_at', until);
         if (sender) query = input.from === null ? query.is('from_number', null) : query.eq('from_number', input.from);
         return query.retry(false).abortSignal(current);
       }));

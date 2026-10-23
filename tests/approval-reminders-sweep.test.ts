@@ -112,6 +112,37 @@ describe('remindPendingApprovals', () => {
     expect(store.tables.notifications).toHaveLength(2);
   });
 
+  // household-roles round 8 (the meter sweep). The "already reminded" check
+  // matched the key alone. Every member may read the approval and the members
+  // a key is built from, and 0388 lets any member file a notification addressed
+  // to themselves under any related_id.
+  it('a teen’s own notifications under the parents’ keys do not stand in for their reminders', async () => {
+    const data = seed();
+    data.notifications = ['m1', 'm2'].map((memberId, i) => ({
+      id: `planted-${i}`, family_id: 'fam-1', user_id: 'u3', type: 'system', title: 'ok', body: null,
+      related_type: 'approval_requests', related_id: `ai-approval:appr-1:${memberId}`, is_read: true,
+    }));
+    const store = makeStore(data);
+    holder.service = store.db;
+
+    expect(await remindPendingApprovals(store.db, NOW)).toEqual({ reminded: 2, families: 1, failures: 0 });
+    const sent = store.tables.notifications.filter((r) => !r.id.startsWith('planted-'));
+    expect(sent.map((r) => `${r.user_id} ${r.related_id}`).sort()).toEqual(['u1 ai-approval:appr-1:m1', 'u2 ai-approval:appr-1:m2']);
+  });
+
+  it('control: a manager’s reminder already sent, read or not, still answers for that manager', async () => {
+    const data = seed();
+    data.notifications = [{
+      id: 'sent-before', family_id: 'fam-1', user_id: 'u1', type: 'system', title: 'Needs your OK: Add soccer', body: null,
+      related_type: 'approval_requests', related_id: 'ai-approval:appr-1:m1', is_read: true,
+    }];
+    const store = makeStore(data);
+    holder.service = store.db;
+
+    expect(await remindPendingApprovals(store.db, NOW)).toEqual({ reminded: 1, families: 1, failures: 0 });
+    expect(store.tables.notifications.map((r) => r.user_id).sort()).toEqual(['u1', 'u2']);
+  });
+
   it('skips a family whose dedupe read fails rather than re-notifying everyone', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const store = makeStore(seed());

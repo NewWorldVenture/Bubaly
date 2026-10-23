@@ -216,10 +216,13 @@ describe('the assistant and the concierge are gated separately', () => {
 });
 
 // Production has not taken held migration 0493, so `count_family_ai_requests_month`
-// does not exist there. Until it does, the allowance is counted exactly as the
+// does not exist there. Until it does, the allowance is counted as the
 // previous release counted it: a direct exact, head-only `ai_requests` count
-// from the start of the UTC month. Only the missing-function answer naming this
-// RPC switches to that path; every other RPC failure still fails closed.
+// from the start of the UTC month, now bounded by the month's end and leaving
+// out the one shape a member's own session may file (household-roles round 8,
+// tests/the-free-allowance-counts-only-the-servers-records.test.ts). Only the
+// missing-function answer naming this RPC switches to that path; every other
+// RPC failure still fails closed.
 describe('without held migration 0493, the previous direct count keeps the allowance', () => {
   const MISSING_PGRST202 = {
     code: 'PGRST202',
@@ -249,6 +252,8 @@ describe('without held migration 0493, the previous direct count keeps the allow
           select: (cols: string, opts: unknown) => { q.select = [cols, opts]; return builder; },
           eq: (col: string, val: unknown) => { q.filters.push(['eq', col, val]); return builder; },
           gte: (col: string, val: unknown) => { q.filters.push(['gte', col, val]); return builder; },
+          lt: (col: string, val: unknown) => { q.filters.push(['lt', col, val]); return builder; },
+          or: (expression: string) => { q.filters.push(['or', expression, null]); return builder; },
           then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
             ('rejects' in legacy
               ? Promise.reject(legacy.rejects)
@@ -279,7 +284,11 @@ describe('without held migration 0493, the previous direct count keeps the allow
       expect(queries).toEqual([{
         table: 'ai_requests',
         select: ['id', { count: 'exact', head: true }],
-        filters: [['eq', 'family_id', 'fam-1'], ['gte', 'created_at', '2026-09-01T00:00:00.000Z']],
+        filters: [
+          ['eq', 'family_id', 'fam-1'], ['gte', 'created_at', '2026-09-01T00:00:00.000Z'], ['lt', 'created_at', '2026-10-01T00:00:00.000Z'],
+          // Every row but a concierge request still as a member may file it (round 8).
+          ['or', 'kind.neq.concierge,status.neq.queued', null],
+        ],
       }]);
     });
 

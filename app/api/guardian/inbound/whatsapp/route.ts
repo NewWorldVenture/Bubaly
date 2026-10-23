@@ -46,11 +46,16 @@ const UNREADABLE_CAP: InboundCap = { sender: false, family: false, unreadable: t
  * unreadable, and an unreadable cap withholds the model call and nothing else.
  */
 async function overInboundCap(supabase: ReturnType<typeof createServiceClient>, familyId: string, from: string | null): Promise<InboundCap> {
-  const since = new Date(Date.now() - GUARDIAN_INBOUND_WINDOW_MS).toISOString();
+  // The last hour, and nothing dated after now: a parent or an adult may still
+  // insert a record with any started_at (0453), and one dated in the future
+  // counted in every window until then (lib/guardian/sms-processing.ts).
+  const nowMs = Date.now();
+  const since = new Date(nowMs - GUARDIAN_INBOUND_WINDOW_MS).toISOString();
+  const until = new Date(nowMs).toISOString();
   const count = async (sender: boolean): Promise<number | null> => {
     try {
       let query = supabase.from('guardian_communications').select('id', { count: 'exact', head: true })
-        .eq('family_id', familyId).eq('comm_type', 'whatsapp_inbound').gte('started_at', since);
+        .eq('family_id', familyId).eq('comm_type', 'whatsapp_inbound').gte('started_at', since).lte('started_at', until);
       if (sender) query = from === null ? query.is('from_number', null) : query.eq('from_number', from);
       const { count: n, error } = await query;
       return !error && typeof n === 'number' ? n : null;
