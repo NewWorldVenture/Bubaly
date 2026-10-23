@@ -20,11 +20,18 @@ import { renderTranslated } from './helpers/render-translated';
  *  - /marketplace/reviews built "Your rating" from the family's 200 newest
  *    reviews filtered to the member, so a member's older reviews fell out of
  *    the average, the count and both lists.
+ *
+ * And the marketplace home page (N17-home-creators): its Top creators card and
+ * its listings' rating chips were built from the family's 500 newest reviews,
+ * so a seller with older reviews read one rating there and another on
+ * /marketplace/creators.
  */
 const harness = vi.hoisted(() => ({ db: null as unknown }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => undefined }) }));
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: () => undefined, error: () => undefined }) }));
+// The home page's one-sentence composer needs the app shell's provider; it plays no part in a rating.
+vi.mock('@/components/marketplace/quick-post', () => ({ QuickPost: () => null }));
 vi.mock('@/lib/supabase/auth', () => ({
   requireUserContext: async () => ({
     user: { id: 'user-self' }, memberships: [],
@@ -45,6 +52,7 @@ vi.mock('@/lib/i18n/server', async () => {
 const { readTrustScoreInputsAction } = await import('@/app/(app)/marketplace/actions');
 const { default: ReviewsPage } = await import('@/app/(app)/marketplace/reviews/page');
 const { default: StorefrontPage } = await import('@/app/(app)/marketplace/creators/[id]/page');
+const { default: MarketplaceHomePage } = await import('@/app/(app)/marketplace/page');
 const { computeTrustScore } = await import('@/lib/marketplace/trust');
 
 const STORE = '00000000-0000-4000-8000-00000000a001';
@@ -143,5 +151,41 @@ describe('a storefront', () => {
     // 27 open; the grid still shows 24 of them.
     expect(html).toMatch(/>27<[^]*?open listings/i);
     expect((html.match(/href="\/marketplace\/item\/lst-/g) ?? []).length).toBe(24);
+  });
+});
+
+describe('the marketplace home page', () => {
+  it('rates its top creators and its listings over every review, not the family\'s 500 newest', async () => {
+    db.seed('marketplace_stores', [{ id: STORE, family_id: 'fam-1', member_id: 'm-sib', name: 'Bea Makes', tagline: null, description: null, emoji: null, is_active: true }]);
+    db.seed('marketplace_listings', [{
+      id: 'lst-lamp', family_id: 'fam-1', member_id: 'm-sib', title: 'Brass lamp', kind: 'sell', category: 'other',
+      price_cents: 1_500, rent_period: null, location: null, condition: null, status: 'available', created_at: day(0),
+    }]);
+    db.seed('marketplace_reviews', [
+      // Bea's 30 oldest reviews, all ones, on the lamp.
+      ...Array.from({ length: 30 }, (_, i) => ({
+        id: `rev-a${pad(i)}`, family_id: 'fam-1', reviewee_member: 'm-sib', reviewer_member: 'm-self', listing_id: 'lst-lamp', rating: 1, created_at: day(i),
+      })),
+      // 1,100 newer reviews between two other members.
+      ...Array.from({ length: 1_100 }, (_, i) => ({
+        id: `rev-m${pad(i)}`, family_id: 'fam-1', reviewee_member: 'm-x', reviewer_member: 'm-self', listing_id: null, rating: 3, created_at: day(100 + i),
+      })),
+      // And Bea's 10 newest, all fives.
+      ...Array.from({ length: 10 }, (_, i) => ({
+        id: `rev-z${pad(i)}`, family_id: 'fam-1', reviewee_member: 'm-sib', reviewer_member: 'm-self', listing_id: null, rating: 5, created_at: day(5_000 + i),
+      })),
+    ]);
+
+    const html = renderTranslated(await MarketplaceHomePage());
+    // Top creators: (30 × 1 + 10 × 5) / 40, as /marketplace/creators reads it.
+    expect(html).toContain('Bea Makes');
+    expect(html).toContain('★ 2.0 (40)');
+    expect(html).not.toContain('★ 5.0 (10)');
+    // The lamp's chip is over its 30 reviews, none of them among the 500 newest.
+    expect(html).toContain('Brass lamp');
+    expect(html).toContain('★ 1.0 (30)');
+    // The activity feed still lists the newest reviews: Bea's fives.
+    expect(html).toContain('Bea received a review');
+    expect(html).not.toContain('Unavailable:');
   });
 });

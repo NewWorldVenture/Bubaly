@@ -21,7 +21,7 @@ import { ratingSummary } from '@/lib/marketplace/trust';
 import { KIND_LABELS, CATEGORY_LABELS, priceLabel, type ListingKind, type ListingCategory, type RentPeriod } from '@/lib/marketplace/listings';
 import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllAsQuery, readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { readFamilyOrders } from '@/lib/marketplace/schema-compat';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -33,6 +33,7 @@ export const dynamic = 'force-dynamic';
 const BASE = '/marketplace';
 
 type ListingRow = PickListing & { rent_period: string | null; location: string | null; condition: string | null };
+type RatingRow = { id: string; listing_id: string | null; reviewee_member: string | null; rating: number };
 
 const ACTIONS: { label: string; sub: string; href: string; icon: typeof ShoppingBag; tint: string }[] = [
   { label: 'Sell', sub: 'List for sale', href: `${BASE}/browse?post=1&kind=sell`, icon: ShoppingBag, tint: 'text-amber-500 bg-amber-500/10' },
@@ -102,7 +103,7 @@ export default async function MarketplaceHomePage() {
   );
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
 
-  const [offers, matches, saves, stores, follows, reviews, orders, collections, collItems] = await Promise.all([
+  const [offers, matches, saves, stores, follows, reviews, ratings, orders, collections, collItems] = await Promise.all([
     safe<{ listing_id: string; status: string }>('Offers', sb.from('marketplace_offers').select('listing_id, status').eq('family_id', familyId).eq('status', 'open').limit(1000)),
     safe<{ supply_id: string }>('Matches', sb.from('marketplace_matches').select('supply_id').eq('family_id', familyId).eq('status', 'active').limit(200)),
     // These three feed counts, so a capped read is a wrong number rather than a
@@ -111,9 +112,20 @@ export default async function MarketplaceHomePage() {
     safe<{ listing_id: string; member_id: string }>('Saved listings', readAllAsQuery((from, to) => sb.from('marketplace_saves').select('listing_id, member_id').eq('family_id', familyId).order('id').range(from, to), { max: 2000 })),
     safe<CreatorStore>('Stores', sb.from('marketplace_stores').select('id, member_id, name, emoji, is_active').eq('family_id', familyId)),
     safe<{ store_id: string; member_id: string }>('Store follows', readAllAsQuery((from, to) => sb.from('marketplace_follows').select('store_id, member_id').eq('family_id', familyId).order('id').range(from, to), { max: 2000 })),
-    safe<{ listing_id: string | null; reviewee_member: string | null; rating: number; created_at: string; id: string }>(
+    // The activity feed lists the newest reviews, so a capped read is the right one.
+    safe<ActivityReview>(
       'Reviews',
-      settle(sb.from('marketplace_reviews').select('id, listing_id, reviewee_member, rating, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(500))),
+      settle(sb.from('marketplace_reviews').select('id, reviewee_member, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(500))),
+    // A creator's and a listing's rating is an AVERAGE and a COUNT, so it is
+    // over every review, paged on id, as /marketplace/creators reads it: from
+    // the 500 newest, a seller's older reviews fell out of the home card alone.
+    safe<RatingRow>(
+      'Reviews',
+      readAllByIdAsQuery<RatingRow>((after, limit) => {
+        let q = sb.from('marketplace_reviews').select('id, listing_id, reviewee_member, rating').eq('family_id', familyId);
+        if (after) q = q.gt('id', after);
+        return q.order('id').limit(limit);
+      }, { max: 50_000 })),
     safe<ActivityOrder & { seller_member: string | null; amount_cents: number }>(
       'Orders',
       // Either party's family: a won order carries the seller's family_id (readFamilyOrders).
@@ -145,7 +157,7 @@ export default async function MarketplaceHomePage() {
 
   const ratingsByListing = new Map<string, number[]>();
   const ratingsByMember = new Map<string, number[]>();
-  for (const r of reviews) {
+  for (const r of ratings) {
     if (r.listing_id) ratingsByListing.set(r.listing_id, [...(ratingsByListing.get(r.listing_id) ?? []), r.rating]);
     if (r.reviewee_member) ratingsByMember.set(r.reviewee_member, [...(ratingsByMember.get(r.reviewee_member) ?? []), r.rating]);
   }
@@ -160,7 +172,7 @@ export default async function MarketplaceHomePage() {
 
   const feed = activityFeed(
     orders as ActivityOrder[],
-    reviews as ActivityReview[],
+    reviews,
     listings.map((l) => ({ id: l.id, title: l.title, member_id: l.member_id, created_at: l.created_at })),
     nameOf, now, 5, locale.code,
   );
