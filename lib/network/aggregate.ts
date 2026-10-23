@@ -10,10 +10,13 @@
 //     (complementary suppression), so a withheld band's size cannot be read
 //     off as "everyone minus the rest".
 //   • Differential-privacy-lite: published counts get calibrated noise so       [#2]
-//     comparing runs can't reveal that one family joined/left. The cron's noise
-//     is STICKY — one draw per (cell, true count), not one per run — so a night
-//     that changed nothing publishes the same number, and averaging many nights
-//     recovers nothing (see aggregate-server.ts).
+//     comparing runs can't reveal which band a family that joined, left or
+//     moved is in. The cron's noise is STICKY — one draw per band per STATE of
+//     its whole (cohort, metric), not one per run — so a night that changed
+//     nothing publishes the same numbers and averaging many nights recovers
+//     nothing, while any change inside a (cohort, metric) redraws every band of
+//     it at once, so the diff of two nights never singles out the band that
+//     moved (see aggregate-server.ts).
 //   • Global launch gate: nothing is published until ≥ N families contribute.   [#5]
 // The cron feeds it real consenting-family contributions; every rule is here so
 // it can't be bypassed downstream.
@@ -147,15 +150,33 @@ export function filterMetricsByScopes(
   return out;
 }
 
-/** The cell a noise draw is for — what a sticky sampler keys its draw on. */
-export type NoiseCell = { scope: ConsentScope; cohortKey: string; metric: string; value: string; cohortSize: number };
+/**
+ * The cell a noise draw is for — what a sticky sampler keys its draw on.
+ *
+ * `bandVector` is the state of the cell's whole (cohort, metric): every band's
+ * TRUE family count, withheld bands included, in one canonical spelling. A
+ * sampler keyed on the cell's own count alone redraws only the band whose
+ * count moved, so two nights compared name the bands a joining or leaving
+ * family occupies; keyed on the vector, any change anywhere in the metric
+ * redraws all of its bands together. Like `cohortSize`, it never leaves the
+ * server: it is the input to the draw, never part of what is published.
+ */
+export type NoiseCell = {
+  scope: ConsentScope;
+  cohortKey: string;
+  metric: string;
+  value: string;
+  cohortSize: number;
+  bandVector: string;
+};
 
 /**
  * Deterministic-by-default noise; the cron injects a real Laplace sampler. The
  * cell is handed over so the sampler can be STICKY — the same draw for the same
- * cell at the same true count. A sampler that ignores it draws afresh on every
- * call, and a fresh draw every night on unchanged data is a new sample of the
- * same number: the mean of a month of them is the true count.
+ * band while its (cohort, metric) holds the same true counts. A sampler that
+ * ignores it draws afresh on every call, and a fresh draw every night on
+ * unchanged data is a new sample of the same number: the mean of a month of
+ * them is the true count.
  */
 export type NoiseFn = (scale: number, cell: NoiseCell) => number;
 const NO_NOISE: NoiseFn = () => 0;
@@ -190,6 +211,20 @@ function withheldBands(bands: Group[], minCohort: number): Set<Group> {
     if (hidden >= minCohort) break;
   }
   return withheld;
+}
+
+/**
+ * One (cohort, metric)'s whole state, canonically: each band's value and TRUE
+ * family count, withheld bands included, sorted by value (code units, so the
+ * spelling never depends on a locale). Two runs spell it the same exactly when
+ * no band of the metric gained or lost a family.
+ */
+function bandVector(bands: Group[]): string {
+  return JSON.stringify(
+    bands
+      .map((b): [string, number] => [b.value, b.families.size])
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+  );
 }
 
 /**
@@ -235,11 +270,17 @@ export function aggregateContributions(
   const out: NetworkAggregate[] = [];
   for (const bands of cells.values()) {
     const withheld = withheldBands(bands, minCohort); // #1 k-anonymity + complementary suppression
+    // Every band of the metric draws on the same vector, the withheld ones'
+    // counts inside it: one family joining, leaving or moving band redraws the
+    // metric's every published figure, not just the ones it is in.
+    const vector = bandVector(bands);
     for (const g of bands) {
       if (withheld.has(g)) continue;
       const cohortSize = g.families.size;
       const scope = metricScope(g.metric);
-      const drawn = noise(AGG_DEFAULTS.noiseScale, { scope, cohortKey: g.cohort, metric: g.metric, value: g.value, cohortSize });
+      const drawn = noise(AGG_DEFAULTS.noiseScale, {
+        scope, cohortKey: g.cohort, metric: g.metric, value: g.value, cohortSize, bandVector: vector,
+      });
       const noised = Math.max(0, Math.round(cohortSize + drawn));
       out.push({ scope, cohortKey: g.cohort, metric: g.metric, value: g.value, count: noised, cohortSize });
     }

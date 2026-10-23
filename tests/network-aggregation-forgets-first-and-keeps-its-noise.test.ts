@@ -208,12 +208,59 @@ describe('the noise is sticky: a night that changed nothing publishes the same f
   });
 
   it('is keyed: the same cell and true count draw the same, another key or count draws anew', () => {
-    const cell = { scope: 'benchmarks' as const, cohortKey: 'kids:6–9|size:1–2', metric: 'dinner_habit', value: 'often (4–5)', cohortSize: 120 };
+    const bandVector = JSON.stringify([['often (4–5)', 120], ['rarely (0–1)', 40]]);
+    const cell = { scope: 'benchmarks' as const, cohortKey: 'kids:6–9|size:1–2', metric: 'dinner_habit', value: 'often (4–5)', cohortSize: 120, bandVector };
     const draw = stickyNoise('key-a');
     expect(draw(1.5, cell)).toBe(draw(1.5, { ...cell }));
     expect(draw(1.5, { ...cell, cohortSize: 121 })).not.toBe(draw(1.5, cell));
     expect(stickyNoise('key-b')(1.5, cell)).not.toBe(draw(1.5, cell));
     expect(Number.isFinite(draw(1.5, cell))).toBe(true);
+    // and keyed on the whole metric: ANOTHER band's count moving redraws this one
+    expect(draw(1.5, { ...cell, bandVector: JSON.stringify([['often (4–5)', 120], ['rarely (0–1)', 39]]) })).not.toBe(draw(1.5, cell));
+  });
+
+  // The re-fix of N1/N6 (sticky-diff): keyed on each cell's own count, one
+  // household leaving moved only the figures of the bands it was in, so two
+  // nights compared named them. The other bands of its metrics must move too.
+  it('one family leaving redraws the other bands of its metrics, so the diff cannot say which band it was in', async () => {
+    // 25 more households in the same cohort plan four dinners ("often"), so
+    // dinner has a band the leaver (an f-* household, "rarely") is not in;
+    // 25 childless ones form a cohort the leaver is not in at all.
+    for (let i = 0; i < 25; i++) {
+      household(`often-${i}`);
+      db.seed('meal_plans', [1, 2, 3, 4].map((d) => ({ family_id: `often-${i}`, meal_type: 'dinner', plan_date: dayKey(d) })));
+    }
+    for (let i = 0; i < 25; i++) household(`nokid-${i}`, { kid: false });
+    const consents = db.table('network_consent').map((r) => ({ ...r }));
+    const often = 'kids:6–9|size:1–2|dinner_habit|often (4–5)';
+    const otherCohort = (counts: Map<string, number>) => [...counts].filter(([cell]) => cell.startsWith('kids:none|'));
+    let oftenMoved = 0;
+    const keys = Array.from({ length: 12 }, (_, i) => `deployment-secret-${i}`);
+    try {
+      for (const key of keys) {
+        vi.stubEnv('INTERNAL_SECRET', key);
+        db.replace('network_consent', consents.map((r) => ({ ...r })));
+        expect((await runNetworkAggregation(db as unknown as DB, NOW)).ok).toBe(true);
+        const before = publishedCounts();
+        expect(before.has(often)).toBe(true);
+        expect(before.has('kids:6–9|size:1–2|dinner_habit|rarely (0–1)')).toBe(true);
+        expect(otherCohort(before).length).toBeGreaterThanOrEqual(3);
+        // f-0 leaves the network.
+        db.replace('network_consent', consents.filter((r) => r.family_id !== 'f-0').map((r) => ({ ...r })));
+        expect((await runNetworkAggregation(db as unknown as DB, new Date(NOW.getTime() + 86_400_000))).ok).toBe(true);
+        const after = publishedCounts();
+        expect(contribution('f-0')).toBeUndefined();
+        // a cohort the leaver was not in republishes its figures exactly …
+        expect(otherCohort(after)).toEqual(otherCohort(before));
+        // … and a band of its metric it was not in redraws (rounded, a redraw
+        // lands on the same whole number about one time in six)
+        if (after.get(often) !== before.get(often)) oftenMoved++;
+      }
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    // Keyed per cell, "often" never moved: its true count did not change.
+    expect(oftenMoved).toBeGreaterThanOrEqual(keys.length / 2);
   });
 });
 

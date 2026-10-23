@@ -269,16 +269,26 @@ function noiseKey(): string | null {
 }
 
 /**
- * STICKY Laplace noise: the draw is a keyed hash of the cell and its TRUE count.
+ * STICKY Laplace noise: the draw is a keyed hash of the band and the TRUE
+ * counts of its whole (cohort, metric) — `cell.bandVector`, every band of the
+ * metric withheld ones included.
  *
  * `Math.random()` drew afresh for every cell on every nightly run, so an
  * unchanged band published a new sample of the same number each night; at
  * scale 1.5 (sd ≈ 2.1) the mean of a month of /resources/benchmarks scrapes is
  * within 0.4 of the true count, and one family joining shows as a step of 1 in
- * it. Keyed on (cell, true count), a night that changed nothing republishes the
- * same figure, and a count that returns to an earlier value returns to that
- * value's figure: repetition adds nothing. A change in the true count still
- * draws anew, independent of the last, so the size of the change stays hidden.
+ * it. Keyed on the metric's state, a night that changed nothing republishes the
+ * same figures, and a metric that returns to an earlier state returns to that
+ * state's figures: repetition adds nothing.
+ *
+ * Keyed on the band's OWN count instead, a figure moved only when that band's
+ * count moved, so the diff of two nights was a change detector: every figure
+ * that differed was a band the family that joined or left occupies, and every
+ * one that did not was a band it is not in (the probe — a cohort of 70 and one
+ * household leaving, over 2000 keys: only its cells ever changed). Now any
+ * change inside a (cohort, metric) redraws all of its bands at once, each
+ * independent of its last draw, so a diff says that the metric changed in that
+ * cohort — and neither which band, nor by how much.
  */
 export function stickyNoise(key: string): NoiseFn {
   return (scale, cell) => laplaceNoise(scale, () => cellUniform(key, cell));
@@ -286,7 +296,7 @@ export function stickyNoise(key: string): NoiseFn {
 
 function cellUniform(key: string, cell: NoiseCell): number {
   const digest = createHmac('sha256', key).update(NOISE_DOMAIN)
-    .update(JSON.stringify([cell.scope, cell.cohortKey, cell.metric, cell.value, cell.cohortSize]))
+    .update(JSON.stringify([cell.scope, cell.cohortKey, cell.metric, cell.value, cell.cohortSize, cell.bandVector]))
     .digest();
   // 48 bits, strictly inside (0, 1): the Laplace inverse never meets log(0).
   return (digest.readUIntBE(0, 6) + 0.5) / 2 ** 48;
@@ -415,7 +425,8 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
   }
   if (contributionFailures > 0) return { ok: false, error: 'failed to persist family contributions', contributors: contributions.length, aggregates: 0 };
 
-  // 4. AGGREGATE — pure k-anonymity + sticky DP noise + launch gate.
+  // 4. AGGREGATE — pure k-anonymity + sticky DP noise (one draw per band per
+  //    state of its whole cohort-metric) + launch gate.
   const aggregates = aggregateContributions(contributions, {
     minCohort: AGG_DEFAULTS.minCohort,
     globalMinFamilies: AGG_DEFAULTS.globalMinFamilies,
