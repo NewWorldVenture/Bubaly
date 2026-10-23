@@ -116,3 +116,16 @@ export function canInviteWithRole(actorRole?: string | null, inviteRole?: string
   if (inviteRole === 'parent') return isAdmin(actorRole);
   return (INVITABLE_ROLES as string[]).includes(inviteRole);
 }
+
+/**
+ * The invite roles a role change leaves the member without standing for: when
+ * moving from `fromRole` to `toRole` takes away any invite `fromRole` could
+ * send, every role `toRole` may not invite with; otherwise none. A parent made
+ * an adult loses `parent` (and `child`, which no one invites with); anyone who
+ * stops being a manager loses them all. A promotion, or a change between two
+ * non-managers, takes nothing away.
+ */
+export function inviteRolesLostOnRoleChange(fromRole?: string | null, toRole?: string | null): MemberRole[] {
+  const lost = ROLE_ORDER.some((r) => canInviteWithRole(fromRole, r) && !canInviteWithRole(toRole, r));
+  return lost ? ROLE_ORDER.filter((r) => !canInviteWithRole(toRole, r)) : [];
+}

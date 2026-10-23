@@ -15,6 +15,7 @@
 import 'server-only';
 import { z } from 'zod';
 import { getPreferences, getMembers, resolveMemberByName } from '@/lib/services/family';
+import { isManager } from '@/lib/constants/roles';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { defineTool, plural, type ToolDefinition } from './types';
 
@@ -86,12 +87,17 @@ export const familyTools: ToolDefinition[] = [
     risk: 'low',
     readOnly: true,
     input: z.object({
-      include_inactive: z.boolean().nullish().describe('Include members who have left the family. Defaults to false.'),
+      include_inactive: z.boolean().nullish().describe('Include members who have left the family (a parent or adult only). Defaults to false.'),
     }),
     output: z.object({ members: z.array(memberShape) }),
     summarize: (_input, output) => `Looked up ${plural(output.members.length, 'family member')}`,
     execute: async (scope, input) => {
-      const res = await getMembers(scope, { includeInactive: input.include_inactive ?? false });
+      // Removed members — an ex-partner, a former caregiver — with their role
+      // and age are a manager's to see, as the export's members section hands
+      // them to a parent or adult only (lib/privacy/export.ts). Every other
+      // role reads the roster it sees on the family page: active members.
+      const includeInactive = (input.include_inactive ?? false) && isManager(scope.role);
+      const res = await getMembers(scope, { includeInactive });
       if (!res.ok) return res;
       return ok({
         members: res.data.map((m) => ({

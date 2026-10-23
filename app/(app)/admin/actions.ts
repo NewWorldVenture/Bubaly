@@ -12,7 +12,7 @@ import { InviteEmail } from '@/lib/emails/invite';
 import { emailSchema } from '@/lib/validation';
 import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { stripeFromKey } from '@/lib/stripe';
-import { REMOVED_MEMBER_PATCH, isManager, type MemberRole } from '@/lib/constants/roles';
+import { REMOVED_MEMBER_PATCH, inviteRolesLostOnRoleChange, isManager, type MemberRole } from '@/lib/constants/roles';
 import { REMOVED_CHILD_BAN_MARKER, isChildLoginAccount, memberHasAKidLogin, revokeRemovedChildLogin } from '@/lib/server/child-account';
 import type { PlanId } from '@/lib/constants/plans';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
@@ -283,7 +283,7 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result<
 }
 
 /** Updates a member's display name and role. */
-export async function adminUpdateMemberAction(memberId: string, input: { displayName: string; role: MemberRole }): Promise<Result> {
+export async function adminUpdateMemberAction(memberId: string, input: { displayName: string; role: MemberRole }): Promise<Result<{ warning?: string }>> {
   const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
@@ -320,9 +320,15 @@ export async function adminUpdateMemberAction(memberId: string, input: { display
       context: { memberId, from: target.role, to: input.role, by: 'super_admin' },
     });
   }
-  await adminAuditLog({ familyId: member.family_id, action: 'update', resource: 'family_members', resourceId: memberId, metadata: { display_name: displayName, role: input.role } });
+  // A demotion revokes the pending invites they sent at a role they may no
+  // longer give, as the household's editor does (updateFamilyMemberAction).
+  // The role change stands if it fails; the audit row and the console say so.
+  const invitesRevoked = !roleChanges || await revokeInvitesIssuedBy(
+    supabase, member.family_id, target.user_id, inviteRolesLostOnRoleChange(target.role, input.role),
+  );
+  await adminAuditLog({ familyId: member.family_id, action: 'update', resource: 'family_members', resourceId: memberId, metadata: { display_name: displayName, role: input.role, invites_they_issued_revoked: invitesRevoked } });
   revalidatePath('/admin/users');
-  return { ok: true };
+  return invitesRevoked ? { ok: true } : { ok: true, data: { warning: t('familyModule.roleChangedButInviteStillOpen') } };
 }
 
 /** Plans a super-admin can assign from the console (free + the paid tiers). */

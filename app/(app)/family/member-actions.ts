@@ -4,7 +4,8 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import {
-  REMOVED_MEMBER_PATCH, ROLE_ORDER, assignableMemberRoles, canRemoveMember, isManager, rolesForAKidLogin, type MemberRole,
+  REMOVED_MEMBER_PATCH, ROLE_ORDER, assignableMemberRoles, canRemoveMember, inviteRolesLostOnRoleChange, isManager,
+  rolesForAKidLogin, type MemberRole,
 } from '@/lib/constants/roles';
 import { memberHasAKidLogin, revokeRemovedChildLogin, type ChildLoginRevocation } from '@/lib/server/child-account';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
@@ -123,12 +124,16 @@ const EDITABLE: readonly (keyof MemberEdit)[] = ['display_name', 'role', 'birthd
  *
  * The write goes through the caller's own session, so fm_update (manager-gated)
  * and 0482's parent boundary stay the database's word on it.
+ *
+ * `invitesRevoked: false` on a success: the role change stands, but a pending
+ * invite the member sent at a role they may no longer give could not be
+ * revoked, so it may still enrol its invitee at that role.
  */
 export async function updateFamilyMemberAction(input: {
   memberId: string;
   expectedUpdatedAt?: string | null;
   changes: MemberEdit;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+}): Promise<{ ok: true; invitesRevoked?: false } | { ok: false; error: string }> {
   const t = await getTranslations();
   const notSaved = { ok: false as const, error: t('errors.thatChangeWasNotSaved') };
   const ctx = await requireUserContext();
@@ -192,6 +197,16 @@ export async function updateFamilyMemberAction(input: {
       reason: `Changed ${target.display_name}'s role from ${target.role} to ${patch.role}`,
       context: { memberId: target.id, from: target.role, to: patch.role },
     });
+    // A demotion takes their invite authority with it. accept_invite never
+    // asks whether `invited_by` may still send an invite at that role, so a
+    // parent made an adult (or a guest) kept enrolling their invitee as a
+    // parent for up to 14 days: revoke the pending invites they sent at a role
+    // they may no longer give, as removal revokes all of them. Service role,
+    // as removal's is; the role change stands if it fails, and says so.
+    const lostRoles = inviteRolesLostOnRoleChange(target.role, patch.role);
+    if (!await revokeInvitesIssuedBy(createServiceClient(), familyId, target.user_id, lostRoles)) {
+      return { ok: true, invitesRevoked: false };
+    }
   }
   return { ok: true };
 }
