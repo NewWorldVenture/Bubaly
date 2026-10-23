@@ -609,7 +609,17 @@ export async function adminDeleteDocumentAction(documentId: string, _storagePath
   if (storageError) return actionFailure(storageError, t('actions.couldNotRemoveTheDocument'));
   if (!removed?.some((object) => object.name === doc.storage_path)) {
     const listed = await supabase.storage.from('documents').list(doc.storage_path.slice(0, doc.storage_path.lastIndexOf('/')), { search: doc.storage_path.slice(doc.storage_path.lastIndexOf('/') + 1), limit: 100 });
-    if (listed.data?.some((object) => object.name === doc.storage_path.slice(doc.storage_path.lastIndexOf('/') + 1))) {
+    // Only a listing that ANSWERED can say the file is gone. One that failed
+    // (a 503) or came back with no list is not evidence, and the row it would
+    // drop is what hides a Vault file from a child: refuse and keep it, as
+    // lib/storage/confirm-removal.ts does for the family's own deletes. A
+    // listing that answers without the file lets a retry after a
+    // half-finished delete complete.
+    if (listed.error || !Array.isArray(listed.data)) {
+      console.error('[admin-action] document file removal could not be confirmed; its row stays', { documentId, error: listed.error });
+      return { ok: false, error: t('actions.couldNotRemoveTheDocument') };
+    }
+    if (listed.data.some((object) => object.name === doc.storage_path.slice(doc.storage_path.lastIndexOf('/') + 1))) {
       return { ok: false, error: t('actions.couldNotRemoveTheDocument') };
     }
   }
