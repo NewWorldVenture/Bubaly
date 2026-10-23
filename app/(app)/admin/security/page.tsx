@@ -100,8 +100,11 @@ export default async function AdminSecurityPage() {
 
   const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
   const actorIds = [...new Set((auditLogs ?? []).map((l) => l.actor_id).filter((x): x is string => !!x))];
+  // Settled: a transport failure REJECTS the query rather than resolving
+  // { data, error }, and unsettled it took the route's error boundary in place
+  // of the security activity read-error state below.
   const actorsResult = actorIds.length
-    ? await supabase.from('profiles').select('id, full_name, email').in('id', actorIds)
+    ? await settle(supabase.from('profiles').select('id, full_name, email').in('id', actorIds))
     : { data: [] as { id: string; full_name: string | null; email: string | null }[] };
   if ('error' in actorsResult && actorsResult.error) {
     console.error('[admin-security] actor profile read failed', actorsResult.error);

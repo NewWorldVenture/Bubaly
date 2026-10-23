@@ -62,6 +62,21 @@ afterEach(() => {
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/** The ceiling every summed read here pages to. */
+const CEILING = 25_000;
+const UNAVAILABLE = SOURCE_MESSAGES['strategyMetrics.unavailable'];
+/**
+ * The figures a ceiling cost, as the page's PartialReadBanner names them (its
+ * title checked, then one item per figure, in order), or null with no banner.
+ */
+function ceilingBanner(html: string): string[] | null {
+  const at = html.indexOf('<div role="status"');
+  if (at < 0) return null;
+  const banner = html.slice(at, html.indexOf('</ul></div>', at));
+  expect(textOf(banner)).toContain(translate(SOURCE_MESSAGES, 'adminCeiling.figuresNotShown', { n: CEILING.toLocaleString() }));
+  return [...banner.matchAll(/<li>([^<]*)<\/li>/g)].map((m) => m[1]);
+}
+
 describe('the fake is the server it stands in for', () => {
   it('the control: an unbounded read stops at 1,000 rows and says nothing', async () => {
     db.seed('support_tickets', Array.from({ length: ROWS }, (_, i) => ({ id: `tkt-${pad(i)}`, status: 'open' })));
@@ -128,13 +143,38 @@ describe('/admin/marketing/loyalty: the tiles are the whole program, and every r
     expect(html).not.toContain('Unknown family');
   });
 
-  it('a balance read that reaches its ceiling is the read-error state, not a smaller program', async () => {
+  // Reaching the ceiling used to turn the whole page into the read-error
+  // state, and with it the reward editor, the redemption queue, the award form
+  // and the program settings (review R4-CEILING-LOCKS-WORK-PAGES). It costs
+  // the one tile now, which says so rather than showing part of the balance.
+  it('a balance read that reaches its ceiling costs the Points outstanding tile, not the program', async () => {
     seedProgram();
-    db.seed('loyalty_accounts', Array.from({ length: 25_000 - ROWS + 1 }, (_, i) => ({
+    db.seed('loyalty_accounts', Array.from({ length: CEILING - ROWS + 1 }, (_, i) => ({
       id: `acct-z-${pad(i)}`, family_id: 'fam-m-000000', points_balance: 1, lifetime_points: 0, tier: 'bronze',
     })));
     const html = await render();
+    expect(html).not.toContain(SOURCE_MESSAGES['loyalty.couldNotLoadLoyaltyData']);
+    expect(tile(html, SOURCE_MESSAGES['adminMarketingLoyalty.pointsOutstanding'])).toBe(UNAVAILABLE);
+    expect(ceilingBanner(html)).toEqual([SOURCE_MESSAGES['adminMarketingLoyalty.pointsOutstanding']]);
+    // Every other tile, the queue and the forms are still the program's.
+    expect(tile(html, SOURCE_MESSAGES['adminMarketingLoyalty.members'])).toBe(String(CEILING + 1));
+    expect(tile(html, SOURCE_MESSAGES['adminMarketingLoyalty.pendingRedemptions'])).toBe(String(ROWS - 100));
+    expect(textOf(html)).toContain(`Member family ${ROWS - 1}`);
+    expect(html).toContain(SOURCE_MESSAGES['adminMarketingLoyalty.awardAdjustPoints']);
+    expect(html).toContain(SOURCE_MESSAGES['adminMarketingLoyalty.saveSettings']);
+  });
+
+  it('a balance read that FAILS is still the read-error state', async () => {
+    seedProgram();
+    h.db = withFaults(db, (_table, calls) => (calls.some((c) => c.method === 'select' && c.args[0] === 'id, points_balance') ? { message: 'balances unavailable' } : null));
+    const html = await render();
     expect(html).toContain(SOURCE_MESSAGES['loyalty.couldNotLoadLoyaltyData']);
+  });
+
+  it('the control: under the ceiling no banner is shown', async () => {
+    seedProgram();
+    const html = await render();
+    expect(ceilingBanner(html)).toBeNull();
   });
 });
 
@@ -205,6 +245,34 @@ describe('/admin/support-tickets: the overview, the donut and the categories cou
     const html = await render();
     expect(html).toContain(SOURCE_MESSAGES['supportTickets.couldNotLoadSupportTickets']);
   });
+
+  // At 25,001 tickets the tally reached its ceiling and the page returned the
+  // read-error state: the queue, its filters, the row actions and the export
+  // went with it (review R4-CEILING-LOCKS-WORK-PAGES).
+  it('a category tally that reaches its ceiling costs Top Categories, not the queue', async () => {
+    seedQueue();
+    db.seed('support_tickets', Array.from({ length: CEILING - ROWS + 1 }, (_, i) => ({
+      id: `tkt-z-${pad(i)}`, ticket_number: `Z-${pad(i)}`, subject: `Old ticket ${i}`, description: null,
+      category: 'general', priority: 'low', status: 'closed', requester_name: null, requester_email: `z${i}@example.com`,
+      assigned_agent_id: null, assigned_agent_name: null, created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z',
+    })));
+    const html = await render();
+    expect(html).not.toContain(SOURCE_MESSAGES['supportTickets.couldNotLoadSupportTickets']);
+    expect(ceilingBanner(html)).toEqual([SOURCE_MESSAGES['adminSupportTickets.topCategories']]);
+    const card = html.slice(html.lastIndexOf(SOURCE_MESSAGES['adminSupportTickets.topCategories']));
+    expect(card.slice(0, card.indexOf(SOURCE_MESSAGES['adminSupportTickets.viewAllCategories']))).toContain(`<p class="text-sm text-muted">${UNAVAILABLE}</p>`);
+    expect(html).not.toContain('<span class="text-muted">Technical</span>');
+    // The queue is still there: the counts, the newest ticket and the export.
+    expect(overview(html, SOURCE_MESSAGES['adminSupportTickets.total'])).toBe((CEILING + 1).toLocaleString());
+    expect(html).toContain(`T-${pad(ROWS - 1)}`);
+    expect(html).toContain('href="/api/admin/support-tickets/export"');
+  });
+
+  it('the control: under the ceiling no banner is shown', async () => {
+    seedQueue();
+    const html = await render();
+    expect(ceilingBanner(html)).toBeNull();
+  });
 });
 
 describe('/admin/marketing/surveys: every response is scored', () => {
@@ -239,6 +307,50 @@ describe('/admin/marketing/surveys: every response is scored', () => {
     expect(html).toContain(SOURCE_MESSAGES['surveys.couldNotLoadSurveyData']);
   });
 
+  // Every response in the table was read, a deleted survey's included, so a
+  // deleted survey answered 25,001 times put the list and the form to create
+  // a survey behind the read-error state (review R4-CEILING-LOCKS-WORK-PAGES).
+  it('a deleted survey\'s responses are not read, so they cannot reach the ceiling', async () => {
+    seedSurveys();
+    db.seed('surveys', [{ id: 'srv-gone', name: 'Retired', type: 'nps', status: 'closed', slug: 'retired', question: 'Recommend us?', scale_min: 0, scale_max: 10, deleted_at: '2026-10-01T00:00:00Z', created_at: '2026-08-01T00:00:00Z' }]);
+    db.seed('survey_responses', Array.from({ length: CEILING + 1 }, (_, i) => ({
+      id: `resp-gone-${pad(i)}`, survey_id: 'srv-gone', score: 5, comment: null, respondent_email: null, submitted_at: minutesAgo(i),
+    })));
+    const { default: SurveysPage } = await import('@/app/(app)/admin/marketing/surveys/page');
+    const html = await renderServerPage(await SurveysPage());
+    const text = textOf(html);
+    expect(html).not.toContain(SOURCE_MESSAGES['surveys.couldNotLoadSurveyData']);
+    expect(ceilingBanner(html)).toBeNull();
+    expect(text).toContain('Renewal NPS · 300 responses');
+    expect(text).toContain('Onboarding NPS · 1000 responses');
+    expect(text).not.toContain('Retired');
+    expect(html).toContain(SOURCE_MESSAGES['adminMarketingSurveys.createSurvey']);
+  });
+
+  it('a batch of live surveys past the ceiling costs those surveys\' scores, not the list or the form', async () => {
+    // A hundred surveys a request, newest first: the oldest survey is alone
+    // in the second batch, and it alone is answered more often than the ceiling.
+    db.seed('surveys', [
+      ...Array.from({ length: 100 }, (_, i) => ({
+        id: `srv-${pad(i)}`, name: `Survey ${i}`, type: 'nps', status: 'active', slug: `survey-${i}`, question: 'Recommend us?',
+        scale_min: 0, scale_max: 10, deleted_at: null, created_at: new Date(Date.UTC(2026, 8, 2) + i * 60_000).toISOString(),
+      })),
+      { id: 'srv-legacy', name: 'Legacy', type: 'nps', status: 'active', slug: 'legacy', question: 'Recommend us?', scale_min: 0, scale_max: 10, deleted_at: null, created_at: '2026-01-01T00:00:00Z' },
+    ]);
+    db.seed('survey_responses', [
+      ...Array.from({ length: 100 }, (_, i) => ({ id: `resp-${pad(i)}`, survey_id: `srv-${pad(i)}`, score: 10, comment: null, respondent_email: null, submitted_at: minutesAgo(i) })),
+      ...Array.from({ length: CEILING + 1 }, (_, i) => ({ id: `resp-l-${pad(i)}`, survey_id: 'srv-legacy', score: 0, comment: null, respondent_email: null, submitted_at: minutesAgo(i) })),
+    ]);
+    const { default: SurveysPage } = await import('@/app/(app)/admin/marketing/surveys/page');
+    const html = await renderServerPage(await SurveysPage());
+    const text = textOf(html);
+    expect(html).not.toContain(SOURCE_MESSAGES['surveys.couldNotLoadSurveyData']);
+    expect(ceilingBanner(html)).toEqual(['Legacy']);
+    expect(text).toContain(`Legacy NPS active ${UNAVAILABLE} NPS`);
+    expect(text).toContain('Survey 99 NPS · 1 response active 100 NPS · 100% promoters · 0% detractors');
+    expect(html).toContain(SOURCE_MESSAGES['adminMarketingSurveys.createSurvey']);
+  });
+
   it('the survey page scores every response, not its newest thousand', async () => {
     db.seed('surveys', [{ id: 'srv-a', name: 'Onboarding', type: 'nps', status: 'active', slug: 'onboarding', question: 'Recommend us?', scale_min: 0, scale_max: 10, deleted_at: null }]);
     // The 300 OLDEST responses are the detractors.
@@ -252,6 +364,36 @@ describe('/admin/marketing/surveys: every response is scored', () => {
     expect(text).toContain('NPS 54 1300 responses · 77% promoters · 23% detractors');
     // The list is the newest hundred.
     expect(html.split('rounded-lg bg-elevated text-sm font-bold').length - 1).toBe(100);
+  });
+
+  // Past the ceiling the page was the read-error state, and the controls to
+  // close or delete the survey and its newest responses went with it (review
+  // R4-CEILING-LOCKS-WORK-PAGES).
+  it('a survey answered past the ceiling costs its score and distribution, not the page', async () => {
+    db.seed('surveys', [{ id: 'srv-a', name: 'Onboarding', type: 'nps', status: 'active', slug: 'onboarding', question: 'Recommend us?', scale_min: 0, scale_max: 10, deleted_at: null }]);
+    db.seed('survey_responses', Array.from({ length: CEILING + 1 }, (_, i) => ({
+      id: `resp-${pad(i)}`, survey_id: 'srv-a', score: 10, comment: i === CEILING ? 'The newest one' : null, respondent_email: null, submitted_at: minutesAgo(CEILING - i),
+    })));
+    const { default: SurveyDetailPage } = await import('@/app/(app)/admin/marketing/surveys/[id]/page');
+    const html = await renderServerPage(await SurveyDetailPage({ params: Promise.resolve({ id: 'srv-a' }) }));
+    const text = textOf(html);
+    expect(html).not.toContain(SOURCE_MESSAGES['surveys.couldNotLoadThisSurvey']);
+    expect(ceilingBanner(html)).toEqual(['NPS', SOURCE_MESSAGES['adminMarketingSurveys.scoreDistribution']]);
+    expect(text).toContain(`NPS ${UNAVAILABLE} ${SOURCE_MESSAGES['adminMarketingSurveys.scoreDistribution']} ${UNAVAILABLE}`);
+    expect(text).not.toContain(SOURCE_MESSAGES['adminMarketingSurveys.promoters']);
+    // The controls, the share link and the newest hundred responses remain.
+    expect(text).toContain(SOURCE_MESSAGES['adminMarketingSurveys.publicShareLink']);
+    expect(text).toContain('The newest one');
+    expect(html.split('rounded-lg bg-elevated text-sm font-bold').length - 1).toBe(100);
+  });
+
+  it('a score read that FAILS is still the survey\'s read-error state', async () => {
+    db.seed('surveys', [{ id: 'srv-a', name: 'Onboarding', type: 'nps', status: 'active', slug: 'onboarding', question: 'Recommend us?', scale_min: 0, scale_max: 10, deleted_at: null }]);
+    db.seed('survey_responses', [{ id: 'resp-1', survey_id: 'srv-a', score: 9, comment: 'Lovely', respondent_email: null, submitted_at: minutesAgo(1) }]);
+    h.db = withFaults(db, (_table, calls) => (calls.some((c) => c.method === 'select' && c.args[0] === 'id, score') ? { message: 'scores unavailable' } : null));
+    const { default: SurveyDetailPage } = await import('@/app/(app)/admin/marketing/surveys/[id]/page');
+    const html = await renderServerPage(await SurveyDetailPage({ params: Promise.resolve({ id: 'srv-a' }) }));
+    expect(html).toContain(SOURCE_MESSAGES['surveys.couldNotLoadThisSurvey']);
   });
 });
 

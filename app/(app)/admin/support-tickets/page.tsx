@@ -9,6 +9,7 @@ import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/filter-bar';
 import { NewTicketButton } from '@/components/admin/new-ticket-button';
 import { TicketRowActions } from '@/components/admin/ticket-row-actions';
@@ -111,8 +112,14 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
       return query.order('id').limit(limit);
     }, { max: SUM_ROW_CEILING }),
   ]);
+  // A tally past its ceiling costs the Top Categories card, not the queue: the
+  // list, its filters, the row actions and the export stay usable, and the card
+  // says the tally is not shown rather than showing part of it. Any other
+  // failure is still the read-error state.
+  const categoriesCeiling = 'truncated' in categoriesResult && categoriesResult.truncated;
   const statsError = totalResult.error ?? openResult.error ?? inProgressResult.error ?? pendingResult.error
-    ?? resolvedResult.error ?? closedResult.error ?? categoriesResult.error;
+    ?? resolvedResult.error ?? closedResult.error ?? (categoriesCeiling ? null : categoriesResult.error);
+  if (categoriesCeiling) console.warn('[admin-support-tickets] the category tally reached its ceiling; Top Categories is not shown');
   if (ticketsError || statsError) {
     console.error('[admin-support-tickets] ticket read failed', ticketsError ?? statsError);
     return <AdminReadError />;
@@ -181,6 +188,10 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
 
   return (
     <div className="module-page">
+      <PartialReadBanner
+        title={tr('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
+        failures={categoriesCeiling ? [tr('adminSupportTickets.topCategories')] : []}
+      />
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -389,14 +400,18 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
               <h2 className="text-base font-semibold">{tr('adminSupportTickets.topCategories')}</h2>
               <span className="text-xs text-muted">{tr('adminSupportTickets.thisWeek')}</span>
             </div>
-            <ul className="space-y-2.5">
-              {topCategories.slice(0, 5).map(([cat, count]) => (
-                <li key={cat} className="flex items-center justify-between text-sm">
-                  <span className="text-muted">{CATEGORY_LABELS[cat] ?? cat}</span>
-                  <span className="font-semibold">{count}</span>
-                </li>
-              ))}
-            </ul>
+            {categoriesCeiling ? (
+              <p className="text-sm text-muted">{tr('strategyMetrics.unavailable')}</p>
+            ) : (
+              <ul className="space-y-2.5">
+                {topCategories.slice(0, 5).map(([cat, count]) => (
+                  <li key={cat} className="flex items-center justify-between text-sm">
+                    <span className="text-muted">{CATEGORY_LABELS[cat] ?? cat}</span>
+                    <span className="font-semibold">{count}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
             <a href="/admin/support-tickets?tab=all" className="mt-4 flex items-center gap-1 text-xs text-brand-text hover:underline">
               {tr('adminSupportTickets.viewAllCategories')}
             </a>

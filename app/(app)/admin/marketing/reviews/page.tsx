@@ -3,8 +3,10 @@ import Link from 'next/link';
 import { Star, MessageSquareQuote, Settings2, ExternalLink } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { ratingStats, DEFAULT_REPUTATION } from '@/lib/marketing/reviews';
 import { ReviewRow } from './review-row';
 import { saveReputationSettingsAction } from './actions';
@@ -17,6 +19,8 @@ export const dynamic = 'force-dynamic';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring';
 const FILTERS = ['all', 'pending', 'approved', 'featured', 'rejected'] as const;
+/** Reviews the rating figures may page through before they are reported as not shown (one round trip per 1,000). */
+const SUM_ROW_CEILING = 25_000;
 
 export default async function ReviewsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   const t = await getTranslations();
@@ -24,25 +28,43 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
   const active = (FILTERS as readonly string[]).includes(status ?? '') ? status! : 'all';
   const supabase = createServiceClient();
 
-  const [reviewsResult, settingsResult] = await settleAll([
-    supabase.from('reviews').select('*').is('deleted_at', null).order('submitted_at', { ascending: false }).limit(500),
+  // The list is the newest 500 reviews in the chosen status, filtered by the
+  // server so a pending review older than the newest 500 still reaches the
+  // moderation queue. The average, the review count, the distribution and the
+  // per-status counts are every review the public has written
+  // (app/reviews/new/actions.ts), paged on the id to a real ceiling; past it
+  // they say they are not shown rather than describing part of them.
+  const listed = supabase.from('reviews').select('*').is('deleted_at', null);
+  const [reviewsResult, settingsResult, ratingsResult] = await settleAll([
+    (active === 'all' ? listed : listed.eq('status', active)).order('submitted_at', { ascending: false }).limit(500),
     supabase.from('reputation_settings').select('*').eq('singleton', true).maybeSingle(),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('reviews').select('id, rating, status').is('deleted_at', null);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
   ]);
-  const readError = reviewsResult.error ?? settingsResult.error;
+  const ratingsCeiling = 'truncated' in ratingsResult && ratingsResult.truncated;
+  const readError = reviewsResult.error ?? settingsResult.error ?? (ratingsCeiling ? null : ratingsResult.error);
   if (readError) {
     console.error('[admin-marketing-reviews] review read failed', readError);
     return <AdminReviewsReadError />;
   }
   const { data: all } = reviewsResult;
   const { data: settings } = settingsResult;
-  const rows = all ?? [];
-  const stats = ratingStats(rows.map((r) => r.rating));
-  const filtered = active === 'all' ? rows : rows.filter((r) => r.status === active);
+  const ratings = ratingsResult.data ?? [];
+  const stats = ratingStats(ratings.map((r) => r.rating));
+  const filtered = all ?? [];
+  const unavailable = t('strategyMetrics.unavailable');
   const reviewUrl = `${SITE_URL}/reviews/new`;
   const set = settings ?? null;
 
   return (
     <div className="space-y-5">
+      <PartialReadBanner
+        title={t('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
+        failures={ratingsCeiling ? [t('adminMarketingReviews.averageRating'), t('adminMarketingReviews.distribution')] : []}
+      />
       <div className="flex items-center gap-2">
         <MessageSquareQuote className="h-5 w-5 text-brand-text" />
         <div>
@@ -55,11 +77,12 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
       <div className="grid gap-3 sm:grid-cols-3">
         <Card>
           <p className="text-xs font-medium text-muted">{t('adminMarketingReviews.averageRating')}</p>
-          <p className="mt-1 text-3xl font-bold leading-none">{stats.total ? stats.average : '—'}</p>
-          <p className="mt-1 text-xs text-muted">{stats.total} review{stats.total === 1 ? '' : 's'} · {stats.positivePct}{t('adminMarketingReviews.positive')}</p>
+          <p className="mt-1 text-3xl font-bold leading-none">{ratingsCeiling ? unavailable : stats.total ? stats.average : '—'}</p>
+          {!ratingsCeiling && <p className="mt-1 text-xs text-muted">{stats.total} review{stats.total === 1 ? '' : 's'} · {stats.positivePct}{t('adminMarketingReviews.positive')}</p>}
         </Card>
         <Card className="sm:col-span-2">
           <p className="mb-2 text-xs font-medium text-muted">{t('adminMarketingReviews.distribution')}</p>
+          {ratingsCeiling ? <p className="text-sm text-muted">{unavailable}</p> : (
           <div className="space-y-1">
             {stats.distribution.map((d) => (
               <div key={d.star} className="flex items-center gap-2 text-xs">
@@ -69,6 +92,7 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
               </div>
             ))}
           </div>
+          )}
         </Card>
       </div>
 
@@ -86,7 +110,7 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
         {FILTERS.map((f) => (
           <Link key={f} href={f === 'all' ? '/admin/marketing/reviews' : `/admin/marketing/reviews?status=${f}`}
             className={`rounded-lg px-3 py-1 text-sm font-medium capitalize ${active === f ? 'bg-elevated text-fg' : 'text-muted hover:text-fg'}`}>
-            {f}{f !== 'all' ? ` (${rows.filter((r) => r.status === f).length})` : ''}
+            {f}{f !== 'all' && !ratingsCeiling ? ` (${ratings.filter((r) => r.status === f).length})` : ''}
           </Link>
         ))}
       </div>

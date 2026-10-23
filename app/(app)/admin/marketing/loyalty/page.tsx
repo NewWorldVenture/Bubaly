@@ -8,6 +8,7 @@ import { readInChunks } from '@/lib/supabase/chunked-in';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { computeTier, TIER_LABELS, DEFAULT_LOYALTY, type Tier } from '@/lib/marketing/loyalty';
 import { RewardRow, AddReward, type Reward } from './reward-editor';
 import { RedemptionRow, type Redemption } from './redemption-row';
@@ -53,8 +54,15 @@ export default async function LoyaltyPage() {
       return query.order('id').limit(limit);
     }, { max: SUM_ROW_CEILING }),
   ]);
+  // Points outstanding past its ceiling costs that one tile. Before the tiles
+  // were whole-program figures this page always rendered, and the rewards,
+  // the redemption queue, the award form and the program settings are work an
+  // operator still has to do; the tile says it is not shown instead of showing
+  // part of the balance. Any other failure is still the read-error state.
+  const balancesCeiling = 'truncated' in balancesResult && balancesResult.truncated;
   const readError = settingsResult.error ?? rewardsResult.error ?? accountsResult.error ?? redemptionsResult.error ?? familiesResult.error
-    ?? memberCountResult.error ?? pendingCountResult.error ?? balancesResult.error;
+    ?? memberCountResult.error ?? pendingCountResult.error ?? (balancesCeiling ? null : balancesResult.error);
+  if (balancesCeiling) console.warn('[admin-marketing-loyalty] the balance read reached its ceiling; Points outstanding is not shown');
   if (readError) {
     console.error('[admin-marketing-loyalty] loyalty read failed', readError);
     return <AdminLoyaltyReadError />;
@@ -94,6 +102,10 @@ export default async function LoyaltyPage() {
 
   return (
     <div className="space-y-5">
+      <PartialReadBanner
+        title={t('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
+        failures={balancesCeiling ? [t('adminMarketingLoyalty.pointsOutstanding')] : []}
+      />
       <div className="flex items-center gap-2">
         <Trophy className="h-5 w-5 text-brand-text" />
         <div>
@@ -106,7 +118,7 @@ export default async function LoyaltyPage() {
       {/* Stats */}
       <div className="grid gap-3 sm:grid-cols-4">
         <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.members')}</p><p className="mt-1 text-3xl font-bold leading-none">{memberCount}</p></Card>
-        <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.pointsOutstanding')}</p><p className="mt-1 text-3xl font-bold leading-none">{totalOutstanding.toLocaleString()}</p></Card>
+        <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.pointsOutstanding')}</p><p className="mt-1 text-3xl font-bold leading-none">{balancesCeiling ? t('strategyMetrics.unavailable') : totalOutstanding.toLocaleString()}</p></Card>
         <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.activeRewards')}</p><p className="mt-1 text-3xl font-bold leading-none">{rewardRows.filter((r) => r.is_active).length}</p></Card>
         <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.pendingRedemptions')}</p><p className="mt-1 text-3xl font-bold leading-none">{pendingCount}</p></Card>
       </div>

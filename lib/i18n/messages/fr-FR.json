@@ -854,6 +854,7 @@
   "adminBilling.started": "Démarré",
   "adminBilling.status": "Statut",
   "adminBilling.subscriptions": "Abonnements",
+  "adminCeiling.figuresNotShown": "Non affichés, car chacun de ces chiffres additionnerait plus de {n} lignes et un total portant sur une partie seulement serait faux :",
   "adminContent.added": "Ajouté",
   "adminContent.addedThisWeek": "Ajouté cette semaine",
   "adminContent.categories": "Catégories",

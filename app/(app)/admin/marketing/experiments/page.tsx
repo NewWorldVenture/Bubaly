@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { FlaskConical, Trophy } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { readInChunks } from '@/lib/supabase/chunked-in';
+import { settle } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { computeABResults, leadingVariant, type ABVariant, type VariantTotals } from '@/lib/marketing/ab';
@@ -26,11 +27,14 @@ const STATUS_STYLE: Record<string, string> = {
 export default async function ABTestingPage() {
   const tr = await getTranslations();
   const supabase = createServiceClient();
-  const { data: experiments, error: experimentsError } = await supabase
+  // Settled: a transport failure REJECTS the query rather than resolving
+  // { data, error }, and unsettled it took the route's error boundary in place
+  // of this page's own read-error state.
+  const { data: experiments, error: experimentsError } = await settle(supabase
     .from('ab_experiments')
     .select('*')
     .is('deleted_at', null)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false }));
 
   // `ab_experiments` is read unbounded, so `keys` is unbounded too — batch the
   // filter rather than building one query string out of every key.

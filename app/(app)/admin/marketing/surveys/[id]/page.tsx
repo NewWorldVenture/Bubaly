@@ -2,11 +2,12 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
-import { settleAll } from '@/lib/supabase/settle';
+import { settle, settleAll } from '@/lib/supabase/settle';
 import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { MessagesSquare } from 'lucide-react';
 import {
   SURVEY_TYPES, summarize, computeNps, distribution, isSurveyType,
@@ -33,7 +34,11 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
   const { fmtDate } = await getFormat(ADMIN_ZONE);
   const { id } = await params;
   const supabase = createServiceClient();
-  const { data: survey, error: surveyError } = await supabase.from('surveys').select('*').eq('id', id).is('deleted_at', null).maybeSingle();
+  // Settled: a transport failure REJECTS the query rather than resolving
+  // { data, error }, and unsettled it took the route's error boundary in place
+  // of this page's own read-error state.
+  const { data: survey, error: surveyError } = await settle(
+    supabase.from('surveys').select('*').eq('id', id).is('deleted_at', null).maybeSingle());
   if (surveyError) {
     console.error('[admin-marketing-survey-detail] survey read failed', surveyError);
     return <SurveyDetailReadError />;
@@ -53,7 +58,12 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
       return query.order('id').limit(limit);
     }, { max: SUM_ROW_CEILING }),
   ]);
-  const responsesError = responsesResult.error ?? scoresResult.error;
+  // A survey answered more often than the ceiling costs its score and
+  // distribution, not the page: the controls, the share link and the newest
+  // responses still render, and the score says it is not shown.
+  const scoresCeiling = 'truncated' in scoresResult && scoresResult.truncated;
+  const responsesError = responsesResult.error ?? (scoresCeiling ? null : scoresResult.error);
+  if (scoresCeiling) console.warn('[admin-marketing-survey-detail] the score read reached its ceiling; the score is not shown');
   if (responsesError) {
     console.error('[admin-marketing-survey-detail] response read failed', responsesError);
     return <SurveyDetailReadError />;
@@ -69,6 +79,10 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
 
   return (
     <div className="space-y-5">
+      <PartialReadBanner
+        title={t('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
+        failures={scoresCeiling ? [summary.headline, t('adminMarketingSurveys.scoreDistribution')] : []}
+      />
       <Link href="/admin/marketing/surveys" className="inline-flex items-center gap-1 text-sm text-muted hover:text-fg">
         <ArrowLeft className="h-4 w-4" /> {t('adminMarketingSurveys.allSurveys')}
       </Link>
@@ -98,9 +112,9 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-1">
           <p className="text-xs font-medium text-muted">{summary.headline}</p>
-          <p className="mt-1 text-4xl font-bold leading-none">{summary.total > 0 ? summary.value : '—'}</p>
-          <p className="mt-2 text-xs text-muted">{summary.total} response{summary.total === 1 ? '' : 's'}{summary.detail && summary.total > 0 ? ` · ${summary.detail}` : ''}</p>
-          {nps && nps.total > 0 && (
+          <p className="mt-1 text-4xl font-bold leading-none">{scoresCeiling ? t('strategyMetrics.unavailable') : summary.total > 0 ? summary.value : '—'}</p>
+          {!scoresCeiling && <p className="mt-2 text-xs text-muted">{summary.total} response{summary.total === 1 ? '' : 's'}{summary.detail && summary.total > 0 ? ` · ${summary.detail}` : ''}</p>}
+          {!scoresCeiling && nps && nps.total > 0 && (
             <div className="mt-3 space-y-1 text-xs">
               <div className="flex items-center justify-between"><span className="text-success">{t('adminMarketingSurveys.promoters')}</span><span>{nps.promoters} ({nps.promoterPct}%)</span></div>
               <div className="flex items-center justify-between"><span className="text-muted">{t('adminMarketingSurveys.passives')}</span><span>{nps.passives} ({nps.passivePct}%)</span></div>
@@ -111,6 +125,7 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
 
         <Card className="lg:col-span-2">
           <p className="mb-2 text-xs font-medium text-muted">{t('adminMarketingSurveys.scoreDistribution')}</p>
+          {scoresCeiling ? <p className="text-sm text-muted">{t('strategyMetrics.unavailable')}</p> : (
           <div className="flex items-end gap-1.5" style={{ height: 140 }}>
             {dist.map((d) => (
               <div key={d.value} className="flex flex-1 flex-col items-center justify-end gap-1">
@@ -123,6 +138,7 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
               </div>
             ))}
           </div>
+          )}
         </Card>
       </div>
 

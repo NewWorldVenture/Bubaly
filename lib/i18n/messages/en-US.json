@@ -847,6 +847,7 @@
   "adminBilling.started": "Started",
   "adminBilling.status": "Status",
   "adminBilling.subscriptions": "Subscriptions",
+  "adminCeiling.figuresNotShown": "Not shown, because each of these would add up more than {n} rows and a total of only some of them would be wrong:",
   "adminContent.added": "Added",
   "adminContent.addedThisWeek": "Added this week",
   "adminContent.categories": "Categories",

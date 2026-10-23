@@ -854,6 +854,7 @@
   "adminBilling.started": "Gestartet",
   "adminBilling.status": "Status",
   "adminBilling.subscriptions": "Abonnements",
+  "adminCeiling.figuresNotShown": "Nicht angezeigt, weil jeder dieser Werte mehr als {n} Zeilen zusammenrechnen würde und eine Summe aus nur einem Teil davon falsch wäre:",
   "adminContent.added": "Hinzugefügt",
   "adminContent.addedThisWeek": "Diese Woche hinzugefügt",
   "adminContent.categories": "Kategorien",

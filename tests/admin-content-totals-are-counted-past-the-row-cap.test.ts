@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SOURCE_MESSAGES } from '@/lib/i18n/messages';
 import { translate } from '@/lib/i18n/translate';
-import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
-import { renderServerPage, statCardValue } from './helpers/render-server-page';
+import { createInMemorySupabase, withFaults, type InMemorySupabase } from './helpers/in-memory-supabase';
+import { renderServerPage, statCardValue, textOf } from './helpers/render-server-page';
 
 // /admin/content read `documents.select('*')` with no bound and computed the
 // storage total, the Total items tile, the category list with its per-category
@@ -96,5 +96,76 @@ describe('/admin/content counts and sums every document, not the newest thousand
     seedPlatform();
     const html = await render();
     expect(html).toContain(`Uploader ${DOCS - 1}`);
+  });
+});
+
+// Reaching the storage read's ceiling used to return the read-error state,
+// and the document list, its filters and its row actions went with it (review
+// R4-CEILING-LOCKS-WORK-PAGES). It costs the figures that read sums now.
+describe('/admin/content past the storage ceiling', () => {
+  const CEILING = 25_000;
+  const UNAVAILABLE = SOURCE_MESSAGES['strategyMetrics.unavailable'];
+  const title = () => translate(SOURCE_MESSAGES, 'adminCeiling.figuresNotShown', { n: CEILING.toLocaleString() });
+  const banner = (html: string) => {
+    const at = html.indexOf('<div role="status"');
+    return at < 0 ? null : html.slice(at, html.indexOf('</ul></div>', at));
+  };
+
+  function seedPastTheCeiling() {
+    seedPlatform();
+    db.seed('documents', Array.from({ length: CEILING - DOCS + 1 }, (_, i) => ({
+      id: `doc-z-${pad(i)}`, family_id: 'fam-000000', title: `Archive ${i}`, category: 'archive', storage_path: `fam/z${i}.pdf`,
+      mime_type: 'application/pdf', size_bytes: 1_000, created_by: null, created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z',
+    })));
+  }
+
+  it('Storage used and Categories say they are not shown; the counts and the list remain', async () => {
+    seedPastTheCeiling();
+    const html = await render();
+    expect(html).not.toContain(SOURCE_MESSAGES['content.couldNotLoadContentFrom']);
+    expect(statCardValue(html, SOURCE_MESSAGES['adminContent.storageUsed'])).toBe(UNAVAILABLE);
+    expect(statCardValue(html, SOURCE_MESSAGES['adminContent.categories'])).toBe(UNAVAILABLE);
+    const shown = banner(html);
+    expect(shown).not.toBeNull();
+    expect(textOf(shown ?? '')).toContain(title());
+    expect([...(shown ?? '').matchAll(/<li>([^<]*)<\/li>/g)].map((m) => m[1])).toEqual([
+      SOURCE_MESSAGES['adminContent.storageUsed'], SOURCE_MESSAGES['adminContent.categories'], SOURCE_MESSAGES['adminContent.storageByCategory'],
+    ]);
+    // The exact counts and the newest documents are still the platform's.
+    expect(statCardValue(html, SOURCE_MESSAGES['adminContent.totalItems'])).toBe((CEILING + 1).toLocaleString());
+    expect(statCardValue(html, SOURCE_MESSAGES['adminContent.addedThisWeek'])).toBe('200');
+    expect(html).toContain(`Doc ${DOCS - 1}`);
+  });
+
+  it('the Categories tab says the breakdown is not shown instead of "no documents"', async () => {
+    seedPastTheCeiling();
+    const html = await render('categories');
+    expect(html).not.toContain(SOURCE_MESSAGES['content.couldNotLoadContentFrom']);
+    expect(html).toContain(`<p class="text-sm text-muted">${UNAVAILABLE}</p>`);
+    expect(html).not.toContain(SOURCE_MESSAGES['adminContent.noDocumentsUploadedYet']);
+    expect(html).not.toMatch(/files · /);
+  });
+
+  it('the category filter still offers categories, and keeps the one chosen', async () => {
+    seedPastTheCeiling();
+    const html = await render();
+    // The listed (newest) documents are all filed under 'school'.
+    expect(html).toContain('<option value="school">school</option>');
+    const { default: AdminContentPage } = await import('@/app/(app)/admin/content/page');
+    const filtered = await renderServerPage(await AdminContentPage({ searchParams: Promise.resolve({ category: 'archive' }) }));
+    expect(filtered).not.toContain(SOURCE_MESSAGES['content.couldNotLoadContentFrom']);
+    expect(filtered).toContain('<option value="archive" selected="">archive</option>');
+    expect(filtered).toContain(`<span class="font-medium">Archive ${CEILING - DOCS}</span>`);
+  });
+
+  it('a storage read that FAILS is still the read-error state', async () => {
+    seedPlatform();
+    h.db = withFaults(db, (_table, calls) => (calls.some((c) => c.method === 'select' && c.args[0] === 'id, category, size_bytes') ? { message: 'documents unavailable' } : null));
+    expect(await render()).toContain(SOURCE_MESSAGES['content.couldNotLoadContentFrom']);
+  });
+
+  it('the control: under the ceiling no banner is shown', async () => {
+    seedPlatform();
+    expect(banner(await render())).toBeNull();
   });
 });
