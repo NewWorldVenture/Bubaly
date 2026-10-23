@@ -64,6 +64,9 @@ export async function setLifeEventStatusAction(planId: string, status: 'active' 
   const t = await getTranslations();
   if (!planId) return { ok: false, error: t('lifeEventActions.invalidPlan') };
   const ctx = await requireUserContext();
+  // Completing, archiving or reopening a plan is planning, which a guest does
+  // not do, as a launch refuses one above (household-roles N4-R1-SIBLING).
+  if (ctx.active.role === 'guest') return { ok: false, error: t('householdRoles.guestViewsOnly') };
   const supabase = await createServer();
   // "Completed" and "archived" both remove the plan from the active list, so a
   // no-op leaves it sitting there after the family said they were done with it.

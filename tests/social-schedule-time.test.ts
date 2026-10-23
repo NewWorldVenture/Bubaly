@@ -63,4 +63,8 @@ describe('explicit social schedule time', () => {
   it('names the plan as the reason a post that came due without Social was held', () => {
     expect(scheduleStatusKey({ schedule_phase: 'failed', schedule_error: 'socialSchedule.notInPlan' })).toBe('socialSchedule.notInPlan');
   });
+  // N2-R2-CLOSED, round 3: and one that came due while the account was closed.
+  it('names the closed account as the reason a post that came due then was held', () => {
+    expect(scheduleStatusKey({ schedule_phase: 'failed', schedule_error: 'socialSchedule.cameDueWhileClosed' })).toBe('socialSchedule.cameDueWhileClosed');
+  });
 });

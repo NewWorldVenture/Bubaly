@@ -81,10 +81,11 @@ async function GatedShell({
       // unpaid (every family since 0164 that dropped its plan) or whose account
       // is closed had nothing left that could disconnect X, and Bubaly kept its
       // tokens (household-roles N2-R1). Whoever may disconnect is shown those
-      // accounts inside the gate, each with its Disconnect, and nothing else of
-      // Social; everyone else sees the gate as before.
+      // accounts inside the gate, each with its Disconnect, behind their App Lock
+      // (underTheAppLock), and nothing else of Social; everyone else sees the
+      // gate as before.
       const left = await accountsBehindTheGate(ent.familyId);
-      const disconnect = left ? <AccountsLeftConnected {...left} /> : null;
+      const disconnect = left ? await underTheAppLock(supabase, user.id, <AccountsLeftConnected {...left} />) : null;
       if (ent.closed) {
         // The gate replaces every route below, switcher included, so a member of
         // two households is handed their open ones here, and a non-parent is not
@@ -163,6 +164,38 @@ async function accountsBehindTheGate(familyId: string | null): Promise<LeftConne
     console.error('[app-layout] social accounts behind the gate could not be read', { familyId, error });
     return null;
   }
+}
+
+/**
+ * The accounts card inside the paywall or the closed-account gate, behind the
+ * member's App Lock. It is the one piece of household data either gate shows
+ * (each account's name, status and last error), and its Disconnect deletes the
+ * family's X tokens, so it waits for the PIN the rest of the app waits for
+ * (household-roles N2-R1-APPLOCK). Only the card does: the gate around it is
+ * drawn as before. It is the read GatedShell makes below, and it fails the same
+ * way, closed: when the preference cannot be read the card is left out.
+ */
+async function underTheAppLock(
+  supabase: Awaited<ReturnType<typeof createServer>>,
+  userId: string,
+  card: React.ReactNode,
+): Promise<React.ReactNode> {
+  const { data: prefs, error } = await supabase
+    .from('user_preferences')
+    .select('notification_prefs')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) {
+    console.error('[app-layout] app-lock preference read failed; leaving the connected accounts out of the gate', {
+      userId, error: error.message,
+    });
+    return null;
+  }
+  const raw = (prefs?.notification_prefs as Record<string, unknown> | null)?.appLock;
+  const appLock = isAppLockConfig(raw) ? raw : null;
+  return appLock?.enabled
+    ? <AppLockGate enabled salt={appLock.salt} hash={appLock.hash} userId={userId}>{card}</AppLockGate>
+    : card;
 }
 
 /**

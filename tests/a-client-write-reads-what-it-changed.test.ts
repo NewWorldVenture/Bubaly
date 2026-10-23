@@ -79,7 +79,9 @@ const FIXED = [
   'components/modules/celebrations-module.tsx',
   'components/modules/concierge-module.tsx',
   'components/modules/insurance-module.tsx',
-  'components/modules/life-events-module.tsx',
+  // The checklist tick left the browser for a server action (household-roles
+  // N4-R1-SIBLING): the confirmed write, and its read, are held where it now lives.
+  'app/(app)/dashboard/life-events/actions.ts',
   'components/modules/screen-time-module.tsx',
   'components/modules/security-module.tsx',
   'components/modules/tax-vault-module.tsx',

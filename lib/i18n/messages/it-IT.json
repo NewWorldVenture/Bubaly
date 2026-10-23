@@ -13769,6 +13769,7 @@
   "socialSchedule.accessUnavailable": "Impossibile verificare le impostazioni o i permessi. Aggiorna la pagina e riprova.",
   "socialSchedule.approvalRequired": "La pubblicazione è sospesa perché è necessaria un’approvazione verificata.",
   "socialSchedule.awaitingConfirmation": "La pubblicazione non può essere confermata. Controlla il post prima di inviarlo di nuovo.",
+  "socialSchedule.cameDueWhileClosed": "Questo post non è stato pubblicato: l’ora prevista è arrivata mentre l’account della tua famiglia era chiuso. Controllalo prima di pubblicarlo ora.",
   "socialSchedule.changed": "Questo post o i suoi account sono cambiati dopo la programmazione. Controllalo prima di pubblicarlo.",
   "socialSchedule.clockChange": "Questo orario viene saltato o si ripete al cambio dell’ora. Scegli un altro orario.",
   "socialSchedule.instant": "Orario di pubblicazione in UTC: {instant}",

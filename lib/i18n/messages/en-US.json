@@ -13965,6 +13965,7 @@
   "socialSchedule.accessUnavailable": "Could not verify social settings or access. Refresh and try again.",
   "socialSchedule.approvalRequired": "Publishing is on hold because verified approval is required.",
   "socialSchedule.awaitingConfirmation": "Publishing confirmation is unavailable. Review the post before sending it again.",
+  "socialSchedule.cameDueWhileClosed": "This post was not published: it came due while your family's account was closed. Review it before publishing it now.",
   "socialSchedule.changed": "This post or its accounts changed after scheduling. Review it before publishing.",
   "socialSchedule.clockChange": "This time is skipped or occurs twice when the clock changes. Choose another time.",
   "socialSchedule.instant": "Publishing time in UTC: {instant}",

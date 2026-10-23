@@ -13769,6 +13769,7 @@
   "socialSchedule.accessUnavailable": "Impossible de vérifier les paramètres ou les droits d’accès. Actualisez la page et réessayez.",
   "socialSchedule.approvalRequired": "La publication est en attente, car une approbation vérifiée est nécessaire.",
   "socialSchedule.awaitingConfirmation": "La publication ne peut pas être confirmée. Consultez-la avant de l’envoyer à nouveau.",
+  "socialSchedule.cameDueWhileClosed": "Cette publication n’a pas été publiée : l’heure prévue est arrivée alors que le compte de votre famille était fermé. Vérifiez-la avant de la publier maintenant.",
   "socialSchedule.changed": "Cette publication ou ses comptes ont changé depuis la programmation. Vérifiez-la avant de la publier.",
   "socialSchedule.clockChange": "Cette heure est supprimée ou se produit deux fois lors du changement d’heure. Choisissez une autre heure.",
   "socialSchedule.instant": "Heure de publication en UTC : {instant}",

@@ -22,9 +22,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
-import { createClient } from '@/lib/supabase/client';
 import { forgetFactAction, saveFactAction, setFactPinnedAction } from '@/app/(app)/dashboard/knowledge/actions';
-import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -36,6 +34,7 @@ import { LIFE_EVENT_TEMPLATES } from '@/lib/life-events/templates';
 import { launchDateFor, type LifeEventSuggestion } from '@/lib/life-events/detect';
 import { factsVisibleTo } from '@/lib/memory/facts';
 import { launchLifeEventAction, setLifeEventStatusAction } from '@/app/(app)/dashboard/life-event-actions';
+import { setLifeEventItemDoneAction } from '@/app/(app)/dashboard/life-events/actions';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock } from '@/components/i18n/use-format';
@@ -119,8 +118,11 @@ export function LifeEventsModule({
   }, [items]);
   const activePlans = (plans ?? []).filter((p) => p.status !== 'archived');
   // A guest views the household and does not plan in it: launchLifeEventAction
-  // refuses one, so Start is not offered (household-roles N4-R1).
-  const canStart = role !== 'guest';
+  // refuses one, so Start is not offered (household-roles N4-R1); nor, since
+  // the plan status, the checklist tick and the facts' actions refuse one too,
+  // Complete, Archive, Reopen, a tick, or adding, pinning, editing or removing
+  // a fact (N4-R1-SIBLING). The guest still reads every one of them.
+  const canPlan = role !== 'guest';
 
   async function launch(eventDate: string | null) {
     if (!startTemplate) return;
@@ -150,10 +152,10 @@ export function LifeEventsModule({
   }
 
   async function toggleItem(it: Item) {
-    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
-    const { data: updated, error } = await createClient().from('life_event_plan_items').update({ is_done: !it.is_done }).eq('id', it.id).select('id');
-    if (error) toastError(describeDbError(error));
-    else if (wroteNoRows(updated)) toastError(tr('errors.thatChangeWasNotSaved'));
+    // A server action, so the guest refusal is the server's (household-roles
+    // N4-R1-SIBLING); it confirms the row it changed (Audit C1-S9-86).
+    const res = await setLifeEventItemDoneAction(it.id, !it.is_done);
+    if (!res.ok) toastError(res.error ?? tr('errors.thatChangeWasNotSaved'));
   }
   async function setPlanStatus(planId: string, status: 'active' | 'completed' | 'archived') {
     const res = await setLifeEventStatusAction(planId, status);
@@ -183,7 +185,7 @@ export function LifeEventsModule({
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-sm font-semibold"><BookHeart className="h-4 w-4 text-brand-text" /> {tr('lifeEvents.whatBubalyHasLearned')}</h2>
-          <Button size="sm" variant="secondary" onClick={() => setFactModal({ open: true, editing: null })}><Plus className="h-4 w-4" /> Add</Button>
+          {canPlan && <Button size="sm" variant="secondary" onClick={() => setFactModal({ open: true, editing: null })}><Plus className="h-4 w-4" /> Add</Button>}
         </div>
         {learned.length === 0 ? (
           <EmptyState icon={Sparkles} title={tr('lifeEvents.bubalyIsStillGettingToKnow')} description={tr('lifeEventsModule.preferencesRoutinesAndTraditionsYou')} />
@@ -197,11 +199,11 @@ export function LifeEventsModule({
                     <p className="mt-0.5 text-sm text-muted">{f.value}</p>
                     {f.notes && <p className="mt-1 text-xs text-muted">{f.notes}</p>}
                   </div>
-                  <div className="flex shrink-0 items-center gap-0.5 opacity-100 sm:opacity-0 transition sm:group-hover:opacity-100 coarse:opacity-100 focus-within:opacity-100">
+                  {canPlan && <div className="flex shrink-0 items-center gap-0.5 opacity-100 sm:opacity-0 transition sm:group-hover:opacity-100 coarse:opacity-100 focus-within:opacity-100">
                     <button onClick={() => togglePin(f)} aria-label={f.is_pinned ? tr('dialogTitle.unpin') : tr('dialogTitle.pin')} className="rounded-lg p-1.5 text-muted hover:text-brand-text">{f.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}</button>
                     <button onClick={() => setFactModal({ open: true, editing: f })} aria-label={tr('lifeEvents.edit')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
                     <button onClick={() => removeFact(f)} aria-label={tr('lifeEvents.remove')} className="rounded-lg p-1.5 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
-                  </div>
+                  </div>}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-1">
                   <span className="inline-block rounded-full border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted">{f.category}</span>
@@ -250,7 +252,7 @@ export function LifeEventsModule({
                       <span className="text-sm font-semibold">{template?.title ?? s.title}</span>
                     </div>
                     <p className="text-xs text-muted">{tr(s.reasonKey, s.reasonParams)}</p>
-                    {canStart && <Button
+                    {canPlan && <Button
                       size="sm"
                       variant="secondary"
                       className="self-start"
@@ -270,7 +272,7 @@ export function LifeEventsModule({
       )}
 
       {/* ── Life-event playbooks ────────────────────────────────────────────── */}
-      {canStart && <section className="space-y-3">
+      {canPlan && <section className="space-y-3">
         <h2 className="text-sm font-semibold">{tr('lifeEvents.startALifeEventPlaybook')}</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {LIFE_EVENT_TEMPLATES.map((t) => {
@@ -311,12 +313,12 @@ export function LifeEventsModule({
                         <p className="text-xs text-muted">{p.event_date ? `Target ${fmtFullDate(p.event_date)}` : 'No date set'} · {done}/{pItems.length} done</p>
                       </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-1 text-xs">
+                    {canPlan && <div className="flex shrink-0 items-center gap-1 text-xs">
                       {p.status !== 'completed'
                         ? <button onClick={() => setPlanStatus(p.id, 'completed')} className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-muted hover:text-emerald-400"><CheckCircle2 className="h-3.5 w-3.5" /> {tr('lifeEvents.complete')}</button>
                         : <button onClick={() => setPlanStatus(p.id, 'active')} className="rounded-lg border border-border px-2 py-1 text-muted hover:text-fg">{tr('lifeEvents.reopen')}</button>}
                       <button onClick={() => setPlanStatus(p.id, 'archived')} aria-label={tr('lifeEvents.archive')} className="rounded-lg border border-border p-1.5 text-muted hover:text-fg"><Archive className="h-3.5 w-3.5" /></button>
-                    </div>
+                    </div>}
                   </div>
                   <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted/10">
                     <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${pct}%` }} />
@@ -324,16 +326,22 @@ export function LifeEventsModule({
                   <ul className="mt-3 space-y-1.5">
                     {pItems.map((it) => {
                       const ItIcon = ITEM_ICON[it.category] ?? ListChecks;
+                      const step = (
+                        <>
+                          <span className={cn('grid h-5 w-5 shrink-0 place-items-center rounded-md border', it.is_done ? 'border-brand bg-brand text-white' : 'border-border text-transparent')}>
+                            <Check className="h-3.5 w-3.5" />
+                          </span>
+                          <ItIcon className={cn('h-3.5 w-3.5 shrink-0', it.is_done ? 'text-muted' : 'text-brand-text')} />
+                          <span className={cn('min-w-0 flex-1 truncate', it.is_done && 'text-muted line-through')}>{it.title}</span>
+                          {it.due_on && <span className="shrink-0 text-[11px] text-muted">{fmtDate(it.due_on)}</span>}
+                        </>
+                      );
+                      // A guest reads the checklist; only a planner ticks it.
                       return (
                         <li key={it.id}>
-                          <button onClick={() => toggleItem(it)} className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm transition hover:bg-muted/5">
-                            <span className={cn('grid h-5 w-5 shrink-0 place-items-center rounded-md border', it.is_done ? 'border-brand bg-brand text-white' : 'border-border text-transparent')}>
-                              <Check className="h-3.5 w-3.5" />
-                            </span>
-                            <ItIcon className={cn('h-3.5 w-3.5 shrink-0', it.is_done ? 'text-muted' : 'text-brand-text')} />
-                            <span className={cn('min-w-0 flex-1 truncate', it.is_done && 'text-muted line-through')}>{it.title}</span>
-                            {it.due_on && <span className="shrink-0 text-[11px] text-muted">{fmtDate(it.due_on)}</span>}
-                          </button>
+                          {canPlan
+                            ? <button onClick={() => toggleItem(it)} className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm transition hover:bg-muted/5">{step}</button>
+                            : <div className="flex w-full items-center gap-2.5 px-2 py-1.5 text-sm">{step}</div>}
                         </li>
                       );
                     })}

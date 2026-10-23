@@ -65,6 +65,10 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
   // recall, search, the AI context, insights — applies it. This page showed
   // and offered to copy "Wi-Fi password" to anyone who opened it.
   const readable = useMemo(() => factsVisibleTo(role, facts), [role, facts]);
+  // A guest reads the family's memory and does not write to it: the fact
+  // actions refuse one (household-roles N4-R1-SIBLING), so Add, Pin, Edit and
+  // Remove are not offered. Copy stays.
+  const canWrite = role !== 'guest';
   const visible = useMemo(
     () => filterFacts(readable, { member: memberFilter, category: catFilter, q }),
     [readable, memberFilter, catFilter, q],
@@ -137,7 +141,7 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
                 <Database className="h-4 w-4" /> {t('knowledgeBase.seedTestData')}
               </Link>
             )}
-            <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('knowledgeBase.addAFact')}</Button>
+            {canWrite && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('knowledgeBase.addAFact')}</Button>}
           </div>
         }
       />
@@ -166,7 +170,7 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
       {visible.length === 0 ? (
         <EmptyState icon={Brain} title={t('knowledgeBase.nothingSavedYet')}
           description={t('knowledgeBaseModule.captureTheFactsYouAlways')}
-          action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('knowledgeBase.addAFact')}</Button>} />
+          action={canWrite ? <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('knowledgeBase.addAFact')}</Button> : undefined} />
       ) : (
         <div className="space-y-6">
           {grouped.map(([cat, items]) => (
@@ -189,11 +193,13 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
                       <button onClick={() => copyValue(f)} aria-label={t('knowledgeBase.copyValue')} title={t('knowledgeBase.copy')} className="rounded p-1.5 text-muted hover:bg-elevated hover:text-fg">
                         {copiedId === f.id ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Copy className="h-3.5 w-3.5" />}
                       </button>
-                      <button onClick={() => togglePin(f)} aria-label={f.is_pinned ? t('dialogTitle.unpin') : t('dialogTitle.pin')} title={f.is_pinned ? t('dialogTitle.unpin') : t('dialogTitle.pin')} className="rounded p-1.5 text-muted hover:bg-elevated hover:text-brand-text">
-                        {f.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
-                      </button>
-                      <button onClick={() => openEdit(f)} aria-label={t('knowledgeBase.edit')} className="rounded p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-                      <button onClick={() => remove(f)} aria-label={t('knowledgeBase.remove')} className="rounded p-1.5 text-muted hover:bg-elevated hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                      {canWrite && <>
+                        <button onClick={() => togglePin(f)} aria-label={f.is_pinned ? t('dialogTitle.unpin') : t('dialogTitle.pin')} title={f.is_pinned ? t('dialogTitle.unpin') : t('dialogTitle.pin')} className="rounded p-1.5 text-muted hover:bg-elevated hover:text-brand-text">
+                          {f.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+                        </button>
+                        <button onClick={() => openEdit(f)} aria-label={t('knowledgeBase.edit')} className="rounded p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => remove(f)} aria-label={t('knowledgeBase.remove')} className="rounded p-1.5 text-muted hover:bg-elevated hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                      </>}
                     </div>
                   </li>
                 ))}

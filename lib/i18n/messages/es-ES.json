@@ -13769,6 +13769,7 @@
   "socialSchedule.accessUnavailable": "No se han podido verificar los ajustes o el acceso. Actualiza la página e inténtalo de nuevo.",
   "socialSchedule.approvalRequired": "La publicación está en espera porque requiere una aprobación verificada.",
   "socialSchedule.awaitingConfirmation": "No se puede confirmar la publicación. Revísala antes de volver a enviarla.",
+  "socialSchedule.cameDueWhileClosed": "Esta publicación no se publicó: llegó la hora mientras la cuenta de tu familia estaba cerrada. Revísala antes de publicarla ahora.",
   "socialSchedule.changed": "La publicación o sus cuentas han cambiado desde que se programó. Revísala antes de publicarla.",
   "socialSchedule.clockChange": "Esta hora se omite o se repite con el cambio de hora. Elige otra hora.",
   "socialSchedule.instant": "Hora de publicación en UTC: {instant}",

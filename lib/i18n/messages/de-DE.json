@@ -13767,6 +13767,7 @@
   "socialSchedule.accessUnavailable": "Die Einstellungen oder Zugriffsrechte konnten nicht geprüft werden. Aktualisieren Sie die Seite und versuchen Sie es erneut.",
   "socialSchedule.approvalRequired": "Die Veröffentlichung ist angehalten, da eine bestätigte Freigabe erforderlich ist.",
   "socialSchedule.awaitingConfirmation": "Die Veröffentlichung konnte nicht bestätigt werden. Prüfen Sie den Beitrag, bevor Sie ihn erneut senden.",
+  "socialSchedule.cameDueWhileClosed": "Dieser Beitrag wurde nicht veröffentlicht: Er war fällig, während das Konto Ihrer Familie geschlossen war. Prüfen Sie ihn, bevor Sie ihn jetzt veröffentlichen.",
   "socialSchedule.changed": "Dieser Beitrag oder seine Konten wurden nach der Planung geändert. Prüfen Sie ihn vor der Veröffentlichung.",
   "socialSchedule.clockChange": "Diese Uhrzeit wird bei der Zeitumstellung übersprungen oder tritt zweimal auf. Wählen Sie eine andere Uhrzeit.",
   "socialSchedule.instant": "Veröffentlichungszeit in UTC: {instant}",

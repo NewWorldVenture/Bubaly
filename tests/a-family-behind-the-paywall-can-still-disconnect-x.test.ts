@@ -23,9 +23,10 @@
 // clear behind the button.
 import { cloneElement, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
-import { allByName, byName, click, has, nodes, render } from './helpers/module-harness';
+import { createInMemorySupabase, withFaults, type InMemorySupabase } from './helpers/in-memory-supabase';
+import { allByName, byName, click, has, nodes, render, settle } from './helpers/module-harness';
 import { resetHookSlots } from './helpers/hook-slots';
+import { buildAppLockConfig, unlockKey } from '@/lib/security/app-lock';
 
 const h = await vi.hoisted(async () => (await import('./helpers/module-state')).createModuleState());
 const server = vi.hoisted(() => ({
@@ -73,7 +74,8 @@ vi.mock('@/lib/server/family-time-zone', () => ({ activeFamilyTimeZone: async ()
 vi.mock('@/components/i18n/scoped-locale-provider', () => ({ ScopedLocaleProvider: ({ children }: { children: ReactNode }) => children }));
 vi.mock('@/components/ui/confirm', () => ({ ConfirmProvider: ({ children }: { children: ReactNode }) => children }));
 vi.mock('@/components/auth/session-keeper', () => ({ SessionKeeper: () => null }));
-vi.mock('@/components/app/app-lock-gate', () => ({ AppLockGate: ({ children }: { children: ReactNode }) => children }));
+// AppLockGate is the REAL lock screen: the card inside the gate waits for the
+// PIN (N2-R1-APPLOCK, below).
 
 const { default: AppGroupLayout } = await import('@/app/(app)/layout');
 
@@ -119,6 +121,28 @@ function withConnectedX(db: InMemorySupabase): InMemorySupabase {
   }]);
   return db;
 }
+/** This tab's sessionStorage, where the lock screen records an unlock. */
+const session = new Map<string, string>();
+const PIN = '4821';
+/** The parent set an App Lock PIN (Settings, Security), kept in notification_prefs.appLock. */
+async function withAppLock(db: InMemorySupabase, enabled = true): Promise<InMemorySupabase> {
+  db.seed('user_preferences', [{ user_id: USERS.parent, notification_prefs: { appLock: { ...(await buildAppLockConfig(PIN)), enabled } } }]);
+  return db;
+}
+const LOCK_SCREEN = 'Enter your PIN';
+/** Type the PIN on the real lock screen's keypad and wait for it to be checked. */
+async function enterPin(element: ReactElement, pin: string): Promise<ReactNode> {
+  let tree = render(h.hooks, element);
+  for (const digit of pin) {
+    await click(byName(tree, digit, 'button'));
+    tree = render(h.hooks, element);
+  }
+  for (let tick = 0; tick < 50 && has(tree, LOCK_SCREEN); tick++) {
+    await settle();
+    tree = render(h.hooks, element);
+  }
+  return tree;
+}
 const token = (db: InMemorySupabase) => db.table('social_account_tokens').find((row) => row.id === X_ACCOUNT)!;
 const account = (db: InMemorySupabase) => db.table('social_accounts').find((row) => row.id === X_ACCOUNT)!;
 
@@ -138,9 +162,10 @@ async function resolveServer(node: ReactNode): Promise<ReactNode> {
 
 /** The (app) layout over every route, as the signed-in member sees it. */
 async function screen() {
-  const tree = render(h.hooks, (await resolveServer(await AppGroupLayout({ children: THE_APP }))) as ReactElement);
+  const element = (await resolveServer(await AppGroupLayout({ children: THE_APP }))) as ReactElement;
+  const tree = render(h.hooks, element);
   const gates = nodes(tree).filter((node) => node.props.role === 'dialog');
-  return { tree, gated: gates.length > 0, showsApp: has(tree, THE_APP) };
+  return { tree, element, gated: gates.length > 0, showsApp: has(tree, THE_APP) };
 }
 
 beforeEach(() => {
@@ -150,6 +175,8 @@ beforeEach(() => {
   h.toasts = { success: [], error: [] };
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.stubGlobal('window', { confirm: () => true, location: { assign() {}, reload() {}, pathname: '/home', search: '' }, addEventListener() {}, removeEventListener() {} });
+  session.clear();
+  vi.stubGlobal('sessionStorage', { getItem: (key: string) => session.get(key) ?? null, setItem: (key: string, value: string) => { session.set(key, value); } });
 });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
@@ -236,5 +263,78 @@ describe('a closed family with X still connected', () => {
     expect(gated).toBe(true);
     expect(has(tree, 'Your account is closed')).toBe(true);
     expect(has(tree, LEFT_CONNECTED)).toBe(false);
+  });
+});
+
+// household-roles N2-R1-APPLOCK, round 3. The card is drawn inside either gate,
+// and either gate returned before the user_preferences read that decides App
+// Lock, so a parent who set a PIN had the accounts' names, statuses and last
+// errors, and a working Disconnect that deletes the family's X tokens, shown to
+// anyone holding the signed-in device. The card now waits behind the PIN like
+// the rest of the app; the gate around it is drawn as before.
+describe('a parent who set an App Lock PIN, behind the gate, with X still connected', () => {
+  it('meets the paywall with the lock over the accounts: no account and no Disconnect until the PIN is entered', async () => {
+    const db = await withAppLock(withConnectedX(household('parent')));
+    const { tree, element } = await screen();
+    expect(has(tree, 'Your free trial has ended'), 'the paywall is drawn as before').toBe(true);
+    expect(has(tree, LOCK_SCREEN)).toBe(true);
+    expect(has(tree, 'Rivera fair on X')).toBe(false);
+    expect(has(tree, LEFT_CONNECTED)).toBe(false);
+    expect(allByName(tree, 'Disconnect', 'button')).toHaveLength(0);
+
+    const unlocked = await enterPin(element, PIN);
+    expect(session.get(unlockKey(USERS.parent))).toBe('1');
+    expect(has(unlocked, LOCK_SCREEN)).toBe(false);
+    expect(has(unlocked, 'Your free trial has ended')).toBe(true);
+    expect(has(unlocked, 'Rivera fair on X')).toBe(true);
+    await click(byName(unlocked, 'Disconnect', 'button'));
+    expect(token(db)).toMatchObject({ access_token_enc: null, refresh_token_enc: null });
+  });
+
+  it('meets the closed-account gate the same way', async () => {
+    const db = await withAppLock(withConnectedX(household('parent', { closed_at: '2026-10-01T09:00:00.000Z' })));
+    const { tree } = await screen();
+    expect(has(tree, 'Your account is closed')).toBe(true);
+    expect(has(tree, LOCK_SCREEN)).toBe(true);
+    expect(has(tree, 'Rivera fair on X')).toBe(false);
+    expect(allByName(tree, 'Disconnect', 'button')).toHaveLength(0);
+    expect(token(db).access_token_enc).toBe('sealed-access-token');
+  });
+
+  it('is shown the accounts at once in a session already unlocked with the PIN', async () => {
+    await withAppLock(withConnectedX(household('parent')));
+    session.set(unlockKey(USERS.parent), '1');
+    const { tree } = await screen();
+    expect(has(tree, LOCK_SCREEN)).toBe(false);
+    expect(has(tree, 'Rivera fair on X')).toBe(true);
+    expect(allByName(tree, 'Disconnect', 'button')).toHaveLength(1);
+  });
+
+  it('when the lock setting cannot be read, is shown the gate and leaves the accounts out (closed, as the app is)', async () => {
+    const db = await withAppLock(withConnectedX(household('parent')));
+    server.db = withFaults(db, (table, calls) =>
+      table === 'user_preferences' && calls.some((call) => call.method === 'select' && call.args[0] === 'notification_prefs')
+        ? { message: 'permission denied for table user_preferences', code: '42501' } : null);
+    const { tree, gated } = await screen();
+    expect(gated).toBe(true);
+    expect(has(tree, 'Your free trial has ended')).toBe(true);
+    expect(has(tree, 'Rivera fair on X')).toBe(false);
+    expect(allByName(tree, 'Disconnect', 'button')).toHaveLength(0);
+  });
+
+  it('with App Lock switched off is shown the accounts and their Disconnect as before (control)', async () => {
+    await withAppLock(withConnectedX(household('parent')), false);
+    const { tree } = await screen();
+    expect(has(tree, LOCK_SCREEN)).toBe(false);
+    expect(has(tree, 'Rivera fair on X')).toBe(true);
+    expect(allByName(tree, 'Disconnect', 'button')).toHaveLength(1);
+  });
+
+  it('with an active plan gets the app behind its lock, as before (control)', async () => {
+    const db = await withAppLock(withConnectedX(household('parent')));
+    db.table('subscriptions')[0].status = 'active';
+    const { tree, showsApp } = await screen();
+    expect(has(tree, LOCK_SCREEN)).toBe(true);
+    expect(showsApp).toBe(false);
   });
 });

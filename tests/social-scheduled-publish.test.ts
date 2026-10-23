@@ -19,7 +19,7 @@ const state = vi.hoisted(() => ({ db: undefined as unknown as InMemorySupabase, 
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => state.db, createServiceClient: () => state.service }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => {
   if (!state.requestAuth) throw new Error('Background worker must not request cookies');
-  return { user: { id: state.userId }, active: { familyId: state.familyId,
+  return { user: { id: state.userId }, active: { familyId: state.familyId, role: 'parent',
     member: { id: state.memberId, family_id: state.familyId, user_id: state.userId } } };
 } }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
@@ -31,6 +31,7 @@ import { scheduleIdentity, SCHEDULE_TOOL } from '@/lib/social/scheduled-authorit
 import { getConnector } from '@/lib/social/connectors';
 import { encryptSecret } from '@/lib/sync/crypto';
 import { GET } from '@/app/api/cron/social-publish/route';
+import { closeAccountAction, reopenAccountAction } from '@/app/(app)/account/actions';
 
 const NOW = new Date('2026-09-12T12:00:00.000Z'), DUE = '2026-09-12T13:00:00.000Z';
 const USER = state.userId, MEMBER = state.memberId;
@@ -60,7 +61,11 @@ async function persistenceHttp(raw: RequestInfo | URL, init?: RequestInit): Prom
   if (method === 'POST') {
     if (prefer.includes('resolution=merge-duplicates')) query.upsert(body, { onConflict: url.searchParams.get('on_conflict') ?? 'id' });
     else query.insert(body);
-  } else if (method === 'PATCH') query.update(body);
+  } else if (method === 'PATCH') {
+    // The database stamps every update to a family (trg_set_updated_at, 0003).
+    if (table === 'families') body.updated_at = new Date().toISOString();
+    query.update(body);
+  }
   else if (method === 'DELETE') query.delete();
   query.select(url.searchParams.get('select') ?? '*', prefer.includes('count=exact') ? { count: 'exact' } : undefined);
   for (const [key, value] of url.searchParams) {
@@ -389,7 +394,8 @@ describe('scheduled X publishing through the installed SDK and private authority
     await schedule();
     lose();
     state.requestAuth = false;
-    expect(await due()).toMatchObject({ attempted: 0, published: 0 });
+    // N2-R2-CRON: a hold for the plan is the family's choice, not a fault.
+    expect(await due()).toMatchObject({ attempted: 0, published: 0, failed: 0, held: 1 });
     expect(provider).not.toHaveBeenCalled();
     expect(receipt().outputs).toMatchObject({ phase: 'failed', errorKey: 'socialSchedule.notInPlan' });
     expect(state.db.table('social_posts')[0]).toMatchObject({ status: 'scheduled', metadata: { schedule_phase: 'failed', schedule_error: 'socialSchedule.notInPlan' } });
@@ -416,6 +422,75 @@ describe('scheduled X publishing through the installed SDK and private authority
     expect(await retryPublishAction(postId)).toMatchObject({ ok: true, outcome: { status: 'published' } });
     expect(provider).toHaveBeenCalledOnce();
     expect(state.db.table('social_posts')[0].status).toBe('published');
+  });
+  // household-roles N2-R2-CRON, round 3: the hold above was counted as a
+  // drain failure, so the route answered 503 and the dispatcher marked the run
+  // failed every time a post came due after a downgrade.
+  const cron = () => GET(new NextRequest('https://app.invalid/api/cron/social-publish', { headers: { authorization: 'Bearer synthetic-cron' } }));
+  it('a post held because the family dropped to Free leaves the cron green and is reported as held', async () => {
+    await schedule();
+    state.db.table('subscriptions')[0].status = 'canceled';
+    vi.setSystemTime(new Date(DUE));
+    const response = await cron();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, attempted: 0, published: 0, failed: 0, held: 1 });
+    expect(provider).not.toHaveBeenCalled();
+    expect(receipt().outputs).toMatchObject({ phase: 'failed', errorKey: 'socialSchedule.notInPlan' });
+  });
+  it('a post held because its author lost the authority still turns the cron red (control)', async () => {
+    await schedule();
+    state.db.table('family_members')[0].is_active = false;
+    vi.setSystemTime(new Date(DUE));
+    const response = await cron();
+    expect(response.status).toBe(503);
+    const body = await response.json();
+    expect(body).toMatchObject({ ok: false, failed: 1 });
+    expect(body.held ?? 0).toBe(0);
+    expect(receipt().outputs).toMatchObject({ phase: 'failed', errorKey: 'socialSchedule.permissionDenied' });
+  });
+  // household-roles N2-R2-CLOSED, round 3: the drain reads open families only,
+  // so a closed family's posts stayed queued, and the first tick after it
+  // reopened sent every one that came due while it was closed, however late.
+  // The real close and reopen actions, then the drain: held like a downgrade.
+  /** A parent with no authenticator enrolled: closing and reopening ask for no code. */
+  function signedInAsAParent() {
+    Object.assign(state.db.auth, {
+      getSession: async () => ({ data: { session: { access_token: 'synthetic-session' } }, error: null }),
+      mfa: { getAuthenticatorAssuranceLevel: async () => ({ data: { currentLevel: 'aal1', nextLevel: 'aal1' }, error: null }) },
+    });
+  }
+  it('a family that reopens is not sent a post that came due while it was closed; whoever may publish sends it by hand', async () => {
+    const postId = await schedule();
+    signedInAsAParent();
+    expect(await closeAccountAction()).toEqual({ ok: true });
+    // No cron looks at a closed family (tests/a-closed-family-is-left-alone-by-the-crons.test.ts),
+    // so the post passes its time queued. Reopened three hours after it, with Basic still active.
+    expect(receipt().outputs).toMatchObject({ phase: 'queued' });
+    vi.setSystemTime(new Date(Date.parse(DUE) + 3 * 3_600_000));
+    state.requestAuth = true;
+    expect(await reopenAccountAction()).toEqual({ ok: true });
+    state.requestAuth = false;
+    expect(await runScheduledPublishDrain()).toMatchObject({ inspected: 1, attempted: 0, published: 0, failed: 0, held: 1 });
+    expect(provider).not.toHaveBeenCalled();
+    expect(receipt().outputs).toMatchObject({ phase: 'failed', errorKey: 'socialSchedule.cameDueWhileClosed' });
+    expect(state.db.table('social_posts')[0]).toMatchObject({ status: 'scheduled', metadata: { schedule_phase: 'failed', schedule_error: 'socialSchedule.cameDueWhileClosed' } });
+    expect(state.db.table('social_schedules')[0]).toMatchObject({ status: 'failed', metadata: { schedule_error: 'socialSchedule.cameDueWhileClosed' } });
+    expect(await runScheduledPublishDrain()).toMatchObject({ attempted: 0, published: 0 }); expect(provider).not.toHaveBeenCalled();
+    state.requestAuth = true;
+    expect(await retryPublishAction(postId)).toMatchObject({ ok: true, outcome: { status: 'published' } });
+    expect(provider).toHaveBeenCalledOnce();
+    expect(state.db.table('social_posts')[0].status).toBe('published');
+  });
+  it('a post due after the family reopened goes out at its time (control)', async () => {
+    await schedule();
+    signedInAsAParent();
+    expect(await closeAccountAction()).toEqual({ ok: true });
+    vi.setSystemTime(new Date(Date.parse(DUE) - 30 * 60_000));
+    expect(await reopenAccountAction()).toEqual({ ok: true });
+    state.requestAuth = false;
+    expect(await due()).toMatchObject({ attempted: 1, published: 1, failed: 0 });
+    expect(provider).toHaveBeenCalledOnce();
+    expect(receipt().outputs.phase).toBe('completed');
   });
   it.each([400, 500])('reports an unsuccessful provider HTTP%s attempt through the actual cron', async status => {
     await schedule(); vi.setSystemTime(new Date(DUE)); provider.mockResolvedValueOnce(Response.json({}, { status }));

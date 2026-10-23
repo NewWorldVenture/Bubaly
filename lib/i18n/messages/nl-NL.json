@@ -13767,6 +13767,7 @@
   "socialSchedule.accessUnavailable": "De instellingen of toegangsrechten konden niet worden gecontroleerd. Vernieuw de pagina en probeer het opnieuw.",
   "socialSchedule.approvalRequired": "Publicatie is gepauzeerd omdat gecontroleerde goedkeuring nodig is.",
   "socialSchedule.awaitingConfirmation": "Publicatie kan niet worden bevestigd. Controleer het bericht voordat je het opnieuw verstuurt.",
+  "socialSchedule.cameDueWhileClosed": "Dit bericht is niet gepubliceerd: het stond gepland terwijl het account van je gezin gesloten was. Controleer het voordat je het nu publiceert.",
   "socialSchedule.changed": "Dit bericht of de accounts zijn na het plannen gewijzigd. Controleer het voordat je het publiceert.",
   "socialSchedule.clockChange": "Dit tijdstip wordt bij de klokwijziging overgeslagen of komt twee keer voor. Kies een ander tijdstip.",
   "socialSchedule.instant": "Publicatietijd in UTC: {instant}",
