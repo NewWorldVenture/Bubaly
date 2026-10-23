@@ -8,6 +8,7 @@ import { runPublishNow, type PublishOutcome } from './publish';
 import { assertXCredentials } from './account-tokens';
 import { familyHasFeature, getFeatureTiersByHref } from '@/lib/server/feature-entitlement';
 import type { FeatureTier } from '@/lib/constants/feature-catalog';
+import { accountReopenedSince } from '@/lib/family/account-reopened';
 import {
   ScheduledPublishError, SCHEDULE_TOOL, scheduleFailure, scheduleIdentity, scheduleSignal,
   readSchedule, changeSchedule, checkScheduleActor, requestScheduleActor, readScheduleSnapshot,
@@ -319,14 +320,24 @@ export async function runScheduledPublishDrain(options: { now?: Date; signal?: A
         // A post that came due while its family's account was closed is held
         // the same way (household-roles N2-R2-CLOSED). The drain does not look
         // at a closed family, so on the first tick after the family reopened
-        // every such post was sent, however late. Reopening clears closed_at
-        // and so changes the family's row, which the database stamps
-        // (families.updated_at, trg_set_updated_at): a post that became
-        // sendable before that change and is still unsent came due while the
-        // drain could not see the family. A later change to the family moves
-        // the stamp later still, so none of those is missed; a post due after
-        // the reopen is sent at its time.
-        if (Date.parse(receipt.outputs.retryAt ?? receipt.inputs.scheduledFor) < familyChangedAt(row)) scheduleFailure('cameDueWhileClosed');
+        // every such post was sent, however late. A post that became sendable
+        // before the family's account was REOPENED, and is still unsent,
+        // waited through the closure; one due after the reopen is sent at its
+        // time. The reopen is the family's own audit entry
+        // (lib/family/account-reopened.ts), not families.updated_at: the
+        // database stamps that on every change to the row, so an open family
+        // that renamed itself after a post came due, before the drain reached
+        // it, had the post held (N3-R1-CLOSED-FALSE-HOLD). The stamp is still
+        // the cheap first question, since a reopen changes the row: a post due
+        // after the row last changed was not waiting through a reopen, and the
+        // trail is read only when it might have been. A trail that cannot be
+        // read sends nothing: the post stays queued for the next tick.
+        const dueAt = Date.parse(receipt.outputs.retryAt ?? receipt.inputs.scheduledFor);
+        if (dueAt < familyChangedAt(row)) {
+          const reopened = await accountReopenedSince(db, receipt.family_id, new Date(dueAt), scheduleSignal(signal));
+          if (reopened === null) scheduleFailure();
+          if (reopened) scheduleFailure('cameDueWhileClosed');
+        }
         const refreshed = await readSchedule(db, receipt.id, signal);
         if (!refreshed) continue;
         summary.attempted++;

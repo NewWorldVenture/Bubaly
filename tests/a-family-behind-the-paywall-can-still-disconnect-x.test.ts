@@ -23,7 +23,7 @@
 // clear behind the button.
 import { cloneElement, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createInMemorySupabase, withFaults, type InMemorySupabase } from './helpers/in-memory-supabase';
+import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { allByName, byName, click, has, nodes, render, settle } from './helpers/module-harness';
 import { resetHookSlots } from './helpers/hook-slots';
 import { buildAppLockConfig, unlockKey } from '@/lib/security/app-lock';
@@ -271,13 +271,23 @@ describe('a closed family with X still connected', () => {
 // Lock, so a parent who set a PIN had the accounts' names, statuses and last
 // errors, and a working Disconnect that deletes the family's X tokens, shown to
 // anyone holding the signed-in device. The card now waits behind the PIN like
-// the rest of the app; the gate around it is drawn as before.
+// the rest of the app.
+//
+// N3-R1-APPLOCK-FOCUS, round 4: round 3 drew the lock INSIDE the gate, a modal
+// dialog in a modal dialog, and the gate's focus trap won: focus began on
+// "Choose" or "Reopen my account" behind "Enter your PIN"
+// (tests/e2e/the-lock-screen-is-the-one-dialog-over-the-gate.spec.ts drives it
+// in Chromium). One dialog at a time: while locked, the lock is drawn in place
+// of the gate, and the gate, with the accounts, once the PIN is in.
+const dialogs = (tree: ReactNode) => nodes(tree).filter((node) => node.props.role === 'dialog').map((node) => node.props['aria-labelledby']);
 describe('a parent who set an App Lock PIN, behind the gate, with X still connected', () => {
-  it('meets the paywall with the lock over the accounts: no account and no Disconnect until the PIN is entered', async () => {
+  it('meets the lock in place of the paywall: no plan, no account and no Disconnect until the PIN is entered', async () => {
     const db = await withAppLock(withConnectedX(household('parent')));
     const { tree, element } = await screen();
-    expect(has(tree, 'Your free trial has ended'), 'the paywall is drawn as before').toBe(true);
+    expect(dialogs(tree), 'one dialog: the lock').toEqual(['app-lock-title']);
     expect(has(tree, LOCK_SCREEN)).toBe(true);
+    expect(has(tree, 'Your free trial has ended'), 'nothing of the paywall is behind the lock').toBe(false);
+    expect(allByName(tree, 'Choose', 'button')).toHaveLength(0);
     expect(has(tree, 'Rivera fair on X')).toBe(false);
     expect(has(tree, LEFT_CONNECTED)).toBe(false);
     expect(allByName(tree, 'Disconnect', 'button')).toHaveLength(0);
@@ -285,20 +295,31 @@ describe('a parent who set an App Lock PIN, behind the gate, with X still connec
     const unlocked = await enterPin(element, PIN);
     expect(session.get(unlockKey(USERS.parent))).toBe('1');
     expect(has(unlocked, LOCK_SCREEN)).toBe(false);
+    expect(dialogs(unlocked)).toEqual(['paywall-title']);
     expect(has(unlocked, 'Your free trial has ended')).toBe(true);
+    expect(allByName(unlocked, 'Choose', 'button')).toHaveLength(2);
     expect(has(unlocked, 'Rivera fair on X')).toBe(true);
     await click(byName(unlocked, 'Disconnect', 'button'));
     expect(token(db)).toMatchObject({ access_token_enc: null, refresh_token_enc: null });
   });
 
-  it('meets the closed-account gate the same way', async () => {
+  it('meets the lock in place of the closed-account gate the same way, and the gate with its accounts after the PIN', async () => {
     const db = await withAppLock(withConnectedX(household('parent', { closed_at: '2026-10-01T09:00:00.000Z' })));
-    const { tree } = await screen();
-    expect(has(tree, 'Your account is closed')).toBe(true);
+    const { tree, element } = await screen();
+    expect(dialogs(tree), 'one dialog: the lock').toEqual(['app-lock-title']);
     expect(has(tree, LOCK_SCREEN)).toBe(true);
+    expect(has(tree, 'Your account is closed'), 'nothing of the gate is behind the lock').toBe(false);
+    expect(allByName(tree, 'Reopen my account', 'button')).toHaveLength(0);
     expect(has(tree, 'Rivera fair on X')).toBe(false);
     expect(allByName(tree, 'Disconnect', 'button')).toHaveLength(0);
     expect(token(db).access_token_enc).toBe('sealed-access-token');
+
+    const unlocked = await enterPin(element, PIN);
+    expect(dialogs(unlocked)).toEqual(['closed-title']);
+    expect(has(unlocked, 'Your account is closed')).toBe(true);
+    expect(allByName(unlocked, 'Reopen my account', 'button')).toHaveLength(1);
+    await click(byName(unlocked, 'Disconnect', 'button'));
+    expect(token(db)).toMatchObject({ access_token_enc: null, refresh_token_enc: null });
   });
 
   it('is shown the accounts at once in a session already unlocked with the PIN', async () => {
@@ -312,13 +333,24 @@ describe('a parent who set an App Lock PIN, behind the gate, with X still connec
 
   it('when the lock setting cannot be read, is shown the gate and leaves the accounts out (closed, as the app is)', async () => {
     const db = await withAppLock(withConnectedX(household('parent')));
-    server.db = withFaults(db, (table, calls) =>
-      table === 'user_preferences' && calls.some((call) => call.method === 'select' && call.args[0] === 'notification_prefs')
-        ? { message: 'permission denied for table user_preferences', code: '42501' } : null);
+    // The read is refused at its terminal. (withFaults answers at `then`, and
+    // `.maybeSingle()` hands back its own promise, so a fault set through it
+    // never fired here, and with the lock drawn over the card this case passed
+    // without the read failing at all.)
+    const from = db.from.bind(db);
+    db.from = ((table: string) => {
+      if (table !== 'user_preferences') return from(table);
+      const refused = { select: () => refused, eq: () => refused,
+        maybeSingle: async () => ({ data: null, error: { message: 'permission denied for table user_preferences', code: '42501' } }) };
+      return refused;
+    }) as typeof db.from;
     const { tree, gated } = await screen();
     expect(gated).toBe(true);
+    expect(dialogs(tree), 'the gate, with no lock: there is no PIN to check').toEqual(['paywall-title']);
+    expect(has(tree, LOCK_SCREEN)).toBe(false);
     expect(has(tree, 'Your free trial has ended')).toBe(true);
     expect(has(tree, 'Rivera fair on X')).toBe(false);
+    expect(has(tree, LEFT_CONNECTED)).toBe(false);
     expect(allByName(tree, 'Disconnect', 'button')).toHaveLength(0);
   });
 

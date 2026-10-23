@@ -1,7 +1,7 @@
 import { createServer } from '@/lib/supabase/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { AppLockGate } from '@/components/app/app-lock-gate';
-import { isAppLockConfig } from '@/lib/security/app-lock';
+import { isAppLockConfig, type AppLockConfig } from '@/lib/security/app-lock';
 import { closedFamilyStanding, resolveEntitlement } from '@/lib/server/entitlement';
 import { isSuperAdmin } from '@/lib/supabase/auth';
 import { TrialPaywallGate } from '@/components/app/trial-paywall-gate';
@@ -85,15 +85,17 @@ async function GatedShell({
       // (underTheAppLock), and nothing else of Social; everyone else sees the
       // gate as before.
       const left = await accountsBehindTheGate(ent.familyId);
-      const disconnect = left ? await underTheAppLock(supabase, user.id, <AccountsLeftConnected {...left} />) : null;
+      const appLock = left ? await appLockBehindTheGate(supabase, user.id) : null;
+      const disconnect = left && appLock !== 'unreadable' ? <AccountsLeftConnected {...left} /> : null;
       if (ent.closed) {
         // The gate replaces every route below, switcher included, so a member of
         // two households is handed their open ones here, and a non-parent is not
         // offered a reopen the action would refuse (closedFamilyStanding).
         const standing = await closedFamilyStanding(supabase, user.id, ent.familyId);
-        return <AccountClosedGate canReopen={standing.canReopen} otherFamilies={standing.openFamilies}>{disconnect}</AccountClosedGate>;
+        return underTheAppLock(disconnect ? appLock : null, user.id,
+          <AccountClosedGate canReopen={standing.canReopen} otherFamilies={standing.openFamilies}>{disconnect}</AccountClosedGate>);
       }
-      return <TrialPaywallGate trialEndsAt={ent.trialEndsAt}>{disconnect}</TrialPaywallGate>;
+      return underTheAppLock(disconnect ? appLock : null, user.id, <TrialPaywallGate trialEndsAt={ent.trialEndsAt}>{disconnect}</TrialPaywallGate>);
     }
   }
 
@@ -167,19 +169,18 @@ async function accountsBehindTheGate(familyId: string | null): Promise<LeftConne
 }
 
 /**
- * The accounts card inside the paywall or the closed-account gate, behind the
- * member's App Lock. It is the one piece of household data either gate shows
- * (each account's name, status and last error), and its Disconnect deletes the
- * family's X tokens, so it waits for the PIN the rest of the app waits for
- * (household-roles N2-R1-APPLOCK). Only the card does: the gate around it is
- * drawn as before. It is the read GatedShell makes below, and it fails the same
- * way, closed: when the preference cannot be read the card is left out.
+ * The member's App Lock, for the accounts card inside the paywall or the
+ * closed-account gate. The card is the one piece of household data either gate
+ * shows (each account's name, status and last error), and its Disconnect
+ * deletes the family's X tokens, so it waits for the PIN the rest of the app
+ * waits for (household-roles N2-R1-APPLOCK). It is the read GatedShell makes
+ * below, and it fails the same way, closed: 'unreadable', and the card is left
+ * out of the gate.
  */
-async function underTheAppLock(
+async function appLockBehindTheGate(
   supabase: Awaited<ReturnType<typeof createServer>>,
   userId: string,
-  card: React.ReactNode,
-): Promise<React.ReactNode> {
+): Promise<AppLockConfig | null | 'unreadable'> {
   const { data: prefs, error } = await supabase
     .from('user_preferences')
     .select('notification_prefs')
@@ -189,13 +190,32 @@ async function underTheAppLock(
     console.error('[app-layout] app-lock preference read failed; leaving the connected accounts out of the gate', {
       userId, error: error.message,
     });
-    return null;
+    return 'unreadable';
   }
   const raw = (prefs?.notification_prefs as Record<string, unknown> | null)?.appLock;
-  const appLock = isAppLockConfig(raw) ? raw : null;
-  return appLock?.enabled
-    ? <AppLockGate enabled salt={appLock.salt} hash={appLock.hash} userId={userId}>{card}</AppLockGate>
-    : card;
+  return isAppLockConfig(raw) ? raw : null;
+}
+
+/**
+ * The gate, with the accounts card in it, behind the member's App Lock.
+ *
+ * The WHOLE gate, not the card inside it (household-roles N3-R1-APPLOCK-FOCUS).
+ * Both gates and the lock are modal dialogs (useDialogBehavior), and round 3
+ * drew the lock inside the gate: React runs a child's effects before its
+ * parent's, so the gate's focus trap went on top of the lock's, focus began on
+ * "Choose" or "Reopen my account" behind "Enter your PIN", Enter from there
+ * started a checkout or a reopen, and Tab walked the gate's controls before it
+ * reached the keypad. One dialog at a time: while the session is locked the
+ * lock screen is drawn in place of the gate (it covered the gate anyway, so
+ * nothing on screen changes), and once the PIN is in, the gate with its
+ * accounts. A gate with no card (nothing left connected, or a lock setting that
+ * could not be read) has nothing of the household's to hold back: `appLock` is
+ * null and the gate is drawn as it was.
+ */
+function underTheAppLock(appLock: AppLockConfig | null | 'unreadable', userId: string, gate: React.ReactNode): React.ReactNode {
+  return appLock && appLock !== 'unreadable' && appLock.enabled
+    ? <AppLockGate enabled salt={appLock.salt} hash={appLock.hash} userId={userId}>{gate}</AppLockGate>
+    : gate;
 }
 
 /**

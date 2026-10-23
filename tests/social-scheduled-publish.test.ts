@@ -492,6 +492,85 @@ describe('scheduled X publishing through the installed SDK and private authority
     expect(provider).toHaveBeenCalledOnce();
     expect(receipt().outputs.phase).toBe('completed');
   });
+  // household-roles N3-R1-CLOSED-FALSE-HOLD, round 4: round 3 held a post that
+  // came due before families.updated_at, and the database stamps that on EVERY
+  // change to the row: a rename, the address, the time zone, the cover,
+  // onboarding. So an OPEN family that edited its profile after a post came
+  // due, before the drain reached it (the drain takes 20 receipts a run, so
+  // that can be hours), had the post held as "came due while closed", where
+  // main sends it. The hold now asks the reopen itself: reopenAccountAction
+  // records it in the family's audit trail, and a post is held only when that
+  // record is later than the time it came due.
+  /** A parent renames the family (components/modules/settings-module.tsx sends this); the database stamps updated_at. */
+  async function renameTheFamily() {
+    const renamed = await state.service.from('families').update({ name: 'The Riveras' }).eq('id', state.familyId).select('id, updated_at');
+    expect(renamed.error).toBeNull();
+    expect(renamed.data).toHaveLength(1);
+    return renamed.data![0].updated_at;
+  }
+  it.each([
+    ['a minute after it came due, and the drain a minute later', 60_000, 2 * 60_000],
+    ['two hours after it came due, and the drain an hour after that', 2 * 3_600_000, 3 * 3_600_000],
+  ])('an open family that edits its profile %s has the post sent, not held', async (_when, editedAfter, drainedAfter) => {
+    await schedule();
+    state.requestAuth = false;
+    vi.setSystemTime(new Date(Date.parse(DUE) + editedAfter));
+    expect(Date.parse(await renameTheFamily())).toBeGreaterThan(Date.parse(DUE));
+    vi.setSystemTime(new Date(Date.parse(DUE) + drainedAfter));
+    expect(await runScheduledPublishDrain()).toMatchObject({ inspected: 1, attempted: 1, published: 1, failed: 0, held: 0 });
+    expect(provider).toHaveBeenCalledOnce();
+    expect(receipt().outputs).toMatchObject({ phase: 'completed', errorKey: null });
+  });
+  it('a family that reopened before the post came due, and edits its profile after, has it sent', async () => {
+    await schedule();
+    signedInAsAParent();
+    expect(await closeAccountAction()).toEqual({ ok: true });
+    vi.setSystemTime(new Date(Date.parse(DUE) - 30 * 60_000));
+    expect(await reopenAccountAction()).toEqual({ ok: true });
+    state.requestAuth = false;
+    vi.setSystemTime(new Date(Date.parse(DUE) + 60_000));
+    await renameTheFamily();
+    vi.setSystemTime(new Date(Date.parse(DUE) + 2 * 60_000));
+    expect(await runScheduledPublishDrain()).toMatchObject({ attempted: 1, published: 1, failed: 0, held: 0 });
+    expect(provider).toHaveBeenCalledOnce();
+  });
+  it('the reopen is what is recorded: once, by the parent who reopened, with the close it ended', async () => {
+    await schedule();
+    signedInAsAParent();
+    expect(await closeAccountAction()).toEqual({ ok: true });
+    const closedAt = state.db.table('families')[0].closed_at;
+    expect(state.db.table('audit_logs')).toEqual([]);
+    vi.setSystemTime(new Date(Date.parse(DUE) + 3 * 3_600_000));
+    expect(await reopenAccountAction()).toEqual({ ok: true });
+    expect(state.db.table('audit_logs')).toEqual([expect.objectContaining({
+      family_id: state.familyId, actor_id: USER, action: 'update', resource: 'family', resource_id: state.familyId,
+      metadata: { change: 'reopened', closed_at: closedAt }, created_at: new Date(Date.parse(DUE) + 3 * 3_600_000).toISOString(),
+    })]);
+    // A reopen of a family that is open already (a stale gate in another tab) reopens nothing and records nothing.
+    expect(await reopenAccountAction()).toEqual({ ok: true });
+    expect(state.db.table('audit_logs')).toHaveLength(1);
+    // And a rename after the reopen does not move it: the post is still held for the reopen it waited through.
+    await renameTheFamily();
+    state.requestAuth = false;
+    expect(await runScheduledPublishDrain()).toMatchObject({ attempted: 0, published: 0, held: 1 });
+    expect(receipt().outputs).toMatchObject({ phase: 'failed', errorKey: 'socialSchedule.cameDueWhileClosed' });
+    expect(provider).not.toHaveBeenCalled();
+  });
+  it('when the reopen record cannot be read, the post is neither sent nor held: it stays queued for the next tick', async () => {
+    await schedule();
+    signedInAsAParent();
+    expect(await closeAccountAction()).toEqual({ ok: true });
+    vi.setSystemTime(new Date(Date.parse(DUE) + 3 * 3_600_000));
+    expect(await reopenAccountAction()).toEqual({ ok: true });
+    state.requestAuth = false;
+    state.fault = { table: 'audit_logs', method: 'GET', at: 1 };
+    expect(await runScheduledPublishDrain()).toMatchObject({ attempted: 0, published: 0, failed: 1, held: 0 });
+    expect(provider).not.toHaveBeenCalled();
+    expect(receipt().outputs).toMatchObject({ phase: 'queued', errorKey: 'socialSchedule.storageUnavailable' });
+    expect(await runScheduledPublishDrain()).toMatchObject({ attempted: 0, held: 1 });
+    expect(receipt().outputs).toMatchObject({ phase: 'failed', errorKey: 'socialSchedule.cameDueWhileClosed' });
+    expect(provider).not.toHaveBeenCalled();
+  });
   it.each([400, 500])('reports an unsuccessful provider HTTP%s attempt through the actual cron', async status => {
     await schedule(); vi.setSystemTime(new Date(DUE)); provider.mockResolvedValueOnce(Response.json({}, { status }));
     const response = await GET(new NextRequest('https://app.invalid/api/cron/social-publish', { headers: { authorization: 'Bearer synthetic-cron' } }));
