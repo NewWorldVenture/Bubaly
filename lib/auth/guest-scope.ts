@@ -19,6 +19,10 @@ export const GUEST_WITHHELD_PREFIXES = [
   // locations (the check-in page stays: it shows a guest only their own)
   '/dashboard/locator',
   '/dashboard/family/driving-safety',
+  // Find Phone reads member_locations and family_places, which 0481 already
+  // narrows to a guest's own row and no places: the page told a guest that
+  // every other member's sharing was off.
+  '/dashboard/family/find-phone',
   // money and cards
   '/dashboard/autopay',
   '/dashboard/billing',
@@ -44,6 +48,9 @@ export const GUEST_WITHHELD_PREFIXES = [
   '/dashboard/behavior',
   '/dashboard/insurance',
   '/dashboard/auto/insurance',
+  // Renewals (passports, licences, warranties): 0481's renewals_not_a_guests_read
+  // returns a guest no rows, and the page said "No renewals have been added yet."
+  '/dashboard/renewals',
   // Guardian and the household inbox. The inbox is read on three pages, not
   // one: the Contact Center lists every message (email, SMS, voicemail
   // transcript) and the AI Front Desk lists the calls. Withholding only

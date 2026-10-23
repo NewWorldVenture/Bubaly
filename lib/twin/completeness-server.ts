@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { graphCompleteness, type CompletenessSnapshot, type GraphCompleteness } from './completeness';
+import { graphCompleteness, slotsUnreadBy, type CompletenessSnapshot, type GraphCompleteness } from './completeness';
 import { settleAll } from '@/lib/supabase/settle';
 
 type DB = SupabaseClient<Database>;
@@ -17,6 +17,8 @@ type DB = SupabaseClient<Database>;
 export async function loadGraphCompleteness(
   sb: DB,
   familyId: string,
+  /** The viewer's role in the family: its reads are what is scored (slotsUnreadBy). */
+  viewerRole?: string | null,
 ): Promise<{ ok: true; data: GraphCompleteness } | { ok: false }> {
   const [members, places, accounts, routines, classes, teams, providers, vehicles, pets] = await settleAll([
     sb.from('family_members').select('id, display_name, birthday').eq('family_id', familyId).eq('is_active', true),
@@ -48,5 +50,5 @@ export async function loadGraphCompleteness(
     vehicles: vehicles.data ?? [],
     pets: pets.data ?? [],
   };
-  return { ok: true, data: graphCompleteness(snapshot) };
+  return { ok: true, data: graphCompleteness(snapshot, { omit: slotsUnreadBy(viewerRole) }) };
 }
