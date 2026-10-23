@@ -80,8 +80,9 @@ export async function setAIConfig(
   // Audit C1-S9-76.
   const { data, error: readError } = await supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle();
   if (readError) throw readError;
-  const stored = (data?.value ?? {}) as StoredConfig;
+  const stored = (data?.value && typeof data.value === 'object' && !Array.isArray(data.value) ? data.value : {}) as StoredConfig;
   const next: StoredConfig = {
+    ...stored,            // what the form does not edit (the per-task `models` map lib/ai/routing.ts reads) stays
     provider: 'openai',   // OpenAI-only deployment
     model: input.model || null,
     anthropicKey: input.anthropicKey?.trim() ? input.anthropicKey.trim() : stored.anthropicKey ?? null,

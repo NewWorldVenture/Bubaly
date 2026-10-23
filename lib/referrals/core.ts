@@ -17,6 +17,42 @@ export const DEFAULT_REFERRAL_CONFIG: ReferralConfig = {
   rewardLabel: '$10 credit',
 };
 
+/**
+ * The most one side of one referral may earn, in cents ($100). Every referral
+ * row copies the program's amounts when it is made, and rewardReferral turns
+ * them into a Stripe balance credit for BOTH families, so an admin who typed
+ * 1000 into a dollars field meaning cents gave $1,000 to each side of every
+ * referral made while it stood. A save above it is refused, and a row holding
+ * more is left for manual reconciliation instead of credited.
+ */
+export const MAX_REFERRAL_REWARD_CENTS = 10_000;
+
+/**
+ * Whole cents from the admin form's dollars field: 0 for a blank field, null
+ * for anything that is not a plain non-negative amount in whole cents within
+ * MAX_REFERRAL_REWARD_CENTS. The caller refuses null rather than clamping it.
+ */
+export function rewardCentsFromDollars(raw: string): number | null {
+  const text = raw.trim();
+  if (!text) return 0;
+  if (!/^\d+(?:\.\d+)?$/.test(text)) return null;
+  const cents = Number(text) * 100;
+  const whole = Math.round(cents);
+  if (!Number.isFinite(cents) || Math.abs(cents - whole) > 1e-6 || whole > MAX_REFERRAL_REWARD_CENTS) return null;
+  return whole;
+}
+
+/**
+ * The label is shown as "Give {label}, get {label}" and promised in the invite
+ * email, so a dollar figure it states is a promise about BOTH amounts. True when
+ * it states none, or every figure it states is both rewards.
+ */
+export function rewardLabelMatchesAmounts(config: ReferralConfig): boolean {
+  const figures = [...config.rewardLabel.matchAll(/\$\s?(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?/g)]
+    .map((m) => Number(m[1].replace(/,/g, '')) * 100 + Number((m[2] ?? '').padEnd(2, '0')));
+  return figures.every((cents) => cents === config.referrerRewardCents && cents === config.referredRewardCents);
+}
+
 /** Merge a partial config (from marketing_settings) over the defaults. */
 export function resolveReferralConfig(raw: unknown): ReferralConfig {
   const c = (raw && typeof raw === 'object' ? raw : {}) as Partial<ReferralConfig>;

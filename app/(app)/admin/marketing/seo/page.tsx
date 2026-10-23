@@ -22,7 +22,7 @@ const SITE_PAGES = [
 ];
 const INTENTS = ['informational', 'navigational', 'commercial', 'transactional'];
 const KEYWORD_STATUSES = ['idea', 'tracking', 'won', 'dropped'];
-const PAGE_STATUSES = ['active', 'noindex', 'archived'];
+const PAGE_STATUSES = ['active', 'archived'];
 
 // The keyword table can hold thousands of rows; fetching + rendering all of them
 // made the page slow to open. Render a bounded, column-projected slice and show the
@@ -121,7 +121,7 @@ export default async function SeoPage() {
                           <input name="title" defaultValue={page.title ?? ''} placeholder={t('seo.seoTitle')} className={inputCls} />
                           <input name="meta_description" defaultValue={page.meta_description ?? ''} placeholder={t('seo.metaDescription')} className={`${inputCls} sm:col-span-2`} />
                           <input name="score" type="number" min="0" max="100" defaultValue={page.score ?? ''} placeholder={t('seo.score0100')} className={inputCls} />
-                          <select aria-label={t('fieldName.status')} name="status" defaultValue={page.status} className={inputCls}>{PAGE_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
+                          <select aria-label={t('fieldName.status')} name="status" defaultValue={page.status} className={inputCls}>{[...new Set([...PAGE_STATUSES, page.status])].map((status) => <option key={status} value={status}>{status}</option>)}</select>
                           <SubmitButton className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90 sm:col-span-2">{t('seo.savePageAudit')}</SubmitButton>
                         </form>
                         <form action={archiveSeoPage} className="mt-2">

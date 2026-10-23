@@ -4,7 +4,8 @@ import { revalidatePath, revalidateTag } from 'next/cache';
 import { AEO_TAG } from '@/lib/marketing/aeo';
 import { redirect } from 'next/navigation';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
-import { archiveLegacyLandingOnPlatform, retireLegacyLandingAliases, syncLegacyLandingToPlatform } from '@/lib/marketing/legacy-bridge';
+import { archiveLegacyLandingOnPlatform, assertLegacyLandingPathFree, retireLegacyLandingAliases, syncLegacyLandingToPlatform } from '@/lib/marketing/legacy-bridge';
+import { normalizeSlug } from '@/lib/marketing/landing';
 import type { SegmentRules, Lifecycle } from '@/lib/marketing/customers';
 import type { Json } from '@/lib/database.types';
 import { refuseInput } from '@/lib/actions/refusal';
@@ -71,7 +72,10 @@ function trackedLink(value: string | null, source: string, campaign: string, med
 }
 
 const CONTENT_KINDS = ['blog', 'landing', 'social', 'email', 'ad', 'seo_brief', 'aeo_brief'] as const;
-const SEO_PAGE_STATUSES = ['active', 'noindex', 'archived'] as const;
+// No 'noindex': the public reader takes only 'active' rows (and anon may read
+// only those, 0230), and no route ever emitted robots noindex for one, so the
+// status only dropped the override while the page stayed indexed.
+const SEO_PAGE_STATUSES = ['active', 'archived'] as const;
 const SEO_KEYWORD_STATUSES = ['idea', 'tracking', 'won', 'dropped'] as const;
 const SEO_INTENTS = ['informational', 'navigational', 'commercial', 'transactional'] as const;
 const AEO_PATTERNS = ['what_is', 'how_to', 'best_x_for_y', 'comparison', 'faq', 'local'] as const;
@@ -278,6 +282,18 @@ export async function updateAeoQuestion(formData: FormData) {
   }
   if (status === 'published' && !answer) {
     marketingActionFailure('publish the AEO question', new Error('A published AEO question must include an answer.'));
+  }
+  // Every other locale reads marketing_aeo_question_translations, which nothing
+  // here edits: a corrected English answer left the old one public in six
+  // languages and in their FAQPage data. When the English text changes, its
+  // translations go first, so a failed edit is retried with them still to drop.
+  const { data: stored, error: storedError } = await supabase.from('marketing_aeo_questions')
+    .select('question, answer').eq('id', id).maybeSingle();
+  if (storedError || !stored) marketingActionFailure('update the AEO question', storedError ?? new Error('AEO question not found.'));
+  if (stored.question.trim() !== question || (stored.answer ?? '').trim() !== answer) {
+    const { error: translationsError } = await supabase.from('marketing_aeo_question_translations')
+      .delete().eq('question_id', id).select('id');
+    if (translationsError) marketingActionFailure("retire the AEO question's translations", translationsError);
   }
   const { data, error } = await supabase.from('marketing_aeo_questions').update({
     question,
@@ -499,8 +515,11 @@ export async function createFunnel(formData: FormData) {
 export async function createLandingPage(formData: FormData) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const title = str(formData.get('title'));
-  const slug = str(formData.get('slug')).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '');
+  // The public route looks a page up by normalizeSlug; storing any other form
+  // ("summer---sale", "-promo") published a page that could only 404.
+  const slug = normalizeSlug(str(formData.get('slug')));
   if (!title || !slug) return;
+  await assertLegacyLandingPathFree(supabase, slug, null);
   const ctaLabel = str(formData.get('cta_label'));
   const ctaHref = str(formData.get('cta_href'));
   const metadata: Record<string, string> = {};
@@ -563,12 +582,13 @@ export async function updateLandingPage(formData: FormData) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const id = str(formData.get('id'));
   const title = str(formData.get('title'));
-  const slug = str(formData.get('slug')).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '');
+  const slug = normalizeSlug(str(formData.get('slug')));
   if (!id || !title || !slug) return;
 
   const { data: existing, error: readError } = await supabase.from('marketing_landing_pages')
     .select('id, slug, metadata, published, status').eq('id', id).is('deleted_at', null).maybeSingle();
   if (readError || !existing) marketingActionFailure('find the landing page', readError ?? new Error('Landing page not found.'));
+  await assertLegacyLandingPathFree(supabase, slug, id);
 
   const currentMetadata = (existing.metadata ?? {}) as Record<string, unknown>;
   const ctaLabel = str(formData.get('cta_label'));

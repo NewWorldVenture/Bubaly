@@ -3,6 +3,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/database.types';
 import { retireAeoQuestionsForPath } from './platform';
+import { refuseInput } from '@/lib/actions/refusal';
 
 type MarketingDb = SupabaseClient<Database>;
 
@@ -116,6 +117,40 @@ export async function archiveLegacyBlogOnPlatform(db: MarketingDb, slug: string,
   return Boolean(data?.id);
 }
 
+function isMissingLandingRegistry(error: { code?: string; message?: string }): boolean {
+  return (error.code === 'PGRST205' && /could not find the table ['"](?:public\.)?marketing_pages['"] in the schema cache/i.test(error.message ?? '')) ||
+    (error.code === '42P01' && /^relation ["']?(?:public\.)?marketing_pages["']? does not exist$/i.test(error.message ?? ''));
+}
+
+/**
+ * Refuse a legacy landing page whose /lp/<slug> already belongs to another page
+ * in the platform registry. The sync below upserts on `path`, and the legacy
+ * slug is unique only in its own table, so a draft created (or renamed) onto a
+ * platform page's slug replaced that live page's content and took it down.
+ * Callers run this BEFORE writing the legacy row: once a published legacy row
+ * holds the slug, /lp/<slug> serves it in place of the platform page anyway.
+ *
+ * The path is free when nothing is there, when the row is this legacy page's
+ * own mirror, or when it is an archived mirror of a legacy page (a renamed
+ * page's retired alias), which no live page holds.
+ */
+export async function assertLegacyLandingPathFree(db: MarketingDb, slug: string, landingId: string | null): Promise<void> {
+  const { data, error } = await db.from('marketing_pages')
+    .select('id, content, deleted_at').eq('path', `/lp/${slug}`).maybeSingle();
+  if (error) {
+    if (isMissingLandingRegistry(error)) return;
+    throw error;
+  }
+  if (!data) return;
+  const content = data.content && typeof data.content === 'object' && !Array.isArray(data.content)
+    ? data.content as { source?: unknown; source_id?: unknown }
+    : {};
+  const legacy = content.source === 'marketing_landing_pages';
+  if (legacy && landingId !== null && content.source_id === landingId) return;
+  if (legacy && data.deleted_at != null) return;
+  refuseInput(`/lp/${slug} is already used by another marketing page.`, 'duplicate');
+}
+
 export async function syncLegacyLandingToPlatform(db: MarketingDb, page: LegacyLanding): Promise<{ available: boolean; pageId: string | null }> {
   const path = `/lp/${page.slug}`;
   const { data, error } = await db.from('marketing_pages').upsert({
@@ -137,10 +172,7 @@ export async function syncLegacyLandingToPlatform(db: MarketingDb, page: LegacyL
   if (error) {
     // A missing trigger dependency must not masquerade as an absent registry.
     // Keep this compatibility check specific to the landing table being synced.
-    const missingRegistry =
-      (error.code === 'PGRST205' && /could not find the table ['"](?:public\.)?marketing_pages['"] in the schema cache/i.test(error.message)) ||
-      (error.code === '42P01' && /^relation ["']?(?:public\.)?marketing_pages["']? does not exist$/i.test(error.message));
-    if (missingRegistry) {
+    if (isMissingLandingRegistry(error)) {
       console.warn('[marketing-legacy-bridge] marketing platform migration is not applied; legacy landing page remains active');
       return { available: false, pageId: null };
     }
