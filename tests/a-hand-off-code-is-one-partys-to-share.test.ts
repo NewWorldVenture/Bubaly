@@ -17,7 +17,10 @@ import { renderTranslated } from './helpers/render-translated';
  * N6. marketplace_complete_handoff (0483) writes the order 'completed' for
  * every kind, so a rent or a borrow was recorded as over the moment it was
  * picked up: no "Mark returned" for the lender, no return reminders. The app
- * no longer sends a loan's pickup there: the code moves it to 'active'.
+ * no longer sends a loan's pickup there: the code moves it to 'active'. An
+ * order cancelled between the pickup's claim and the loan's start takes the
+ * pickup and its calendar event down (N6-revert): put back to 'confirmed', it
+ * was a live code and a calendar event on an order that is off.
  *
  * N9. A reschedule rewrites the time and place and leaves the pickup
  * 'proposed', so a confirm claimed on status alone agreed to whatever was
@@ -232,8 +235,9 @@ describe('a rent or a borrow starts at its pickup (N6)', () => {
     expect(handoff().status).toBe('completed');
   });
 
-  it('a loan cancelled after its pickup was claimed puts the pickup back, and starts nothing', async () => {
-    seed({ kind: 'borrow' }, { proposer_role: 'seller', completed_at: null });
+  it('a loan cancelled after its pickup was claimed takes the pickup down, and starts nothing', async () => {
+    seed({ kind: 'borrow' }, { proposer_role: 'seller', completed_at: null, calendar_event_id: 'ev-1' });
+    db.seed('calendar_events', [{ id: 'ev-1', family_id: 'fam-1', title: 'Marketplace pickup · Library', starts_at: MEET_AT }]);
     as('m-seller');
     const realFrom = db.from.bind(db);
     db.from = ((table: string) => {
@@ -247,7 +251,49 @@ describe('a rent or a borrow starts at its pickup (N6)', () => {
 
     expect(await completeHandoffAction({ orderId: 'order-1', code: CODE })).toEqual({ ok: false, error: t('handoff.pickupChangedRefresh') });
     expect(order().status).toBe('cancelled');
-    expect(handoff()).toMatchObject({ status: 'confirmed', completed_at: null });
+    // Not put back to 'confirmed': a live code and a calendar event on an order that is off.
+    expect(handoff()).toMatchObject({ status: 'cancelled', completed_at: null });
+    expect(db.table('calendar_events')).toEqual([]);
+  });
+
+  it('the borrower cancelling between the lender\'s claim and the loan start leaves no live pickup and no calendar event', async () => {
+    seed({ kind: 'borrow' }, { proposer_role: 'seller', completed_at: null, calendar_event_id: 'ev-1' });
+    db.seed('calendar_events', [
+      { id: 'ev-1', family_id: 'fam-1', title: 'Marketplace pickup · Library', starts_at: MEET_AT },
+      { id: 'ev-dentist', family_id: 'fam-1', title: 'Dentist', starts_at: LATER },
+    ]);
+    // The lender has claimed the pickup and is about to start the order when
+    // the borrower's own Cancel runs start to finish. Its cancelOrderPickup
+    // finds the pickup already 'completed', so it takes nothing down.
+    const realFrom = db.from.bind(db);
+    let cancel: Promise<unknown> | null = null;
+    db.from = ((table: string) => {
+      const builder = realFrom(table);
+      if (table === 'marketplace_orders' && !cancel) {
+        const update = builder.update.bind(builder);
+        builder.update = (patch: Row) => {
+          if (!cancel && patch.status === 'active') {
+            expect(handoff().status).toBe('completed');
+            cancel = (async () => {
+              as('m-buyer');
+              try { return await setOrderStatusAction('order-1', 'cancelled'); } finally { as('m-seller'); }
+            })();
+            const then = builder.then.bind(builder);
+            (builder as { then: typeof builder.then }).then = ((ok, bad) => (cancel as Promise<unknown>).then(() => then(ok, bad))) as typeof builder.then;
+          }
+          return update(patch);
+        };
+      }
+      return builder;
+    }) as typeof db.from;
+
+    as('m-seller');
+    expect(await completeHandoffAction({ orderId: 'order-1', code: CODE })).toEqual({ ok: false, error: t('handoff.pickupChangedRefresh') });
+    expect(await cancel).toEqual({ ok: true });
+    expect(order().status).toBe('cancelled');
+    expect(handoff()).toMatchObject({ status: 'cancelled', completed_at: null });
+    // The pickup's own event is gone; the family's others are not touched.
+    expect(db.table('calendar_events').map((e) => e.id)).toEqual(['ev-dentist']);
   });
 });
 

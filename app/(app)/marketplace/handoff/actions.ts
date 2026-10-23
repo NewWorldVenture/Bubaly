@@ -282,7 +282,7 @@ type ConfirmedHandoff = { id: string; confirm_code: string | null };
 async function startLoanAtPickup(
   sb: Awaited<ReturnType<typeof loadOrderRole>>['sb'],
   t: Awaited<ReturnType<typeof getTranslations>>,
-  order: LoadedOrder, handoff: ConfirmedHandoff, code: string,
+  order: LoadedOrder, handoff: ConfirmedHandoff, code: string, actorFamilyId: string,
 ): Promise<Result<{ loanStarted: boolean }>> {
   if (order.status !== 'confirmed' && order.status !== 'active') return { ok: false, error: t(COMPLETE_REASON.order_not_open) };
   const stored = handoff.confirm_code;
@@ -307,12 +307,19 @@ async function startLoanAtPickup(
     .eq('id', order.id).eq('family_id', order.family_id).in('status', ['confirmed', 'active']).select('id');
   if (startError) return actionFailure('start the loan', t('actions.couldNotCompleteThePickup'), startError);
   if (wroteNoRows(started)) {
-    // The order moved on (cancelled) since it was read, so the pickup this call
-    // completed goes back to waiting. The claim above is this call's alone,
-    // and the undo is predicated on it, so it cannot reopen anyone else's.
-    const { data: undone, error: undoError } = await sb.from('marketplace_handoffs').update({ status: 'confirmed', completed_at: null })
-      .eq('id', handoff.id).eq('family_id', order.family_id).eq('status', 'completed').eq('completed_at', completedAt).select('id');
-    if (undoError || wroteNoRows(undone)) console.error('[marketplace-handoff] could not put the pickup back to confirmed', undoError ?? handoff.id);
+    // The order is no longer confirmed or active: it was cancelled (or closed)
+    // since it was read. So the pickup this call completed is taken down, not
+    // put back to 'confirmed': the order's own cancel, landing after the claim
+    // above, found no open pickup to cancel, and a reopened pickup was a live
+    // code and a calendar event on an order that is off. The claim is
+    // this call's alone and the take-down is predicated on it, so it cannot
+    // touch anyone else's. The event is in the confirmer's family; between two
+    // households that copy is theirs to remove, and a miss is logged.
+    const { data: undone, error: undoError } = await sb.from('marketplace_handoffs').update({ status: 'cancelled', completed_at: null })
+      .eq('id', handoff.id).eq('family_id', order.family_id).eq('status', 'completed').eq('completed_at', completedAt)
+      .select('id, calendar_event_id');
+    if (undoError || wroteNoRows(undone)) console.error('[marketplace-handoff] could not take the pickup down', undoError ?? handoff.id);
+    else await removePickupFromCalendar(sb, actorFamilyId, undone?.[0]?.calendar_event_id);
     return { ok: false, error: t('handoff.pickupChangedRefresh') };
   }
   return { ok: true, data: { loanStarted: true } };
@@ -337,7 +344,7 @@ export async function completeHandoffAction(input: { orderId: string; code: stri
   // hand-off code is readable family-wide, so a sibling who is neither party
   // could close someone else's pickup (and end a loan nobody exchanged). The
   // party check the other three actions make is made here too.
-  const { sb, order, orderError, role } = await loadOrderRole(input.orderId);
+  const { ctx, sb, order, orderError, role } = await loadOrderRole(input.orderId);
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
   if (!role) return { ok: false, error: t(COMPLETE_REASON.forbidden) };
@@ -351,7 +358,7 @@ export async function completeHandoffAction(input: { orderId: string; code: stri
   if (holdsHandoffCode(role, handoff.proposer_role as HandoffRole)) return { ok: false, error: t('handoff.theOtherPersonEntersTheCode') };
 
   if (isLoanKind(order.kind)) {
-    const started = await startLoanAtPickup(sb, t, order, handoff, input.code);
+    const started = await startLoanAtPickup(sb, t, order, handoff, input.code, ctx.active.familyId);
     if (started.ok) revalidatePath('/marketplace/orders');
     return started;
   }
