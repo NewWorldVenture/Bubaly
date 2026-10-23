@@ -241,9 +241,12 @@ describe('the rail\'s Trust Score card is read on the server', () => {
       listingsPosted: 1,
     });
     expect(warned('marketplace_orders.buyer_family_id')).toBe(schema === 'before');
+    // The ratings are paged on id (every one of them, N17), so their read ends
+    // on an empty second page; the orders are probed once after the SQL and
+    // fall back once before it.
     expect(db.log.map((l) => l.table)).toEqual(schema === 'after'
-      ? ['marketplace_reviews', 'marketplace_orders', 'marketplace_listings']
-      : ['marketplace_reviews', 'marketplace_orders', 'marketplace_listings', 'marketplace_orders']);
+      ? ['marketplace_reviews', 'marketplace_orders', 'marketplace_listings', 'marketplace_reviews']
+      : ['marketplace_reviews', 'marketplace_orders', 'marketplace_listings', 'marketplace_reviews', 'marketplace_orders']);
   });
 
   it('a read that fails is reported, not scored as a baseline', async () => {

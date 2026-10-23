@@ -17121,5 +17121,7 @@
   "handoffPanel.pickedUpLoanStarted": "Opgehaald — de uitleen is begonnen.",
   "marketplace.reviewsAcrossHouseholdsAreNotOpenYet": "Beoordelingen tussen twee huishoudens zijn nog niet mogelijk.",
   "marketplace.anAuctionTakesBidsNotInterest": "Dit is een veiling: breng in plaats daarvan een bod uit.",
-  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Vragen tussen twee huishoudens zijn nog niet mogelijk."
+  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Vragen tussen twee huishoudens zijn nog niet mogelijk.",
+  "assistantActions.couldNotReadTheBoard": "De marktplaats kon nu niet worden gelezen. Probeer het zo meteen opnieuw.",
+  "negotiations.theOtherSideActedAtTheSameMoment": "De andere partij reageerde op hetzelfde moment op dit aanbod. Vernieuw de pagina en probeer het opnieuw."
 }

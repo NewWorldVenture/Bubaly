@@ -70,11 +70,18 @@ export async function loadAndSnapshotMatches(sb: DB, familyId: string, userId: s
     const { data: members } = await sb.from('family_members').select('id, display_name').eq('family_id', familyId);
     const nameOf = new Map((members ?? []).map((m) => [m.id, m.display_name]));
 
-    // Existing rows so we can preserve dismissed/actioned decisions.
-    const { data: existing } = await sb
+    // Existing rows, so a dismissed or actioned match is not written at all. It
+    // is not what keeps a decision (the upsert below carries no status), so a
+    // read cut at db-max-rows costs only a few redundant writes; a failed one
+    // still says nothing about the family's matches, so there is no strip.
+    const { data: existing, error: existingError } = await sb
       .from('marketplace_matches')
       .select('id, wanted_id, supply_id, status')
       .eq('family_id', familyId);
+    if (existingError) {
+      console.error('[marketplace-matches] marketplace_matches read failed', existingError);
+      return [];
+    }
     const priorStatus = new Map((existing ?? []).map((e) => [`${e.wanted_id}:${e.supply_id}`, e.status]));
 
     const build = (m: MarketplaceMatch) => {
@@ -88,6 +95,11 @@ export async function loadAndSnapshotMatches(sb: DB, familyId: string, userId: s
     };
 
     // Upsert only matches that aren't already dismissed/actioned (leave those be).
+    // No `status` in the row: a new match takes the column's default, 'active'
+    // (0150), and on a conflict ON CONFLICT DO UPDATE sets only the columns
+    // sent, so a dismissal another member (or tab) committed after the read
+    // above keeps its status. Sending 'active' rewrote it back to active.
+    // `created_by` is still sent, as before: a new row has no other source for it.
     const toUpsert = matches
       .filter((m) => {
         const s = priorStatus.get(`${m.wantedId}:${m.supplyId}`);
@@ -95,7 +107,7 @@ export async function loadAndSnapshotMatches(sb: DB, familyId: string, userId: s
       })
       .map((m) => ({
         family_id: familyId, wanted_id: m.wantedId, supply_id: m.supplyId,
-        score: m.score, reason: build(m).reason, status: 'active', created_by: userId,
+        score: m.score, reason: build(m).reason, created_by: userId,
       }));
 
     if (toUpsert.length > 0) {

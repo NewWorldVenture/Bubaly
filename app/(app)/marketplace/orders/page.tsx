@@ -58,9 +58,15 @@ export default async function MarketplaceOrdersPage() {
   // agreed in a negotiation carries the SELLER's family_id and this family as
   // buyer_family_id (proposed economy SQL, section 2). Without that column it
   // is the seller-family read it always was (readFamilyOrders).
+  // Filtered to this member's own orders BEFORE the cap. The read was the
+  // family's 100 newest, filtered afterwards, so a member's older live order
+  // (a long borrow) fell out once the family had 100 newer ones, and its
+  // controls and hand-off panel with it. A second `or` is ANDed with the
+  // family scope's.
   const { data: orders, error: ordersError } = await readFamilyOrders(familyId, (scope) => scope(sb
     .from('marketplace_orders')
     .select('id, family_id, listing_id, buyer_member, seller_member, kind, status, amount_cents, ends_on, returned_at, created_at'))
+    .or(`buyer_member.eq.${selfId},seller_member.eq.${selfId}`)
     .order('created_at', { ascending: false })
     .limit(100));
 

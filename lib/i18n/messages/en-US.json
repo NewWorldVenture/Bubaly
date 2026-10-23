@@ -17121,5 +17121,7 @@
   "handoffPanel.pickedUpLoanStarted": "Picked up — the loan has started.",
   "marketplace.reviewsAcrossHouseholdsAreNotOpenYet": "Reviews between two households are not open yet.",
   "marketplace.anAuctionTakesBidsNotInterest": "This is an auction: place a bid instead.",
-  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Questions between two households are not open yet."
+  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Questions between two households are not open yet.",
+  "assistantActions.couldNotReadTheBoard": "Could not read the marketplace board just now. Try again in a moment.",
+  "negotiations.theOtherSideActedAtTheSameMoment": "The other side acted on this offer at the same moment. Refresh and try again."
 }

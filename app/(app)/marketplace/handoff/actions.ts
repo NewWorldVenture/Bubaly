@@ -276,7 +276,8 @@ type ConfirmedHandoff = { id: string; confirm_code: string | null };
  * "Mark returned" left, and the return-reminder cron never selected the order
  * again. Until the owner's SQL makes the function start a loan instead, the
  * app does not call it for one. Both writes are claimed on the state they were
- * decided from; either party may start an order (0518 leaves 'active' to both).
+ * decided from, the hand-off before the order; either party may start an order
+ * (0518 leaves 'active' to both).
  */
 async function startLoanAtPickup(
   sb: Awaited<ReturnType<typeof loadOrderRole>>['sb'],
@@ -287,25 +288,31 @@ async function startLoanAtPickup(
   const stored = handoff.confirm_code;
   if (!stored || !codesMatch(code, stored)) return { ok: false, error: t(COMPLETE_REASON.code_mismatch) };
 
-  if (order.status === 'confirmed') {
-    const { data: started, error } = await sb.from('marketplace_orders').update({ status: 'active' })
-      .eq('id', order.id).eq('family_id', order.family_id).eq('status', 'confirmed').select('id');
-    if (error) return actionFailure('start the loan', t('actions.couldNotCompleteThePickup'), error);
-    if (wroteNoRows(started)) return { ok: false, error: t('handoff.pickupChangedRefresh') };
-  }
+  // The hand-off is claimed FIRST. Only one call can win it, so a second submit
+  // (the same proposer in another tab) stops here having changed nothing. The
+  // order used to go first, and its undo was what broke: B saw the order A had
+  // just started, skipped it and won the hand-off; A's claim then matched
+  // nothing and put the picked-up loan back to 'confirmed'.
+  const completedAt = new Date().toISOString();
   const { data: picked, error } = await sb.from('marketplace_handoffs')
-    .update({ status: 'completed', completed_at: new Date().toISOString() })
+    .update({ status: 'completed', completed_at: completedAt })
     .eq('id', handoff.id).eq('family_id', order.family_id).eq('status', 'confirmed').eq('confirm_code', stored)
     .select('id');
   if (error) return actionFailure('complete the pickup', t('actions.couldNotCompleteThePickup'), error);
-  if (wroteNoRows(picked)) {
-    // The pickup was cancelled or finished a moment ago, so nothing was handed
-    // over here: the loan this call started goes back to waiting for it.
-    if (order.status === 'confirmed') {
-      const { data: undone, error: undoError } = await sb.from('marketplace_orders').update({ status: 'confirmed' })
-        .eq('id', order.id).eq('family_id', order.family_id).eq('status', 'active').select('id');
-      if (undoError || wroteNoRows(undone)) console.error('[marketplace-handoff] could not put the order back to confirmed', undoError ?? order.id);
-    }
+  // The pickup was cancelled or finished a moment ago: nothing was handed over here.
+  if (wroteNoRows(picked)) return { ok: false, error: t('handoff.pickupChangedRefresh') };
+
+  // Then the loan starts. 'active' already (either party's "Start") is started.
+  const { data: started, error: startError } = await sb.from('marketplace_orders').update({ status: 'active' })
+    .eq('id', order.id).eq('family_id', order.family_id).in('status', ['confirmed', 'active']).select('id');
+  if (startError) return actionFailure('start the loan', t('actions.couldNotCompleteThePickup'), startError);
+  if (wroteNoRows(started)) {
+    // The order moved on (cancelled) since it was read, so the pickup this call
+    // completed goes back to waiting. The claim above is this call's alone,
+    // and the undo is predicated on it, so it cannot reopen anyone else's.
+    const { data: undone, error: undoError } = await sb.from('marketplace_handoffs').update({ status: 'confirmed', completed_at: null })
+      .eq('id', handoff.id).eq('family_id', order.family_id).eq('status', 'completed').eq('completed_at', completedAt).select('id');
+    if (undoError || wroteNoRows(undone)) console.error('[marketplace-handoff] could not put the pickup back to confirmed', undoError ?? handoff.id);
     return { ok: false, error: t('handoff.pickupChangedRefresh') };
   }
   return { ok: true, data: { loanStarted: true } };

@@ -10,6 +10,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { readFamilyOrders } from '@/lib/marketplace/schema-compat';
 import { cancelOrderPickup } from '@/lib/marketplace/pickup-server';
 import { ORDER_TRANSITIONS, SELLER_ONLY_ORDER_STEPS } from '@/lib/marketplace/order-lifecycle';
@@ -277,7 +278,7 @@ export async function makeOfferAction(listingId: string): Promise<Result> {
 
   const { data: listing, error: listingError } = await supabase
     .from('marketplace_listings')
-    .select('id, kind, status, member_id, sale_format')
+    .select('id, kind, status, member_id, sale_format, price_cents')
     .eq('id', listingId)
     .eq('family_id', ctx.active.familyId)
     .maybeSingle();
@@ -307,8 +308,13 @@ export async function makeOfferAction(listingId: string): Promise<Result> {
   // unique index (listing_id, member_id where status='open') makes a racing
   // duplicate a caught 23505 rather than a second open offer.
   const kind = listing.kind === 'sell' || listing.kind === 'rent' ? 'interest' : 'claim';
+  // An interest carries the price it was given at. Accepting records the order
+  // at `coalesce(offer.amount_cents, listing.price_cents)` (0315), so an offer
+  // with no amount was accepted at whatever the listing said by then: a price
+  // the seller changed after the interest, and the buyer never saw.
   const { error } = await supabase.from('marketplace_offers').insert({
     family_id: ctx.active.familyId, listing_id: listingId, member_id: memberId, kind, created_by: ctx.user.id,
+    amount_cents: kind === 'interest' ? listing.price_cents : null,
   });
   if (error) {
     if (error.code === '23505') return { ok: false, error: t('actions.youAlreadyReachedOutAbout') };
@@ -348,10 +354,20 @@ export async function readTrustScoreInputsAction(): Promise<TrustScoreInputsResu
   const memberId = ctx.active.member.id;
 
   const [reviews, orders, listings] = await settleAll([
-    supabase.from('marketplace_reviews').select('rating').eq('family_id', familyId).eq('reviewee_member', memberId),
+    // Every rating, paged on id: an unbounded read stops at db-max-rows (1,000)
+    // and says nothing, so the score was over a sample of them.
+    readAllByIdAsQuery<{ id: string; rating: number }>((after, limit) => {
+      let q = supabase.from('marketplace_reviews').select('id, rating').eq('family_id', familyId).eq('reviewee_member', memberId);
+      if (after) q = q.gt('id', after);
+      return q.order('id').limit(limit);
+    }, { max: 50_000 }),
     // Either party's family, so an exchange this member won from another
-    // household counts too (lib/marketplace/schema-compat.ts).
-    readFamilyOrders(familyId, (scope) => scope(supabase.from('marketplace_orders').select('status, buyer_member, seller_member'))),
+    // household counts too (lib/marketplace/schema-compat.ts). Counted by the
+    // database, on this member's side of each order: the family's whole order
+    // list, filtered here, was the first 1,000 of them.
+    readFamilyOrders(familyId, (scope) => scope(supabase.from('marketplace_orders').select('id', { count: 'exact', head: true }))
+      .eq('status', 'completed')
+      .or(`buyer_member.eq.${memberId},seller_member.eq.${memberId}`)),
     supabase.from('marketplace_listings').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('member_id', memberId),
   ]);
   // A failed read is said, not scored: a zero baseline is a real-looking number
@@ -363,9 +379,7 @@ export async function readTrustScoreInputsAction(): Promise<TrustScoreInputsResu
     ok: true,
     memberId,
     ratingsReceived: (reviews.data ?? []).map((r) => r.rating),
-    ordersCompleted: (orders.data ?? []).filter(
-      (o) => o.status === 'completed' && (o.buyer_member === memberId || o.seller_member === memberId),
-    ).length,
+    ordersCompleted: orders.count ?? 0,
     listingsPosted: listings.count ?? 0,
   };
 }

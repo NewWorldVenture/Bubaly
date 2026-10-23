@@ -17121,5 +17121,7 @@
   "handoffPanel.pickedUpLoanStarted": "Abgeholt – die Ausleihe hat begonnen.",
   "marketplace.reviewsAcrossHouseholdsAreNotOpenYet": "Bewertungen zwischen zwei Haushalten sind noch nicht möglich.",
   "marketplace.anAuctionTakesBidsNotInterest": "Dies ist eine Auktion: Geben Sie stattdessen ein Gebot ab.",
-  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Fragen zwischen zwei Haushalten sind noch nicht möglich."
+  "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Fragen zwischen zwei Haushalten sind noch nicht möglich.",
+  "assistantActions.couldNotReadTheBoard": "Der Marktplatz konnte gerade nicht gelesen werden. Versuchen Sie es gleich noch einmal.",
+  "negotiations.theOtherSideActedAtTheSameMoment": "Die andere Seite hat im selben Moment auf dieses Angebot reagiert. Aktualisieren Sie die Seite und versuchen Sie es erneut."
 }
