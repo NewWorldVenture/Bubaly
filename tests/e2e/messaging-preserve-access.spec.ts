@@ -57,6 +57,8 @@ type Config = {
   failInboxOffset?: number;
   /** Opt-in actual settings modal/SDK ACK fixture; original cases keep their refusal mock. */
   settings?: boolean;
+  /** Opt-in realtime presence lifecycle controls; defaults remain unchanged. */
+  presence?: boolean;
 };
 type Call = { method: string; url: string; body: Row | null; family: string | null; conversation: string | null; user: string };
 declare global {
@@ -82,6 +84,9 @@ declare global {
       unmount: () => void;
       settingsSaves: { id: number; family: string; conversation: string; committed: Row; delivered: boolean; bodyConsumed: boolean; nativeReader: string | null }[];
       releaseSettingsAck: (id: number) => void;
+      presenceTracks: { channel: number; payload: Row }[];
+      emitPresence: (id: number, users: string[]) => void;
+      emitPresenceStatus: (id: number, status: string) => void;
     };
   }
 }
@@ -134,6 +139,13 @@ async function start(page: Page, config: Config) {
     window.addEventListener('unhandledrejection', e => { p.errors.push(String(e.reason)); e.preventDefault(); });
     let scope = { familyId: ${JSON.stringify(FAMILY_A)}, userId: ${JSON.stringify(USER_A)},
       members: [], selfMember: { id: 'synthetic-member-'+${JSON.stringify(FAMILY_A)}+':'+${JSON.stringify(USER_A)}, family_id: ${JSON.stringify(FAMILY_A)}, user_id: ${JSON.stringify(USER_A)}, is_active: true, role: 'parent', display_name: 'Synthetic self' } };
+    const presenceMembers = () => {
+      if (!config.presence) return;
+      scope.members = [scope.selfMember, { id: 'synthetic-other-' + scope.familyId,
+        family_id: scope.familyId, user_id: scope.userId === ${JSON.stringify(USER_A)} ? ${JSON.stringify(USER_B)} : ${JSON.stringify(USER_A)},
+        display_name: scope.familyId === ${JSON.stringify(FAMILY_A)} ? 'Presence direct A' : 'Presence direct B', is_active: true, role: 'adult' }];
+    };
+    presenceMembers();
     const tr = key => key;
     const clone = value => JSON.parse(JSON.stringify(value));
     const respond = reply => new Response(JSON.stringify(reply.error || reply.data), {
@@ -319,6 +331,16 @@ async function start(page: Page, config: Config) {
           on(kind, filter, callback) { this.bindings.push({ kind, filter, callback }); return this; },
           subscribe() { return this; }, presenceState() { return {}; }, track: async () => {}, send: async () => {},
         };
+        if (config.presence) {
+          let state = {};
+          ch.presenceState = () => clone(state);
+          ch.subscribe = callback => { ch.statusCallback = callback; return ch; };
+          ch.track = async payload => { p.presenceTracks.push({ channel: ch.id, payload: clone(payload) }); };
+          ch.deliverPresence = users => {
+            state = Object.fromEntries(users.map(user => [user, [{ user_id: user }]]));
+            for (const binding of ch.bindings) if (binding.kind === 'presence' && binding.filter.event === 'sync') binding.callback();
+          };
+        }
         p.channels.push(ch); return ch;
       },
       removeChannel: async ch => { ch.removed = true; },
@@ -332,6 +354,18 @@ async function start(page: Page, config: Config) {
         binding.callback({ eventType: event, new: clone(newRow), old: clone(oldRow) });
       }
     };
+    if (config.presence) {
+      p.presenceTracks = [];
+      const channel = id => {
+        const ch = p.channels.find(item => item.id === id);
+        if (!ch || !ch.topic.startsWith('presence:family:')) throw new Error('Unknown synthetic presence channel ' + id);
+        return ch;
+      };
+      // Delivery deliberately includes removed channels, modeling callbacks queued
+      // before cleanup. Only the actual registered product callbacks are invoked.
+      p.emitPresence = (id, users) => channel(id).deliverPresence(users);
+      p.emitPresenceStatus = (id, status) => channel(id).statusCallback?.(status);
+    }
     const mocks = {
       react: React,
       'lucide-react': Object.fromEntries([
@@ -380,7 +414,7 @@ async function start(page: Page, config: Config) {
     const ToastProvider = load('@/components/ui/toast').ToastProvider;
     const root = ReactDOM.createRoot(document.getElementById('root'));
     const render = () => ReactDOM.flushSync(() => root.render(React.createElement(ToastProvider, null, React.createElement(Messages))));
-    p.switchScope = (familyId, userId) => { scope = { ...scope, familyId, userId, selfMember: { ...scope.selfMember, id: 'synthetic-member-'+familyId+':'+userId, family_id: familyId, user_id: userId, is_active: true } }; render(); };
+    p.switchScope = (familyId, userId) => { scope = { ...scope, familyId, userId, selfMember: { ...scope.selfMember, id: 'synthetic-member-'+familyId+':'+userId, family_id: familyId, user_id: userId, is_active: true } }; presenceMembers(); render(); };
     p.unmount = () => ReactDOM.flushSync(() => root.unmount());
     render();
   })();` });
@@ -861,3 +895,117 @@ for (const retired of ['A-to-B', 'A-to-B-to-A', 'same-A-reopen'] as const) {
     await assertOneSettingsWrite(page);
   });
 }
+
+// Presence events below invoke the actual registered realtime callbacks. Channel
+// state/status is synthetic; authorization and hosted Realtime are not exercised.
+function presenceFixture(): Config {
+  const fixture = base();
+  return { ...fixture, presence: true, conversations: {
+    [FAMILY_A]: [conversation(CHAT_A, FAMILY_A, 'Canonical', true), { ...conversation(OLD, FAMILY_A, 'Presence direct A'), kind: 'direct' }],
+    [FAMILY_B]: [conversation(CHAT_B, FAMILY_B, 'Canonical', true), { ...conversation('presence-direct-b', FAMILY_B, 'Presence direct B'), kind: 'direct' }],
+  } };
+}
+async function presenceTurn(page: Page) {
+  await page.evaluate(async () => {
+    const turn = () => new Promise<void>(resolve => {
+      const channel = new MessageChannel();
+      channel.port1.onmessage = () => { channel.port1.close(); channel.port2.close(); resolve(); };
+      channel.port2.postMessage(null);
+    });
+    await turn(); await turn();
+    (window as unknown as { ReactDOM: { flushSync: (callback: () => void) => void } }).ReactDOM.flushSync(() => {});
+  });
+}
+async function currentPresence(page: Page, family: string): Promise<number> {
+  await expect.poll(() => page.evaluate(family => window.__messagingPreserve.channels.filter(channel => channel.topic === 'presence:family:' + family && !channel.removed).length, family)).toBe(1);
+  return page.evaluate(family => window.__messagingPreserve.channels.find(channel => channel.topic === 'presence:family:' + family && !channel.removed)!.id, family);
+}
+async function presenceSync(page: Page, id: number, users: string[]) {
+  await page.evaluate(({ id, users }) => window.__messagingPreserve.emitPresence(id, users), { id, users });
+  await presenceTurn(page);
+}
+async function retirePresenceThroughInbox(page: Page, presence: number) {
+  // A real inbox response loses its required canonical marker. The public retry
+  // button then provides recovery; no private state setter triggers the lifecycle.
+  const convChannel = await page.evaluate(family => window.__messagingPreserve.channels.find(channel => channel.topic.startsWith('convs:' + family + ':') && !channel.removed)!.id, FAMILY_A);
+  const invalid = { ...conversation(CHAT_A, FAMILY_A, 'Unavailable') };
+  delete invalid.is_family_chat;
+  await page.evaluate(({ family, rows, channel }) => {
+    window.__messagingPreserve.configure({ conversations: { [family]: rows } });
+    window.__messagingPreserve.emit(channel, 'UPDATE', rows[0]);
+  }, { family: FAMILY_A, rows: [invalid], channel: convChannel });
+  await expect(page.getByRole('button', { name: 'messagesChat.retryLoad', exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(id => window.__messagingPreserve.channels.find(channel => channel.id === id)?.removed, presence)).toBe(true);
+  await presenceTurn(page);
+}
+async function recoverPresenceThroughRetry(page: Page): Promise<number> {
+  await page.evaluate(conversations => window.__messagingPreserve.configure({ conversations }), presenceFixture().conversations);
+  await page.getByRole('button', { name: 'messagesChat.retryLoad', exact: true }).click();
+  const successor = await currentPresence(page, FAMILY_A);
+  await page.getByRole('button', { name: /Presence direct A/ }).click();
+  await expect(page.getByText('Direct message', { exact: true })).toBeVisible();
+  return successor;
+}
+
+test('current presence callbacks track the viewer and render online then offline', async ({ page }) => {
+  await start(page, presenceFixture());
+  const id = await currentPresence(page, FAMILY_A);
+  await page.getByRole('button', { name: /Presence direct A/ }).click();
+  await expect(page.getByText('Direct message', { exact: true })).toBeVisible();
+  await page.evaluate(id => window.__messagingPreserve.emitPresenceStatus(id, 'SUBSCRIBED'), id);
+  await presenceTurn(page);
+  const tracks = await page.evaluate(() => window.__messagingPreserve.presenceTracks);
+  expect(tracks).toHaveLength(1); expect(tracks[0].channel).toBe(id); expect(tracks[0].payload.user_id).toBe(USER_A);
+  await presenceSync(page, id, [USER_B]);
+  await expect(page.getByText('Active now', { exact: true })).toBeVisible();
+  await presenceSync(page, id, []);
+  expect(await page.getByText('Active now', { exact: true }).count()).toBe(0);
+  await expect(page.getByText('Direct message', { exact: true })).toBeVisible();
+});
+
+test('a retired presence sync cannot overwrite the recovered channel online state', async ({ page }) => {
+  await start(page, presenceFixture());
+  const old = await currentPresence(page, FAMILY_A);
+  await retirePresenceThroughInbox(page, old);
+  const successor = await recoverPresenceThroughRetry(page);
+  expect(successor).not.toBe(old);
+  await presenceSync(page, successor, [USER_B]);
+  await expect(page.getByText('Active now', { exact: true })).toBeVisible();
+  await presenceSync(page, successor, []);
+  await expect(page.getByText('Direct message', { exact: true })).toBeVisible();
+  await presenceSync(page, old, [USER_B]);
+  // After the actual old callback and React completion, successor state remains.
+  expect(await page.getByText('Active now', { exact: true }).count()).toBe(0);
+  expect(await page.getByText('Direct message', { exact: true }).count()).toBe(1);
+});
+
+test('a retired presence subscription status cannot track after inbox refusal', async ({ page }) => {
+  await start(page, presenceFixture());
+  const old = await currentPresence(page, FAMILY_A);
+  await page.evaluate(id => window.__messagingPreserve.emitPresenceStatus(id, 'SUBSCRIBED'), old);
+  await presenceTurn(page);
+  expect(await page.evaluate(() => window.__messagingPreserve.presenceTracks.length)).toBe(1);
+  await retirePresenceThroughInbox(page, old);
+  await page.evaluate(id => window.__messagingPreserve.emitPresenceStatus(id, 'SUBSCRIBED'), old);
+  await presenceTurn(page);
+  expect(await page.evaluate(() => window.__messagingPreserve.presenceTracks.length)).toBe(1);
+  await expect(page.getByRole('button', { name: 'messagesChat.retryLoad', exact: true })).toBeVisible();
+});
+
+test('a removed family presence callback cannot repaint the new family workspace', async ({ page }) => {
+  await start(page, presenceFixture());
+  const old = await currentPresence(page, FAMILY_A);
+  await page.getByRole('button', { name: /Presence direct A/ }).click();
+  await presenceSync(page, old, [USER_B]);
+  await expect(page.getByText('Active now', { exact: true })).toBeVisible();
+  await page.evaluate(({ family, user }) => window.__messagingPreserve.switchScope(family, user), { family: FAMILY_B, user: USER_A });
+  const current = await currentPresence(page, FAMILY_B);
+  await expect.poll(() => page.evaluate(id => window.__messagingPreserve.channels.find(channel => channel.id === id)?.removed, old)).toBe(true);
+  await page.getByRole('button', { name: /Presence direct B/ }).click();
+  await presenceSync(page, current, []);
+  await expect(page.getByText('Direct message', { exact: true })).toBeVisible();
+  await presenceSync(page, old, [USER_B]);
+  expect(await page.getByText('Active now', { exact: true }).count()).toBe(0);
+  expect(await page.getByText('Direct message', { exact: true }).count()).toBe(1);
+  await expect(page.getByRole('button', { name: /Presence direct A/ })).toHaveCount(0);
+});
