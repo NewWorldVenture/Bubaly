@@ -18,6 +18,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { at, between, bodyOf } from './helpers/source-order';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import ts from 'typescript';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { FamilyTimeZoneProvider, LocaleProvider } from '@/components/i18n/locale-provider';
@@ -53,6 +54,85 @@ function clockFor(familyZone: string): FamilyClock {
 }
 
 const iso = (d: Date) => d.toISOString();
+
+function verifyChoreStreakClockWiring(source: string): void {
+  function ensure(value: unknown, reason: string): asserts value {
+    if (!value) throw new Error(`Chores family-clock wiring: ${reason}`);
+  }
+  const file = ts.createSourceFile('chores-module.tsx', source,
+    ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  function imported(module: string, name: string): string {
+    const bindings: string[] = [];
+    for (const statement of file.statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)
+        || statement.moduleSpecifier.text !== module) continue;
+      const clause = statement.importClause;
+      if (!clause || clause.isTypeOnly || !clause.namedBindings
+        || !ts.isNamedImports(clause.namedBindings)) continue;
+      for (const item of clause.namedBindings.elements) {
+        if (!item.isTypeOnly && (item.propertyName?.text ?? item.name.text) === name)
+          bindings.push(item.name.text);
+      }
+    }
+    ensure(bindings.length === 1, `one value import for ${module}::${name}`);
+    return bindings[0];
+  }
+  const hook = imported('@/components/i18n/use-format', 'useFamilyClock');
+  const helper = imported('@/lib/chores/dashboard', 'streaksByMember');
+  const memo = imported('react', 'useMemo');
+  const components = file.statements.filter(ts.isFunctionDeclaration)
+    .filter(node => node.name?.text === 'ChoresModule'
+      && node.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword));
+  ensure(components.length === 1 && components[0].body, 'one exported ChoresModule body');
+  const body = components[0].body;
+  const declarations = body.statements.filter(ts.isVariableStatement)
+    .filter(statement => (statement.declarationList.flags & ts.NodeFlags.Const) !== 0)
+    .flatMap(statement => [...statement.declarationList.declarations]);
+  function declaration(name: string): ts.VariableDeclaration {
+    const matches = declarations.filter(node => ts.isIdentifier(node.name) && node.name.text === name);
+    ensure(matches.length === 1, `one component-body const ${name}`);
+    return matches[0];
+  }
+  function member(node: ts.Node, receiver: string, property: string): boolean {
+    return ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression)
+      && node.expression.text === receiver && node.name.text === property;
+  }
+  const clocks = declarations.filter(node => node.initializer
+    && ts.isCallExpression(node.initializer) && ts.isIdentifier(node.initializer.expression)
+    && node.initializer.expression.text === hook && node.initializer.arguments.length === 0);
+  ensure(clocks.length === 1 && ts.isIdentifier(clocks[0].name), 'direct component-body family clock hook');
+  const clock = clocks[0].name.text;
+  const streakDeclaration = declaration('streaks');
+  const initializer = streakDeclaration.initializer;
+  ensure(initializer && ts.isCallExpression(initializer)
+    && ts.isIdentifier(initializer.expression) && initializer.expression.text === memo
+    && initializer.arguments.length === 2, 'streak result uses actual imported useMemo');
+  const callback = initializer.arguments[0], dependencies = initializer.arguments[1];
+  ensure(ts.isArrowFunction(callback) && callback.parameters.length === 0
+    && ts.isCallExpression(callback.body), 'memo directly returns the helper result');
+  const call = callback.body;
+  ensure(ts.isIdentifier(call.expression) && call.expression.text === helper
+    && call.arguments.length === 4, 'actual imported streak helper, four arguments');
+  const [members, assignments, day, zone] = call.arguments;
+  ensure(ts.isIdentifier(members) && members.text === 'members', 'same member input');
+  ensure(ts.isCallExpression(assignments) && ts.isIdentifier(assignments.expression)
+    && assignments.expression.text === 'asgLike' && assignments.arguments.length === 1
+    && ts.isIdentifier(assignments.arguments[0]) && assignments.arguments[0].text === 'data',
+  'same assignment adapter and data input');
+  ensure(ts.isIdentifier(day), 'day argument is a component-body primitive binding');
+  const dayDeclaration = declaration(day.text), dayInitializer = dayDeclaration.initializer;
+  ensure(dayInitializer && ts.isCallExpression(dayInitializer)
+    && member(dayInitializer.expression, clock, 'todayKey')
+    && dayInitializer.arguments.length === 0, 'day captured directly from family clock each render');
+  ensure(clocks[0].pos < dayDeclaration.pos && dayDeclaration.pos < streakDeclaration.pos,
+    'clock precedes per-render day capture, which precedes streak memo');
+  ensure(member(zone, clock, 'timeZone'), 'helper uses the same family clock timezone');
+  ensure(ts.isArrayLiteralExpression(dependencies), 'explicit memo dependency array');
+  for (const name of ['members', 'data', day.text]) ensure(dependencies.elements.some(node =>
+    ts.isIdentifier(node) && node.text === name), `memo depends on ${name}`);
+  ensure(dependencies.elements.some(node => member(node, clock, 'timeZone')),
+    'memo depends on the same family timezone');
+}
 
 describe('a Los Angeles phone, a UTC family, the morning Los Angeles springs forward', () => {
   const HALF_TWO = new Date('2026-03-08T02:30:00Z');
@@ -316,7 +396,20 @@ describe('rides and chore streaks read the family\'s day (#688 review comments 5
 
   it('the chores sidebar buckets completions in the family\'s zone', () => {
     const src = readFileSync(join(__dirname, '..', 'components/modules/chores-module.tsx'), 'utf8');
-    expect(src).toContain('streaksByMember(members, asgLike(data), clock.todayKey(), clock.timeZone)');
+    expect(() => verifyChoreStreakClockWiring(src)).not.toThrow();
+    // These are finite checker controls, not extra product cases. Each mutation
+    // must change the intended unique source fragment or fail admission first.
+    const mutate = (before: string, after: string): string => {
+      expect(src.split(before)).toHaveLength(2);
+      return src.replace(before, after);
+    };
+    const mutants = [
+      mutate('const todayKey = clock.todayKey();', 'const todayKey = new Date().toISOString().slice(0, 10);'),
+      mutate('const todayKey = clock.todayKey();', 'const todayKey = useMemo(() => clock.todayKey(), [clock]);'),
+      mutate('[members, data, todayKey, clock.timeZone]', '[members, data, clock.timeZone]'),
+      mutate('[members, data, todayKey, clock.timeZone]', '[members, data, todayKey]'),
+    ];
+    for (const mutant of mutants) expect(() => verifyChoreStreakClockWiring(mutant)).toThrow();
   });
 });
 

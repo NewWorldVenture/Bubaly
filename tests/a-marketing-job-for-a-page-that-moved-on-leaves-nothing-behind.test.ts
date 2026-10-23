@@ -482,17 +482,27 @@ describe('F5-EMBED-STALE-CHUNKS: only the page as it now stands keeps ready chun
   });
 
   it('control: a save that leaves the text as it is, inside its model call, keeps its chunks ready', async () => {
-    const page = await aPageWhoseNextEmbeddingIsQueued();
-    const read = embeddedText(page);
-    h.duringEmbedding = async () => { await theConsoleSaves(page); };
+    const start = new Date('2026-10-23T12:00:00.000Z');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(start);
+    try {
+      const page = await aPageWhoseNextEmbeddingIsQueued();
+      const read = embeddedText(page);
+      h.duringEmbedding = async () => {
+        vi.setSystemTime(new Date(start.getTime() + 1_000));
+        await theConsoleSaves(page);
+      };
 
-    const runs = [await theCronRuns(), ...await theCronDrainsTheQueue()];
+      const runs = [await theCronRuns(), ...await theCronDrainsTheQueue()];
 
-    expect(page).toMatchObject({ version: 4 });
-    expect(embeddedText(page)).toBe(read);
-    expect(chunksOf(page.id, 'ready').map((row) => row.content)).toEqual([read]);
-    for (const run of runs) expect(run).toEqual(cleanRun);
-    expect(workerFailures()).toEqual([]);
+      expect(page).toMatchObject({ version: 4 });
+      expect(embeddedText(page)).toBe(read);
+      expect(chunksOf(page.id, 'ready').map((row) => row.content)).toEqual([read]);
+      for (const run of runs) expect(run).toEqual(cleanRun);
+      expect(workerFailures()).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   // RV61-F5-STALES-A-CHUNK-THE-REGENERATION-RESTORES. A legacy save writes the

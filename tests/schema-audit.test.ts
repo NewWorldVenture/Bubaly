@@ -455,3 +455,99 @@ describe('schema audit redacted failure diagnostics', () => {
     expect(logs).not.toHaveBeenCalled();
   });
 });
+
+// Native localhost presence checks: the server models PostgREST's select-list
+// admission, not database rows, permissions, CRUD or provider execution.
+const omittedRunColumns = ['run_type', 'progress', 'started_at', 'completed_at', 'error'] as const;
+function declaredRunColumns() {
+  const sql = readFileSync(resolve('supabase/migrations/0250_ai_runtime_core.sql'), 'utf8');
+  const start = sql.indexOf('alter table public.family_automation_runs');
+  const end = sql.indexOf(';', start);
+  expect(start).toBeGreaterThan(0);
+  expect(end).toBeGreaterThan(start);
+  return [...sql.slice(start, end).matchAll(/add\s+column\s+if\s+not\s+exists\s+(\w+)/gi)].map((match) => match[1]);
+}
+
+async function withRunColumnServer(
+  missing: string | null,
+  action: (base: string, requests: { method: string | undefined; path: string; limit: string | null; selected: string[]; keyMatched: boolean }[]) => Promise<void>,
+) {
+  const { createServer } = await import('node:http');
+  const available = new Set(declaredRunColumns().filter((name) => name !== missing));
+  const requests: Parameters<typeof action>[1] = [];
+  const server = createServer((request, response) => {
+    const endpoint = new URL(request.url ?? '/', 'http://127.0.0.1');
+    const selected = (endpoint.searchParams.get('select') ?? '').split(',');
+    const keyMatched = request.headers.apikey === 'synthetic-schema-native-key'
+      && request.headers.authorization === 'Bearer synthetic-schema-native-key';
+    requests.push({ method: request.method, path: endpoint.pathname, limit: endpoint.searchParams.get('limit'), selected, keyMatched });
+    const invalid = request.method !== 'GET' || endpoint.searchParams.get('limit') !== '0' || !keyMatched;
+    const absent = endpoint.pathname === '/rest/v1/family_automation_runs'
+      && selected.some((name) => !available.has(name));
+    response.writeHead(invalid ? 403 : absent ? 400 : 200, { 'Content-Type': 'application/json' });
+    response.end(invalid ? '{"message":"synthetic-private-header-diagnostic"}'
+      : absent ? '{"message":"synthetic-private-column-diagnostic"}' : '[]');
+  });
+  await new Promise<void>((done, fail) => { server.once('error', fail); server.listen(0, '127.0.0.1', done); });
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Synthetic schema listener did not bind TCP');
+  let primary: unknown;
+  let cleanup: unknown;
+  try { await action(`http://127.0.0.1:${address.port}`, requests); }
+  catch (error) { primary = error; }
+  finally {
+    server.closeAllConnections();
+    try { await new Promise<void>((done, fail) => server.close((error) => error ? fail(error) : done())); }
+    catch (error) { cleanup = error; }
+  }
+  if (primary) throw primary;
+  if (cleanup) throw cleanup;
+  expect(server.listening).toBe(false);
+}
+
+describe('every canonical automation-run column is required over native HTTP', () => {
+  it('selects all eighteen columns declared by 0250 exactly once without widening the fifty-two targets', () => {
+    const declared = declaredRunColumns();
+    expect(declared).toHaveLength(18);
+    const check = SCHEMA_CHECKS.find(([name]) => name === 'family_automation_runs.runtime_columns');
+    expect(check?.[1]).toBe('0250_ai_runtime_core.sql');
+    const selected = check?.[2]?.split(',') ?? [];
+    expect(selected).toHaveLength(18);
+    expect(new Set(selected).size).toBe(18);
+    expect([...selected].sort()).toEqual([...declared].sort());
+    expect(SCHEMA_CHECKS).toHaveLength(52);
+  });
+
+  it('accepts the healthy whole fifty-two-check catalog with zero-row native requests and canonical run selection', async () => {
+    await withRunColumnServer(null, async (base, requests) => {
+      const results = await auditSupabaseSchema({ url: base, key: 'synthetic-schema-native-key' });
+      expect(results).toHaveLength(52);
+      expect(results.every(({ ok, status }) => ok && status === 200)).toBe(true);
+      expect(requests).toHaveLength(52);
+      expect(requests.every((request) => request.method === 'GET' && request.limit === '0' && request.keyMatched)).toBe(true);
+      const run = requests.filter(({ path }) => path === '/rest/v1/family_automation_runs');
+      expect(run).toHaveLength(1);
+      expect([...run[0].selected].sort()).toEqual([...declaredRunColumns()].sort());
+    });
+  });
+
+  it.each(omittedRunColumns)('refuses a catalog missing only %s; omitting that requirement causally restores the false green', async (missing) => {
+    await withRunColumnServer(missing, async (base, requests) => {
+      const results = await auditSupabaseSchema({ url: base, key: 'synthetic-schema-native-key' });
+      expect(results).toHaveLength(52);
+      const failed = results.filter(({ ok }) => !ok);
+      expect(failed).toEqual([{ table: 'family_automation_runs.runtime_columns', migration: '0250_ai_runtime_core.sql', status: 400, ok: false }]);
+      expect(results.filter(({ ok }) => ok)).toHaveLength(51);
+      expect(JSON.stringify(results)).not.toContain('synthetic-private-column-diagnostic');
+      expect(requests).toHaveLength(52);
+      const weakened = SCHEMA_CHECKS.map(([name, migration, columns]) => name === 'family_automation_runs.runtime_columns'
+        ? [name, migration, columns.split(',').filter((column: string) => column !== missing).join(',')]
+        : [name, migration, columns]);
+      const blind = await auditSupabaseSchema({ url: base, key: 'synthetic-schema-native-key', checks: weakened });
+      expect(blind).toHaveLength(52);
+      expect(blind.every(({ ok, status }) => ok && status === 200)).toBe(true);
+      expect(requests).toHaveLength(104);
+      expect(requests.every((request) => request.method === 'GET' && request.limit === '0' && request.keyMatched)).toBe(true);
+    });
+  });
+});
