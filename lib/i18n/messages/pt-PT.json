@@ -17175,5 +17175,8 @@
   "marketplace.anAuctionTakesBidsNotInterest": "Isto é um leilão: faça antes uma licitação.",
   "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "As perguntas entre dois agregados familiares ainda não estão disponíveis.",
   "assistantActions.couldNotReadTheBoard": "Não foi possível ler o mercado neste momento. Tente novamente daqui a pouco.",
-  "negotiations.theOtherSideActedAtTheSameMoment": "A outra parte agiu sobre esta oferta no mesmo momento. Atualize a página e tente novamente."
+  "negotiations.theOtherSideActedAtTheSameMoment": "A outra parte agiu sobre esta oferta no mesmo momento. Atualize a página e tente novamente.",
+  "medicationsModule.otherMembersDosesAreKeptByManagers": "As tomas dos outros membros são registadas e acompanhadas pelos pais e adultos da sua família.",
+  "nutrition.aGuestSeesSavedEstimatesOnly": "Os convidados podem ver uma estimativa nutricional guardada, mas não pedir uma nova. Peça a um membro da família que a analise.",
+  "mealsModule.guestsSeeTheVoteOnly": "Os convidados podem ver a votação da família, mas não votar nela."
 }

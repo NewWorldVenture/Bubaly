@@ -17175,5 +17175,8 @@
   "marketplace.anAuctionTakesBidsNotInterest": "This is an auction: place a bid instead.",
   "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Questions between two households are not open yet.",
   "assistantActions.couldNotReadTheBoard": "Could not read the marketplace board just now. Try again in a moment.",
-  "negotiations.theOtherSideActedAtTheSameMoment": "The other side acted on this offer at the same moment. Refresh and try again."
+  "negotiations.theOtherSideActedAtTheSameMoment": "The other side acted on this offer at the same moment. Refresh and try again.",
+  "medicationsModule.otherMembersDosesAreKeptByManagers": "Other members' doses are logged and tracked by your family's parents and adults.",
+  "nutrition.aGuestSeesSavedEstimatesOnly": "Guests can see a saved nutrition estimate but not request a new one. Ask a family member to analyze it.",
+  "mealsModule.guestsSeeTheVoteOnly": "Guests can see the family vote but not vote in it."
 }

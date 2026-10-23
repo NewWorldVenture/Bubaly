@@ -39,7 +39,14 @@ export function ExpensesModule() {
   // Money follows the reader; the currency stays the money's own.
   const locale = useLocale();
   const usd = (cents: number) => usdIn(cents, locale.code);
-  const { familyId, userId, members, family } = useApp();
+  const { familyId, userId, members, family, role } = useApp();
+  // 0481 refuses a caregiver every share write: expense_split_shares_insert and
+  // _update both exclude 'caregiver'. A split a caregiver started was rolled
+  // back with an RLS error and a settle came back "not saved", on every try.
+  // The screen offers a caregiver what the database lets them do: read the
+  // household's splits. (Whether a caregiver should settle a share they owe
+  // or paid is the owner's call on that policy.)
+  const writesShares = role !== 'caregiver';
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
   const [saving, setSaving] = useState(false);
@@ -185,7 +192,7 @@ export function ExpensesModule() {
         <h1 className="flex items-center gap-2 text-base font-semibold"><Split className="h-4 w-4 text-brand-text" /> {tr('expenses.expenseSplitting')}</h1>
         <div className="flex items-center gap-2">
           <AiInsight kind="expenses" />
-          <Button onClick={() => setForm(blank(family?.timezone ?? 'UTC'))}><Plus className="h-4 w-4" /> {tr('expenses.splitAnExpense')}</Button>
+          {writesShares && <Button onClick={() => setForm(blank(family?.timezone ?? 'UTC'))}><Plus className="h-4 w-4" /> {tr('expenses.splitAnExpense')}</Button>}
         </div>
       </div>
 
@@ -230,7 +237,11 @@ export function ExpensesModule() {
                 </button>
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {sh.map((s) => (
+                {sh.map((s) => !writesShares ? (
+                  <span key={s.id} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${s.settled ? 'bg-success/15 text-success' : 'bg-border/40 text-muted'}`}>
+                    {s.settled && <Check className="h-3 w-3" />} {memberName(s.member_id)} {usd(s.share_cents)}
+                  </span>
+                ) : (
                   <button
                     key={s.id}
                     onClick={() => toggleSettled(s)}
