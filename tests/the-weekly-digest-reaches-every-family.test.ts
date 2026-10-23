@@ -86,7 +86,8 @@ vi.mock('@/lib/supabase/server', () => ({
         },
         order: () => b,
         limit: () => b,
-        gte: () => b, lte: () => b,
+        // The meal count reads the family's week end-exclusive (`.lt`).
+        gte: () => b, lte: () => b, lt: () => b,
         // The calendar read (lib/calendar/occurrences.ts) filters series by
         // `neq` and an `or` on recurrence_until; this fake holds no events, so
         // the filters only need to chain.

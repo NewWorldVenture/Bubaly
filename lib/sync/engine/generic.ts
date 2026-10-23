@@ -30,7 +30,11 @@ import { logSyncProviderError, recordSyncFailure } from '@/lib/sync/audit';
 type Admin = ReturnType<typeof createServiceClient>;
 type Account = { id: string; user_id: string | null; family_id: string; external_id: string | null };
 
-export type RunResult = { imported: number; exported: number; skipped: number; conflicts: number; error?: string };
+export type RunResult = {
+  imported: number; exported: number; skipped: number; conflicts: number; error?: string;
+  /** The account's policy refused the sync before it started: no job, no provider call, nothing written. */
+  refused?: boolean;
+};
 
 const REMOTE_META: Json = { origin: 'remote' };
 const hashMeta = (h: string): Json => ({ lastHash: h });
@@ -44,7 +48,7 @@ export async function runProviderSync(admin: Admin, account: Account, adapter: S
   const provider = adapter.provider;
   const result: RunResult = { imported: 0, exported: 0, skipped: 0, conflicts: 0 };
   const permission = await loadSyncExecutionPolicy(admin, account, adapter.provider);
-  if (!permission.ok) return { ...result, error: permission.error };
+  if (!permission.ok) return { ...result, error: permission.error, refused: true };
   const policy = permission.data;
 
   const { data: job, error: jobError } = await admin

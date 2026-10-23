@@ -9,10 +9,11 @@ import { getTranslations } from '@/lib/i18n/server';
 import { MARKETPLACE_CURRENCY } from '@/lib/marketplace/listings';
 import { getFormat } from '@/lib/utils/format-server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { createServer } from '@/lib/supabase/server';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { buyNowClosedByBids } from '@/lib/marketplace/auction';
 import { readBidTarget } from '@/lib/marketplace/circle-reads';
+import { readSellerStanding } from '@/lib/marketplace/seller-standing';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -64,6 +65,13 @@ export async function placeBidAction(input: { listingId: string; maxCents: numbe
   if (listing && listing.highest_bidder_family_id === ctx.active.familyId) {
     return { ok: false, error: t('actions.youAlreadyLeadThisAuction') };
   }
+  // A closed seller family is refused before the bid is made: the sale would
+  // sit unsettled until they reopen (lib/marketplace/seller-standing.ts).
+  if (listing) {
+    const seller = await readSellerStanding(createServiceClient(), input.listingId);
+    if (seller === 'unknown') return { ok: false, error: t('actions.couldNotPlaceThatBid') };
+    if (seller === 'closed') return { ok: false, error: t('actions.thisFamilyHasClosedItsAccount') };
+  }
 
   const { data, error } = await supabase.rpc('marketplace_place_bid', {
     p_listing_id: input.listingId,
@@ -111,6 +119,11 @@ export async function buyNowAction(listingId: string): Promise<Result<{ orderId:
   if (listingError) return { ok: false, error: t('actions.couldNotCompleteBuyIt') };
   if (!listing) return { ok: false, error: t('actions.listingNotFound') };
   if (buyNowClosedByBids(listing.bid_count)) return { ok: false, error: t('actions.buyItNowIsnT') };
+  // Buy-It-Now creates the order at once: never with a seller family that
+  // closed its account and would not hear of it (seller-standing.ts).
+  const seller = await readSellerStanding(createServiceClient(), listingId);
+  if (seller === 'unknown') return { ok: false, error: t('actions.couldNotCompleteBuyIt') };
+  if (seller === 'closed') return { ok: false, error: t('actions.thisFamilyHasClosedItsAccount') };
   const { data, error } = await supabase.rpc('marketplace_buy_now', {
     p_listing_id: listingId,
     p_buyer_member_id: ctx.active.member.id,

@@ -94,6 +94,8 @@ function fixture() {
     global: { fetch: async (raw, init = {}) => {
       const url = new URL(String(raw));
       if (url.origin !== 'https://outside-sender-fixture.invalid') throw new Error('Unexpected fixture origin');
+      // The durable limiter behind the concierge budget (lib/contact-center/inbound-budget.ts): within budget here.
+      if (url.pathname === '/rest/v1/rpc/rate_limit_hit') return Response.json([{ allowed: true, retry_after: 0 }]);
       const user = /^\/auth\/v1\/admin\/users\/([^/]+)$/.exec(url.pathname);
       if (user) {
         const found = state.users[user[1]];

@@ -7,6 +7,9 @@ import { groupCalendarDays, parseCalendarReply } from '../mobile/src/lib/calenda
 const h = vi.hoisted(() => ({ enabled: true, context: vi.fn() }));
 vi.mock('@/lib/calendar/source-capability', () => ({ get CALENDAR_SOURCE_ARCHIVE_ENABLED() { return h.enabled; } }));
 vi.mock('@/lib/supabase/bearer', async original => ({ ...await original<typeof import('@/lib/supabase/bearer')>(), getBearerUserContext: h.context }));
+// The account-standing gate is proved with the real standing read in
+// tests/the-phone-calendar-refuses-a-locked-family.test.ts; the family here is open.
+vi.mock('@/lib/server/route-feature-gate', () => ({ refuseIfLocked: async () => null }));
 import { GET } from '@/app/api/calendar/occurrences/route';
 const family = '10000000-0000-4000-8000-000000000001', feed = '20000000-0000-4000-8000-000000000001', revision = '30000000-0000-4000-8000-000000000001';
 const owner = { userId: 'synthetic-user', familyId: family, memberId: 'synthetic-member', timezone: 'America/New_York' };

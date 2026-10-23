@@ -5,6 +5,7 @@ import type { LocaleCode } from '@/lib/i18n/locales';
 import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { MARKETPLACE_CURRENCY } from '@/lib/marketplace/listings';
+import { RESERVE_VIEW_COLUMNS, readWithReserveView } from '@/lib/marketplace/reserve-view';
 import { createFormat } from '@/lib/utils/format';
 import { notify } from '@/lib/services/notifications';
 import { systemScopeForFamily } from '@/lib/services/scope';
@@ -17,6 +18,15 @@ export const maxDuration = 120;
 // RPC. Listing, order, and bid state changes commit together; notifications
 // remain best-effort after the transaction succeeds.
 const BATCH = 50;
+
+/**
+ * Pages of due auctions read to fill one BATCH. An auction whose winning
+ * bidder's household has closed is held (see the due query) and stays due, so
+ * a single page could fill with held auctions and starve the settleable ones
+ * behind them. Bounded, as the re-check below is, so one run stays inside
+ * maxDuration.
+ */
+const DUE_MAX_PAGES = 4;
 
 /**
  * How far back a settled auction's notices are re-checked. Settlement commits
@@ -161,19 +171,78 @@ export async function GET(req: NextRequest) {
     });
   const nowIso = new Date().toISOString();
 
-  const { data: due, error } = await admin
-    .from('marketplace_listings')
-    .select('id')
-    .eq('sale_format', 'auction').eq('status', 'available')
-    .lt('auction_ends_at', nowIso)
-    .limit(BATCH);
-  if (error) return NextResponse.json({ ok: false, error: t('closeAuctions.couldNotLoadAuctions') }, { status: 500 });
+  // Auctions of OPEN families only. A family that closed its account
+  // (families.closed_at) cannot see a sale, and every delivery cron skips its
+  // notices, so settling its auction created an order naming a seller who
+  // hears nothing until they reopen — the buyer waiting on them meanwhile.
+  // The listing stays `available` and is settled by the first run after the
+  // family reopens. Same shape as cron/wallet-allowance's rule, with the
+  // embed named by its column: marketplace_listings has a second foreign key
+  // into families (highest_bidder_family_id), and an unhinted `families(...)`
+  // is ambiguous to PostgREST.
+  //
+  // Nor is one settled to a winning bidder whose household has closed since
+  // bidding: marketplace_close_auction would write the 'Won at auction' order
+  // for highest_bidder_family_id regardless, a confirmed order the winner
+  // cannot see, with the seller waiting on them — the harm the negotiation
+  // actions refuse for a closed buyer. What a closed winner SHOULD mean (fall
+  // through to the next bidder, or refuse to settle) is the owner's call for
+  // that RPC; until then the cron holds such an auction unsettled, counts it
+  // (`heldForClosedBidder`) and settles it on the first run after that
+  // household reopens. The second embed is hinted by its column for the same
+  // ambiguity, and is not `!inner`: an auction with no bids has no bidder.
+  //
+  // Only an auction that would SELL to that bidder is held: marketplace_close_
+  // auction writes the order only when its `v_sold` holds (0483: bids, a
+  // leader's max that meets the reserve, a leading member and family). Any
+  // other closes unsold, with no order for anyone, so a closed leader is no
+  // reason to keep an open seller's auction running past its end. The figures
+  // v_sold compares are the two SEC-016 secrets, which no code names, so this
+  // reads 0452's public `reserve_met` instead: since 0483(b) a leader whose max
+  // covers the reserve shows at least the reserve, and before 0483 the RPC
+  // compared the shown price itself (0457), so bids plus reserve_met is v_sold.
+  // (A bid placed before 0483(b) whose hidden max covered the reserve without
+  // the price showing it reads as unmet; what the RPC does for a closed winner
+  // is the owner's SQL.)
+  type Due = {
+    id: string; bid_count: number | null; reserve_met: boolean | null; highest_bidder_member_id: string | null;
+    bidder: { closed_at: string | null } | { closed_at: string | null }[] | null;
+  };
+  const wouldSell = (row: Due) => Number(row.bid_count ?? 0) > 0 && row.reserve_met === true && row.highest_bidder_member_id != null;
+  const due: Due[] = [];
+  let heldForClosedBidder = 0;
+  for (let page = 0; page < DUE_MAX_PAGES && due.length < BATCH; page++) {
+    const from = page * BATCH;
+    // Through readWithReserveView, so a database 0452 has not reached yet
+    // still settles (lib/marketplace/reserve-view.ts).
+    const { data: rows, error } = await readWithReserveView<Due[]>(
+      `id, bid_count, ${RESERVE_VIEW_COLUMNS}, highest_bidder_member_id, family:families!family_id!inner(closed_at), bidder:families!highest_bidder_family_id(closed_at)`,
+      (columns) => admin
+        .from('marketplace_listings')
+        .select(columns)
+        .eq('sale_format', 'auction').eq('status', 'available')
+        .lt('auction_ends_at', nowIso)
+        .is('family.closed_at', null)
+        .order('id', { ascending: true })
+        .range(from, from + BATCH - 1),
+    );
+    if (error) return NextResponse.json({ ok: false, error: t('closeAuctions.couldNotLoadAuctions') }, { status: 500 });
+    for (const row of rows ?? []) {
+      const bidder = Array.isArray(row.bidder) ? row.bidder[0] : row.bidder;
+      if (bidder?.closed_at && wouldSell(row)) heldForClosedBidder++;
+      else if (due.length < BATCH) due.push(row);
+    }
+    if ((rows ?? []).length < BATCH) break;
+  }
+  if (heldForClosedBidder > 0) {
+    console.warn(`Auctions held unsettled because the winning bidder's household has closed: ${heldForClosedBidder}`);
+  }
 
   let sold = 0;
   let unsold = 0;
   let failed = 0;
   const settledThisRun = new Set<string>();
-  for (const listing of due ?? []) {
+  for (const listing of due) {
     const { data: closed, error: closeError } = await admin.rpc('marketplace_close_auction', {
       p_listing_id: listing.id,
       p_now: nowIso,
@@ -270,5 +339,5 @@ export async function GET(req: NextRequest) {
 
   if (skipped > 0) console.warn(`Auction notices skipped for families with no notice scope: ${skipped}`);
   const ok = failed === 0;
-  return NextResponse.json({ ok, closed: sold + unsold, sold, unsold, failed, skipped, rechecked }, { status: ok ? 200 : 502 });
+  return NextResponse.json({ ok, closed: sold + unsold, sold, unsold, failed, skipped, rechecked, heldForClosedBidder }, { status: ok ? 200 : 502 });
 }

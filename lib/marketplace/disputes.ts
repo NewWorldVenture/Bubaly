@@ -1,8 +1,17 @@
-// lib/marketplace/disputes.ts — the dispute state machine + remedy rules (pure,
-// unit-tested). Backs marketplace_disputes. The spec is explicit: "do not
-// fabricate dispute outcomes" — so this engine ONLY validates status transitions
-// and tells you which remedies are applicable to a dispute kind. It never decides
-// an outcome; a human (admin) supplies the decision, and this checks it is legal.
+// lib/marketplace/disputes.ts — a SPECIFICATION, not a live engine.
+//
+// NOT WIRED. No table backs it: no migration creates a disputes table, and no
+// code outside its own test imports it; this test holds both:
+//   tests/an-order-step-is-one-the-database-knows.test.ts
+// The marketplace has no dispute, refund or deposit handling; an order's
+// statuses are ORDER_TRANSITIONS in ./order-lifecycle.ts. Wiring this means
+// creating its table first.
+//
+// What it encodes: the dispute state machine and remedy rules. The spec is
+// explicit: "do not fabricate dispute outcomes" — so this ONLY validates status
+// transitions and tells you which remedies apply to a dispute kind. It never
+// decides an outcome; a human (admin) supplies the decision, and this checks it
+// is legal.
 
 export type DisputeKind =
   | 'not_received' | 'damaged' | 'not_as_described' | 'rental_damage' | 'late_return' | 'fraud';

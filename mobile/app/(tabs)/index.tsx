@@ -1,11 +1,10 @@
 import React, { useMemo } from 'react';
 import { Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import * as Linking from 'expo-linking';
 import { Ionicons } from '@expo/vector-icons';
 import { AppText } from '../../src/components/AppText';
 import { Button } from '../../src/components/Button';
-import { EmptyState } from '../../src/components/EmptyState';
+import { FamilyGate } from '../../src/components/FamilyGate';
 import { GlassCard } from '../../src/components/GlassCard';
 import { Divider, ListRow } from '../../src/components/ListRow';
 import { Pill } from '../../src/components/Pill';
@@ -13,7 +12,6 @@ import { Screen } from '../../src/components/Screen';
 import { useAsyncData } from '../../src/hooks/use-async-data';
 import { useCalendar } from '../../src/hooks/use-calendar';
 import { useAuth } from '../../src/lib/auth';
-import { webUrl } from '../../src/lib/config';
 import { dueLabel, formatTime, greeting } from '../../src/lib/format';
 import { groupCalendarDays } from '../../src/lib/calendar-core';
 import { isOpenChore } from '../../src/lib/chores-core';
@@ -39,15 +37,17 @@ export default function TodayScreen() {
     }).slice(0, 4);
   }, [calendar.data, tz]);
 
-  const today = useAsyncData(async () => {
+  const today = useAsyncData(async (signal) => {
     if (!familyId) return null;
     try {
     const [chores, grocery] = await Promise.all([
-      fetchOpenChores(supabase, familyId),
-      fetchGroceryList(supabase, familyId),
+      fetchOpenChores(supabase, familyId, signal),
+      fetchGroceryList(supabase, familyId, signal),
     ]);
-    const open = chores.filter((c) => isOpenChore(c.status));
-    return { ownerKey, data: { chores: open.slice(0, 4), openChores: open.length, toBuy: grocery.items.filter((i) => !i.is_checked).length }, error: null };
+    const open = chores.rows.filter((c) => isOpenChore(c.status));
+    // The household's counts, not the page's: a family with more than a page
+    // of open chores reads its real number here.
+    return { ownerKey, data: { chores: open.slice(0, 4), openChores: chores.openCount, toBuy: grocery.items.filter((i) => !i.is_checked).length }, error: null };
     } catch {
       return { ownerKey, data: null, error: 'Household tasks unavailable. Please try again.' };
     }
@@ -60,21 +60,21 @@ export default function TodayScreen() {
   );
 
   if (!family) {
+    // Loading, failed, or no household yet: three different cards (FamilyGate).
+    // The onboarding card used to show for all three, every cold start included.
     return (
       <Screen title={greeting(new Date(), tz)} right={settings} refreshing={familyLoading} onRefresh={refreshFamily}>
-        <EmptyState
-          icon="people-outline"
-          title={familyError ? 'Couldn’t load your family' : 'Finish setting up your family'}
-          body={familyError ?? 'Create your household on the web app, then pull to refresh here.'}
-          action={<Button title={familyError ? 'Try again' : 'Open Bubaly on the web'} variant="secondary" onPress={familyError ? refreshFamily : () => Linking.openURL(webUrl('/onboarding'))} />}
-        />
+        <FamilyGate loading={familyLoading} error={familyError} onRetry={() => void refreshFamily()} />
       </Screen>
     );
   }
 
   const ownedToday = today.data?.ownerKey === ownerKey ? today.data : null;
   const data = ownedToday?.data;
-  const refresh = async () => { await Promise.all([today.refresh(), calendar.refresh()]); };
+  // Pull to refresh re-reads the family too: a household timezone (or active
+  // family) changed on the web otherwise keeps failing the calendar's
+  // owner check until the Assistant tab happens to be focused.
+  const refresh = async () => { await Promise.all([today.refresh(), calendar.refresh(), refreshFamily()]); };
   return (
     <Screen title={`${greeting(new Date(), tz)}, ${family.displayName.split(' ')[0]}`} subtitle={family.familyName} right={settings} refreshing={today.refreshing || calendar.refreshing} onRefresh={refresh}>
       {ownedToday?.error ? <AppText variant="muted" color={colors.danger}>{ownedToday.error}</AppText> : null}

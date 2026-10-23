@@ -4,7 +4,7 @@ import {
   isGithubConfigured, listIssuesByLabels, type GithubIssue,
 } from '@/lib/integrations/github';
 import { GH_MARKER_LABEL, feedbackIdFromBody, statusFromIssue } from '@/lib/feedback/github-map';
-import { syncIdeaToGithub } from '@/lib/feedback/notify';
+import { githubClaimCutoff, syncIdeaToGithub } from '@/lib/feedback/notify';
 import { readAll } from '@/lib/supabase/read-all';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
@@ -66,12 +66,23 @@ export async function runGithubFeedbackSync(admin: Admin, opts?: { backfillLimit
   const limiter = createServiceClient();
 
   // 1. Backfill unsynced ideas → issues, within the per-run and per-family caps.
-  const { data: unsynced } = await admin
+  //    An idea another sync has claimed in the last GITHUB_SYNC_CLAIM_MS is
+  //    left to that sync (syncIdeaToGithub).
+  const { data: unsynced, error: unsyncedError } = await admin
     .from('feedback_ideas')
     .select('id, title, kind, category, problem, body, impact, vote_count, author_name, family_id, author_id')
     .is('github_issue_number', null)
+    .or(`github_synced_at.is.null,github_synced_at.lt.${githubClaimCutoff()}`)
     .order('created_at', { ascending: true })
     .limit(opts?.backfillLimit ?? BACKFILL_PER_RUN);
+  // The error was dropped here, so a failed read was an empty backfill: zero
+  // iterations, `errors` untouched, the route a clean 200 with no github_error
+  // notice. The linked-idea read below already treats its error as the run's;
+  // this one does the same.
+  if (unsyncedError) {
+    console.error('[github-sync] unsynced-idea read failed', unsyncedError);
+    return { configured: true, created: 0, reconciled: 0, changes: [], errors: errors + 1, held };
+  }
   for (const idea of unsynced ?? []) {
     const subject = idea.family_id ? `family:${idea.family_id}` : idea.author_id ? `author:${idea.author_id}` : 'unattributed';
     const gate = await enforceRequestRateLimit(limiter, `feedback-github-backfill:${subject}`, { limit: FAMILY_ISSUES_PER_DAY, windowMs: ISSUE_WINDOW_MS });

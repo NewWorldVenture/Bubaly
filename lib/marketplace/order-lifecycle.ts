@@ -1,10 +1,16 @@
-// lib/marketplace/order-lifecycle.ts — the buy/sell offer + order state machine
-// (pure, unit-tested). The purchase-side counterpart to rental-lifecycle: it
-// encodes valid offer transitions (open → accepted/declined/withdrawn) and order
-// transitions (pending → completed/sold, canceled, refunded, disputed), plus the
-// "accept one offer, auto-decline the rest" rule. Statuses match the DB check
-// constraints on marketplace_offers (0120) and marketplace_orders (0138) exactly,
-// so persisted rows always satisfy them.
+// lib/marketplace/order-lifecycle.ts — the offer + order state machine (pure,
+// unit-tested). It encodes valid offer transitions (open → accepted/declined/
+// withdrawn), the "accept one offer, auto-decline the rest" rule, and THE order
+// state machine the app runs: setOrderStatusAction (app/(app)/marketplace/
+// actions.ts) allows exactly ORDER_TRANSITIONS, and the Orders page offers
+// exactly those steps (components/marketplace/order-controls.tsx).
+//
+// The statuses are the database's own: marketplace_orders.status is checked
+// against requested/confirmed/active/returned/completed/cancelled (0151), and
+// tests/an-order-step-is-one-the-database-knows.test.ts holds this table to
+// that check. It used to say the same of a vocabulary the database never had
+// (pending/available/sold/canceled/refunded/disputed), while the live flow was
+// a second table in actions.ts and a third in order-controls.tsx.
 
 // ── Offers ─────────────────────────────────────────────────────────────────
 export type OfferStatus = 'open' | 'accepted' | 'declined' | 'withdrawn';
@@ -41,24 +47,27 @@ export function resolveOfferAcceptance(offers: OfferLike[], acceptedId: string):
 }
 
 // ── Orders ─────────────────────────────────────────────────────────────────
-export type OrderStatus =
-  | 'pending' | 'available' | 'sold' | 'canceled' | 'refunded' | 'disputed' | 'completed';
+/** marketplace_orders.status, exactly as 0151's check constraint spells it. */
+export type OrderStatus = 'requested' | 'confirmed' | 'active' | 'returned' | 'completed' | 'cancelled';
 
-export const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
-  available: ['pending', 'canceled'],
-  pending: ['sold', 'completed', 'canceled', 'disputed'],
-  sold: ['completed', 'refunded', 'disputed'],
-  completed: ['refunded', 'disputed'],
-  disputed: ['completed', 'refunded', 'canceled'],
-  canceled: [],
-  refunded: [],
+/**
+ * requested → confirmed → active → (returned →) completed; an order not yet
+ * under way can be cancelled. `active` is a sale handed over or a loan running.
+ */
+export const ORDER_TRANSITIONS: Readonly<Record<OrderStatus, readonly OrderStatus[]>> = {
+  requested: ['confirmed', 'cancelled'],
+  confirmed: ['active', 'cancelled'],
+  active: ['returned', 'completed'],
+  returned: ['completed'],
+  completed: [],
+  cancelled: [],
 };
 
 export function canOrderTransition(from: OrderStatus, to: OrderStatus): boolean {
   return (ORDER_TRANSITIONS[from] ?? []).includes(to);
 }
 
-export function nextOrderStatuses(from: OrderStatus): OrderStatus[] {
+export function nextOrderStatuses(from: OrderStatus): readonly OrderStatus[] {
   return ORDER_TRANSITIONS[from] ?? [];
 }
 
@@ -66,9 +75,12 @@ export function isOrderTerminal(status: OrderStatus): boolean {
   return nextOrderStatuses(status).length === 0;
 }
 
-/** True once money has changed hands (eligible for refund / review). */
+/**
+ * True once the exchange is finished (reviews open). No marketplace order is
+ * charged in-app, so this is "done", not "money moved".
+ */
 export function isOrderPaid(status: OrderStatus): boolean {
-  return status === 'sold' || status === 'completed';
+  return status === 'completed';
 }
 
 // ── Who takes which step ───────────────────────────────────────────────────

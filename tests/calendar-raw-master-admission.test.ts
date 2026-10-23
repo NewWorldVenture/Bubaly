@@ -49,7 +49,11 @@ function setup(events: Row[] = [native()], options: Options = {}) {
   } } });
   return { calls, tables };
 }
-beforeEach(() => { h.mail = []; h.enabled = false; vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-04T12:00:00Z')); vi.spyOn(console, 'error').mockImplementation(() => {}); });
+// The digest's clock sits on its Monday 08:00 UTC slot: the route reads the
+// slot's week, not the seven days from the tick (lib/server/cron-slot.ts), so
+// this is the week of 2026-10-05 — the one `window` below names for the other
+// consumers, in which the monthly master has no occurrence.
+beforeEach(() => { h.mail = []; h.enabled = false; vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-05T08:00:00Z')); vi.spyOn(console, 'error').mockImplementation(() => {}); });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 async function send() {
   const response = await GET(new NextRequest('https://local.synthetic.invalid/api/cron/weekly-digest'));

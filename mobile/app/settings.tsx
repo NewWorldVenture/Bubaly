@@ -19,10 +19,14 @@ const LABELS: Record<ThemePreference, string> = { dark: 'Dark', light: 'Light', 
 export default function SettingsScreen() {
   const theme = useTheme();
   const { colors, spacing, radius } = theme;
-  const { session, family, signOut } = useAuth();
+  const { session, family, familyLoading, familyError, signOut } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
   const [signOutFailed, setSignOutFailed] = useState(false);
   const t = (key: string) => mobileTranslate(deviceLocale(), key);
+  // "No family yet" is true only once the family read has answered with none;
+  // while it is loading, or when it failed, the line says that instead.
+  const account = family ? `${family.displayName} · ${family.role} · ${family.familyName}`
+    : familyError ? t('mobileAssistant.familyLoadFailed') : familyLoading ? t('mobileAssistant.checking') : 'No family yet';
 
   return (
     <Screen>
@@ -49,7 +53,7 @@ export default function SettingsScreen() {
 
       <GlassCard>
         <AppText variant="label" style={{ marginBottom: spacing[2] }}>Account</AppText>
-        <ListRow title={session?.user.email ?? 'Signed in'} subtitle={family ? `${family.displayName} · ${family.role} · ${family.familyName}` : 'No family yet'} leading={<Ionicons name="person-circle-outline" size={28} color={colors.muted} />} />
+        <ListRow title={session?.user.email ?? 'Signed in'} subtitle={account} leading={<Ionicons name="person-circle-outline" size={28} color={colors.muted} />} />
         <Divider />
         <ListRow title="Manage family on the web" subtitle="Members, invites, billing" leading={<Ionicons name="open-outline" size={24} color={colors.muted} />} onPress={() => Linking.openURL(webUrl('/dashboard/family'))} />
         <Divider />

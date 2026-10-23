@@ -1,12 +1,18 @@
 import { lastUtcDays } from '@/lib/admin/clock';
 
-/** Real cumulative-count-by-day area chart from a list of actual creation timestamps. */
-export function GrowthChart({ timestamps, days = 30 }: { timestamps: string[]; days?: number }) {
+/**
+ * Real cumulative-count-by-day area chart from a list of actual creation timestamps.
+ *
+ * `base` is the number created before the first day drawn, for a caller that
+ * counts those rather than reading every one of them; it lifts every point
+ * equally, exactly as passing their timestamps would.
+ */
+export function GrowthChart({ timestamps, days = 30, base = 0 }: { timestamps: string[]; days?: number; base?: number }) {
   // Cumulative count at the END of each of the last `days` whole admin-zone
   // days (lib/admin/clock.ts). The rolling host-midnight cutoffs this replaced
   // drew a different curve on every host.
   const dates = timestamps.map((t) => new Date(t).getTime());
-  const points = lastUtcDays(days).map((w) => dates.filter((t) => t < w.end).length);
+  const points = lastUtcDays(days).map((w) => dates.filter((t) => t < w.end).length).map((n) => base + n);
   const max = Math.max(...points, 1);
   const w = 600, h = 160;
   const path = points

@@ -228,7 +228,7 @@ export const homeTools: ToolDefinition[] = [
     summarize: (_input, output) => `Added maintenance task "${output.title}"${output.due_at ? ` due ${output.when}` : ''}`,
     resource: (output) => ({ table: 'maintenance_tasks', id: output.id }),
     execute: async (scope, input) => {
-      const assignee = await resolveAssigneeId(scope, input);
+      const assignee = await resolveAssigneeId(scope, input, { requireActive: true });
       if (!assignee.ok) return assignee;
       const res = await createMaintenanceTask(scope, {
         title: input.title, description: input.description ?? null, dueAt: input.due_at ?? null, assetId: input.asset_id ?? null,

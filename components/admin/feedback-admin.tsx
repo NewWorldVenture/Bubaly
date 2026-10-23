@@ -17,7 +17,7 @@ import {
   categoryMeta, statusMeta, kindMeta,
   type IdeaRow, type FeedbackStatus, type FeedbackKind,
 } from '@/lib/feedback/board';
-import { feedbackAdminSummary, filterIdeasForAdmin, type AdminFeedbackFilter } from '@/lib/feedback/admin';
+import { feedbackBoardSummary, filterIdeasForAdmin, type AdminFeedbackFilter, type FeedbackBoardCounts } from '@/lib/feedback/admin';
 import {
   updateIdeaAction, setIdeaPinnedAction, deleteIdeaAction, postTeamReplyAction,
   syncGithubNowAction, markAdminNotificationsReadAction,
@@ -35,8 +35,19 @@ const fmtIn = (locale: LocaleCode) => (iso: string) => {
   return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfigured = false }: {
-  ideas: IdeaRow[]; comments: AdminComment[]; notifications?: AdminNotification[]; githubConfigured?: boolean;
+/**
+ * `comments` is null when the page could not read every comment on the board:
+ * each thread then says it is not shown, rather than showing part of itself as
+ * the whole, and everything else on a card still works.
+ *
+ * `counts` are the board's own (lib/feedback/admin.ts), not a tally of
+ * `ideas`, which is the listed newest 1,000 at most.
+ */
+export function FeedbackAdmin({ ideas, counts, comments, notifications = [], unreadCount, githubConfigured = false }: {
+  ideas: IdeaRow[]; counts: FeedbackBoardCounts; comments: AdminComment[] | null; notifications?: AdminNotification[];
+  /** Every unread notification, counted: `notifications` is the newest few, listed. */
+  unreadCount: number;
+  githubConfigured?: boolean;
 }) {
   const locale = useLocale();
   const fmt = fmtIn(locale.code);
@@ -49,8 +60,7 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
   const [syncing, startSync] = useTransition();
   const [marking, startMark] = useTransition();
 
-  const summary = useMemo(() => feedbackAdminSummary(ideas), [ideas]);
-  const unreadNotes = notifications.filter((n) => !n.is_read);
+  const summary = useMemo(() => feedbackBoardSummary(counts), [counts]);
 
   function runSync() {
     startSync(async () => {
@@ -65,6 +75,7 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
     });
   }
   const commentsByIdea = useMemo(() => {
+    if (!comments) return null;
     const m = new Map<string, AdminComment[]>();
     for (const c of comments) { const a = m.get(c.idea_id) ?? []; a.push(c); m.set(c.idea_id, a); }
     return m;
@@ -77,12 +88,12 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
     return q ? base.filter((i) => i.title.toLowerCase().includes(q) || (i.body ?? '').toLowerCase().includes(q) || (i.problem ?? '').toLowerCase().includes(q)) : base;
   }, [ideas, filter, kindFilter, q]);
 
-  const cards: { label: string; value: number; tone: string }[] = [
+  const cards: { label: string; value: number | null; tone: string }[] = [
     { label: 'Needs review', value: summary.needsReview, tone: 'text-amber-500' },
     { label: 'Active', value: summary.active, tone: 'text-purple-500' },
     { label: 'Shipped', value: summary.shipped, tone: 'text-emerald-500' },
     { label: 'Total ideas', value: summary.total, tone: 'text-fg' },
-    { label: 'Total votes', value: summary.totalVotes, tone: 'text-brand-text' },
+    { label: t('feedbackAdmin.totalVotes'), value: summary.totalVotes, tone: 'text-brand-text' },
   ];
 
   return (
@@ -91,7 +102,7 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {cards.map((c) => (
           <div key={c.label} className="rounded-2xl border border-border bg-surface/40 p-4">
-            <p className={cn('text-2xl font-black tabular-nums', c.tone)}>{c.value}</p>
+            <p className={cn('text-2xl font-black tabular-nums', c.tone)}>{c.value ?? t('strategyMetrics.unavailable')}</p>
             <p className="mt-0.5 text-xs text-muted">{c.label}</p>
           </div>
         ))}
@@ -102,10 +113,10 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <p className="flex items-center gap-2 text-sm font-bold text-fg">
             <Bell className="h-4 w-4 text-brand-text" /> {t('feedbackAdmin.activityRelay')}
-            {unreadNotes.length > 0 && <span className="rounded-full bg-brand px-2 py-0.5 text-[11px] font-bold text-brand-fg">{unreadNotes.length} new</span>}
+            {unreadCount > 0 && <span className="rounded-full bg-brand px-2 py-0.5 text-[11px] font-bold text-brand-fg">{unreadCount.toLocaleString(locale.code)} new</span>}
           </p>
           <div className="flex items-center gap-2">
-            {unreadNotes.length > 0 && (
+            {unreadCount > 0 && (
               <button type="button" onClick={markAllRead} disabled={marking}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-50">
                 {marking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} {t('feedbackAdmin.markAllRead')}
@@ -185,6 +196,13 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
         </div>
       </div>
 
+      {/* The chips count the whole board; the list holds the first 1,000 of it
+          (pinned, then newest), so past them a chip can promise ideas the list
+          does not have, and the list says so (review R8B-FEEDBACK-CHIP-COUNTS-PROMISE-UNLISTED-IDEAS). */}
+      {counts.total > ideas.length && (
+        <p className="text-xs text-muted">{t('feedbackAdmin.theListHoldsPartOfTheBoard', { shown: ideas.length.toLocaleString(locale.code), total: counts.total.toLocaleString(locale.code) })}</p>
+      )}
+
       {/* List */}
       {visible.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-10 text-center text-sm text-muted">
@@ -196,7 +214,7 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
             <IdeaAdminCard
               key={idea.id}
               idea={idea}
-              comments={commentsByIdea.get(idea.id) ?? []}
+              comments={commentsByIdea ? commentsByIdea.get(idea.id) ?? [] : null}
               expanded={expanded === idea.id}
               onToggle={() => setExpanded((e) => (e === idea.id ? null : idea.id))}
               onSuccess={success}
@@ -224,7 +242,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
 }
 
 function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError }: {
-  idea: IdeaRow; comments: AdminComment[]; expanded: boolean; onToggle: () => void;
+  idea: IdeaRow; comments: AdminComment[] | null; expanded: boolean; onToggle: () => void;
   onSuccess: (m: string) => void; onError: (m: string) => void;
 }) {
   const locale = useLocale();
@@ -351,7 +369,9 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
           </div>
 
           {/* Existing comments */}
-          {comments.length > 0 && (
+          {comments === null ? (
+            <p className="text-xs text-muted">{t('feedbackAdmin.conversationNotShown')}</p>
+          ) : comments.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-semibold text-muted">{t('feedbackAdmin.conversation')}</p>
               {comments.map((c) => (

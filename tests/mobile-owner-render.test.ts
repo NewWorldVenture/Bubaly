@@ -37,6 +37,8 @@ vi.doMock(resolveNative('expo-crypto'), () => ({ randomUUID: () => `conversation
 vi.doMock(resolveNative('expo-audio'), () => ({ RecordingPresets: { HIGH_QUALITY: {} }, requestRecordingPermissionsAsync: async () => ({ granted: true }),
   setAudioModeAsync: async () => {}, useAudioRecorder: () => ({ prepareToRecordAsync: async () => {}, record: () => {}, stop: async () => {}, uri: 'file:///voice.m4a' }) }));
 vi.doMock(resolveNative('@expo/vector-icons'), () => ({ Ionicons: 'Ionicons' }));
+// The recording cleanup (recordings.ts) reaches the device's file system through expo-file-system; no file is touched here.
+vi.doMock(resolveNative('expo-file-system'), () => ({ File: class { exists = false; delete() {} }, Directory: class { exists = false; delete() {} }, Paths: { cache: { list: () => [] } } }));
 for (const name of ['AppText', 'Field', 'GlassCard', 'Pill', 'Screen']) {
   vi.doMock(`../mobile/src/components/${name}`, () => ({ [name]: name }));
 }

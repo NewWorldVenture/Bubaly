@@ -3,8 +3,11 @@ import Link from 'next/link';
 import { TrendingUp, DollarSign, Trophy, Percent } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { fmtDate } from '@/lib/utils/format';
 import {
   dealsByStage, openPipelineValueCents, weightedPipelineValueCents, wonValueCents, winRate,
@@ -25,6 +28,10 @@ type Deal = Tables<'crm_deals'>;
 type Contact = Tables<'crm_contacts'>;
 
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
+/** Deals the tiles may page through before they are reported as not shown (one round trip per 1,000). */
+const SUM_ROW_CEILING = 25_000;
+/** The board lists the newest this many deals. */
+const BOARD_SHOWN = 500;
 const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
 
 const STAGE_TINT: Record<DealStage, string> = {
@@ -35,11 +42,25 @@ const STAGE_TINT: Record<DealStage, string> = {
 export default async function PipelinePage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const [dealsResult, contactsResult] = await settleAll([
-    supabase.from('crm_deals').select('*').order('created_at', { ascending: false }).limit(500),
+  // The board is the newest 500 deals and the contact picker the newest 500
+  // contacts; the tiles are the whole pipeline. Summed from the board, Open
+  // pipeline, Weighted, Won and Win rate left out every older deal, so the
+  // deals are paged on the id to a real ceiling, and past it the tiles say
+  // they are not shown rather than adding up part of the pipeline.
+  // The picker said nothing of that: against a head:true count of the
+  // contacts it says when it offers part of them (coverage sweep round 9).
+  const [dealsResult, contactsResult, pipelineResult, contactCountResult] = await settleAll([
+    supabase.from('crm_deals').select('*').order('created_at', { ascending: false }).order('id', { ascending: false }).limit(BOARD_SHOWN),
     supabase.from('crm_contacts').select('id, first_name, last_name, email').order('created_at', { ascending: false }).limit(500),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('crm_deals').select('id, stage, amount_cents');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
+    supabase.from('crm_contacts').select('id', { count: 'exact', head: true }),
   ]);
-  const readError = dealsResult.error ?? contactsResult.error;
+  const pipelineCeiling = 'truncated' in pipelineResult && pipelineResult.truncated;
+  const readError = dealsResult.error ?? contactsResult.error ?? (pipelineCeiling ? null : pipelineResult.error) ?? contactCountResult.error;
   if (readError) {
     console.error('[admin-marketing-pipeline] pipeline read failed', readError);
     return <AdminPipelineReadError />;
@@ -49,18 +70,42 @@ export default async function PipelinePage() {
 
   const list = (deals ?? []) as Deal[];
   const contactList = (contacts ?? []) as Pick<Contact, 'id' | 'first_name' | 'last_name' | 'email'>[];
-  const contactName = new Map(contactList.map((c) => [c.id, contactDisplayName(c)]));
+  // A deal is named from ITS contact. The newest 500 contacts named whichever
+  // contacts were newest, and a deal whose contact was older read "—".
+  const listedContactIds = [...new Set(list.map((d) => d.contact_id).filter((id): id is string => !!id))];
+  const labelsResult = await readInChunks(listedContactIds, (chunk) =>
+    supabase.from('crm_contacts').select('id, first_name, last_name, email').in('id', chunk));
+  if (labelsResult.error) {
+    console.error('[admin-marketing-pipeline] pipeline read failed', labelsResult.error);
+    return <AdminPipelineReadError />;
+  }
+  const contactName = new Map(labelsResult.data.map((c) => [c.id, contactDisplayName(c)]));
   const grouped = dealsByStage(list.map((d) => ({ ...d, stage: d.stage as DealStage })));
+  const pipeline = (pipelineResult.data ?? []).map((d) => ({ ...d, stage: d.stage as DealStage }));
+  // Each column header counts and adds up its WHOLE stage, from the paged
+  // read the tiles use, so the open stages add up to Open pipeline; from the
+  // board they described the newest 500 deals (review
+  // R5-CRM-BOARD-AND-RANKING-FROM-CAPPED-LISTS). Past the ceiling they say they
+  // are not shown, as the tiles do, and the board says when it lists fewer
+  // deals than the pipeline holds.
+  const stageTotals = dealsByStage(pipeline);
+  const boardIsPart = pipelineCeiling || pipeline.length > list.length;
+  const unavailable = t('strategyMetrics.unavailable');
+  const tile = (value: string) => (pipelineCeiling ? unavailable : value);
 
   const stats = [
-    { label: 'Open pipeline', value: formatCents(openPipelineValueCents(list as never)), icon: TrendingUp, tint: 'text-violet-400 bg-violet-500/15' },
-    { label: 'Weighted (expected)', value: formatCents(weightedPipelineValueCents(list as never)), icon: DollarSign, tint: 'text-amber-400 bg-amber-500/15' },
-    { label: 'Won', value: formatCents(wonValueCents(list as never)), icon: Trophy, tint: 'text-emerald-400 bg-emerald-500/15' },
-    { label: 'Win rate', value: `${Math.round(winRate(list as never) * 100)}%`, icon: Percent, tint: 'text-blue-400 bg-blue-500/15' },
+    { label: 'Open pipeline', value: tile(formatCents(openPipelineValueCents(pipeline))), icon: TrendingUp, tint: 'text-violet-400 bg-violet-500/15' },
+    { label: 'Weighted (expected)', value: tile(formatCents(weightedPipelineValueCents(pipeline))), icon: DollarSign, tint: 'text-amber-400 bg-amber-500/15' },
+    { label: 'Won', value: tile(formatCents(wonValueCents(pipeline))), icon: Trophy, tint: 'text-emerald-400 bg-emerald-500/15' },
+    { label: 'Win rate', value: tile(`${Math.round(winRate(pipeline) * 100)}%`), icon: Percent, tint: 'text-blue-400 bg-blue-500/15' },
   ];
 
   return (
     <div className="space-y-5">
+      <PartialReadBanner
+        title={t('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
+        failures={pipelineCeiling ? [...stats.map((s) => s.label), t('adminMarketingPipeline.stageTotals')] : []}
+      />
       <p className="text-sm text-muted">{t('adminMarketingPipeline.trackEveryOpportunityFromLeadTo')}</p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -88,18 +133,25 @@ export default async function PipelinePage() {
           <input name="close_date" type="date" aria-label={t('adminMarketingPipeline.closeDate')} className={inputCls} />
           <SubmitButton className={btnCls}>{t('adminMarketingPipeline.addDeal')}</SubmitButton>
         </form>
+        {(contactCountResult.count ?? 0) > contactList.length && (
+          <p className="mt-2 text-xs text-muted">{t('adminCeiling.pickerOffersTheNewest', { picker: t('adminMarketingPipeline.contact'), shown: contactList.length.toLocaleString(), total: (contactCountResult.count ?? 0).toLocaleString() })}</p>
+        )}
       </Card>
 
       {/* Pipeline board */}
+      {boardIsPart && (
+        <p className="text-xs text-muted">{t('adminMarketingPipeline.boardIsTheNewest', { n: BOARD_SHOWN.toLocaleString() })}</p>
+      )}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         {DEAL_STAGES.map((stage) => {
           const col = grouped[stage];
-          const total = col.reduce((sum, d) => sum + (d.amount_cents || 0), 0);
+          const whole = stageTotals[stage];
+          const total = whole.reduce((sum, d) => sum + (d.amount_cents || 0), 0);
           return (
             <div key={stage} className="rounded-2xl border border-border bg-surface/30 p-2.5">
               <div className="flex items-center justify-between px-1 pb-2">
                 <span className={`text-sm font-semibold ${STAGE_TINT[stage]}`}>{DEAL_STAGE_LABELS[stage]}</span>
-                <span className="text-xs text-muted">{col.length} · {formatCents(total)}</span>
+                <span className="text-xs text-muted">{pipelineCeiling ? unavailable : `${whole.length} · ${formatCents(total)}`}</span>
               </div>
               <div className="space-y-2">
                 {col.length === 0 ? (

@@ -9,7 +9,7 @@ import { DEFAULT_THEME as WEB_DEFAULT_THEME, THEME_KEY as WEB_THEME_KEY, resolve
 import { SECURE_CHUNK_SIZE, createChunkedStore, splitChunks, type KeyValueStore } from '@/mobile/src/lib/chunked-storage';
 import { pickActiveFamily } from '@/mobile/src/lib/family';
 import { dayKey, dayLabel, dueLabel, formatTime, greeting, groupByDay, shiftDays } from '@/mobile/src/lib/format';
-import { completionPatch, isOpenChore, statusLabel } from '@/mobile/src/lib/chores-core';
+import { completionPatch, explainRefusedCompletion, isOpenChore, mayCompleteChore, statusLabel } from '@/mobile/src/lib/chores-core';
 import { buildAssistantRequest, parseAssistantResponse } from '@/mobile/src/lib/assistant-core';
 import { friendlyAuthError, validateCredentials } from '@/mobile/src/lib/auth-core';
 import { palette } from '@/design/tokens';
@@ -93,11 +93,12 @@ describe('chunked secure storage', () => {
 });
 
 describe('pickActiveFamily', () => {
+  // Rows as the database may hand them back: the LATER membership first.
   const rows = [
-    { id: 'm1', family_id: 'fam-1', role: 'parent', display_name: 'Dan', families: { name: 'One', timezone: 'America/New_York' } },
-    { id: 'm2', family_id: 'fam-2', role: 'adult', display_name: 'Dan', families: { name: 'Two', timezone: null } },
+    { id: 'm2', family_id: 'fam-2', role: 'adult', display_name: 'Dan', created_at: '2026-02-01T00:00:00Z', families: { name: 'Two', timezone: null } },
+    { id: 'm1', family_id: 'fam-1', role: 'parent', display_name: 'Dan', created_at: '2026-01-01T00:00:00Z', families: { name: 'One', timezone: 'America/New_York' } },
   ];
-  it('prefers the stored active family and falls back to the first membership', () => {
+  it('prefers the stored active family and falls back to the earliest membership, not row 0 (the server’s rule)', () => {
     expect(pickActiveFamily(rows, 'fam-2')).toEqual({ familyId: 'fam-2', familyName: 'Two', timezone: 'UTC', memberId: 'm2', role: 'adult', displayName: 'Dan' });
     expect(pickActiveFamily(rows, null)?.familyId).toBe('fam-1');
     expect(pickActiveFamily(rows, 'fam-9')?.familyId).toBe('fam-1');
@@ -157,16 +158,36 @@ describe('formatting in the family time zone', () => {
 
 describe('chore completion', () => {
   const now = new Date('2026-09-05T15:00:00Z');
-  it('only ever submits — approval and payout stay manager/server decisions (migration 0223)', () => {
-    expect(completionPatch(now)).toEqual({ status: 'submitted', submitted_at: now.toISOString() });
+  it('settles a no-approval chore to done and submits one that needs approval — approval and payout stay manager/server decisions (migration 0223)', () => {
+    expect(completionPatch({ requires_approval: false }, now)).toEqual({ status: 'done', submitted_at: now.toISOString() });
+    expect(completionPatch({ requires_approval: true }, now)).toEqual({ status: 'submitted', submitted_at: now.toISOString() });
+    // An unreadable chore row waits for a parent rather than settling itself.
+    expect(completionPatch(null, now)).toEqual({ status: 'submitted', submitted_at: now.toISOString() });
     expect(isOpenChore('todo')).toBe(true);
     expect(isOpenChore('in_progress')).toBe(true);
     expect(isOpenChore('submitted')).toBe(false);
     expect(isOpenChore('approved')).toBe(false);
   });
+  it('offers Done on your own chore, or on anyone’s to a parent or adult (0374)', () => {
+    const row = { member_id: 'member-child' };
+    expect(mayCompleteChore(row, { memberId: 'member-child', role: 'child' })).toBe(true);
+    expect(mayCompleteChore(row, { memberId: 'member-sibling', role: 'teen' })).toBe(false);
+    expect(mayCompleteChore(row, { memberId: 'member-guest', role: 'guest' })).toBe(false);
+    expect(mayCompleteChore(row, { memberId: 'member-parent', role: 'parent' })).toBe(true);
+    expect(mayCompleteChore(row, { memberId: 'member-adult', role: 'adult' })).toBe(true);
+  });
+  it('explains a completion that matched no row the way the service does', () => {
+    const child = { memberId: 'member-child', role: 'child' };
+    expect(explainRefusedCompletion(null, child)).toBe('gone');
+    expect(explainRefusedCompletion({ member_id: 'member-child', status: 'approved' }, child)).toBe('approved');
+    expect(explainRefusedCompletion({ member_id: 'member-sibling', status: 'todo' }, child)).toBe('not_yours');
+    expect(explainRefusedCompletion({ member_id: 'member-sibling', status: 'todo' }, { memberId: 'member-parent', role: 'parent' })).toBe('changed');
+    expect(explainRefusedCompletion({ member_id: 'member-child', status: 'submitted' }, child)).toBe('changed');
+  });
   it('labels statuses for people', () => {
     expect(statusLabel('submitted')).toBe('Waiting for approval');
     expect(statusLabel('approved')).toBe('Done');
+    expect(statusLabel('done')).toBe('Done');
     expect(statusLabel('custom')).toBe('custom');
   });
 });

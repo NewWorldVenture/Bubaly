@@ -57,6 +57,50 @@ function isCountedFactory(source: string, chainAt: number, chain: string): boole
   return !!call && Number(call[1].replaceAll('_', '')) > 0 && Number(call[4].replaceAll('_', '')) > 0;
 }
 
+/**
+ * Paged on the key, as a `readAllById` callback pages: the chain is bound to a
+ * builder (`let query = sb.from(t)…;`) that the next two statements move past
+ * the last id read and order and limit by it. `readAllById` asks for at most a
+ * page per round trip and reads to an empty page or its ceiling, so this is as
+ * bounded as `.range()` — and it is the form a lookup joined onto a live table
+ * takes, because an offset read repeats or skips a row written between pages.
+ */
+function pagesOnId(source: string, chainAt: number, chain: string): boolean {
+  const bound = /let (\w+) = \w+\.$/.exec(source.slice(Math.max(0, chainAt - 40), chainAt))?.[1];
+  if (!bound) return false;
+  return new RegExp(
+    `^;\\s*if \\(after\\) ${bound} = ${bound}\\.gt\\('id', after\\);\\s*return ${bound}\\.order\\('id'\\)\\.limit\\(limit\\);`,
+  ).test(source.slice(chainAt + chain.length));
+}
+
+describe('the id-paging guard refuses incomplete substitutes', () => {
+  const complete = `readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('family_members').select('id, family_id');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: 20000 })`;
+  const accepts = (source: string) => {
+    const start = source.indexOf("from('family_members')");
+    const end = source.indexOf(';', start);
+    return pagesOnId(source, start, source.slice(start, end));
+  };
+
+  it('recognises a builder paged past the last id read', () => {
+    expect(accepts(complete)).toBe(true);
+  });
+
+  it.each([
+    ['missing cursor', (source: string) => source.replace("if (after) query = query.gt('id', after);", '')],
+    ['cursor on another column', (source: string) => source.replace("query.gt('id', after)", "query.gt('created_at', after)")],
+    ['not ordered by the key', (source: string) => source.replace("query.order('id')", "query.order('family_id')")],
+    ['no page size', (source: string) => source.replace('.limit(limit)', '')],
+    ['a different builder paged', (source: string) => source.replace("return query.order('id')", "return other.order('id')")],
+    ['an unbound chain', (source: string) => source.replace('let query = supabase.', 'supabase.')],
+  ])('rejects %s', (_label, change) => {
+    expect(accepts(change(complete))).toBe(false);
+  });
+});
+
 describe('the counted-builder guard refuses incomplete substitutes', () => {
   const complete = `import { readCountedRows } from '@/lib/calendar/occurrences';
     const query = () => db.from('calendar_feeds').select('id', { count: 'exact' }).order('id');
@@ -336,6 +380,7 @@ describe('no delivery-contract read is left unbounded', () => {
   const WATCHED: { file: string; table: string; why: string }[] = [
     { file: 'lib/briefing/deliver.ts', table: 'families', why: 'one morning brief per family, from the cron' },
     { file: 'lib/network/aggregate-server.ts', table: 'network_consent', why: 'drives a not-in DELETE of contributions' },
+    { file: 'lib/marketing/customers.ts', table: 'families', why: 'every customer is one family row' },
     { file: 'lib/marketing/customers.ts', table: 'subscriptions', why: 'joined onto every family row' },
     { file: 'lib/marketing/customers.ts', table: 'family_members', why: 'joined onto every family row' },
     { file: 'lib/marketing/customers.ts', table: 'profiles', why: 'joined onto every family row' },
@@ -384,11 +429,12 @@ describe('no delivery-contract read is left unbounded', () => {
       // callback) or it is not an unbounded read at all: a write chain, or a
       // read already bounded to one owner's rows by an explicit `.limit()`.
       const isWrite = /\.(insert|update|upsert|delete)\(/.test(chain);
-      // Bounded means the response cannot reach the cap: it pages (`.range()`),
-      // it asks for a fixed few (`.limit()`), or it is a `readInChunks`
-      // callback, whose batch of at most 100 ids can never match 1,000 rows.
+      // Bounded means the response cannot reach the cap: it pages (`.range()`,
+      // or past the last id read), it asks for a fixed few (`.limit()`), or it
+      // is a `readInChunks` callback, whose batch of at most 100 ids can never
+      // match 1,000 rows.
       const isBounded = chain.includes('.range(') || chain.includes('.limit(') || /\.in\('[a-z_]+', chunk\)/.test(chain)
-        || isCountedFactory(source, at, chain);
+        || isCountedFactory(source, at, chain) || pagesOnId(source, at, chain);
       expect(isWrite || isBounded, `unbounded read of ${table}: ${chain.replace(/\s+/g, ' ').slice(0, 160)}`).toBe(true);
     }
   });

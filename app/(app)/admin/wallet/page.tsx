@@ -7,10 +7,13 @@ import { settleAll, describeReadError, credentialHint } from '@/lib/supabase/set
 
 import { AdminWalletClient, type FlagRow, type AuditRow } from './admin-wallet-client';
 import { getTranslations } from '@/lib/i18n/server';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Admin · Family Wallet', robots: { index: false } };
 export const dynamic = 'force-dynamic';
+
+/** Completed transactions the ledger volume may page through before it is reported as not shown. */
+const VOLUME_ROW_CEILING = 10000;
 
 export default async function AdminWalletPage() {
   const tr = await getTranslations();
@@ -30,8 +33,14 @@ export default async function AdminWalletPage() {
     supabase.from('gift_payments').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     supabase.from('parent_approvals').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     // Money: `.limit(10000)` was never 10,000 (PostgREST caps at db-max-rows),
-    // so this platform total was the sum of 1,000 arbitrary rows.
-    readAllAsQuery((from, to) => supabase.from('wallet_transactions').select('amount_cents, direction, status').eq('status', 'completed').order('id').range(from, to), { max: 10000, failOnMax: true }),
+    // so this platform total was the sum of 1,000 arbitrary rows. It pages on
+    // the id, not on offsets: a transaction completing between two pages
+    // shifted every later offset by one, and one row's cents were added twice.
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('wallet_transactions').select('id, amount_cents, direction, status').eq('status', 'completed');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: VOLUME_ROW_CEILING, failOnMax: true }),
     supabase.from('feature_flags').select('key, enabled, description').order('key'),
     supabase.from('wallet_audit_logs').select('id, family_id, action, entity_type, detail, created_at').order('created_at', { ascending: false }).limit(25),
   ]);
@@ -46,7 +55,13 @@ export default async function AdminWalletPage() {
     ['audit', auditResult],
   ] as const)
     .filter(([, res]) => res.error)
+    // The ledger volume past its ceiling did not fail: its three figures say
+    // they are not shown and the ceiling banner names them, rather than $0.00
+    // beside this banner. Any other failure is still named here.
+    .filter(([, res]) => !('truncated' in res && res.truncated))
     .map(([label, res]) => `${label}: ${describeReadError(res.error)}`);
+  const volumeCeiling = 'truncated' in creditAggResult && creditAggResult.truncated;
+  if (volumeCeiling) console.warn('[admin-wallet] the ledger volume read reached its ceiling; the volume is not shown');
   const readError = readFailures.length > 0;
   if (readError) {
     // Degraded, not fatal: every consumer below defaults an absent read to an
@@ -76,6 +91,10 @@ export default async function AdminWalletPage() {
   return (
     <div className="space-y-5">
       <PartialReadBanner title={"Wallet oversight is incomplete — some reads failed:"} failures={readFailures} hint={credentialHint(readFailures, describeConfiguredServiceKey())} />
+      <PartialReadBanner
+        title={tr('adminCeiling.figuresNotShown', { n: VOLUME_ROW_CEILING.toLocaleString() })}
+        failures={volumeCeiling ? [tr('adminWalletAdminWalletClient.totalCredits'), tr('adminWalletAdminWalletClient.totalDebits'), tr('adminWalletAdminWalletClient.netOutstanding')] : []}
+      />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
@@ -88,18 +107,23 @@ export default async function AdminWalletPage() {
           <ShieldCheck className="h-4 w-4" /> {tr('adminWallet.reconciliation')}
         </Link>
       </div>
+      {/* A read that failed is named in the banner above, and what it fed is
+          not shown as a value: a count reads Unavailable rather than 0, the
+          ledger volume rather than $0.00, and the flags and the activity are
+          the read-error state rather than no flags to toggle and "No wallet
+          audit activity yet". A volume past its ceiling has an error too. */}
       <AdminWalletClient
         stats={{
-          activeWallets: activeWallets ?? 0,
-          childWallets: childWallets ?? 0,
-          pendingGifts: pendingGifts ?? 0,
-          pendingApprovals: pendingApprovals ?? 0,
-          creditVolumeCents,
-          debitVolumeCents,
-          netCents: creditVolumeCents - debitVolumeCents,
+          activeWallets: activeWalletsResult.error ? null : activeWallets ?? 0,
+          childWallets: childWalletsResult.error ? null : childWallets ?? 0,
+          pendingGifts: pendingGiftsResult.error ? null : pendingGifts ?? 0,
+          pendingApprovals: pendingApprovalsResult.error ? null : pendingApprovals ?? 0,
+          creditVolumeCents: creditAggResult.error ? null : creditVolumeCents,
+          debitVolumeCents: creditAggResult.error ? null : debitVolumeCents,
+          netCents: creditAggResult.error ? null : creditVolumeCents - debitVolumeCents,
         }}
-        flags={flagRows}
-        audit={auditRows}
+        flags={flagsResult.error ? null : flagRows}
+        audit={auditResult.error ? null : auditRows}
       />
     </div>
   );

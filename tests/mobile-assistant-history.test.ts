@@ -59,10 +59,13 @@ describe('native saved assistant history through the real query builder', () => 
 
   it('reopens cards, safe run identifiers, action summaries and partial-response errors', async () => {
     const { db, signal } = fixture({ messages: [{ ...rows[1], tool_results: [{ name: 'create_task', ok: true, summary: 'Task saved' }], structured_content: {
-      cards: [{ kind: 'task_group', title: 'Tasks' }], runIds: [id(9), id(9), '../other-page'], responseError: 'Provider stopped after the task was saved.',
+      cards: [{ kind: 'task_group', title: 'Tasks' }], runIds: [id(9), id(9), '../other-page'], responseError: 'Provider stopped after the task was saved.', responseErrorCode: 'quota',
     } }] });
     const result = await fetchAssistantHistory(db, owner, 'conversation-a', signal);
-    expect(result.messages[0]).toMatchObject({ cards: [{ kind: 'task_group', title: 'Tasks' }], runIds: [id(9)], actions: [{ name: 'create_task', ok: true, summary: 'Task saved' }], responseError: 'Provider stopped after the task was saved.' });
+    expect(result.messages[0]).toMatchObject({ cards: [{ kind: 'task_group', title: 'Tasks' }], runIds: [id(9)], actions: [{ name: 'create_task', ok: true, summary: 'Task saved' }], responseError: 'Provider stopped after the task was saved.', responseErrorCode: 'quota' });
+    // A code that is not describeAIError's shape is dropped; the screen then shows its generic copy.
+    const odd = fixture({ messages: [{ ...rows[1], structured_content: { responseError: 'cut', responseErrorCode: 'Admin → AI Engine' } }] });
+    expect((await fetchAssistantHistory(odd.db, owner, 'conversation-a', odd.signal)).messages[0]).not.toHaveProperty('responseErrorCode');
     expect(savedRunIds(['', {}, id(9)])).toEqual([id(9)]);
   });
 
