@@ -47,9 +47,13 @@ const { getPublishedMarketingPage } = await import('@/lib/marketing/public-pages
 const { default: LandingRoute } = await import('@/app/(marketing)/lp/[slug]/page');
 
 let db: InMemorySupabase;
+// A live page as the platform console writes it, with its own stamp
+// (createPlatformPage, admin reach N12-REGEN-REPAIR-SPEC). A row with no
+// `content.source` is TRANSITIONAL and handled by path, as on main, until the
+// owner's repair (N12-TRANSITION-OLD-SLUG, a-legacy-landing-page-can-take-back-a-former-slug).
 const platformPage: Row = {
   id: 'platform-spring', page_type: 'landing', slug: 'spring', path: '/lp/spring', title: 'Spring offer',
-  summary: 'The live campaign', body: 'Live body', content: {}, seo: { title: 'Spring offer' }, aeo: { questions: [] },
+  summary: 'The live campaign', body: 'Live body', content: { source: 'platform_console' }, seo: { title: 'Spring offer' }, aeo: { questions: [] },
   status: 'published', published_at: '2026-10-01T00:00:00.000Z', deleted_at: null,
 };
 function form(fields: Record<string, string>) {

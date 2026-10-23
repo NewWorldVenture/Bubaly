@@ -12,19 +12,23 @@
 // the mirror, and a blog republish was refused while Unpublish and Archive left
 // the mirror published. Main does all of these by path.
 //
-// The transitional rule: a row with NO `content.source` at the path the legacy
-// record holds is handled as main handles it, and the bridge's write stamps the
-// marker back. A row marked as another source, including a page the platform
-// console made, is never touched, and an unmarked row at a path the legacy page
-// does not hold is still another page's.
+// The transitional rule: a row with NO `content.source` is handled as main
+// handles it, by path: at the path the legacy record holds it is that record's
+// mirror, and a create or rename onto it takes it over, as main's upsert did
+// (admin reach N12-TRANSITION-OLD-SLUG). The bridge's write stamps the marker
+// back. A row marked as another source, including a page the platform console
+// made, is never touched.
 //
 // Each case seeds the mirror as production has it: written by the REAL legacy
 // or content action, then given the content main's regeneration wrote. Then it
 // drives the REAL legacy, content and platform actions, the bridge, the job
 // worker, the public /lp route and the public AEO reader against one in-memory
-// database. On 7ebf6fe94 the 14 cases not named "the control" fail; the four
-// controls pass there and here. Without the console's stamp on the pages it
-// makes, the console-page controls (and round 2's) fail under this rule.
+// database. On 7ebf6fe94 the 14 publish, edit, unpublish and archive cases
+// fail; the two controls pass there and here. Without the console's stamp on
+// the pages it makes, the console-page controls (and round 2's) fail under
+// this rule. The two takeover cases (a create or rename onto an unmarked row
+// no legacy page holds) fail on 7ebf6fe94 and on 5fb3a933b, which refused them;
+// a-legacy-landing-page-can-take-back-a-former-slug has the former-slug cases.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpers/in-memory-supabase';
 import { REFUSAL_DIGEST_PREFIX } from '@/lib/actions/refusal';
@@ -259,27 +263,35 @@ describe.each(MAIN_REGENERATIONS)('a mirror main regenerated (%s) still follows 
     expect(pageAt(BLOG_PATH)!.deleted_at).not.toBeNull();
   });
 
-  it('the control: an unmarked row at a path the legacy page does not hold is still another page’s', async () => {
+  it('an unmarked row at a path the legacy page does not hold is taken over by a rename or a create, as on main', async () => {
     await createLandingPage(form({ title: 'Autumn', slug: 'autumn', headline: 'Autumn sale' }));
     const legacy = legacyRow();
-    // No legacy page holds /lp/spring: a console page made before the console
-    // stamped its own, or a former slug's alias, as main's regeneration left it.
-    const row: Row = {
-      id: 'unowned-spring', page_type: 'landing', slug: 'spring', path: '/lp/spring', title: 'Spring offer',
-      summary: 'The live campaign', body: 'Live body', seo: {}, aeo: {}, status: 'published',
-      published_at: '2026-10-01T00:00:00.000Z', deleted_at: null, version: 3,
-    };
-    db.seed('marketing_pages', [{ ...row, content: regenerated(row) }]);
-    const unowned = structuredClone(pageAt('/lp/spring')!);
-    expect(unowned.content).not.toHaveProperty('source');
+    // No legacy page holds /lp/spring or /lp/summer: a former slug's alias, or a
+    // console page made before the console stamped its own, as main's
+    // regeneration left it. Main's sync upserted over such a row on a create or
+    // a rename; until the owner's repair marks it, so does the bridge.
+    for (const slug of ['spring', 'summer']) {
+      const row: Row = {
+        id: `unowned-${slug}`, page_type: 'landing', slug, path: `/lp/${slug}`, title: `${slug} offer`,
+        summary: 'The live campaign', body: 'Live body', seo: {}, aeo: {}, status: 'published',
+        published_at: '2026-10-01T00:00:00.000Z', deleted_at: null, version: 3,
+      };
+      db.seed('marketing_pages', [{ ...row, content: regenerated(row) }]);
+      expect(pageAt(`/lp/${slug}`)!.content).not.toHaveProperty('source');
+    }
 
-    expect(await digestOf(updateLandingPage(form({ id: legacy.id, title: 'Autumn', slug: 'spring', headline: 'Autumn sale' }))))
-      .toBe(`${REFUSAL_DIGEST_PREFIX}duplicate`);
-    expect(await digestOf(createLandingPage(form({ title: 'Spring again', slug: 'spring' }))))
-      .toBe(`${REFUSAL_DIGEST_PREFIX}duplicate`);
+    expect(await digestOf(updateLandingPage(form({ id: legacy.id, title: 'Autumn', slug: 'spring', headline: 'Autumn sale' })))).toBeNull();
+    expect(legacyRow()).toMatchObject({ id: legacy.id, slug: 'spring' });
+    expect(pageAt('/lp/spring')).toMatchObject({
+      id: 'unowned-spring', status: 'draft', title: 'Autumn sale', content: { source: 'marketing_landing_pages', source_id: legacy.id },
+    });
+    expect(pageAt('/lp/autumn')).toMatchObject({ status: 'archived' });
 
-    expect(legacyRow()).toMatchObject({ id: legacy.id, slug: 'autumn' });
-    expect(pageAt('/lp/spring')).toEqual(unowned);
+    expect(await digestOf(createLandingPage(form({ title: 'Summer', slug: 'summer' })))).toBeNull();
+    const summer = db.table('marketing_landing_pages').find((row) => row.slug === 'summer')!;
+    expect(pageAt('/lp/summer')).toMatchObject({
+      id: 'unowned-summer', status: 'draft', title: 'Summer', content: { source: 'marketing_landing_pages', source_id: summer.id },
+    });
   });
 });
 

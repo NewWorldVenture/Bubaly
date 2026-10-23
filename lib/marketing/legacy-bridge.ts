@@ -71,14 +71,19 @@ function contentSource(content: Json | null | undefined): { source?: unknown; so
  * and a blog republish ('duplicate'), and leave Unpublish and Archive with the
  * page still live.
  *
- * So an unmarked row at the path the legacy record already holds — /lp/<the
- * landing page's current slug>, or /blog/<slug> — is handled as main handles
- * every row there: by path, as that record's mirror. The bridge's next write to
- * it stamps the marker back. A row marked as any other source is never touched,
- * and that includes a page the platform console made or moved
- * (CONSOLE_PAGE_SOURCE in ./platform). A console page made before that stamp
- * existed cannot be told from an unmarked mirror by its row, so it is handled
- * as main handles it too.
+ * So an unmarked row is handled as main handles every row: by path. At the path
+ * the legacy record already holds — /lp/<the landing page's current slug>, or
+ * /blog/<slug> — it is that record's mirror. At the path a landing page is
+ * created at or renamed onto, main's upsert took it over, and so does the
+ * bridge (N12-TRANSITION-OLD-SLUG): every rename under main left an unmarked
+ * live alias at /lp/<old slug>, since retireLegacyLandingAliases matches the
+ * marker, and refusing those would refuse renaming a page back to a former
+ * slug, or another page taking it. The bridge's write stamps the marker back.
+ * A row marked as any other source is never touched, and that includes a page
+ * the platform console made or moved (CONSOLE_PAGE_SOURCE in ./platform). A
+ * console page made before that stamp existed cannot be told from an unmarked
+ * mirror by its row, so it is handled as main handles it too: until the repair
+ * stamps it, a legacy create or rename onto its path takes it over.
  *
  * Once the owner's repair has re-marked the existing mirrors (and stamped the
  * console's own pages), a row with no marker is no mirror: delete this and
@@ -204,9 +209,10 @@ function isMissingLandingRegistry(error: { code?: string; message?: string }): b
  * The path is free when nothing is there, when the row is this legacy page's
  * own mirror, or when it is an archived mirror of a legacy page (a renamed
  * page's retired alias), which no live page holds. TRANSITIONAL (`unmarked`):
- * a row with no marker at the page's own current path is its mirror, as on
- * main. At any other path (a new page, or a rename) no legacy record holds it,
- * so an unmarked row there is still another page's.
+ * a row with no marker is free at any path, as on main, whose sync upserted
+ * over whatever row held it: the page's own mirror at its current path, and on
+ * a create or a rename the unmarked alias a rename under main left at a former
+ * slug. A marked row keeps the rule above.
  *
  * `landing` is the legacy page as stored now, or null for one not yet created.
  */
@@ -223,7 +229,7 @@ export async function legacyLandingPathTaken(db: MarketingDb, slug: string, land
     throw error;
   }
   if (!data) return false;
-  if (unmarked(data.content) && landing !== null && landing.slug === slug) return false;
+  if (unmarked(data.content)) return false;
   const content = contentSource(data.content);
   const legacy = content.source === 'marketing_landing_pages';
   if (legacy && landing !== null && content.source_id === landing.id) return false;
