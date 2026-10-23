@@ -110,9 +110,12 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   // family name and the invitations' families were lost; past 25,000
   // subscriptions every member read Free; past 25,000 invites the All tab said
   // "No invites yet"; past 25,000 members every tab was the read-error state:
-  //   - members (All, Families): the All tab's listed rows, so past the ceiling
-  //     that list is its own error state, and the Families tab's member counts
-  //     say they are not shown; the tiles, the donut and the other tabs stay;
+  //   - members (every tab: the toolbar's Export holds their first page on
+  //     each, review R6-USERS-EXPORT-EMPTY-OFF-MEMBER-TABS): the All tab's
+  //     listed rows, so past the ceiling that list is its own error state, and
+  //     the Families tab's member counts say they are not shown; the tiles, the
+  //     donut and the other tabs stay. A failed read is the read-error state
+  //     where members are listed (All, Families) and a banner line elsewhere;
   //   - families: the Families tab's listed rows and the picker's options, read
   //     once to the ceiling as a prefix (failOnMax: false). Past it the picker
   //     offers the first families by id and says so, and the Families tab is
@@ -133,11 +136,11 @@ export default async function AdminUsersPage({ searchParams }: Params) {
     roleCountResults,
   ] = await Promise.all([
     settleAll([
-      listsMembers ? readAllByIdAsQuery((after, limit) => {
+      readAllByIdAsQuery((after, limit) => {
         let query = supabase.from('family_members').select('*').eq('is_active', true);
         if (after) query = query.gt('id', after);
         return query.order('id').limit(limit);
-      }, { max: ROW_CEILING }) : notRead,
+      }, { max: ROW_CEILING }),
       readAllByIdAsQuery((after, limit) => {
         let query = supabase.from('families').select('*');
         if (after) query = query.gt('id', after);
@@ -167,11 +170,13 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   if (familiesCeiling) console.warn('[admin-users] the family read reached its ceiling; the picker offers the first families only');
   const memberRows = membersRes.data ?? [];
   const inviteRows = (tab === 'all' ? recentInvitesRes.data : invitesRes.data) ?? [];
-  // The families each listed row names, and the plan of each listed family.
+  // The families each listed row names, and the plan of each listed family and
+  // of each member's family (a member's plan is filtered on and exported from every tab).
   const labelledFamilyIds = [...new Set([...memberRows.map((m) => m.family_id), ...inviteRows.map((inv) => inv.family_id)])];
-  const planFamilyIds = tab === 'all' ? [...new Set(memberRows.map((m) => m.family_id))]
-    : tab === 'families' && !familiesCeiling ? (familiesRes.data ?? []).map((f) => f.id)
-    : [];
+  const planFamilyIds = [...new Set([
+    ...memberRows.map((m) => m.family_id),
+    ...(tab === 'families' && !familiesCeiling ? (familiesRes.data ?? []).map((f) => f.id) : []),
+  ])];
   const userIds = [...new Set(memberRows.map((m) => m.user_id).filter((id): id is string => !!id))];
   const [profilesRes, familyLabelsRes, subscriptionsRes] = await Promise.all([
     readInChunks(userIds, (chunk) => supabase.from('profiles').select('*').in('id', chunk)),
@@ -208,8 +213,9 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   // list.
   // Past its ceiling the member read costs the member list and the member
   // counts (below), not the page; a member read that fails is still the
-  // read-error state.
-  if (membersRes.error && !membersCeiling) {
+  // read-error state on the tabs that list members. On the others it costs
+  // the Export alone, and the banner names it.
+  if (listsMembers && membersRes.error && !membersCeiling) {
     console.error('[admin-users] users read failed', loadErrors.join('; '));
     return <AdminUsersReadError />;
   }
@@ -483,8 +489,9 @@ export default async function AdminUsersPage({ searchParams }: Params) {
 
       {tab === 'families' && (
         <Card>
-          <h2 className="mb-4 text-base font-semibold">{tr('adminUsers.allFamilies')} {!familiesCeiling && <span className="text-muted">({families?.length ?? 0})</span>}</h2>
-          {familiesCeiling ? (
+          <h2 className="mb-4 text-base font-semibold">{tr('adminUsers.allFamilies')} {!familiesCeiling && !familiesRes.error && <span className="text-muted">({families?.length ?? 0})</span>}</h2>
+          {familiesCeiling || familiesRes.error ? (
+            // Every family or none: past the ceiling, or failed, this tab is its own read-error state.
             <ErrorState message={tr('users.couldNotLoadUsersAnd')} />
           ) : !families || families.length === 0 ? (
             <EmptyState icon={UsersRound} title={tr('adminUsers.noFamiliesYet')} />
