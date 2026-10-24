@@ -16,7 +16,7 @@
 // So these read through `readAll`, and this file pins that by giving the fake
 // the server's cap and asserting the job still sees everyone. Each assertion
 // fails against the unbounded `.select()` these call sites used before.
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
@@ -326,6 +326,8 @@ describe('network contributions', () => {
 });
 
 describe('the marketing automation runner', () => {
+  afterEach(() => { vi.unstubAllEnvs(); });
+
   it('does not re-run a workflow for a subject whose run row sits past the cap', async () => {
     const db = capped();
     // Three lapsed customers — the `payment_failed` audience.
@@ -338,8 +340,11 @@ describe('the marketing automation runner', () => {
       family_id: id, plan: 'plus', status: 'past_due',
       created_at: '2026-01-01T00:00:00Z', current_period_end: '2026-06-01T00:00:00Z',
     })));
+    // One email step: a workflow with no step a runner executes is not run at
+    // all. No provider key, so the step is recorded skipped and nothing is sent.
+    vi.stubEnv('RESEND_API_KEY', '');
     db.seed('marketing_automation_workflows', [{
-      id: 'wf-1', trigger: 'payment_failed', status: 'active', deleted_at: null, steps: [], run_count: 0,
+      id: 'wf-1', trigger: 'payment_failed', status: 'active', deleted_at: null, steps: [{ action: 'send_email' }], run_count: 0,
     }]);
     // A workflow with history: one row per subject it has ever run for. The
     // already-run family's row is the LAST of them, so a read capped at

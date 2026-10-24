@@ -373,7 +373,8 @@ describe('a closed family is left alone by the scheduled jobs', () => {
     // A trigger both families meet but for the closure: nine months of Family+
     // is high value. (customer_inactive matches no one from the customer view,
     // which has no activity signal — lib/marketing/customers.ts activityKnown.)
-    db.seed('marketing_automation_workflows', [{ id: 'wf-1', trigger: 'high_value_detected', steps: [], run_count: 0, status: 'active', deleted_at: null }]);
+    // One email step: a workflow with no step a runner executes is not run at all.
+    db.seed('marketing_automation_workflows', [{ id: 'wf-1', trigger: 'high_value_detected', steps: [{ action: 'send_email' }], run_count: 0, status: 'active', deleted_at: null }]);
     await runAutomations(asDb());
     expect(harness.emailedTo).toEqual([`${OPEN}@bubaly.test`]);
     expect(db.table('marketing_automation_runs').map((r) => r.subject_key)).toEqual([OPEN]);

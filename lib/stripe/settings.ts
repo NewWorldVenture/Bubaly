@@ -48,6 +48,34 @@ export function effectiveSecretKey(s: StripeSettings | null): string | null {
   return s?.secret_key?.trim() || process.env.STRIPE_SECRET_KEY || null;
 }
 
+/** The key billing uses and where it came from; `unreadable` when Stripe Setup could not be read. */
+export type StripeKeyResolution =
+  | { status: 'resolved'; key: string; source: 'setup' | 'environment' }
+  | { status: 'none' }
+  | { status: 'unreadable'; error: { message: string } };
+
+/**
+ * The secret key billing resolves (effectiveSecretKey over readStripeSettings),
+ * for the admin consoles that report on it or list through it. Each of them
+ * read STRIPE_SECRET_KEY alone: a deployment whose key is saved only in Stripe
+ * Setup read "not configured" while checkout worked, and a stale environment
+ * key listed invoices from an account billing no longer uses. Settings that
+ * could not be read are `unreadable`, never the environment's answer — the
+ * stored key may differ from it. Never rejects.
+ */
+export async function resolveStripeSecretKey(): Promise<StripeKeyResolution> {
+  let read: StripeSettingsRead;
+  try {
+    read = await readStripeSettings();
+  } catch (cause) {
+    return { status: 'unreadable', error: { message: cause instanceof Error ? cause.message : 'Stripe settings read failed.' } };
+  }
+  if (read.error) return { status: 'unreadable', error: read.error };
+  const key = effectiveSecretKey(read.settings);
+  if (!key) return { status: 'none' };
+  return { status: 'resolved', key, source: read.settings?.secret_key?.trim() ? 'setup' : 'environment' };
+}
+
 /** Effective webhook signing secret: configured value first, then env. */
 export function effectiveWebhookSecret(s: StripeSettings | null): string | null {
   return s?.webhook_secret?.trim() || process.env.STRIPE_WEBHOOK_SECRET || null;

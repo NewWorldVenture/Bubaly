@@ -198,9 +198,24 @@ export function retryOf(metadata: unknown, current: Step[]): { steps: Step[]; pr
  */
 export function worthRetrying(metadata: unknown): boolean {
   const actions = recordedActions(metadata);
-  const retryable = actions.some((action) => action.includes(':failed') || action.includes(':skipped'));
-  const unsupported = actions.some((action) => action.includes(':unsupported'));
-  return retryable || !unsupported;
+  return retryableShortfall(actions) || !unsupportedStep(actions);
+}
+
+/**
+ * Whether an attempt's results hold a shortfall another attempt could change:
+ * a step that failed or was skipped. This, and only this, is a failed run for
+ * the pass that ran it. A run whose only shortfall is `unsupportedStep` is
+ * still recorded `failed` (honest about the step it could not do, and not
+ * retried), but counted as a failure it answered the cron 502 on every day a
+ * new subject matched a legacy workflow, for a step no retry can ever do.
+ */
+export function retryableShortfall(actions: readonly string[]): boolean {
+  return actions.some((action) => action.includes(':failed') || action.includes(':skipped'));
+}
+
+/** Whether an attempt recorded a step no runner executes (`<action>:unsupported`). */
+export function unsupportedStep(actions: readonly string[]): boolean {
+  return actions.some((action) => action.includes(':unsupported'));
 }
 
 /** Emails this attempt actually sent: a send carried over from `previous` was not sent again. */

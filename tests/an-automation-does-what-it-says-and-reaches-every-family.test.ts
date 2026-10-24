@@ -25,6 +25,13 @@ import { renderServerPage, textOf } from './helpers/render-server-page';
 //  - The 200-subject cap was applied before completed subjects were set aside,
 //    so the newest 200 matching families filled it every day and nobody past
 //    them was ever served, while the run reported unserved: 0.
+//  - A workflow switched on BEFORE the console refused unrunnable ones still
+//    failed every NEW subject: each first run that recorded an unsupported
+//    step was counted a failure, so the cron answered 502 on every day a family
+//    joined (hiding the prune failures that share its status), and one with no
+//    step a runner executes added a failed run per family to run_count while
+//    sending nothing. It is reported as `unrunnable` and never fails the pass;
+//    one with nothing to run is not run.
 
 const h = vi.hoisted(() => ({ db: null as unknown, sent: [] as { to: string; subject: string }[] }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => h.db, createServer: async () => h.db }));
@@ -71,6 +78,8 @@ const actions = await vi.importActual<typeof import('@/app/(app)/admin/marketing
 const { runAutomations } = await import('@/lib/marketing/automation-runner');
 const { resolveRecipients } = await import('@/lib/marketing/send');
 const { GET: cron } = await import('@/app/api/cron/automations/route');
+const { GET: checkoutAbandoned } = await import('@/app/api/cron/checkout-abandoned/route');
+const { fireAutomationEvent } = await import('@/lib/marketing/automation-events');
 type DB = SupabaseClient<Database>;
 
 const NOW = new Date('2026-10-12T10:00:00.000Z');
@@ -174,7 +183,9 @@ describe('a workflow with a step no runner executes', () => {
     workflow('customer_created', [{ action: 'send_email', subject: 'Welcome' }, { action: 'apply_tag' }]);
 
     const first = await runAutomations(db as unknown as DB);
-    expect(first).toMatchObject({ runs: 1, emails: 1, failures: 1 });
+    // A step no runner executes is reported, not this pass's failure: counted
+    // one, the first run of every new family answered the cron 502 (below).
+    expect(first).toMatchObject({ runs: 1, emails: 1, failures: 0, unrunnable: 1 });
     expect(runs()[0].status).toBe('failed');
     expect((runs()[0].metadata as { actions: string[] }).actions).toEqual(['send_email', 'apply_tag:unsupported']);
 
@@ -240,5 +251,96 @@ describe('the per-pass cap counts the families still owed a run', () => {
     const third = await runAutomations(db as unknown as DB);
     expect(third).toMatchObject({ runs: 0, emails: 0, unserved: 0 });
     expect(flow().run_count).toBe(250);
+  });
+});
+
+describe('a workflow switched on before the console refused unrunnable ones', () => {
+  /** The clock `day` days after NOW, and a family that subscribed the day before it. */
+  function nextDay(day: number) {
+    vi.setSystemTime(new Date(NOW.getTime() + day * DAY));
+    family(`fam-day-${day}`, { subscribedDaysAgo: 1 - day, createdIndex: day });
+  }
+
+  it('an email-and-tag workflow mails each new family once, and the cron answers 200 on every day one joins', async () => {
+    workflow('customer_created', [{ action: 'send_email', subject: 'Welcome' }, { action: 'apply_tag' }]);
+    for (let day = 0; day < 3; day++) {
+      nextDay(day);
+      const response = await cronRequest();
+      const body = await response.json();
+      expect(response.status, `day ${day + 1}: a new family on a legacy workflow answered 502`).toBe(200);
+      expect(body).toMatchObject({ runs: 1, emails: 1, failures: 0, unrunnable: 1, ok: true });
+    }
+    expect(h.sent).toEqual([0, 1, 2].map((day) => ({ to: `fam-day-${day}@example.com`, subject: 'Welcome' })));
+    // Each family's row is still honest about the step it could not do, and is not retried.
+    expect(runs().map((r) => [r.subject_key, r.status, (r.metadata as { actions: string[] }).actions])).toEqual(
+      [0, 1, 2].map((day) => [`fam-day-${day}`, 'failed', ['send_email', 'apply_tag:unsupported']]),
+    );
+    expect(flow().run_count).toBe(3);
+  });
+
+  it.each([
+    ['a lone SMS step', [{ action: 'send_sms' }]],
+    ['a tag and an admin note', [{ action: 'apply_tag' }, { action: 'notify_admin' }]],
+    ['no steps at all', []],
+  ])('one with %s is not run: no row, nothing counted, and the cron answers 200', async (_label, steps) => {
+    workflow('customer_created', steps);
+    for (let day = 0; day < 2; day++) {
+      nextDay(day);
+      const response = await cronRequest();
+      expect(response.status, 'a workflow that sends nothing failed every new family').toBe(200);
+      expect(await response.json()).toMatchObject({ workflows: 0, runs: 0, emails: 0, failures: 0, unrunnable: 1, ok: true });
+    }
+    expect(runs(), 'a failed run was recorded for each family').toEqual([]);
+    expect(flow().run_count, 'each family was added to "N runs" while nothing was sent').toBe(0);
+    expect(h.sent).toEqual([]);
+  });
+
+  it('control: a workflow every step of which runs is not reported', async () => {
+    workflow('customer_created', [{ action: 'send_email', subject: 'Welcome' }]);
+    nextDay(0);
+    const response = await cronRequest();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ runs: 1, emails: 1, failures: 0, unrunnable: 0 });
+  });
+
+  describe('on the event path', () => {
+    const HOUR = 3_600_000;
+    const session = () => db.table('checkout_sessions').find((s) => s.session_id === 'cs_1')!;
+    beforeEach(() => {
+      db.seed('checkout_sessions', [{
+        id: 'row-1', session_id: 'cs_1', family_id: null, email: 'parent@example.com', name: 'Sam', status: 'pending',
+        created_at: new Date(NOW.getTime() - 3 * HOUR).toISOString(), abandoned_at: null,
+      }]);
+    });
+    const checkoutRequest = () => checkoutAbandoned(new NextRequest('https://bubaly.test/api/cron/checkout-abandoned', { headers: { authorization: 'Bearer cron-fixture-secret' } }));
+
+    it('a checkout nudge with a step no runner executes is fired and keeps its claim, and the cron answers 200', async () => {
+      workflow('checkout_abandoned', [{ action: 'send_email', subject: 'Still thinking?' }, { action: 'notify_admin' }]);
+      const response = await checkoutRequest();
+      expect(response.status, 'the delivered nudge was counted failed and its session handed back').toBe(200);
+      expect(await response.json()).toMatchObject({ ok: true, fired: 1, failed: 0 });
+      expect(session().status).toBe('abandoned');
+      expect(h.sent).toEqual([{ to: 'parent@example.com', subject: 'Still thinking?' }]);
+      expect(runs()).toEqual([expect.objectContaining({ status: 'failed', metadata: expect.objectContaining({ actions: ['send_email', 'notify_admin:unsupported'] }) })]);
+      expect(flow().run_count).toBe(1);
+    });
+
+    it('an event workflow with no step a runner executes is reported and not run', async () => {
+      workflow('form_submitted', [{ action: 'send_sms' }]);
+      const result = await fireAutomationEvent(db as unknown as DB, {
+        trigger: 'form_submitted', email: 'lead@example.com', name: 'Lead', subjectKey: 'form_submitted:lead@example.com',
+      });
+      expect(result).toEqual({ workflows: 0, emails: 0, failures: 0, errors: 0, unrunnable: 1 });
+      expect(runs()).toEqual([]);
+      expect(flow().run_count).toBe(0);
+    });
+
+    it('control: a send that failed is still a failure', async () => {
+      workflow('form_submitted', [{ action: 'send_email' }, { action: 'notify_admin' }]);
+      const result = await fireAutomationEvent(db as unknown as DB, {
+        trigger: 'form_submitted', email: null, name: 'Lead', subjectKey: 'form_submitted:anon',
+      });
+      expect(result).toMatchObject({ workflows: 1, emails: 0, failures: 1, unrunnable: 1 });
+    });
   });
 });

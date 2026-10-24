@@ -1,7 +1,8 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { automationSendKey, emailsSent, failedAttempt, recordedActionsJson, retryOf, stepsRecorded, runSteps, worthRetrying, type Step } from '@/lib/marketing/automation-steps';
+import { automationSendKey, emailsSent, failedAttempt, recordedActionsJson, retryableShortfall, retryOf, stepsRecorded, runSteps, unsupportedStep, worthRetrying, type Step } from '@/lib/marketing/automation-steps';
+import { hasRunnableStep, stepsAreRunnable } from '@/lib/marketing/automation-triggers';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 import { getMarketingCustomersWithError, type MarketingCustomer } from '@/lib/marketing/customers';
 import { wroteNoRows } from '@/lib/supabase/errors';
@@ -50,6 +51,12 @@ export type AutomationRunSummary = {
   workflows: number; runs: number; emails: number; failures: number;
   /** Subjects this run never started because its budget ran out: a failed run, not a quiet one. */
   unserved: number;
+  /**
+   * Active workflows holding a step no runner executes, each counted once per
+   * pass: reported, not failed (see the loop below). Such a workflow can only
+   * be one switched on before the console refused them (setAutomationStatus).
+   */
+  unrunnable: number;
 };
 
 /**
@@ -90,7 +97,7 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
   const cap = opts.maxPerWorkflow ?? 200;
   const startedAt = Date.now();
   const outOfTime = () => opts.budgetMs !== undefined && Date.now() - startedAt >= opts.budgetMs;
-  const summary: AutomationRunSummary = { workflows: 0, runs: 0, emails: 0, failures: 0, unserved: 0 };
+  const summary: AutomationRunSummary = { workflows: 0, runs: 0, emails: 0, failures: 0, unserved: 0, unrunnable: 0 };
 
   const { data: flows, error: flowsError } = await supabase
     .from('marketing_automation_workflows')
@@ -108,6 +115,19 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
 
   for (const flow of flows) {
     if (!SCHEDULED_TRIGGERS.includes(flow.trigger as ScheduledTrigger)) continue;
+    // A workflow switched on before the console refused unrunnable ones is
+    // reported once, here, and never fails the pass. One with no step a runner
+    // executes (a lone send_sms, apply_tag, or nothing) is not run at all: it
+    // reserved a row for every new subject, recorded it `failed`, added it to
+    // run_count and answered the cron 502, every day, while sending nothing.
+    // One that also sends email still sends it; the step it cannot do is
+    // recorded `:unsupported` and is not this pass's failure (below).
+    if (!stepsAreRunnable(flow.steps)) {
+      summary.unrunnable++;
+      const runnable = hasRunnableStep(flow.steps);
+      console.warn('[marketing automation] an active workflow holds a step no runner executes', { workflowId: flow.id, skipped: !runnable });
+      if (!runnable) continue;
+    }
     summary.workflows++;
 
     const matching = subjectsForTrigger(flow.trigger, customers);
@@ -234,7 +254,13 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
         actions = failedAttempt(steps, previous);
       }
       summary.emails += emailsSent(actions, previous);
-      const failed = actions.some((action) => action.includes(':failed') || action.includes(':skipped') || action.includes(':unsupported'));
+      // Recorded `failed` for any shortfall, an unsupported step included, so
+      // the row is honest about what it could not do (and worthRetrying leaves
+      // it alone). Counted a FAILURE only for one a retry could change: a step
+      // no runner executes fails the same way for every subject on every day,
+      // and counted, a legacy workflow kept the cron at 502 for good.
+      const retryable = retryableShortfall(actions);
+      const failed = retryable || unsupportedStep(actions);
       // The steps beside their results, so a retry matches each result to the step that produced it (retryOf).
       const outcome = { trigger: flow.trigger, actions, steps } as unknown as RunMetadata;
       // Status-guarded, so zero rows means the run was moved on (a reaper marked
@@ -263,7 +289,7 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
       }
       if (firstRun) ran++;
       summary.runs++;
-      if (failed) summary.failures++;
+      if (retryable) summary.failures++;
     };
 
     for (let i = 0; i < subjects.length; i++) {

@@ -1,8 +1,8 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { automationSendKey, emailsSent, failedAttempt, recordedActionsJson, retryOf, stepsRecorded, runSteps, worthRetrying, type SendAdmission, type Step } from '@/lib/marketing/automation-steps';
-import { EVENT_DEFAULT_COPY, type EventTrigger } from '@/lib/marketing/automation-triggers';
+import { automationSendKey, emailsSent, failedAttempt, recordedActionsJson, retryableShortfall, retryOf, stepsRecorded, runSteps, unsupportedStep, worthRetrying, type SendAdmission, type Step } from '@/lib/marketing/automation-steps';
+import { EVENT_DEFAULT_COPY, hasRunnableStep, stepsAreRunnable, type EventTrigger } from '@/lib/marketing/automation-triggers';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
 type DB = SupabaseClient<Database>;
@@ -28,7 +28,10 @@ export type FireEventParams = {
 
 export type FireEventResult = {
   workflows: number; emails: number;
-  /** Workflows that ran and recorded a failed, skipped or unsupported step. */
+  /**
+   * Workflows that ran and recorded a failed or skipped step: a nudge a retry
+   * could still deliver. A step no runner executes is not one (`unrunnable`).
+   */
   failures: number;
   /**
    * What could not even be attempted: the workflows read answered an error, or
@@ -37,6 +40,15 @@ export type FireEventResult = {
    * into a database that refused it counted the nudge as sent.
    */
   errors: number;
+  /**
+   * Matching workflows holding a step no runner executes, reported and never
+   * failed: one switched on before the console refused them. One with no step
+   * a runner executes is not run at all — no row, no run_count, no failure.
+   * Counted a failure, its first run for every new subject made the caller's
+   * cron answer 502 (checkout-abandoned also handed the session back), for a
+   * step no retry can do.
+   */
+  unrunnable: number;
 };
 
 /**
@@ -50,7 +62,7 @@ export type FireEventResult = {
  * user-facing response on it.
  */
 export async function fireAutomationEvent(supabase: DB, params: FireEventParams): Promise<FireEventResult> {
-  const result: FireEventResult = { workflows: 0, emails: 0, failures: 0, errors: 0 };
+  const result: FireEventResult = { workflows: 0, emails: 0, failures: 0, errors: 0, unrunnable: 0 };
 
   const { data: flows, error: flowsError } = await supabase
     .from('marketing_automation_workflows')
@@ -68,6 +80,13 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
   const fallback = EVENT_DEFAULT_COPY[params.trigger];
 
   for (const flow of flows) {
+    // Reported, not failed; and not run at all when nothing in it would run.
+    if (!stepsAreRunnable(flow.steps)) {
+      result.unrunnable++;
+      const runnable = hasRunnableStep(flow.steps);
+      console.warn('[marketing automation] an active workflow holds a step no runner executes', { trigger: params.trigger, workflowId: flow.id, skipped: !runnable });
+      if (!runnable) continue;
+    }
     // Reserve the run first so duplicates short-circuit before any email sends.
     const { data: reserved, error: reserveErr } = await supabase
       .from('marketing_automation_runs')
@@ -133,7 +152,11 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
       actions = failedAttempt(steps, previous);
     }
 
-    const failed = actions.some((action) => action.includes(':failed') || action.includes(':skipped') || action.includes(':unsupported'));
+    // Recorded `failed` for any shortfall, an unsupported step included (and
+    // worthRetrying leaves that one alone); counted a failure only for one a
+    // retry could change, as the scheduled runner counts it.
+    const retryable = retryableShortfall(actions);
+    const failed = retryable || unsupportedStep(actions);
     // The run row was reserved or claimed by this path above, so zero rows is a
     // result that was not recorded — the same situation the error already
     // throws for, and it takes the same path. Audit C1-S9-67.
@@ -159,7 +182,7 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
 
     result.workflows++;
     result.emails += emailsSent(actions, previous);
-    if (failed) result.failures++;
+    if (retryable) result.failures++;
   }
 
   return result;

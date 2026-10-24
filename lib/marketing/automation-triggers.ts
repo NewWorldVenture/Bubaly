@@ -47,9 +47,30 @@ export const CONSOLE_TRIGGERS = [
  */
 export function workflowIsRunnable(trigger: string, steps: unknown): boolean {
   if (!(CONSOLE_TRIGGERS as readonly string[]).includes(trigger)) return false;
-  if (!Array.isArray(steps) || steps.length === 0) return false;
-  return steps.every((step) => !!step && typeof step === 'object'
-    && (RUNNABLE_ACTIONS as readonly string[]).includes(String((step as { action?: unknown }).action)));
+  return stepsAreRunnable(steps);
+}
+
+/** Whether a runner executes this step (RUNNABLE_ACTIONS); any other is recorded `<action>:unsupported`. */
+export function isRunnableStep(step: unknown): boolean {
+  return !!step && typeof step === 'object'
+    && (RUNNABLE_ACTIONS as readonly string[]).includes(String((step as { action?: unknown }).action));
+}
+
+/** Whether a runner executes every one of a workflow's steps, and there is at least one. */
+export function stepsAreRunnable(steps: unknown): boolean {
+  return Array.isArray(steps) && steps.length > 0 && steps.every(isRunnableStep);
+}
+
+/**
+ * Whether a workflow's steps would do anything at all. A workflow switched on
+ * before the console refused unrunnable ones (setAutomationStatus) can hold
+ * only steps no runner executes — a lone send_sms, apply_tag, or nothing.
+ * Run, it reserved a row per subject, recorded each `failed`, added each to
+ * run_count and answered the cron 502, every day a new subject matched, while
+ * sending nothing. Both runners skip such a workflow and report it instead.
+ */
+export function hasRunnableStep(steps: unknown): boolean {
+  return Array.isArray(steps) && steps.some(isRunnableStep);
 }
 
 export type Copy = { subject: string; body: string };
