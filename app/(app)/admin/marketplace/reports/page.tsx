@@ -2,11 +2,12 @@ import type { Metadata } from 'next';
 import { ShieldAlert } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { readInChunks } from '@/lib/supabase/chunked-in';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { ReportModeration } from '@/components/admin/report-moderation';
 import {
-  reasonLabel, STATUS_LABELS, summarizeReports, reportMatchesFilter, isReportFilter,
+  reasonLabel, STATUS_LABELS, reportMatchesFilter, isReportFilter,
   type ReportStatus, type ReportFilter,
 } from '@/lib/marketplace/reports';
 import { cn } from '@/lib/utils/cn';
@@ -29,6 +30,9 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 export const dynamic = 'force-dynamic';
 
+/** The newest reports a filter lists. */
+const LISTED = 300;
+
 const STATUS_CHIP: Record<string, string> = {
   open: 'bg-rose-500/15 text-rose-600 dark:text-rose-400',
   reviewing: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
@@ -47,18 +51,36 @@ export default async function AdminMarketplaceReportsPage({ searchParams }: Para
   const filter: ReportFilter = isReportFilter(sp.status) ? sp.status : 'all';
   const admin = createServiceClient();
 
-  const { data: reports, error: reportsError } = await admin
+  // The tiles and the filter chips were tallied from the newest 300 reports,
+  // and each filter narrowed those 300, so past them an older report still open
+  // was in no tile, no chip and not under "Needs action" (coverage sweep round
+  // 9, class B). The tiles and chips are head:true counts of every report now,
+  // each filter is read with the server, and the list says when it holds only
+  // part of its filter. Any of these reads that fails is the read-error state.
+  let listed = admin
     .from('marketplace_reports')
-    .select('id, listing_id, family_id, reason, details, status, resolution, created_at')
-    .order('created_at', { ascending: false })
-    .limit(300);
+    .select('id, listing_id, family_id, reason, details, status, resolution, created_at');
+  if (filter === 'needs_action') listed = listed.in('status', ['open', 'reviewing']);
+  else if (filter !== 'all') listed = listed.eq('status', filter);
+  const counted = () => admin.from('marketplace_reports').select('id', { count: 'exact', head: true });
+  const [{ data: reports, error: reportsError }, totalResult, needsActionResult, actionedResult, dismissedResult] = await settleAll([
+    listed.order('created_at', { ascending: false }).order('id', { ascending: false }).limit(LISTED),
+    counted(),
+    counted().in('status', ['open', 'reviewing']),
+    counted().eq('status', 'actioned'),
+    counted().eq('status', 'dismissed'),
+  ]);
   if (reportsError) {
     console.error('[admin-marketplace-reports] report read failed', reportsError);
     return <AdminReadError />;
   }
+  const countError = totalResult.error ?? needsActionResult.error ?? actionedResult.error ?? dismissedResult.error;
+  if (countError) {
+    console.error('[admin-marketplace-reports] report count read failed', countError);
+    return <AdminReadError />;
+  }
 
   const rows = reports ?? [];
-  const summary = summarizeReports(rows.map((r) => ({ status: r.status, reason: r.reason })));
 
   // Enrich with listing titles + reporter family names (service role, all families).
   const listingIds = [...new Set(rows.map((r) => r.listing_id))];
@@ -85,10 +107,10 @@ export default async function AdminMarketplaceReportsPage({ searchParams }: Para
     .filter((r) => reportMatchesFilter(r.status, filter));
 
   const filterCount: Record<ReportFilter, number> = {
-    all: summary.total,
-    needs_action: summary.open,
-    actioned: summary.byStatus.actioned ?? 0,
-    dismissed: summary.byStatus.dismissed ?? 0,
+    all: totalResult.count ?? 0,
+    needs_action: needsActionResult.count ?? 0,
+    actioned: actionedResult.count ?? 0,
+    dismissed: dismissedResult.count ?? 0,
   };
 
   return (
@@ -102,10 +124,10 @@ export default async function AdminMarketplaceReportsPage({ searchParams }: Para
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: 'Needs action', value: summary.open },
-          { label: 'Actioned', value: summary.byStatus.actioned ?? 0 },
-          { label: 'Dismissed', value: summary.byStatus.dismissed ?? 0 },
-          { label: 'Total', value: summary.total },
+          { label: 'Needs action', value: filterCount.needs_action },
+          { label: 'Actioned', value: filterCount.actioned },
+          { label: 'Dismissed', value: filterCount.dismissed },
+          { label: 'Total', value: filterCount.all },
         ].map((t) => (
           <Card key={t.label} className="p-4">
             <div className="text-2xl font-bold">{t.value}</div>
@@ -128,6 +150,10 @@ export default async function AdminMarketplaceReportsPage({ searchParams }: Para
           </a>
         ))}
       </div>
+
+      {filterCount[filter] > rows.length && (
+        <p className="text-xs text-muted">{tr('adminCeiling.listShowsTheNewest', { shown: rows.length.toLocaleString(), total: filterCount[filter].toLocaleString() })}</p>
+      )}
 
       {ordered.length === 0 ? (
         <EmptyState

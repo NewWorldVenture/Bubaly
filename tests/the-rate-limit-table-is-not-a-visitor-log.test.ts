@@ -130,6 +130,19 @@ describe('the limiter stores no IP and no address', () => {
     expect(storedBucketKey(`ai:${uid}`)).toBe(`ai:${uid}`);
     expect(storedBucketKey(`invite:${uid}:Someone@Example.com`)).toMatch(new RegExp(`^invite:${uid}:h\\.[0-9a-f]{32}$`));
   });
+
+  it('a phone number is stored as a digest too (the Contact Center budgets key the signed sender)', async () => {
+    const { storedBucketKey } = await import('@/lib/server/rate-limit-db');
+    const family = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
+    const stored = storedBucketKey(`cc-sms:sender:${family}:+15555550200`);
+    expect(stored).toMatch(new RegExp(`^cc-sms:sender:${family}:h\\.[0-9a-f]{32}$`));
+    expect(stored).not.toContain('5555550200');
+    // The same number is the same subject; a different one is not.
+    expect(storedBucketKey(`cc-sms:sender:${family}:+15555550200`)).toBe(stored);
+    expect(storedBucketKey(`cc-sms:sender:${family}:+15555550201`)).not.toBe(stored);
+    // A key with no number in it is kept as written.
+    expect(storedBucketKey(`cc-sms:family:${family}`)).toBe(`cc-sms:family:${family}`);
+  });
 });
 
 describe('old windows are pruned, and a prune that fails is not silent', () => {

@@ -22,18 +22,20 @@ const SITE_PAGES = [
 ];
 const INTENTS = ['informational', 'navigational', 'commercial', 'transactional'];
 const KEYWORD_STATUSES = ['idea', 'tracking', 'won', 'dropped'];
-const PAGE_STATUSES = ['active', 'noindex', 'archived'];
+const PAGE_STATUSES = ['active', 'archived'];
 
 // The keyword table can hold thousands of rows; fetching + rendering all of them
 // made the page slow to open. Render a bounded, column-projected slice and show the
 // true total from a cheap COUNT (head:true → no row transfer). The page registry is
-// small (one row per public route) so it loads in full.
+// small (one row per public route) so it loads in full, as far as PostgREST's
+// db-max-rows lets it; its figures are a COUNT too, and the list says when it
+// holds only part (review R10-SEO-REGISTRY-COUNTS-ITS-UNBOUNDED-LIST).
 const KEYWORD_LIMIT = 100;
 
 export default async function SeoPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const [keywordCountResult, keywordsResult, pagesResult] = await settleAll([
+  const [keywordCountResult, keywordsResult, pagesResult, pageCountResult] = await settleAll([
     supabase.from('marketing_seo_keywords').select('id', { count: 'exact', head: true }),
     supabase
       .from('marketing_seo_keywords')
@@ -41,8 +43,9 @@ export default async function SeoPage() {
       .order('created_at', { ascending: false })
       .limit(KEYWORD_LIMIT),
     supabase.from('marketing_seo_pages').select('*').order('path', { ascending: true }),
+    supabase.from('marketing_seo_pages').select('id', { count: 'exact', head: true }),
   ]);
-  const readError = keywordCountResult.error ?? keywordsResult.error ?? pagesResult.error;
+  const readError = keywordCountResult.error ?? keywordsResult.error ?? pagesResult.error ?? pageCountResult.error;
   if (readError) {
     console.error('[admin-marketing-seo] read failed', readError);
     return <AdminSeoReadError />;
@@ -50,6 +53,7 @@ export default async function SeoPage() {
   const keywords = keywordsResult.data ?? [];
   const keywordTotal = keywordCountResult.count ?? 0;
   const seoPages = pagesResult.data ?? [];
+  const seoPageTotal = pageCountResult.count ?? 0;
 
   return (
     <div className="space-y-5">
@@ -93,7 +97,7 @@ export default async function SeoPage() {
           {
             id: 'registry',
             label: 'SEO Page Registry',
-            count: seoPages.length,
+            count: seoPageTotal,
             panel: (
               <Card>
                 <div className="flex items-start justify-between gap-3">
@@ -101,8 +105,11 @@ export default async function SeoPage() {
                     <h2 className="font-semibold">{t('adminMarketingSeo.seoPageRegistry')}</h2>
                     <p className="mt-1 text-xs text-muted">{t('seo.theStoredTitleDescriptionAudit')}</p>
                   </div>
-                  <span className="text-xs text-muted">{seoPages.length} tracked</span>
+                  <span className="text-xs text-muted">{seoPageTotal.toLocaleString()} tracked</span>
                 </div>
+                {seoPageTotal > seoPages.length && (
+                  <p className="mt-2 text-xs text-muted">{t('adminCeiling.listShowsPart', { shown: seoPages.length.toLocaleString(), total: seoPageTotal.toLocaleString() })}</p>
+                )}
                 {seoPages.length === 0 ? (
                   <p className="mt-4 text-sm text-muted">{t('adminMarketingSeo.noPageAuditsYetAddThe')}</p>
                 ) : (
@@ -121,7 +128,7 @@ export default async function SeoPage() {
                           <input name="title" defaultValue={page.title ?? ''} placeholder={t('seo.seoTitle')} className={inputCls} />
                           <input name="meta_description" defaultValue={page.meta_description ?? ''} placeholder={t('seo.metaDescription')} className={`${inputCls} sm:col-span-2`} />
                           <input name="score" type="number" min="0" max="100" defaultValue={page.score ?? ''} placeholder={t('seo.score0100')} className={inputCls} />
-                          <select aria-label={t('fieldName.status')} name="status" defaultValue={page.status} className={inputCls}>{PAGE_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
+                          <select aria-label={t('fieldName.status')} name="status" defaultValue={page.status} className={inputCls}>{[...new Set([...PAGE_STATUSES, page.status])].map((status) => <option key={status} value={status}>{status}</option>)}</select>
                           <SubmitButton className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90 sm:col-span-2">{t('seo.savePageAudit')}</SubmitButton>
                         </form>
                         <form action={archiveSeoPage} className="mt-2">

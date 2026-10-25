@@ -180,6 +180,8 @@ export type ListingLike = {
   member_id: string | null;
   claimed_by: string | null;
   created_at: string;
+  /** 'auction' for an auction listing; absent or 'fixed' otherwise. */
+  sale_format?: string | null;
 };
 
 export type ListingFilter = { kind?: ListingKind | 'all'; category?: ListingCategory | 'all'; q?: string };
@@ -228,6 +230,9 @@ export function canOffer(
   existingOffers: OfferLike[],
 ): boolean {
   if (!memberId) return false;
+  // An auction takes bids. An offer flips the listing to 'pending' (0154's
+  // trigger), which every bid and the close then refuse: it froze the auction.
+  if (listing.sale_format === 'auction') return false;
   if (listing.status !== 'available' && listing.status !== 'pending') return false;
   if (listing.member_id === memberId) return false;
   return !existingOffers.some(

@@ -10,6 +10,11 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  DO_NOT_TRACK: '1'
+  SUPABASE_TELEMETRY_DISABLED: '1'
+  NEXT_TELEMETRY_DISABLED: '1'
+
 jobs:
   quality:
     # Keep the existing required status while independent jobs run concurrently.
@@ -358,8 +363,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
-        shardTotal: [4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shardTotal: [8]
     steps:
       - uses: actions/checkout@v4
 
@@ -490,6 +495,14 @@ jobs:
 
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
+
+      - name: Verify toast commit lifetimes in Chromium
+        if: matrix.shard == 1
+        run: node node_modules/vitest/vitest.mjs run --config vitest.toast-browser.config.ts --maxWorkers 1
+
+      - name: Verify feedback submission outcomes in Chromium
+        if: matrix.shard == 1
+        run: node node_modules/vitest/vitest.mjs run --config vitest.feedback-browser.config.ts --maxWorkers 1
 
       # Diagnostic only (never fails): key shapes + PostgREST status/body for
       # every header combination, so a red schema audit explains itself here.

@@ -42,16 +42,37 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-/** A query chain, from `.from('t')` to the end of the statement. */
-function chains(source: string, table: string): { text: string; line: number }[] {
-  const out: { text: string; line: number }[] = [];
+/**
+ * A query chain, from `.from('t')` to the end of the statement — and, when the
+ * chain is bound to a builder (`let query = sb.from('t')…;`), the statements
+ * after it, which is where a `readAllById` callback pages that builder.
+ */
+function chains(source: string, table: string): { text: string; line: number; bound: string | null; next: string }[] {
+  const out: { text: string; line: number; bound: string | null; next: string }[] = [];
   const pattern = new RegExp(`\\.from\\(\\s*['"]${table}['"]\\s*\\)`, 'g');
   for (const m of source.matchAll(pattern)) {
     // Everything up to the statement's end — far enough to see .range/.limit.
-    const rest = source.slice(m.index!, m.index! + 600).split(/;\s*\n/)[0];
-    out.push({ text: rest, line: source.slice(0, m.index).split('\n').length });
+    const window = source.slice(m.index!, m.index! + 600);
+    const end = window.search(/;\s*\n/);
+    const rest = end === -1 ? window : window.slice(0, end);
+    const bound = /let (\w+) = \w+\s*$/.exec(source.slice(Math.max(0, m.index! - 40), m.index!))?.[1] ?? null;
+    out.push({ text: rest, line: source.slice(0, m.index).split('\n').length, bound, next: end === -1 ? '' : window.slice(end) });
   }
   return out;
+}
+
+/**
+ * Paged on the key, as a `readAllById` callback pages: the builder the chain is
+ * bound to moves past the last id read, and is ordered and limited by it, in
+ * the very next two statements. `readAllById` asks for at most a page (1,000)
+ * per round trip and reads to an empty page or its ceiling, so this is as
+ * bounded as `.range()` — and it is the form a SUMMED ledger read must take,
+ * because an offset read counts a row twice when one is written between pages.
+ */
+function pagesOnId(bound: string | null, next: string): boolean {
+  return bound !== null && new RegExp(
+    `^;\\s*if \\(after\\) ${bound} = ${bound}\\.gt\\('id', after\\);\\s*return ${bound}\\.order\\('id'\\)\\.limit\\(limit\\);`,
+  ).test(next);
 }
 
 /**
@@ -80,7 +101,7 @@ const unbounded = sourceFiles(join(ROOT, 'lib'))
   .flatMap((file) => {
     const source = readFileSync(file, 'utf8');
     return LEDGERS.flatMap((table) => chains(source, table)
-      .filter((c) => !isBounded(c.text))
+      .filter((c) => !isBounded(c.text) && !pagesOnId(c.bound, c.next))
       .map((c) => `${relative(ROOT, file)}:${c.line} reads ${table} with no bound — PostgREST will stop at ${ROW_CAP} rows and the total will be wrong`));
   });
 

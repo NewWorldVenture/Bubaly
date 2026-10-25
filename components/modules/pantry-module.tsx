@@ -56,10 +56,7 @@ export function PantryModule() {
   // The FAMILY's day, not this device's. A parent on a phone set to UTC, or
   // travelling, would otherwise be told food expires on a different day than
   // the server-rendered kitchen page says — same data, two answers.
-  const todayKey = useMemo(
-    () => dayKeyIn(new Date(), family?.timezone || 'UTC'),
-    [family?.timezone],
-  );
+  const todayKey = dayKeyIn(new Date(), family?.timezone || 'UTC');
   const summary = useMemo(() => pantrySummary(items, todayKey), [items, todayKey]);
   const expiring = useMemo(() => expiringSoon(items, 5, todayKey), [items, todayKey]);
   const low = useMemo(() => lowStockItems(items), [items]);

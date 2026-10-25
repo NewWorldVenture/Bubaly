@@ -4,9 +4,12 @@ import {
   Plus, TicketCheck, XCircle,
 } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/filter-bar';
 import { NewTicketButton } from '@/components/admin/new-ticket-button';
 import { TicketRowActions } from '@/components/admin/ticket-row-actions';
@@ -22,6 +25,8 @@ export async function generateMetadata(): Promise<Metadata> {
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 10;
+/** Rows the category tally may page through before it is reported as a prefix (one round trip per 1,000). */
+const SUM_ROW_CEILING = 25_000;
 
 // `labelKey`, not `label`: 'supportTickets.unassigned' was a catalogue key in a
 // field rendered verbatim, so that tab read back its own key.
@@ -81,24 +86,54 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key as TabKey) ?? 'all';
   const supabase = createServiceClient();
 
-  const { data: allTickets, error: ticketsError } = await supabase
-    .from('support_tickets')
-    .select('*')
-    .order('updated_at', { ascending: false });
-  if (ticketsError) {
-    console.error('[admin-support-tickets] ticket read failed', ticketsError);
+  // The overview, the donut and the categories are the whole queue: exact
+  // counts, and a category tally paged on the id (the contact form files
+  // tickets while it reads). Tallied from the list read, they counted at most
+  // the 1,000 most recently updated tickets — PostgREST answers an unbounded
+  // select with db-max-rows and no error.
+  const counted = () => supabase.from('support_tickets').select('id', { count: 'exact', head: true });
+  const [
+    { data: allTickets, error: ticketsError },
+    totalResult, openResult, inProgressResult, pendingResult, resolvedResult, closedResult, categoriesResult,
+  ] = await settleAll([
+    supabase
+      .from('support_tickets')
+      .select('*')
+      .order('updated_at', { ascending: false }),
+    counted(),
+    counted().eq('status', 'open'),
+    counted().eq('status', 'in_progress'),
+    counted().eq('status', 'pending'),
+    counted().eq('status', 'resolved'),
+    counted().eq('status', 'closed'),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('support_tickets').select('id, category');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
+  ]);
+  // A tally past its ceiling costs the Top Categories card, not the queue: the
+  // list, its filters, the row actions and the export stay usable, and the card
+  // says the tally is not shown rather than showing part of it. Any other
+  // failure is still the read-error state.
+  const categoriesCeiling = 'truncated' in categoriesResult && categoriesResult.truncated;
+  const statsError = totalResult.error ?? openResult.error ?? inProgressResult.error ?? pendingResult.error
+    ?? resolvedResult.error ?? closedResult.error ?? (categoriesCeiling ? null : categoriesResult.error);
+  if (categoriesCeiling) console.warn('[admin-support-tickets] the category tally reached its ceiling; Top Categories is not shown');
+  if (ticketsError || statsError) {
+    console.error('[admin-support-tickets] ticket read failed', ticketsError ?? statsError);
     return <AdminReadError />;
   }
 
   const tickets = allTickets ?? [];
 
   // ── Stats ─────────────────────────────────────────────────────────
-  const total      = tickets.length;
-  const openCount  = tickets.filter((t) => t.status === 'open').length;
-  const inProgress = tickets.filter((t) => t.status === 'in_progress').length;
-  const pending    = tickets.filter((t) => t.status === 'pending').length;
-  const resolved   = tickets.filter((t) => t.status === 'resolved').length;
-  const closed     = tickets.filter((t) => t.status === 'closed').length;
+  const total      = totalResult.count ?? 0;
+  const openCount  = openResult.count ?? 0;
+  const inProgress = inProgressResult.count ?? 0;
+  const pending    = pendingResult.count ?? 0;
+  const resolved   = resolvedResult.count ?? 0;
+  const closed     = closedResult.count ?? 0;
 
   // Unique agents
   const agentNames = [...new Set(
@@ -107,7 +142,7 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
 
   // Top categories
   const categoryCounts = new Map<string, number>();
-  for (const t of tickets) categoryCounts.set(t.category, (categoryCounts.get(t.category) ?? 0) + 1);
+  for (const t of categoriesResult.data ?? []) categoryCounts.set(t.category, (categoryCounts.get(t.category) ?? 0) + 1);
   const topCategories = [...categoryCounts.entries()].sort((a, b) => b[1] - a[1]);
 
   // ── Filter & paginate ─────────────────────────────────────────────
@@ -153,6 +188,10 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
 
   return (
     <div className="module-page">
+      <PartialReadBanner
+        title={tr('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
+        failures={categoriesCeiling ? [tr('adminSupportTickets.topCategories')] : []}
+      />
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -213,6 +252,13 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
                 <Filter className="h-4 w-4" /> {tr('adminSupportTickets.filters')}
               </button>
             </FilterForm>
+            {/* The tiles, the donut and the categories count every ticket; the
+                list is the unbounded read PostgREST caps at db-max-rows, and its
+                tabs, filters and "of N tickets" go through those rows only, so
+                it says when it holds part of the queue (coverage sweep round 9). */}
+            {total > tickets.length && (
+              <p className="mt-3 text-xs text-muted">{tr('adminCeiling.listAndFiltersShowPart', { shown: tickets.length.toLocaleString(), total: total.toLocaleString() })}</p>
+            )}
 
             {pageRows.length === 0 ? (
               <div className="mt-6"><EmptyState icon={TicketCheck} title={tr('adminSupportTickets.noTicketsMatchTheseFilters')} /></div>
@@ -361,14 +407,18 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
               <h2 className="text-base font-semibold">{tr('adminSupportTickets.topCategories')}</h2>
               <span className="text-xs text-muted">{tr('adminSupportTickets.thisWeek')}</span>
             </div>
-            <ul className="space-y-2.5">
-              {topCategories.slice(0, 5).map(([cat, count]) => (
-                <li key={cat} className="flex items-center justify-between text-sm">
-                  <span className="text-muted">{CATEGORY_LABELS[cat] ?? cat}</span>
-                  <span className="font-semibold">{count}</span>
-                </li>
-              ))}
-            </ul>
+            {categoriesCeiling ? (
+              <p className="text-sm text-muted">{tr('strategyMetrics.unavailable')}</p>
+            ) : (
+              <ul className="space-y-2.5">
+                {topCategories.slice(0, 5).map(([cat, count]) => (
+                  <li key={cat} className="flex items-center justify-between text-sm">
+                    <span className="text-muted">{CATEGORY_LABELS[cat] ?? cat}</span>
+                    <span className="font-semibold">{count}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
             <a href="/admin/support-tickets?tab=all" className="mt-4 flex items-center gap-1 text-xs text-brand-text hover:underline">
               {tr('adminSupportTickets.viewAllCategories')}
             </a>

@@ -9,6 +9,7 @@ import type { TrustLevel } from '@/lib/guardian/trust';
 import type { RoutingMode } from '@/lib/guardian/pipeline';
 import { guardianProfilePayload, type GuardianProfileWrite } from '@/lib/guardian/routing-form';
 import { runLearningForFamily } from '@/lib/guardian/learning-run';
+import { runUnderLearningLease } from '@/lib/guardian/learning-lease';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import type { Database, GuardianContext } from '@/lib/database.types';
 
@@ -513,9 +514,17 @@ export async function generateGuardianSuggestionsAction(): Promise<ActionResult<
   const t = await getTranslations();
   const supabase = await createServer();
   try {
-    const result = await runLearningForFamily(supabase, ctx.active.familyId, { auditClient: createServiceClient() });
+    // Under the family's learning lease (lib/guardian/learning-lease.ts), the
+    // one the nightly cron takes: two runs at once both read "not suggested
+    // yet" and both inserted. A scan already running is said so, not counted
+    // as "nothing new"; its tips land when it finishes.
+    const leased = await runUnderLearningLease(createServiceClient(), ctx.active.familyId,
+      () => runLearningForFamily(supabase, ctx.active.familyId, { auditClient: createServiceClient() }));
+    if (!leased.ran) {
+      return { ok: false, error: leased.reason === 'held' ? t('guardian.aScanIsAlreadyRunning') : t('globalError.somethingWentWrong') };
+    }
     revalidatePath('/guardian');
-    return { ok: true, data: { created: result.created } };
+    return { ok: true, data: { created: leased.result.created } };
   } catch (err) {
     return actionFailure('run Guardian learning', t('globalError.somethingWentWrong'), err);
   }

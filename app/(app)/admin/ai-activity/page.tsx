@@ -98,9 +98,9 @@ export default async function AdminAIActivityPage({ searchParams }: Params) {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <SummaryTile label={t('adminAiActivity.failedLastHours', { hours: SUMMARY_WINDOW_HOURS })} value={summary.failed} tone={summary.failed > 0 ? 'danger' : 'neutral'} />
-        <SummaryTile label={t('adminAiActivity.inFlightLastHours', { hours: SUMMARY_WINDOW_HOURS })} value={summary.inFlight} tone="brand" />
-        <SummaryTile label={t('adminAiActivity.totalLastHours', { hours: SUMMARY_WINDOW_HOURS })} value={summary.total} tone="neutral" />
+        <SummaryTile label={t('adminAiActivity.failedLastHours', { hours: SUMMARY_WINDOW_HOURS })} value={summary.failed} unavailable={t('strategyMetrics.unavailable')} tone={(summary.failed ?? 0) > 0 ? 'danger' : 'neutral'} />
+        <SummaryTile label={t('adminAiActivity.inFlightLastHours', { hours: SUMMARY_WINDOW_HOURS })} value={summary.inFlight} unavailable={t('strategyMetrics.unavailable')} tone="brand" />
+        <SummaryTile label={t('adminAiActivity.totalLastHours', { hours: SUMMARY_WINDOW_HOURS })} value={summary.total} unavailable={t('strategyMetrics.unavailable')} tone="neutral" />
       </div>
 
       <SignalPrecisionCard result={precision} retryHref="/admin/ai-activity" allFamilies />
@@ -214,12 +214,12 @@ export default async function AdminAIActivityPage({ searchParams }: Params) {
   );
 }
 
-function SummaryTile({ label, value, tone }: { label: string; value: number; tone: 'danger' | 'brand' | 'neutral' }) {
+function SummaryTile({ label, value, unavailable, tone }: { label: string; value: number | null; unavailable: string; tone: 'danger' | 'brand' | 'neutral' }) {
   const colour = tone === 'danger' ? 'text-danger' : tone === 'brand' ? 'text-brand-text' : 'text-fg';
   return (
     <Card className="p-4">
       <p className="text-xs text-muted">{label}</p>
-      <p className={`mt-1 text-2xl font-bold tabular-nums ${colour}`}>{value.toLocaleString()}</p>
+      <p className={`mt-1 text-2xl font-bold tabular-nums ${colour}`}>{value === null ? unavailable : value.toLocaleString()}</p>
     </Card>
   );
 }

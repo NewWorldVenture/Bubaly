@@ -6,6 +6,7 @@
 // server-loaded (RLS does the cross-family work); writes go through the
 // circle actions and revalidate.
 import { useMemo, useState, useTransition } from 'react';
+import Link from 'next/link';
 import {
   Users, Plus, LogOut, Copy, Loader2, Share2, X, HandHeart, Sparkles, AlertTriangle,
 } from 'lucide-react';
@@ -23,10 +24,12 @@ import { cn } from '@/lib/utils/cn';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 export function CommunityModule({
-  migrated, familyId, circles, members, shares, sharedListings, myListings, readWarnings = [],
+  migrated, familyId, canManage = false, circles, members, shares, sharedListings, myListings, readWarnings = [],
 }: {
   migrated: boolean;
   familyId: string;
+  /** A parent or adult: only they dissolve a circle their family founded (leaveCircleAction). */
+  canManage?: boolean;
   circles: CircleLite[];
   members: CircleMemberLite[];
   shares: ShareLite[];
@@ -164,20 +167,24 @@ export function CommunityModule({
             >
               <Copy className="h-3.5 w-3.5" /> {formatJoinCode(circle.join_code)}
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                const owner = myRole === 'owner';
-                if (confirm(owner ? 'You founded this circle — leaving dissolves it for everyone. Continue?' : `Leave ${circle.name}?`)) {
-                  run(() => leaveCircleAction(circle.id), owner ? 'Circle dissolved' : 'Left the circle');
-                  setSelected(null);
-                }
-              }}
-              disabled={pending}
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-muted transition hover:text-rose-400 disabled:opacity-50"
-            >
-              <LogOut className="h-3.5 w-3.5" /> {myRole === 'owner' ? 'Dissolve' : 'Leave'}
-            </button>
+            {/* Leaving a circle the family founded dissolves it for every
+                household in it, which is a parent's or an adult's call. */}
+            {(myRole !== 'owner' || canManage) && (
+              <button
+                type="button"
+                onClick={() => {
+                  const owner = myRole === 'owner';
+                  if (confirm(owner ? 'You founded this circle — leaving dissolves it for everyone. Continue?' : `Leave ${circle.name}?`)) {
+                    run(() => leaveCircleAction(circle.id), owner ? 'Circle dissolved' : 'Left the circle');
+                    setSelected(null);
+                  }
+                }}
+                disabled={pending}
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-muted transition hover:text-rose-400 disabled:opacity-50"
+              >
+                <LogOut className="h-3.5 w-3.5" /> {myRole === 'owner' ? 'Dissolve' : 'Leave'}
+              </button>
+            )}
           </div>
 
           {/* Share picker */}
@@ -228,7 +235,12 @@ export function CommunityModule({
                       <span className="text-[10px] text-muted">{CONDITION_LABELS[f.listing.condition as ListingCondition] ?? f.listing.condition}</span>
                     )}
                   </div>
-                  <p className="mt-1.5 text-sm font-bold leading-snug">{f.listing.title}</p>
+                  {/* The listing page serves another family's shared listing too
+                      (lib/marketplace/circle-reads.ts readListingDetail): bids,
+                      offers, questions and reports start there. */}
+                  <Link href={`/marketplace/item/${f.listing.id}`} className="mt-1.5 block text-sm font-bold leading-snug hover:text-brand-text">
+                    {f.listing.title}
+                  </Link>
                   <p className="mt-0.5 text-sm font-semibold text-brand-text">
                     {priceLabel(f.listing.kind as ListingKind, f.listing.price_cents ?? 0, (f.listing.rent_period ?? null) as RentPeriod | null, locale.code, t) || '—'}
                   </p>

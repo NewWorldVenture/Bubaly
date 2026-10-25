@@ -6,7 +6,7 @@ import { stripeFromKey } from '@/lib/stripe';
 import { effectiveSecretKey, getStripeSettings } from '@/lib/stripe/settings';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import {
-  DEFAULT_REFERRAL_CONFIG, resolveReferralConfig, generateReferralCode, normalizeCode,
+  DEFAULT_REFERRAL_CONFIG, MAX_REFERRAL_REWARD_CENTS, resolveReferralConfig, generateReferralCode, normalizeCode,
   REFERRAL_EMAIL_SOURCE, evaluateReferralEmailThrottle, decideReferralEmailAdmission, referralEmailSendTimes, withReferralEmailSent,
   rewardRecordFrom, rewardSidesOwed, withRewardRecord, rewardIdempotencyKey,
   type ReferralConfig, type ReferralRewardSide,
@@ -453,6 +453,12 @@ export async function rewardReferral(service: DB, referralId: string, deps: Rewa
       // not proof that the provider never received the old request.
       if (!attempt && attempted) return creditFailed(new Error('Prior referral attempt has no confirmed outcome; manual reconciliation required'));
       let maySubmit = false;
+      // A row keeps the amounts the program had when it was made, so one made
+      // under a mistyped config still asks for them. Above the cap it is not
+      // credited at all: it stays converted for manual reconciliation.
+      if (!attempt && amount > MAX_REFERRAL_REWARD_CENTS) {
+        return creditFailed(new Error('Referral reward is above the per-side cap; manual reconciliation required'));
+      }
       if (!attempt) {
         const wanted: RewardAttempt = { customer: creditCustomer, params: {
           amount: -Math.round(amount), currency, description: `Bubaly referral credit (${row.code})`,

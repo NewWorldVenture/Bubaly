@@ -7,12 +7,21 @@ import { ErrorState } from '@/components/ui/states';
 import { ratingSummary } from '@/lib/marketplace/trust';
 import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
   return { title: `${t('marketplaceItem.reviews')} · ${t('navLabel.marketplace')}` };
 }
 export const dynamic = 'force-dynamic';
+
+type ReviewRow = {
+  id: string; reviewer_member: string | null; reviewee_member: string | null; role: string;
+  rating: number; comment: string | null; created_at: string; listing_id: string | null;
+};
+
+/** How many reviews each list shows, newest first. */
+const LIST_LIMIT = 200;
 
 function Stars({ n, label }: { n: number; label: string }) {
   return (
@@ -30,12 +39,19 @@ export default async function MarketplaceReviewsPage() {
   const sb = await createServer();
   const selfId = ctx.active.member.id;
 
-  const { data: reviews, error: reviewsError } = await sb
-    .from('marketplace_reviews')
-    .select('id, reviewer_member, reviewee_member, role, rating, comment, created_at, listing_id')
-    .eq('family_id', ctx.active.familyId)
-    .order('created_at', { ascending: false })
-    .limit(200);
+  // Every review this member gave or received, paged on id. The read was the
+  // FAMILY's 200 newest, filtered to the member afterwards, so once the family
+  // passed 200 reviews a member's older ones fell out of "Your rating", its
+  // count and both lists. The lists below still show the newest few.
+  const { data: reviews, error: reviewsError } = await readAllByIdAsQuery<ReviewRow>((after, limit) => {
+    let q = sb
+      .from('marketplace_reviews')
+      .select('id, reviewer_member, reviewee_member, role, rating, comment, created_at, listing_id')
+      .eq('family_id', ctx.active.familyId)
+      .or(`reviewee_member.eq.${selfId},reviewer_member.eq.${selfId}`);
+    if (after) q = q.gt('id', after);
+    return q.order('id').limit(limit);
+  }, { max: 50_000 });
 
   // Reviews drive a member's marketplace reputation. A dropped read error would
   // render "No reviews received yet" + "None yet" — the user's rating appears to
@@ -49,8 +65,10 @@ export default async function MarketplaceReviewsPage() {
     );
   }
 
-  const received = (reviews ?? []).filter((r) => r.reviewee_member === selfId);
-  const given = (reviews ?? []).filter((r) => r.reviewer_member === selfId);
+  const newestFirst = [...(reviews ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const received = newestFirst.filter((r) => r.reviewee_member === selfId);
+  const given = newestFirst.filter((r) => r.reviewer_member === selfId);
+  // Over every review received; only the lists are cut.
   const summary = ratingSummary(received.map((r) => r.rating));
 
   const { data: members } = await sb.from('family_members').select('id, display_name').eq('family_id', ctx.active.familyId);
@@ -91,8 +109,8 @@ export default async function MarketplaceReviewsPage() {
           </p>
         )}
       </div>
-      <Section title={t('marketplaceReviews.received')} rows={received} whoOf={(r) => `from ${nameOf(r.reviewer_member)}`} />
-      <Section title={t('marketplaceReviews.given')} rows={given} whoOf={(r) => `to ${nameOf(r.reviewee_member)}`} />
+      <Section title={t('marketplaceReviews.received')} rows={received.slice(0, LIST_LIMIT)} whoOf={(r) => `from ${nameOf(r.reviewer_member)}`} />
+      <Section title={t('marketplaceReviews.given')} rows={given.slice(0, LIST_LIMIT)} whoOf={(r) => `to ${nameOf(r.reviewee_member)}`} />
     </div>
   );
 }

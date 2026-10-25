@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
+import { rateLimitHit } from './helpers/rate-limit-rpc';
 
 const mocks = vi.hoisted(() => ({ getUser: vi.fn(), admin: vi.fn(), submit: vi.fn(), sendSms: vi.fn(), concierge: vi.fn() }));
 vi.mock('@supabase/ssr', () => ({ createServerClient: () => ({ auth: { getUser: mocks.getUser } }) }));
@@ -60,10 +61,15 @@ beforeEach(() => {
   vi.stubEnv('TWILIO_AUTH_TOKEN', TOKEN);
   vi.stubEnv('TWILIO_ACCOUNT_SID', '');
   vi.stubEnv('CONTACT_CENTER_INBOUND_SECRET', 'test-inbound-secret');
+  // The concierge and reply budgets key the sender's number, which the durable
+  // limiter digests under a server secret (lib/contact-center/inbound-budget.ts).
+  vi.stubEnv('INTERNAL_SECRET', 'synthetic-internal-secret');
   vi.spyOn(console, 'error').mockImplementation(() => {});
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
   mocks.getUser.mockResolvedValue({ data: { user: null }, error: null });
   db = createInMemorySupabase({ uniques: { notifications: [['id']], ai_tool_calls: [['id'], ['family_id', 'idempotency_key']], family_inbox_messages: [['channel', 'provider_ref']] },
-    defaults: { family_inbox_messages: { ai_handled: false, direction: 'inbound', status: 'new', occurred_at: '2026-09-12T00:00:00.000Z' } } });
+    defaults: { family_inbox_messages: { ai_handled: false, direction: 'inbound', status: 'new', occurred_at: '2026-09-12T00:00:00.000Z' } },
+    rpc: { rate_limit_hit: rateLimitHit } });
   db.seed('families', [{ id: FAMILY, name: 'Ours', timezone: 'UTC' }]);
   db.seed('family_contact_channels', [{ id: 'channel-ours', family_id: FAMILY, phone_number: '+15555550100', email_local: 'ours', ai_concierge_enabled: false }]);
   db.seed('family_members', [{ id: PARENT.member, family_id: FAMILY, user_id: PARENT.user, role: 'parent', is_active: true }]);

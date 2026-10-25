@@ -27,8 +27,8 @@ export function guardianEscalationDescription(text: string): string {
 }
 
 export const guardianEscalationSchema = z.object({
-  familyId: z.string().uuid(),
-  commId: z.string().uuid().optional(),
+  familyId: z.string().guid(),
+  commId: z.string().guid().optional(),
   escalationType: z.enum(['emergency_call', 'medical', 'police', 'fire', 'child_safety', 'urgent_personal']),
   severity: z.enum(['high', 'critical']),
   description: z.string().trim().min(1).max(GUARDIAN_ESCALATION_DESCRIPTION_MAX),

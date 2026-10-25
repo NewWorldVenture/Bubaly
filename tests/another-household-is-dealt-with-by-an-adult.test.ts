@@ -27,7 +27,9 @@ vi.mock('@/lib/supabase/auth', () => ({
     active: { familyId: 'fam-buyer', role: harness.role, member: { id: harness.memberId, family_id: 'fam-buyer' } },
   }),
 }));
-vi.mock('@/lib/supabase/server', () => ({ createServer: async () => harness.db }));
+// The service client answers the seller's standing (an open family here: the
+// listing's family has no closed_at), as auctions/actions reads it.
+vi.mock('@/lib/supabase/server', () => ({ createServer: async () => harness.db, createServiceClient: () => harness.db }));
 vi.mock('@/lib/i18n/server', async () => {
   const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
   return { getTranslations: async () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params) };

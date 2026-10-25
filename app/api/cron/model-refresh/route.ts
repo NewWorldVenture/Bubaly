@@ -8,10 +8,24 @@ import { runPrepGeneration } from '@/lib/planning/prep-server';
 import { runSignalDetection } from '@/lib/intelligence/hard-signals-server';
 import { needsRefresh, summarizeSweep, type RefreshOutcome } from '@/lib/planning/refresh';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
+import { sweepFamilies } from '@/lib/server/cron-family-sweep';
+import { lastDailySlot, MODEL_REFRESH_SLOTS } from '@/lib/server/cron-slot';
 import { readAll } from '@/lib/supabase/read-all';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
+// Each family's refresh is three serial multi-query passes (twin, prep,
+// signals), and with a six-hour TTL against two runs a day nearly every family
+// is stale on every run. The serial loop had no clock and no per-family bound:
+// a hung read (the service client's fetch has no timeout) held it until the
+// platform killed the function, which lost the response and left every family
+// after it, in id order, unrefreshed every run. The pass now stops STARTING
+// families once this much of maxDuration is spent and reports the rest as
+// failures, gives each family a timeout, and rotates where it starts
+// (lib/server/cron-family-sweep.ts), as guardian-learning and autopilot-scan do.
+const BUDGET_MS = 40_000;
+const FAMILY_TIMEOUT_MS = 12_000;
+const FAMILY_CONCURRENCY = 4;
 
 // Signal detection STORES a sentence with money in it (budget drift), and this
 // cron has no reader to word it for: a family's language lives only in the
@@ -68,14 +82,25 @@ export async function GET(req: NextRequest) {
     }
 
     const outcomes: RefreshOutcome[] = [];
-    for (const fam of families ?? []) {
+    // `counted.current` is false once the pass stopped waiting for a family: its
+    // late outcome is not recorded on top of its timeout. The run is named by its
+    // slot (04:00 or 16:00), so the 16:00 run starts half the ring past the
+    // 04:00 one rather than at the same family.
+    // Counted from the start of the request, so the family reads above are
+    // inside the budget too.
+    const startedAt = now.getTime();
+    const run = lastDailySlot(startedAt, MODEL_REFRESH_SLOTS);
+    const swept = await sweepFamilies(families ?? [], {
+      budgetMs: BUDGET_MS, itemTimeoutMs: FAMILY_TIMEOUT_MS, concurrency: FAMILY_CONCURRENCY, startedAt,
+      runIndex: run.day, slot: { index: run.slot, of: MODEL_REFRESH_SLOTS.length },
+    }, async (fam, counted) => {
       try {
         // Event-driven: refresh if a source change marked the family dirty, or if
         // the last completed refresh is stale past the TTL. Otherwise skip.
         const state = dirtyByFamily.get(fam.id);
         if (!needsRefresh({ dirty: state?.dirty ?? false, lastRefreshedAt: state?.refreshedAt ?? null, now })) {
-          outcomes.push({ familyId: fam.id, ok: true, skipped: true });
-          continue;
+          if (counted.current) outcomes.push({ familyId: fam.id, ok: true, skipped: true });
+          return;
         }
         const twin = await runTwinProjection(supabase, fam.id, null);
         const prep = await runPrepGeneration(supabase, fam.id, null, fam.timezone || 'UTC', now);
@@ -96,6 +121,7 @@ export async function GET(req: NextRequest) {
             dirtyWriteFailed = true;
           }
         }
+        if (!counted.current) return;
         outcomes.push({
           familyId: fam.id, ok,
           entities: twin.entities, edges: twin.edges, plans: prep.plans,
@@ -103,13 +129,26 @@ export async function GET(req: NextRequest) {
         });
       } catch (err) {
         console.error(`Model-refresh cron failed for family ${fam.id}:`, err);
-        outcomes.push({ familyId: fam.id, ok: false, error: t('modelRefresh.modelRefreshFailed') });
+        if (counted.current) outcomes.push({ familyId: fam.id, ok: false, error: t('modelRefresh.modelRefreshFailed') });
       }
+    });
+    // A family the pass gave up waiting for, or never reached, is a family it
+    // failed, not a success: either one answers 502.
+    for (const fam of swept.timedOut) {
+      console.error(`Model-refresh gave up waiting for family ${fam.id} after ${FAMILY_TIMEOUT_MS} ms`);
+      outcomes.push({ familyId: fam.id, ok: false, error: t('modelRefresh.modelRefreshFailed') });
+    }
+    if (swept.unreached.length > 0) {
+      console.error(`Model-refresh ran out of time: ${swept.unreached.length} families not reached`, swept.unreached.slice(0, 50).map((fam) => fam.id));
+      for (const fam of swept.unreached) outcomes.push({ familyId: fam.id, ok: false, error: t('modelRefresh.modelRefreshFailed') });
     }
 
     const summary = summarizeSweep(outcomes);
     const ok = summary.failures === 0;
-    return NextResponse.json({ ok, ...summary }, { status: ok ? 200 : 502 });
+    return NextResponse.json(
+      { ok, ...summary, timedOut: swept.timedOut.length, unreached: swept.unreached.length },
+      { status: ok ? 200 : 502 },
+    );
   } catch (err) {
     console.error('Model-refresh cron error:', err);
     return NextResponse.json({ error: t('modelRefresh.modelRefreshCronFailed') }, { status: 500 });

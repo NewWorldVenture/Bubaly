@@ -137,7 +137,11 @@ describe('the cron tick, when a run throws', () => {
     seedRun();
     seam.runGraph.mockRejectedValue(new Error('provider exploded'));
     const first = await cronTick();
-    expect(first.status).toBe(200);
+    // A tick whose only run threw did not do its work: it used to answer 200
+    // ok:true with the throw listed only in `results`, so the dispatcher logged
+    // it as a clean tick.
+    expect(first.status).toBe(502);
+    expect(first.body).toMatchObject({ ok: false, runFailures: 1 });
     expect(first.body.results).toEqual([{ runId: RUN, status: 'error', completed: 0, failed: 0 }]);
     expect(errors.some((args) => /run threw/.test(String(args[0])))).toBe(true);
 

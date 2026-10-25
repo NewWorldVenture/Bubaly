@@ -55,15 +55,15 @@ const scalar = z.union([z.string(), z.number(), z.boolean(), z.null()]);
  * which is the exact failure this whole mechanism exists to end.
  */
 const idOrBinding = z.union([
-  z.string().uuid(),
+  z.string().guid(),
   z.object({ [BINDING_KEY]: z.string().min(1), path: z.string().min(1) }).strict(),
 ]);
 
 export const verificationCheckSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('records_exist'), table: tableSchema, ids: z.array(idOrBinding).min(1).max(100), label: z.string().max(120).optional() }),
-  z.object({ kind: z.literal('fields_match'), table: tableSchema, id: idOrBinding, expect: z.record(scalar), label: z.string().max(120).optional() }),
+  z.object({ kind: z.literal('fields_match'), table: tableSchema, id: idOrBinding, expect: z.record(z.string(), scalar), label: z.string().max(120).optional() }),
   z.object({
-    kind: z.literal('count_at_least'), table: tableSchema, min: z.number().int().min(1).max(500), where: z.record(scalar).optional(),
+    kind: z.literal('count_at_least'), table: tableSchema, min: z.number().int().min(1).max(500), where: z.record(z.string(), scalar).optional(),
     // An inclusive range on one column — the week a plan is for — so rows from
     // another week cannot satisfy the count (`meal_plans.plan_date`).
     between: z.object({ column: z.string().regex(/^[a-z_][a-z0-9_]*$/), from: z.string().min(1), to: z.string().min(1) }).strict().optional(),

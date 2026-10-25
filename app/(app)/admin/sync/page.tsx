@@ -18,15 +18,20 @@ export default async function AdminSyncPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
 
-  const [conns, errors, deadJobs, webhookFails, providers] = await settleAll([
-    supabase.from('sync_connections').select('id, health', { count: 'exact' }),
+  // Both connection tiles are exact counts. 'Connections in error' was
+  // filtered from the rows of a select that PostgREST answers with at most
+  // 1,000, so past a thousand connections it counted the errors among the
+  // first thousand and said nothing about the rest.
+  const [conns, erroredConnsResult, errors, deadJobs, webhookFails, providers] = await settleAll([
+    supabase.from('sync_connections').select('id', { count: 'exact', head: true }),
+    supabase.from('sync_connections').select('id', { count: 'exact', head: true }).eq('health', 'error'),
     supabase.from('sync_provider_errors').select('id', { count: 'exact', head: true }).eq('is_fatal', true),
     supabase.from('sync_jobs').select('id', { count: 'exact', head: true }).eq('status', 'dead_letter'),
     supabase.from('sync_webhook_events').select('id', { count: 'exact', head: true }).eq('signature_ok', false),
     supabase.from('sync_providers').select('provider, label, is_enabled, auth_kind'),
   ]);
 
-  const readError = conns.error ?? errors.error ?? deadJobs.error ?? webhookFails.error ?? providers.error;
+  const readError = conns.error ?? erroredConnsResult.error ?? errors.error ?? deadJobs.error ?? webhookFails.error ?? providers.error;
   if (readError) {
     console.error('[admin-sync] sync platform read failed', readError);
     return (
@@ -41,9 +46,8 @@ export default async function AdminSyncPage() {
     );
   }
 
-  const connRows = conns.data ?? [];
-  const activeConns = conns.count ?? connRows.length;
-  const erroredConns = connRows.filter((c) => c.health === 'error').length;
+  const activeConns = conns.count ?? 0;
+  const erroredConns = erroredConnsResult.count ?? 0;
 
   return (
     <div className="module-page">

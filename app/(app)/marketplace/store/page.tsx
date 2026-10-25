@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { ListChecks } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settle } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { StoreForm } from '@/components/marketplace/store-form';
@@ -54,7 +55,13 @@ export default async function MarketplaceStorePage() {
     store
       ? settle(sb.from('marketplace_follows').select('id', { count: 'exact', head: true }).eq('store_id', store.id))
       : Promise.resolve({ count: 0 } as { count: number | null }),
-    settle(sb.from('marketplace_reviews').select('rating').eq('family_id', familyId).eq('reviewee_member', selfId).limit(500)),
+    // "N reviews" and the average are over every rating, paged on id; a
+    // `.limit(500)` read stopped counting at 500.
+    readAllByIdAsQuery<{ id: string; rating: number }>((after, limit) => {
+      let q = sb.from('marketplace_reviews').select('id, rating').eq('family_id', familyId).eq('reviewee_member', selfId);
+      if (after) q = q.gt('id', after);
+      return q.order('id').limit(limit);
+    }, { max: 50_000 }),
     settle(sb.from('marketplace_listings')
       .select('id, title, kind, status, price_cents, rent_period, created_at')
       .eq('family_id', familyId).eq('member_id', selfId)

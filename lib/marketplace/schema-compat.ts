@@ -73,6 +73,10 @@ export type OrderFamilyScope = <Q extends ScopableOrders<Q>>(query: Q) => Q;
  * and passes it through `scope` where it used to write
  * `.eq('family_id', familyId)`. On a database without buyer_family_id the same
  * query runs again with that `.eq`, which is exactly the read before this file.
+ *
+ * `run` must not be a HEAD read (`{ head: true }`). A HEAD answer has no body,
+ * so the missing column arrives as `{ message: '' }` with no code and never
+ * falls back; count with a GET (`{ count: 'exact' }` and `.limit(1)`) instead.
  */
 export async function readFamilyOrders<R extends { error: unknown }>(
   familyId: string,

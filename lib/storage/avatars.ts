@@ -7,7 +7,9 @@ import type { SupabaseBrowser } from '@/lib/supabase/types';
 import { unguessableObjectName } from './object-name';
 import { describeActionError } from '@/lib/supabase/errors';
 
-const BUCKET = 'avatars';
+/** The public bucket every profile photo lives in (saveUserProfile removes a superseded one from it). */
+export const AVATAR_BUCKET = 'avatars';
+const BUCKET = AVATAR_BUCKET;
 const MAX_BYTES = 5 * 1024 * 1024;
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
 
@@ -22,8 +24,9 @@ export async function uploadAvatar(
   }
 
   // Public bucket: the object name carries the entropy, not the folder. A
-  // timestamp name left every avatar a user ever uploaded enumerable, and they
-  // are never deleted.
+  // timestamp name left every avatar a user ever uploaded enumerable. The
+  // superseded photo leaves the bucket when the profile is saved
+  // (lib/server/profiles.ts saveUserProfile, through avatarObjectPathFor below).
   const path = `${userId}/${unguessableObjectName(file.name.toLowerCase())}`;
 
   const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
@@ -34,4 +37,37 @@ export async function uploadAvatar(
 
   const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(path);
   return { url: publicUrl, error: null };
+}
+
+/**
+ * The object an avatar URL names, when it is THIS user's own:
+ * `…/storage/v1/object/public/avatars/<userId>/<name>` → `<userId>/<name>`.
+ *
+ * Null for anything else — another user's folder (a crafted row could name
+ * one), a nested path, an external picture, a `data:` URI, an unreadable
+ * value — none of which is this user's photo to delete. The caller
+ * (saveUserProfile) removes only what this answers, the way releaseFamilyMedia
+ * removes only an object under its own family's folder.
+ */
+export function avatarObjectPathFor(userId: string, url: string | null | undefined): string | null {
+  if (!userId || !url || typeof url !== 'string') return null;
+  let pathname: string;
+  try {
+    pathname = new URL(url, 'https://avatar-url.invalid').pathname;
+  } catch {
+    return null;
+  }
+  const match = /^\/storage\/v1\/object\/public\/avatars\/(.+)$/.exec(pathname);
+  if (!match) return null;
+  let objectPath: string;
+  try {
+    objectPath = decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+  const prefix = `${userId}/`;
+  if (!objectPath.startsWith(prefix)) return null;
+  const name = objectPath.slice(prefix.length);
+  if (!name || name.includes('/') || name.includes('..')) return null;
+  return objectPath;
 }

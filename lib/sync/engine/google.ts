@@ -39,6 +39,8 @@ export type RunResult = {
   skipped: number;
   conflicts: number;
   error?: string;
+  /** The account's policy refused the sync before it started: no job, no provider call, nothing written. */
+  refused?: boolean;
 };
 
 const REMOTE_META: Json = { origin: 'remote' };
@@ -52,7 +54,10 @@ function redact(msg: string): string {
 export async function runGoogleSync(admin: Admin, account: Account): Promise<RunResult> {
   const result: RunResult = { imported: 0, exported: 0, skipped: 0, conflicts: 0 };
   const permission = await loadSyncExecutionPolicy(admin, account, 'google');
-  if (!permission.ok) return { ...result, error: permission.error };
+  // Said as a refusal, as the generic engine does: the account lease
+  // (lib/sync/account-lease.ts) gives the account back as it found it rather
+  // than stamping a sync that never started as the account's error.
+  if (!permission.ok) return { ...result, error: permission.error, refused: true };
   const policy = permission.data;
 
   const { data: job, error: jobError } = await admin

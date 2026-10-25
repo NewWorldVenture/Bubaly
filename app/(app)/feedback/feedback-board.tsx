@@ -1,6 +1,7 @@
 'use client';
 
 import { useId, useMemo, useRef, useState, useTransition } from 'react';
+import { unstable_rethrow } from 'next/navigation';
 import { ChevronUp, MessageCircle, Send, Loader2, Sparkles, Filter, Shield, Lightbulb, Bug, Search, X } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
@@ -12,7 +13,7 @@ import {
 } from '@/lib/feedback/board';
 import { submitIdeaAction, toggleVoteAction, addCommentAction, setIdeaStatusAction } from './actions';
 import { FeedbackAttachmentUpload } from './feedback-attachment-upload';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { useFormat } from '@/components/i18n/use-format';
 import type { Format } from '@/lib/utils/format';
@@ -47,9 +48,11 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
   const [audience, setAudience] = useState('me');
   const [imageUrl, setImageUrl] = useState('');
   const [pending, start] = useTransition();
+  const [submitUncertain, setSubmitUncertain] = useState(false);
   const isBug = kind === 'bug';
 
   function reset() {
+    setSubmitUncertain(false);
     setKind('idea'); setTitle(''); setProblem(''); setBody('');
     setCategory('other'); setImpact('helpful'); setAudience('me'); setImageUrl('');
   }
@@ -57,7 +60,15 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
   function submit(e: React.FormEvent) {
     e.preventDefault();
     start(async () => {
-      const res = await submitIdeaAction({ title, problem, body, category, impact, audience, kind, imageUrl });
+      let res: Awaited<ReturnType<typeof submitIdeaAction>>;
+      try {
+        res = await submitIdeaAction({ title, problem, body, category, impact, audience, kind, imageUrl });
+      } catch (cause) {
+        unstable_rethrow(cause);
+        // A missing acknowledgement cannot tell us whether the write committed.
+        setSubmitUncertain(true);
+        return;
+      }
       if (!res.ok || !res.id) { error(res.error ?? (isBug ? t('feedback.couldNotSubmitBug') : t('feedback.couldNotSubmitIdea'))); return; }
       onCreated({
         id: res.id, title: title.trim(), problem: problem.trim() || null, body: body.trim() || null,
@@ -88,6 +99,7 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
 
   return (
     <form onSubmit={submit} className="space-y-4">
+      {submitUncertain && <p role="alert" className="text-sm text-muted">{t('quickCapture.saveUncertain')}</p>}
       {/* Idea vs Bug — routes to the right list on the tracker + tunes the copy */}
       <div>
         {/* A <span>, not a <label>: this names a PAIR of buttons, and a label
@@ -359,12 +371,16 @@ function IdeaCard({ idea, voted, votesUnavailable, onVote, isSuperAdmin, onStatu
 }
 
 // ── The board ────────────────────────────────────────────────────────────────
-export function FeedbackBoard({ initialIdeas, votedIds, votesUnavailable = false, userId, isSuperAdmin }: {
-  initialIdeas: IdeaRow[]; votedIds: string[];
+export function FeedbackBoard({ initialIdeas, totalIdeas = null, votedIds, votesUnavailable = false, userId, isSuperAdmin }: {
+  initialIdeas: IdeaRow[];
+  /** Every idea on the board, counted; null when the count could not be read. `initialIdeas` is the top 400 at most. */
+  totalIdeas?: number | null;
+  votedIds: string[];
   /** The votes read failed on the server: voting is paused and no pill claims a state. */
   votesUnavailable?: boolean; userId: string; isSuperAdmin: boolean;
 }) {
   const t = useTranslations();
+  const locale = useLocale().code;
   const [ideas, setIdeas] = useState<IdeaRow[]>(initialIdeas);
   const [voted, setVoted] = useState<string[]>(votedIds);
   const [sort, setSort] = useState<FeedbackSort>('top');
@@ -469,6 +485,10 @@ export function FeedbackBoard({ initialIdeas, votedIds, votesUnavailable = false
           <button key={c} onClick={() => setCategoryFilter(c)} className={pill(categoryFilter === c)}>{CATEGORY_META[c].emoji} {CATEGORY_META[c].label}</button>
         ))}
       </div>
+
+      {totalIdeas !== null && totalIdeas > initialIdeas.length && (
+        <p className="mt-4 text-xs text-muted">{t('feedbackFeedbackBoard.theBoardListsTheTop', { shown: initialIdeas.length.toLocaleString(locale), total: totalIdeas.toLocaleString(locale) })}</p>
+      )}
 
       {votesUnavailable && (
         <p role="status" className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/5 px-4 py-2 text-xs text-amber-600">{t('feedbackFeedbackBoard.yourVotesCouldNotBeRead')}</p>

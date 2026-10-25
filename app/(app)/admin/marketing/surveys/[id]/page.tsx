@@ -2,9 +2,12 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settle, settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { MessagesSquare } from 'lucide-react';
 import {
   SURVEY_TYPES, summarize, computeNps, distribution, isSurveyType,
@@ -19,6 +22,10 @@ export const metadata: Metadata = { title: 'Survey · Marketing', robots: { inde
 export const dynamic = 'force-dynamic';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
+/** Responses the score may page through before it is reported as a prefix (one round trip per 1,000). */
+const SUM_ROW_CEILING = 25_000;
+/** The newest responses listed under the score. */
+const LISTED_RESPONSES = 100;
 
 export default async function SurveyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const t = await getTranslations();
@@ -27,21 +34,42 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
   const { fmtDate } = await getFormat(ADMIN_ZONE);
   const { id } = await params;
   const supabase = createServiceClient();
-  const { data: survey, error: surveyError } = await supabase.from('surveys').select('*').eq('id', id).is('deleted_at', null).maybeSingle();
+  // Settled: a transport failure REJECTS the query rather than resolving
+  // { data, error }, and unsettled it took the route's error boundary in place
+  // of this page's own read-error state.
+  const { data: survey, error: surveyError } = await settle(
+    supabase.from('surveys').select('*').eq('id', id).is('deleted_at', null).maybeSingle());
   if (surveyError) {
     console.error('[admin-marketing-survey-detail] survey read failed', surveyError);
     return <SurveyDetailReadError />;
   }
   if (!survey) return <AppNotFound backHref="/admin/marketing/surveys" />;
 
-  const { data: responses, error: responsesError } = await supabase
-    .from('survey_responses').select('*').eq('survey_id', id).order('submitted_at', { ascending: false });
+  // The score, its summary and the distribution are every response, paged on
+  // the id while the public keeps answering; the list is the newest hundred.
+  // One unbounded select fed both and stopped at 1,000 responses with no
+  // error, so a survey past that was scored from its newest thousand.
+  const [responsesResult, scoresResult] = await settleAll([
+    supabase.from('survey_responses').select('*').eq('survey_id', id)
+      .order('submitted_at', { ascending: false }).order('id').limit(LISTED_RESPONSES),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('survey_responses').select('id, score').eq('survey_id', id);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
+  ]);
+  // A survey answered more often than the ceiling costs its score and
+  // distribution, not the page: the controls, the share link and the newest
+  // responses still render, and the score says it is not shown.
+  const scoresCeiling = 'truncated' in scoresResult && scoresResult.truncated;
+  const responsesError = responsesResult.error ?? (scoresCeiling ? null : scoresResult.error);
+  if (scoresCeiling) console.warn('[admin-marketing-survey-detail] the score read reached its ceiling; the score is not shown');
   if (responsesError) {
     console.error('[admin-marketing-survey-detail] response read failed', responsesError);
     return <SurveyDetailReadError />;
   }
-  const rows = responses ?? [];
-  const scores = rows.map((r) => r.score);
+  const rows = responsesResult.data ?? [];
+  const scores = (scoresResult.data ?? []).map((r) => r.score);
   const type = isSurveyType(survey.type) ? survey.type : 'custom';
   const summary = summarize(type, scores, survey.scale_max);
   const dist = distribution(scores, survey.scale_min, survey.scale_max);
@@ -51,6 +79,10 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
 
   return (
     <div className="space-y-5">
+      <PartialReadBanner
+        title={t('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
+        failures={scoresCeiling ? [summary.headline, t('adminMarketingSurveys.scoreDistribution')] : []}
+      />
       <Link href="/admin/marketing/surveys" className="inline-flex items-center gap-1 text-sm text-muted hover:text-fg">
         <ArrowLeft className="h-4 w-4" /> {t('adminMarketingSurveys.allSurveys')}
       </Link>
@@ -80,9 +112,9 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-1">
           <p className="text-xs font-medium text-muted">{summary.headline}</p>
-          <p className="mt-1 text-4xl font-bold leading-none">{summary.total > 0 ? summary.value : '—'}</p>
-          <p className="mt-2 text-xs text-muted">{summary.total} response{summary.total === 1 ? '' : 's'}{summary.detail && summary.total > 0 ? ` · ${summary.detail}` : ''}</p>
-          {nps && nps.total > 0 && (
+          <p className="mt-1 text-4xl font-bold leading-none">{scoresCeiling ? t('strategyMetrics.unavailable') : summary.total > 0 ? summary.value : '—'}</p>
+          {!scoresCeiling && <p className="mt-2 text-xs text-muted">{summary.total} response{summary.total === 1 ? '' : 's'}{summary.detail && summary.total > 0 ? ` · ${summary.detail}` : ''}</p>}
+          {!scoresCeiling && nps && nps.total > 0 && (
             <div className="mt-3 space-y-1 text-xs">
               <div className="flex items-center justify-between"><span className="text-success">{t('adminMarketingSurveys.promoters')}</span><span>{nps.promoters} ({nps.promoterPct}%)</span></div>
               <div className="flex items-center justify-between"><span className="text-muted">{t('adminMarketingSurveys.passives')}</span><span>{nps.passives} ({nps.passivePct}%)</span></div>
@@ -93,6 +125,7 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
 
         <Card className="lg:col-span-2">
           <p className="mb-2 text-xs font-medium text-muted">{t('adminMarketingSurveys.scoreDistribution')}</p>
+          {scoresCeiling ? <p className="text-sm text-muted">{t('strategyMetrics.unavailable')}</p> : (
           <div className="flex items-end gap-1.5" style={{ height: 140 }}>
             {dist.map((d) => (
               <div key={d.value} className="flex flex-1 flex-col items-center justify-end gap-1">
@@ -105,17 +138,26 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
               </div>
             ))}
           </div>
+          )}
         </Card>
       </div>
 
       {/* Responses */}
       <Card>
         <h3 className="mb-3 text-sm font-semibold">{t('adminMarketingSurveys.responses')}</h3>
+        {/* The list is the newest few; the score covers every response (coverage sweep round 9). */}
+        {!scoresCeiling && scores.length > rows.length && (
+          <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsTheNewest', { shown: rows.length.toLocaleString(), total: scores.length.toLocaleString() })}</p>
+        )}
+        {/* Past the ceiling the list is certainly part of the responses, with no total to name. */}
+        {scoresCeiling && (
+          <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsTheNewestTotalNotShown', { shown: rows.length.toLocaleString() })}</p>
+        )}
         {rows.length === 0 ? (
           <EmptyState icon={MessagesSquare} title={t('adminMarketingSurveys.noResponsesYet')} description={t('surveys.shareTheLinkAboveTo')} />
         ) : (
           <div className="space-y-2">
-            {rows.slice(0, 100).map((r) => (
+            {rows.map((r) => (
               <div key={r.id} className="flex items-start gap-3 rounded-lg border border-border px-3 py-2 text-sm">
                 <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-elevated text-sm font-bold">{r.score ?? '–'}</span>
                 <div className="min-w-0 flex-1">

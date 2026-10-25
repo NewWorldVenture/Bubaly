@@ -145,7 +145,13 @@ function contentDrift(stored: TodoItem, wanted: TodoContent): string[] {
   return drift;
 }
 
-/** A task's member reference must share its server-derived family scope. */
+/**
+ * A task's member reference must share its server-derived family scope, and
+ * be a CURRENT member: a removed member (`is_active = false`) must not accrue
+ * new assignments — the row would be invisible to every active member's
+ * "mine" view — whether the caller is a tool that skipped the resolver's
+ * `requireActive` or a direct service caller.
+ */
 async function checkTodoAssignee(scope: ServiceScope, memberId: string | null): Promise<ServiceResult<null>> {
   if (memberId === null) return ok(null);
   if (typeof memberId !== 'string' || !memberId.trim()) {
@@ -153,11 +159,12 @@ async function checkTodoAssignee(scope: ServiceScope, memberId: string | null): 
   }
   try {
     const { data, error } = await scope.db.from('family_members')
-      .select('id, family_id').eq('id', memberId).eq('family_id', scope.familyId).maybeSingle();
+      .select('id, family_id, is_active').eq('id', memberId).eq('family_id', scope.familyId).maybeSingle();
     if (error) return fail(describeDbError(error, 'Could not verify that task assignee.'), { code: SERVICE_CODES.db });
     if (!data || typeof data !== 'object' || Array.isArray(data) || data.id !== memberId || data.family_id !== scope.familyId) {
       return fail('That task assignee could not be found.', { code: SERVICE_CODES.notFound });
     }
+    if (data.is_active === false) return fail('That person is no longer in this family.', { code: SERVICE_CODES.notFound });
     return ok(null);
   } catch (error) {
     return fail(describeDbError(error, 'Could not verify that task assignee.'), { code: SERVICE_CODES.db });

@@ -3,18 +3,23 @@ import Link from 'next/link';
 import { FlaskConical, Trophy } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { readInChunks } from '@/lib/supabase/chunked-in';
+import { settle, settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { ErrorState } from '@/components/ui/states';
 import { computeABResults, leadingVariant, type ABVariant, type VariantTotals } from '@/lib/marketing/ab';
 import { NewExperimentForm, ExperimentControls } from './experiments-client';
 import { getTranslations } from '@/lib/i18n/server';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
   return { title: t('experiments.aBTesting'), robots: { index: false } };
 }
 export const dynamic = 'force-dynamic';
+
+/** Events a batch of experiments may page through before it is read an experiment at a time. */
+const EVENT_ROW_CEILING = 100000;
 
 const STATUS_STYLE: Record<string, string> = {
   draft: 'bg-elevated text-muted',
@@ -26,30 +31,61 @@ const STATUS_STYLE: Record<string, string> = {
 export default async function ABTestingPage() {
   const tr = await getTranslations();
   const supabase = createServiceClient();
-  const { data: experiments, error: experimentsError } = await supabase
+  // Settled: a transport failure REJECTS the query rather than resolving
+  // { data, error }, and unsettled it took the route's error boundary in place
+  // of this page's own read-error state.
+  const { data: experiments, error: experimentsError } = await settle(supabase
     .from('ab_experiments')
     .select('*')
     .is('deleted_at', null)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false }));
 
   // `ab_experiments` is read unbounded, so `keys` is unbounded too — batch the
   // filter rather than building one query string out of every key.
   const keys = (experiments ?? []).map((e) => e.key);
+  type AbEvent = { id: string; experiment_key: string; variant_key: string; kind: string };
+  // Per CHUNK of experiment keys, and an event table is the one place rows
+  // genuinely pile up: `.limit(100000)` returned 1,000 (PostgREST caps at
+  // db-max-rows), so every conversion rate on this page was computed from a
+  // 1,000-row sample per chunk and read as exact. Paged on the id, because
+  // /api/ab/track records exposures WHILE this reads: on offsets, one landing
+  // between two pages pushed an event onto the next and it was tallied twice.
+  //
+  // A chunk past its ceiling is read again an experiment at a time, and an
+  // experiment recorded past the ceiling costs its own results, which say they
+  // are not shown, not the page: it used to be the read-error state, and the
+  // form and every experiment's controls went with it. Any failure still is.
+  const unscored = new Set<string>();
+  const eventsOf = (experimentKeys: string[]) => readAllByIdAsQuery<AbEvent>((after, limit) => {
+    let query = supabase.from('ab_events').select('id, experiment_key, variant_key, kind').in('experiment_key', experimentKeys);
+    if (after) query = query.gt('id', after);
+    return query.order('id').limit(limit);
+  }, { max: EVENT_ROW_CEILING });
   // The error type also admits `{ message }`: a paged read reports a TRANSPORT
   // failure in that shape rather than rejecting, so the batch survives it.
-  const eventResult = await readInChunks<{ experiment_key: string; variant_key: string; kind: string }, typeof experimentsError | { message: string }>(
-    keys,
-    // Per CHUNK of experiment keys, and an event table is the one place rows
-    // genuinely pile up: `.limit(100000)` returned 1,000 (PostgREST caps at
-    // db-max-rows), so every conversion rate on this page was computed from a
-    // 1,000-row sample per chunk and read as exact.
-    (chunk) => readAllAsQuery((from, to) => supabase.from('ab_events').select('experiment_key, variant_key, kind').in('experiment_key', chunk).order('id').range(from, to), { max: 100000 }),
-  );
+  const eventResult = await readInChunks<AbEvent, typeof experimentsError | { message: string }>(keys, async (chunk) => {
+    const page = await eventsOf(chunk);
+    if (!page.truncated) return page;
+    if (chunk.length === 1) {
+      unscored.add(chunk[0]);
+      return { data: [], error: null };
+    }
+    const each = await settleAll(chunk.map((key) => eventsOf([key])));
+    const data: AbEvent[] = [];
+    for (const [i, one] of each.entries()) {
+      if ('truncated' in one && one.truncated) unscored.add(chunk[i]);
+      else if (one.error) return { data: null, error: one.error };
+      else data.push(...(one.data ?? []));
+    }
+    return { data, error: null };
+  });
   if (experimentsError || eventResult.error) {
     console.error('[admin-marketing-experiments] experiment read failed', experimentsError ?? eventResult.error);
     return <AdminExperimentsReadError />;
   }
   const { data: events } = eventResult;
+  const unscoredNames = [...new Set((experiments ?? []).filter((e) => unscored.has(e.key)).map((e) => e.name))];
+  if (unscoredNames.length > 0) console.warn('[admin-marketing-experiments] an event read reached its ceiling; those experiments are not scored');
 
   // Tally exposures/conversions per experiment+variant.
   const tally = new Map<string, { exposures: number; conversions: number }>();
@@ -62,6 +98,7 @@ export default async function ABTestingPage() {
 
   return (
     <div className="space-y-5">
+      <PartialReadBanner title={tr('adminCeiling.figuresNotShown', { n: EVENT_ROW_CEILING.toLocaleString() })} failures={unscoredNames} />
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted">{tr('adminMarketingExperiments.runExperimentsWithDeterministicVariantAssignment')}</p>
         <NewExperimentForm />
@@ -95,7 +132,7 @@ export default async function ABTestingPage() {
                   <ExperimentControls id={exp.id} status={exp.status} variants={variants} />
                 </div>
 
-                <div className="overflow-x-auto">
+                {unscored.has(exp.key) ? <p className="text-sm text-muted">{tr('strategyMetrics.unavailable')}</p> : <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="text-left text-xs text-muted">
                       <tr><th className="pb-2">{tr('experiments.variant')}</th><th className="pb-2 text-right">{tr('experiments.exposures')}</th><th className="pb-2 text-right">{tr('experiments.conversions')}</th><th className="pb-2 text-right">{tr('experiments.rate')}</th><th className="pb-2 text-right">{tr('experiments.lift')}</th><th className="pb-2 text-right">{tr('experiments.significance')}</th></tr>
@@ -113,7 +150,7 @@ export default async function ABTestingPage() {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </div>}
               </Card>
             );
           })}

@@ -46,6 +46,39 @@ export function rollForward(nextRunOn: string, cadence: Cadence, today: string, 
   return { runs, next: cursor };
 }
 
+/**
+ * The identity of one allowance PAYMENT: the rule and the day it is paid for.
+ *
+ * WHICH day: the occurrence being paid, `rule.next_run_on` as the run claimed
+ * it — never the day the run happens. The nightly cron's day is the UTC day and
+ * "Run due now" counts in the family's zone, so a run-day key gave one payment
+ * two identities whenever those days differ (a Los Angeles evening, a Tokyo
+ * morning): an answer lost on one path and paid again on the other was a NEW
+ * key, which no unique index can refuse. The due date is the same for the
+ * cron, the manual run and every retry after a rollback, whatever the zone.
+ *
+ * Every credit used to carry `related_id = rule.id` and nothing else, so the
+ * ledger could not tell week one from week two and no key could ever refuse a
+ * second credit of the same occurrence — which is exactly what a run needs
+ * when an insert's answer is lost (the insert committed, the connection
+ * dropped) and the schedule is rolled back and paid again. Keyed per
+ * occurrence, a run can ask the ledger whether this payment landed, and the
+ * owner's partial unique index can refuse the repeat.
+ *
+ * WHERE it rides: `wallet_transactions.metadata.occurrence` (jsonb), beside
+ * the split — never in `related_id`. That column is `uuid` (0088), so this
+ * `<rule>:<day>` text is refused there with 22P02 before any row is written,
+ * and a run that wrote it there paid nobody while its claim had already moved
+ * the schedule on. `related_id` stays the rule's id, as every other ledger
+ * reference does; the key is read back with `.eq('metadata->>occurrence', k)`,
+ * the expression the owner's index on
+ * (family_id, related_id, (metadata->>'occurrence'), bucket_id)
+ * where related_type = 'allowance_rules' is built over.
+ */
+export function allowanceOccurrenceKey(ruleId: string, dueOn: string): string {
+  return `${ruleId}:${isoDay(dueOn)}`;
+}
+
 export type DueRule = { isActive: boolean; nextRunOn: string | null; amountCents: number };
 
 /** Summary of allowance rules that are due to pay (next_run_on ≤ today), used to
