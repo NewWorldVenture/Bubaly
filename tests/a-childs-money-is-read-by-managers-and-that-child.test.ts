@@ -80,6 +80,7 @@ describe('every wallet page reads a non-manager\'s own wallet, in the query', ()
     ['app/(app)/wallet/send/page.tsx', ["inWalletScope(supabase.from('wallet_buckets')", "inWalletScope(supabase.from('wallet_transactions')"]],
     ['app/(app)/wallet/settings/page.tsx', ["inWalletScope(supabase.from('wallet_rules')"]],
     ['app/(app)/wallet/cards/page.tsx', ["inWalletScope(supabase.from('stripe_issuing_cards')"]],
+    ['app/(app)/wallet/invest/page.tsx', ["inWalletScope(supabase.from('invest_holdings')", "inWalletScope(supabase.from('wallet_buckets')", "inWalletScope(supabase.from('invest_orders')", "inWalletScope(supabase\n        .from('wallet_transactions')"]],
   ])('%s', (file, narrowed) => {
     const src = read(file);
     expect(src).toContain('await readWalletScope(supabase, ctx)');
