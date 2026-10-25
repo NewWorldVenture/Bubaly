@@ -82,17 +82,32 @@ export function WalletHub() {
     },
   });
   const txns = useMemo(() => transactionsInScope(txnRows, role, selfId), [txnRows, role, selfId]);
+  // The held 0515: cards, passes and rewards are read by a parent or adult and
+  // by the member they belong to (one on nobody is the parents'), narrowed in
+  // the query like the transactions above.
   const { data: cards, error: cardsError, refresh: refreshCards } = useRealtimeQuery<Card>({
-    table: 'wallet_cards', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('wallet_cards').select('*').eq('family_id', familyId).eq('is_active', true).order('sort_order'),
+    table: 'wallet_cards', familyId, deps: [familyId, role, selfId],
+    fetcher: (sb) => {
+      if (!seesAll && !selfId) return Promise.resolve({ data: [] as Card[], error: null });
+      const query = sb.from('wallet_cards').select('*').eq('family_id', familyId).eq('is_active', true);
+      return (seesAll ? query : query.eq('member_id', selfId!)).order('sort_order');
+    },
   });
   const { data: passes, error: passesError, refresh: refreshPasses } = useRealtimeQuery<Pass>({
-    table: 'wallet_passes', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('wallet_passes').select('*').eq('family_id', familyId).eq('is_active', true).order('sort_order'),
+    table: 'wallet_passes', familyId, deps: [familyId, role, selfId],
+    fetcher: (sb) => {
+      if (!seesAll && !selfId) return Promise.resolve({ data: [] as Pass[], error: null });
+      const query = sb.from('wallet_passes').select('*').eq('family_id', familyId).eq('is_active', true);
+      return (seesAll ? query : query.eq('member_id', selfId!)).order('sort_order');
+    },
   });
   const { data: rewards, error: rewardsError, refresh: refreshRewards } = useRealtimeQuery<Reward>({
-    table: 'wallet_rewards', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('wallet_rewards').select('*').eq('family_id', familyId).eq('is_active', true).order('sort_order'),
+    table: 'wallet_rewards', familyId, deps: [familyId, role, selfId],
+    fetcher: (sb) => {
+      if (!seesAll && !selfId) return Promise.resolve({ data: [] as Reward[], error: null });
+      const query = sb.from('wallet_rewards').select('*').eq('family_id', familyId).eq('is_active', true);
+      return (seesAll ? query : query.eq('member_id', selfId!)).order('sort_order');
+    },
   });
 
   const [tab, setTab] = useState<Tab>('Accounts');

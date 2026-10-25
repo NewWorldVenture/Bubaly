@@ -138,6 +138,7 @@ source allocations are not evidence that production applied any migration.
 | 0512 proposed, held | `0512_a_kid_login_is_never_a_parent_or_adult.sql` | A member whose account is a kid login (the synthetic kid address or the server's `bubaly_kid_login` mark; not a mapping alone, for 0495's reason) is refused a parent or adult role when the role or the login changes, and a kid-login mapping is refused for a parent or adult member or an account that is one in any family (42501, every caller). Nothing stored is changed. Decided by the account holder ("refuse until the PIN login is gone"); requested on #771 (comment 6104294318), not yet confirmed. |
 | 0513 proposed, held | `0513_a_removed_member_keeps_no_social_raise.sql` | When a member is removed (`is_active` to false) or their row deleted, their `social_access_permissions` grant in that family is deleted if its social role carries any permission their role's default lacks; a restriction stays. Adds `social_role_permissions(social_role)`, the matrix as a set. Decided by the account holder ("drop raises, keep limits"); requested on #771 (comment 6104294318), not yet confirmed. |
 | 0514 proposed, held | `0514_household_money_is_a_parents_or_adults.sql` | A row of `financial_accounts`, `family_wallets`, `stripe_connected_accounts`, `stripe_financial_accounts`, `billing_customers`, `checkout_sessions` or `babysitter_payments` is read by a manager of its family; a `transactions` row also by the member it is tagged to; a `home_warranties`, `auto_insurance_policies`, `vehicle_registrations` or `paperwork_items` row also by whoever added it; all inside `is_family_member(family_id)`. Writes unchanged. Decided by the account holder (the audit's open sensitive-table finding, household-money group, with the transactions and added-by follow-ups); requested on #771 (comment 6109587749, transactions in 6110569862), not yet confirmed. |
+| 0515 proposed, held | `0515_a_childs_money_is_read_by_managers_and_that_child.sql` | A row of `child_wallets`, `wallet_cards`, `wallet_passes`, `wallet_rewards` or `stripe_cardholders` is read by a manager of its family or the member it is for; a row of `stripe_issuing_cards`, `stripe_authorizations`, `wallet_transactions`, `invest_holdings`, `invest_orders`, `pay_handles`, `wallet_buckets`, `wallet_goals`, `wallet_rules`, `allowance_rules` or `gift_links` by a manager or the child whose wallet it is on, through `is_own_child_wallet_in_family()` (SECURITY DEFINER, pinned to the row's family); all inside `is_family_member(family_id)`. Writes unchanged (`allowance_rules`' FOR ALL split per command). Decided by the account holder (the audit's open sensitive-table finding, child-money group); requested on #771 (comment 6109587749), not yet confirmed. |
 | 0516 proposed, held | `0516_location_history_is_read_by_managers_the_member_and_caregivers.sql` | A row of `location_events`, `safety_check_ins` or `driving_trips` is read by a manager of its family, the member it is about, or a caregiver, inside `is_family_member(family_id)`. Live location keeps its own rule; writes unchanged. Decided by the account holder (the audit's open sensitive-table finding, location group); requested on #771 (comment 6109587749), not yet confirmed. |
 | 0517 proposed, held | `0517_a_personal_record_is_read_by_managers_and_its_member.sql` | A row of `insurance_policies`, `family_insurance_policies`, `vacation_documents` or `voice_commands` is read by a manager of its family or the member it is about, inside `is_family_member(family_id)`; `vacation_medical_information` and `health_providers` also by a caregiver. The two travel tables' FOR ALL policies are split so their member-wide writes stay exactly as they were. Decided by the account holder (the audit's open sensitive-table finding, personal-records group); requested on #771 (comment 6109587749), not yet confirmed. |
 
@@ -4777,6 +4778,81 @@ Dropping any one table's trigger turns the probe red on that table. 184 of
 families, try to vote in one family's poll under their member id from the
 other family and confirm 42501; then vote as their own member there and
 confirm it lands.
+
+## `0515` (proposed, held) — every member read every child's money
+
+`supabase/reserved/0515_a_childs_money_is_read_by_managers_and_that_child.sql`
+— **held**: requested on #771 in comment 6109587749. Not yet confirmed.
+
+**Severity: medium (a sibling, a caregiver or a guest read every child's
+balance, ledger, goals, allowance, cards, investments, gift links and
+Pay-IDs). Deploy order: any; the screens ship first.** Sixteen tables of a
+child's money read with `is_family_member(family_id)`. Measured on a replay of
+main through 0486, in Piggy House: the teen, the child, the caregiver and the
+guest each read other members' rows in **all 16 tables**.
+
+**Database.** One read per table, "A child's money is read by a manager or
+that child", inside `is_family_member(family_id)`:
+- `child_wallets`, `wallet_cards`, `wallet_passes`, `wallet_rewards`,
+  `stripe_cardholders`: `can_manage_family(family_id) or is_self_member(member_id)`;
+- the eleven wallet tables: `can_manage_family(family_id) or
+  is_own_child_wallet_in_family(child_wallet_id, family_id)`. The helper reads
+  `child_wallets` as its owner (SECURITY DEFINER, pinned search_path, not
+  executable by PUBLIC or anon) and is pinned to the row's family, so a row
+  naming a child's wallet in another household is not theirs.
+
+A row on no member or no wallet is a manager's. `allowance_rules`' FOR ALL
+policy is split per command with its own expressions first, and every other
+write policy is untouched (the migration raises if a table's count changes).
+The held 0509's guest guards and the 0254/0275 manager guards are kept.
+`gift_payments` is left alone (0483 §9).
+
+**App, shipping with the source** (`lib/wallet/own-wallets.ts`, the same
+rule):
+- activity, allowance, cards, gift and Pay-ID, goals, send and settings read a
+  non-manager's own wallet, narrowed in the query before any range, and say so
+  in seven locales;
+- a sibling's wallet page, child coach and invest mentor answer a child as a
+  wallet that is not there;
+- the treasury (every child's total) and the family coach are a parent's or
+  adult's;
+- the wallet hub reads a member's own cards, passes and rewards, and what a
+  teen or child adds is filed on them.
+
+**Released probes made rule-aware** (each passes with and without 0515):
+- `money-decision-rows-check.sql`: under 0515 the brother reads no sibling
+  goal, and the same forgery tried on a goal of his own is refused by the write
+  rule;
+- `pay-id-and-goal-write-check.sql`: a child reads no sibling goal or Pay-ID.
+
+The held 0509 probe counts the fifteen guest-guarded tables as already closed
+under 0515. `wallet-write-rls-check.sql`'s 0275 re-run leaves the reads as it
+found them (0514's change).
+
+**Proof:** `.github/workflows/child-money-runtime.yml` requires the held probe
+`docs/audit/reserved/a-childs-money-is-read-by-managers-and-that-child-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0515 twice and requires it to pass, then re-runs the thirty released
+probes over these tables and the held probe once more. The passing run shows:
+- the teen and the child read their own rows and no other (counted), and the
+  child not the Piggy House row naming their wallet in another household; the
+  caregiver and the guest read only their own cards, passes and rewards;
+- the parent and the adult read every row; the teen reads the household they
+  manage;
+- the removed adult and a stranger read nothing;
+- the service role, with and without a user id, reads every row;
+- the teen's own wallet card and a parent's goal for the child come back from
+  `insert … returning` (`OK 1`);
+- **wiring:** the exact predicate for each rule, the helper's definer and
+  grants, and `allowance_rules`' member-wide writes;
+- **N1** (the family-wide read put back): the child reads the ward's row in all
+  sixteen;
+- **M1** (the helper unpinned from the row's family): the child reads the row
+  naming their other household's wallet.
+
+**After approved release:** sign a test child in and confirm the wallet
+activity, goals and gift pages show only their own wallet, and that a
+sibling's wallet link answers "not here".
 
 ## `0514` (proposed, held) — every member read the household's money
 

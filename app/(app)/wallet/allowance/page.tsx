@@ -10,6 +10,7 @@ import { walletTierForPlanLevel, walletFeatureEnabled } from '@/lib/wallet/tiers
 import { AllowanceView, type AllowanceRow } from '@/components/wallet/allowance-view';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { inWalletScope, ownMemberOnly, readWalletScope } from '@/lib/wallet/own-wallets';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -23,10 +24,18 @@ export default async function WalletAllowancePage() {
   const supabase = await createServer();
   const dataWarnings: string[] = [];
 
+  // The held 0515: a child's money is read by a parent or adult and by that
+  // child, so anyone else's page reads their own wallet's, narrowed in the query.
+  const { scope, error: scopeError } = await readWalletScope(supabase, ctx);
+  if (scopeError) {
+    console.error('[wallet-allowance] Own wallet read failed', scopeError);
+    return <ErrorState message={t('allowance.couldNotLoadWalletAllowance')} />;
+  }
+
   const [{ data: childWallets, error: childWalletsError }, { data: members, error: membersError }, { data: rules, error: rulesError }, famPlanLevel] = await Promise.all([
-    settle(supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true)),
+    settle(ownMemberOnly(supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true), scope, ctx.active.member.id)),
     settle(supabase.from('family_members').select('id, display_name').eq('family_id', familyId)),
-    settle(supabase.from('allowance_rules').select('id, child_wallet_id, amount_cents, cadence, is_active, next_run_on').eq('family_id', familyId)),
+    settle(inWalletScope(supabase.from('allowance_rules').select('id, child_wallet_id, amount_cents, cadence, is_active, next_run_on').eq('family_id', familyId), scope)),
     resolveFamilyPlanLevel(supabase, familyId),
   ]);
   if (childWalletsError) {
@@ -72,6 +81,7 @@ export default async function WalletAllowancePage() {
           <p>{t('walletAllowance.someAllowanceDetailsAreTemporarilyUnavailable')} {dataWarnings.join(', ')}.</p>
         </div>
       )}
+      {!scope.all && <p className="mb-3 text-xs text-muted">{t('childMoney.onlyYourOwnWallet')}</p>}
       <AllowanceView rows={rows} enabled={walletFeatureEnabled(tier, 'allowances')} canManage={isManager(ctx.active.role)} />
     </div>
   );

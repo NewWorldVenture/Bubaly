@@ -17164,5 +17164,6 @@
   "marketplace.anAuctionTakesBidsNotInterest": "Esto es una subasta: haz una puja en su lugar.",
   "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Las preguntas entre dos hogares aún no están disponibles.",
   "assistantActions.couldNotReadTheBoard": "No se ha podido leer el mercado ahora mismo. Inténtalo de nuevo en un momento.",
-  "negotiations.theOtherSideActedAtTheSameMoment": "La otra parte ha actuado sobre esta oferta en el mismo momento. Actualiza la página e inténtalo de nuevo."
+  "negotiations.theOtherSideActedAtTheSameMoment": "La otra parte ha actuado sobre esta oferta en el mismo momento. Actualiza la página e inténtalo de nuevo.",
+  "childMoney.onlyYourOwnWallet": "Aquí ves tu propia cartera. Un padre o madre o un adulto ve la de cada niño."
 }

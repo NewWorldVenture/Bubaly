@@ -14,6 +14,7 @@ import { buildChildCoachPrompt, parseWalletCoach } from '@/lib/wallet/coach';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { logWalletAudit } from '@/lib/server/audit';
+import { readsEveryWallet } from '@/lib/wallet/own-wallets';
 
 // POST /api/ai/wallet/child/[childId] — child-specific AI Money Coach.
 // Same tier gate + daily limit as the family-wide coach, but the prompt is
@@ -63,7 +64,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
       console.error('[ai/wallet/child] wallet read failed', { familyId, error: describeReadError(cwError) });
       return NextResponse.json({ error: tr('child.walletDataIsTemporarilyUnavailable') }, { status: 503 });
     }
-    if (!cw) return NextResponse.json({ error: tr('child.childWalletNotFound') }, { status: 404 });
+    // The held 0515: a sibling's wallet answers anyone but a parent or adult as
+    // one that is not there, which is what the database will answer them.
+    if (!cw || (!readsEveryWallet(ctx.active.role) && cw.member_id !== ctx.active.member.id)) {
+      return NextResponse.json({ error: tr('child.childWalletNotFound') }, { status: 404 });
+    }
 
     // Tier gate
     const tier = walletTierForPlanLevel(await effectivePlanLevel(await resolveFamilyPlanLevel(supabase, familyId)));
