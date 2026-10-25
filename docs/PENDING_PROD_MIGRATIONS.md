@@ -141,6 +141,8 @@ source allocations are not evidence that production applied any migration.
 | 0515 proposed, held | `0515_a_childs_money_is_read_by_managers_and_that_child.sql` | A row of `child_wallets`, `wallet_cards`, `wallet_passes`, `wallet_rewards` or `stripe_cardholders` is read by a manager of its family or the member it is for; a row of `stripe_issuing_cards`, `stripe_authorizations`, `wallet_transactions`, `invest_holdings`, `invest_orders`, `pay_handles`, `wallet_buckets`, `wallet_goals`, `wallet_rules`, `allowance_rules` or `gift_links` by a manager or the child whose wallet it is on, through `is_own_child_wallet_in_family()` (SECURITY DEFINER, pinned to the row's family); all inside `is_family_member(family_id)`. Writes unchanged (`allowance_rules`' FOR ALL split per command). Decided by the account holder (the audit's open sensitive-table finding, child-money group); requested on #771 (comment 6109587749), not yet confirmed. |
 | 0516 proposed, held | `0516_location_history_is_read_by_managers_the_member_and_caregivers.sql` | A row of `location_events`, `safety_check_ins` or `driving_trips` is read by a manager of its family, the member it is about, or a caregiver, inside `is_family_member(family_id)`. Live location keeps its own rule; writes unchanged. Decided by the account holder (the audit's open sensitive-table finding, location group); requested on #771 (comment 6109587749), not yet confirmed. |
 | 0517 proposed, held | `0517_a_personal_record_is_read_by_managers_and_its_member.sql` | A row of `insurance_policies`, `family_insurance_policies`, `vacation_documents` or `voice_commands` is read by a manager of its family or the member it is about, inside `is_family_member(family_id)`; `vacation_medical_information` and `health_providers` also by a caregiver. The two travel tables' FOR ALL policies are split so their member-wide writes stay exactly as they were. Decided by the account holder (the audit's open sensitive-table finding, personal-records group); requested on #771 (comment 6109587749), not yet confirmed. |
+| 0520 proposed, held | `0520_a_guest_does_not_read_the_front_desks_call_history_or_the_hub.sql` | A row of `call_logs` or `family_communications` is not read by a guest of its family: 0509's restrictive guard, `not is_family_guest(family_id)`, on the two tables behind guest-withheld pages that 0509's list left out. Needs 0509 first. Follows the account holder's decision on ROLE-SCOPE-001; requested on #771 (comment 6402247950), not yet confirmed. |
+| 0521 proposed, held | `0521_a_call_in_the_front_desk_history_is_written_by_no_member.sql` | `call_logs` is written by no member: 0092's member insert and update policies dropped, INSERT and UPDATE revoked from anon and authenticated; the members' read and the managers' delete unchanged. Requested on #771 (comment 6402247950), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4778,6 +4780,108 @@ Dropping any one table's trigger turns the probe red on that table. 184 of
 families, try to vote in one family's poll under their member id from the
 other family and confirm 42501; then vote as their own member there and
 confirm it lands.
+
+## `0520` (proposed, held) — a guest read the front desk's call history and the Hub
+
+`supabase/reserved/0520_a_guest_does_not_read_the_front_desks_call_history_or_the_hub.sql`
+— **held**: requested on #771 in comment 6402247950. Not yet confirmed.
+**Needs the held 0509 first** (its `is_family_guest()`); the file refuses to
+run without it.
+
+**Severity: medium (a guest read the household's call transcripts, voicemail
+links and AI call summaries, and the Communications Hub's messages). Deploy
+order: after 0509; the screens ship first.** The owner's decision on
+ROLE-SCOPE-001 withholds the household inbox from a guest on three pages
+(`lib/auth/guest-scope.ts`: the inbox, the Contact Center and the AI Front
+Desk). 0509 guards the Contact Center's table, `family_inbox_messages`, but not
+the other two those pages read: `call_logs` (the front desk's history) and
+`family_communications` (the Hub on `/dashboard/inbox`). Both read with any
+active membership and are in the realtime publication. Measured on a replay of
+main with every held file through 0518 applied: a guest read the household's
+row in both.
+
+**Database.** Each table gets 0509's guard by 0509's name: "A guest does not
+read <table>", RESTRICTIVE SELECT to authenticated, USING
+`not is_family_guest(family_id)` (neither table has a `member_id`). It narrows
+the members' read and widens nothing; every other role reads as before, and a
+guest here who is a parent elsewhere reads that household's rows.
+`paperwork_items`, the inbox's third source, is already narrowed by 0514.
+
+**App, shipping with the source:** the three pages already send a guest away;
+the home dashboard stops offering a guest its Front Desk and Inbox tiles,
+which linked to two of them and showed the household's unread counts.
+
+**Proof:** `.github/workflows/front-desk-guest-runtime.yml` requires the held
+probe `docs/audit/reserved/a-guest-does-not-read-the-front-desks-call-history-check.sql`
+to fail on the released schema on the defect, with no control failing; applies
+0509 and requires the same failure (0509 alone leaves both tables open); applies
+0520 twice and requires a pass; then re-runs 0509's held probe and the released
+`gated-write-tables`, `realtime-anon-stream` and `member-scope-crossing`
+probes. The passing run shows:
+- the guest reads neither Front Desk House row;
+- the parent, the adult, the teen, the child and the caregiver read both;
+- the guest reads both rows of the household they are a parent of;
+- the removed adult and a stranger read neither; the service role, with and
+  without a user id, reads both;
+- **wiring:** 0520's guard with its exact predicate and no other restrictive
+  read; `is_family_guest` SECURITY DEFINER with a pinned search_path, not
+  executable by PUBLIC or anon;
+- **N1** (both guards dropped): the guest reads both;
+- **M1** (each guard made permissive): the guest reads both.
+
+All 189 released probes pass with 0509 and 0520 applied, and with every held
+file applied twice.
+
+**After approved release:** sign a test guest in and confirm that the Front
+Desk and Inbox tiles are gone from their home dashboard, and that a direct
+read of `call_logs` or `family_communications` for that household returns no
+rows.
+
+## `0521` (proposed, held) — any member could add a call or rewrite a transcript
+
+`supabase/reserved/0521_a_call_in_the_front_desk_history_is_written_by_no_member.sql`
+— **held**: requested on #771 in comment 6402247950. Not yet confirmed.
+
+**Severity: medium (a child, a caregiver or a guest could plant a call that
+looks like telephony, or rewrite the transcript or AI summary of a call the
+parents read). Deploy order: any.** `call_logs` is the front desk's history
+from before the Contact Center; the application reads it and writes nothing
+to it ("No mark-read, no delete, no hand-entered call: `call_logs` is frozen
+history now", `components/modules/front-desk-module.tsx`), and no SQL
+function writes it. 0092's `call_logs_insert` and `call_logs_update` still
+admitted any active member. Measured on a replay of main with every held file
+through 0518 applied: the parent, the adult, the teen, the child, the
+caregiver and the guest each added a call and rewrote a doctor's voicemail
+transcript (`OK 1`).
+
+**Database.** Drops `call_logs_insert` and `call_logs_update`, and revokes
+INSERT and UPDATE on `call_logs` from anon and authenticated. The members'
+read, the managers' `call_logs_delete` (`can_manage_family`) with its DELETE
+privilege, and the service role are unchanged. No application change: nothing
+writes the table.
+
+**Proof:** `.github/workflows/call-history-writes-runtime.yml` requires the
+held probe `docs/audit/reserved/a-call-in-the-front-desk-history-is-written-by-no-member-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0521 twice and requires it to pass, then re-runs the released
+`gated-write-tables` and `realtime-anon-stream` probes. The passing run shows:
+- none of the six members adds a call or rewrites the transcript, which reads
+  as filed;
+- the parent, the teen, the child and the caregiver still read it;
+- the child's delete removes nothing and the parent's removes the call
+  (`OK 1`);
+- the service role adds and rewrites a call (`OK 1` each);
+- **wiring:** no permissive insert or update policy and no INSERT or UPDATE
+  privilege for a client role; the read and the managers' delete in place;
+- **N1** (0092's insert put back): the child adds a call;
+- **M1** (0092's update alone put back): the child rewrites the transcript.
+
+All 189 released probes pass with 0521 applied, and with every held file
+applied twice.
+
+**After approved release:** as a test child, try to insert a `call_logs` row
+and to update one's transcript and confirm 42501; as a test parent, confirm the
+front desk's history still lists the calls.
 
 ## `0515` (proposed, held) — every member read every child's money
 

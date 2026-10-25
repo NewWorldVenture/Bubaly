@@ -7,6 +7,7 @@ import { settle, settleAll } from '@/lib/supabase/settle';
 import type { UserContext } from '@/lib/supabase/auth';
 import { isSuperAdmin } from '@/lib/supabase/auth';
 import { isManager } from '@/lib/constants/roles';
+import { isWithheldFromGuest } from '@/lib/auth/guest-scope';
 import { suggestionVisibleTo } from '@/lib/autopilot/audience';
 import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
 import { readVisiblePrefix } from '@/lib/autopilot/visible-prefix';
@@ -67,6 +68,9 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const me = ctx.active.member;
   const myMemberId = me.id;
   const manager = isManager(ctx.active.role);
+  // The front desk and the inbox are withheld from a guest (lib/auth/guest-scope.ts;
+  // held 0509 and 0520 refuse them the rows), so their tiles are not offered.
+  const offered = (href: string) => !(ctx.active.role === 'guest' && isWithheldFromGuest(href));
   const supabase = await createServer();
 
   const now = new Date();
@@ -644,7 +648,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
 
       {/* Front Desk + Communications + Concierge widgets */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Link href="/dashboard/front-desk"
+        {offered('/dashboard/front-desk') && <Link href="/dashboard/front-desk"
           className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4 transition hover:bg-elevated hover:border-brand/20">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-green-500/10">
             <PhoneCall className="h-5 w-5 text-green-400" />
@@ -660,8 +664,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
               {unreadCallsCount}
             </span>
           )}
-        </Link>
-        <Link href="/dashboard/inbox"
+        </Link>}
+        {offered('/dashboard/inbox') && <Link href="/dashboard/inbox"
           className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4 transition hover:bg-elevated hover:border-brand/20">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-500/10">
             <MessageSquare className="h-5 w-5 text-blue-400" />
@@ -677,7 +681,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
               {unreadCommsCount}
             </span>
           )}
-        </Link>
+        </Link>}
         <Link href="/dashboard/concierge"
           className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4 transition hover:bg-elevated hover:border-brand/20">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-500/10">
