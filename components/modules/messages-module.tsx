@@ -1705,11 +1705,12 @@ function MessagesWorkspace() {
           userId={userId}
           members={members}
           myName={myName}
+          isCurrent={() => alive.current && owner.current.current(messageOrigin)}
+          onCommitted={() => { if (alive.current) void loadConversations(); }}
           onClose={() => setNewConvOpen(false)}
           onCreated={(conv) => {
             selectConversation(conv);
             setNewConvOpen(false);
-            void loadConversations();
           }}
         />
       )}
@@ -1807,10 +1808,12 @@ const SMART_GROUPS: { key: string; labelKey: string; emoji: string; roles: Membe
 type Step = 'people' | 'details';
 type Tab = 'suggested' | 'contacts' | 'groups';
 
-function NewConversation({ familyId, userId, members, myName, onClose, onCreated }: {
+function NewConversation({ familyId, userId, members, myName, isCurrent, onCommitted, onClose, onCreated }: {
   familyId: string; userId: string;
   members: Member[];
   myName: string;
+  isCurrent: () => boolean;
+  onCommitted: () => void;
   onClose: () => void;
   onCreated: (conv: Conversation) => void;
 }) {
@@ -1823,6 +1826,10 @@ function NewConversation({ familyId, userId, members, myName, onClose, onCreated
   const [name, setName] = useState('');
   const [emoji, setEmoji] = useState('💬');
   const [loading, setLoading] = useState(false);
+  const episode = useRef(true);
+  useEffect(() => { episode.current = true; return () => { episode.current = false; }; }, []);
+  const current = () => episode.current && isCurrent();
+  const close = () => { episode.current = false; onClose(); };
 
   const others = members.filter((m) => m.is_active && m.user_id !== userId);
   const byId = new Map(members.map((m) => [m.id, m]));
@@ -1859,7 +1866,7 @@ function NewConversation({ familyId, userId, members, myName, onClose, onCreated
   ).filter((m) => !q || m.display_name.toLowerCase().includes(q));
 
   async function create() {
-    if (selected.size === 0 || loading) return;
+    if (!current() || selected.size === 0 || loading) return;
     setLoading(true);
 
     const selfMemberId = members.find((m) => m.user_id === userId)?.id;
@@ -1893,17 +1900,21 @@ function NewConversation({ familyId, userId, members, myName, onClose, onCreated
       participant_ids: participantIds,
     });
 
-    setLoading(false);
-    if (error || !data) { toastError(describeDbError(error, tr('messagesModule.couldNotCreateConversation'))); return; }
+    if (error || !data) { if (current()) toastError(describeDbError(error, tr('messagesModule.couldNotCreateConversation'))); return; }
+    // The conversation already committed. Refresh the current inbox without
+    // letting a retired dialog navigate or dismiss a newer conversation draft.
+    onCommitted();
+    if (!current()) return;
+    episode.current = false;
     onCreated(data);
-    } catch (error) { toastError(describeDbError(error)); }
-    finally { setLoading(false); }
+    } catch (error) { if (current()) toastError(describeDbError(error)); }
+    finally { if (current()) setLoading(false); }
   }
 
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={close}
       title={tr('messages.newConversation')}
       description={step === 'people' ? 'Start a conversation with the people who matter most.' : 'Name it and pick an icon (optional).'}
       className="max-w-2xl"
