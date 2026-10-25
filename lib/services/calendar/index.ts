@@ -506,6 +506,8 @@ const SERIES_NEEDS_OCCURRENCE = 'That event repeats. Say which week this new tim
 const UNREADABLE_OCCURRENCE = 'That week could not be understood. Give its start exactly as the calendar search returned it.';
 /** A move that would change which weeks a series has, refused before anything is written. */
 const WEEKS_WOULD_CHANGE = 'Moving every week there would change which weeks this event has before it ends, so nothing was moved.';
+/** A change between all-day and timed needs the new start to place it on the new clock. */
+const MODE_NEEDS_START = 'To change a repeating event between all-day and timed, give the new start of the week as well.';
 /** A week the series does not have now: read before someone moved or ended it. */
 const STALE_OCCURRENCE = 'That week is not on this event\'s calendar any more; it may have been moved. Read the calendar again and say which week.';
 
@@ -561,6 +563,12 @@ function forSeriesOccurrence(
  * same number of weeks; a move no offset can keep (a monthly 29th that a
  * February lacks) is refused before anything is written.
  *
+ * A change between all-day and timed is mapped and checked on the clock the
+ * row will be SAVED with: the stored week's date on its own clock, the new
+ * time on the new one. Read on the stored clock, an all-day week made 16:00 in
+ * New York was saved at 16:00 Greenwich, and the calendar showed 17:00 in
+ * November (one hour more in September's daylight time).
+ *
  * An unchanged start is the series' own start, exactly. A one-off row and a
  * series turned into a one-off (which stays where the week was) are left as
  * given. Anything unreadable, the week included, is refused: never written as
@@ -579,14 +587,18 @@ function onSeriesClock(
   // read before the series moved, mapped onto where it is, moved it again.
   const zone = seriesZone(stored, timezone);
   if (!occursAt(stored, occurrence, zone)) return fail(STALE_OCCURRENCE, { code: SERVICE_CODES.invalidInput });
+  const allDay = patch.allDay ?? stored.all_day;
+  const savedZone = seriesZone({ all_day: allDay }, timezone);
+  const modeChanged = allDay !== stored.all_day;
+  if (modeChanged && patch.startsAt === undefined) return fail(MODE_NEEDS_START, { code: SERVICE_CODES.invalidInput });
   const start = patch.startsAt === undefined ? occurrence : normalizeCalendarWriteInstant(patch.startsAt, timezone);
   const end = patch.endsAt == null ? null : normalizeCalendarWriteInstant(patch.endsAt, timezone);
   if (!start) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
   if (patch.endsAt != null && !end) return fail('That end time could not be understood.', { code: SERVICE_CODES.invalidInput });
   try {
     const seriesStart = sameCalendarInstant(occurrence, stored.starts_at) ? start
-      : sameCalendarInstant(start, occurrence) ? stored.starts_at
-        : movedOnWallClock(stored.starts_at, occurrence, start, zone);
+      : !modeChanged && sameCalendarInstant(start, occurrence) ? stored.starts_at
+        : movedOnWallClock(stored.starts_at, occurrence, zone, start, savedZone);
     const mapped: UpdateEventPatch = { ...patch };
     if (patch.startsAt !== undefined) mapped.startsAt = seriesStart;
     if (end !== null) mapped.endsAt = formatExactInstant(parseExactInstant(seriesStart) + parseExactInstant(end) - parseExactInstant(start));
@@ -595,11 +607,13 @@ function onSeriesClock(
     }
     // Its starts as they would be written (the end is checked by `applyEventUpdate`).
     const written: SeriesState = {
-      ...stored, starts_at: seriesStart, recurrence: patch.recurrence ?? stored.recurrence,
+      ...stored, all_day: allDay, starts_at: seriesStart, recurrence: patch.recurrence ?? stored.recurrence,
       recurrence_until: mapped.recurrenceUntil === undefined ? stored.recurrence_until : mapped.recurrenceUntil,
     };
-    const kept = occursAt(written, start, zone) && (!stored.recurrence_until || !written.recurrence_until
-      || finiteCount({ ...written, recurrence_until: written.recurrence_until }, zone) === finiteCount({ ...stored, recurrence_until: stored.recurrence_until }, zone));
+    // Checked as the calendar will read the saved row: on ITS clock.
+    const writtenZone = seriesZone(written, timezone);
+    const kept = occursAt(written, start, writtenZone) && (!stored.recurrence_until || !written.recurrence_until
+      || finiteCount({ ...written, recurrence_until: written.recurrence_until }, writtenZone) === finiteCount({ ...stored, recurrence_until: stored.recurrence_until }, zone));
     return kept ? ok(mapped) : fail(WEEKS_WOULD_CHANGE, { code: SERVICE_CODES.invalidInput });
   } catch {
     return fail('That new time could not be placed on this event\'s repeat schedule.', { code: SERVICE_CODES.invalidInput });
@@ -608,19 +622,23 @@ function onSeriesClock(
 
 const MINUTE_NS = 60_000_000_000n;
 
-/** `anchor` moved as `from` moved to `to` on `zone`'s wall clock: by whole dates, to `to`'s clock time. */
-function movedOnWallClock(anchor: string, from: string, to: string, zone: string): string {
+/**
+ * `anchor` moved as `from` moved to `to`: by whole dates, to `to`'s clock time.
+ * `anchor` and `from` are read on `fromZone`, the clock the series is stored
+ * on; `to` and the result on `toZone`, the clock it will be saved on.
+ */
+function movedOnWallClock(anchor: string, from: string, fromZone: string, to: string, toZone: string): string {
   const exactTo = parseExactInstant(to);
-  const [a, f, t] = [parseExactInstant(anchor), parseExactInstant(from), exactTo]
-    .map((exact) => localPartsAt(new Date(exactInstantMilliseconds(exact)), zone));
+  const local = (exact: bigint, zone: string) => localPartsAt(new Date(exactInstantMilliseconds(exact)), zone);
+  const [a, f, t] = [local(parseExactInstant(anchor), fromZone), local(parseExactInstant(from), fromZone), local(exactTo, toZone)];
   const civil = (p: { year: number; month: number; day: number }) => {
     const day = new Date(0);
     day.setUTCFullYear(p.year, p.month - 1, p.day);
     return day;
   };
-  const moved = civil(a!);
-  moved.setUTCDate(moved.getUTCDate() + Math.round((civil(t!).getTime() - civil(f!).getTime()) / 86_400_000));
-  const at = instantForIcsLocalTime(moved.getUTCFullYear(), moved.getUTCMonth() + 1, moved.getUTCDate(), t!.hour * 60 + t!.minute, zone);
+  const moved = civil(a);
+  moved.setUTCDate(moved.getUTCDate() + Math.round((civil(t).getTime() - civil(f).getTime()) / 86_400_000));
+  const at = instantForIcsLocalTime(moved.getUTCFullYear(), moved.getUTCMonth() + 1, moved.getUTCDate(), t.hour * 60 + t.minute, toZone);
   if (!at) throw new Error('That time does not exist on the series clock');
   // Seconds and below are the new start's own, as the expander keeps them.
   return formatExactInstant(BigInt(at.getTime()) * 1_000_000n + ((exactTo % MINUTE_NS) + MINUTE_NS) % MINUTE_NS);
