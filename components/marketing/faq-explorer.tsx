@@ -403,7 +403,7 @@ export function FaqExplorer({ topics, popular }: { topics: FaqTopic[]; popular: 
                 </button>
                 <Link
                   href="/contact"
-                  className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-5 py-2.5 text-sm font-bold text-brand-fg shadow-glow transition hover:-translate-y-0.5 focus-ring"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 px-5 py-2.5 text-sm font-bold text-brand-fg shadow-glow transition hover:-translate-y-0.5 focus-ring"
                 >
                   {t('faqExplorer.askUs')}{' '}<ArrowRight className="h-4 w-4" aria-hidden />
                 </Link>
