@@ -307,7 +307,7 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
             <span id={trustId} className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.trustLevelsAnyOfThese')}</span>
             <div {...labelledGroup(trustId)} className="flex flex-wrap gap-1.5">
               {TRUST_LEVELS.map((t) => (
-                <button key={t} type="button" onClick={() => toggleTrust(t)}
+                <button key={t} type="button" onClick={() => toggleTrust(t)} aria-pressed={form.trust_levels.includes(t)}
                   className={cn('rounded-full border px-2.5 py-1 text-xs font-medium transition',
                     form.trust_levels.includes(t) ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:border-brand/40'
                   )}>
@@ -332,7 +332,7 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
             <span id={daysId} className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.daysOfWeek')}</span>
             <div {...labelledGroup(daysId)} className="flex gap-1.5">
               {DAYS.map((d, i) => (
-                <button key={d} type="button" onClick={() => toggleDay(i)}
+                <button key={d} type="button" onClick={() => toggleDay(i)} aria-pressed={form.days.includes(i)}
                   className={cn('flex-1 rounded-lg border py-2 text-xs font-medium transition',
                     form.days.includes(i) ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:border-brand/40'
                   )}>{d[0]}</button>
@@ -343,7 +343,7 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
             <span id={contextId} className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.context')}</span>
             <div {...labelledGroup(contextId)} className="flex flex-wrap gap-1.5">
               {CONTEXTS.map((c) => (
-                <button key={c.value} type="button" onClick={() => toggleCtx(c.value)}
+                <button key={c.value} type="button" onClick={() => toggleCtx(c.value)} aria-pressed={form.contexts.includes(c.value)}
                   className={cn('rounded-full border px-2.5 py-1 text-xs font-medium transition',
                     form.contexts.includes(c.value) ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:border-brand/40'
                   )}>{c.label}</button>
@@ -360,7 +360,7 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
             <span id={actionId} className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.action')}</span>
             <div {...labelledGroup(actionId)} className="grid grid-cols-2 gap-1.5">
               {ROUTING_MODES.map((mode) => (
-                <button key={mode} type="button" onClick={() => setForm(p => ({ ...p, routing_mode: mode }))}
+                <button key={mode} type="button" onClick={() => setForm(p => ({ ...p, routing_mode: mode }))} aria-pressed={form.routing_mode === mode}
                   className={cn('rounded-xl border px-3 py-2 text-xs font-medium text-left transition',
                     form.routing_mode === mode ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:border-brand/40'
                   )}>

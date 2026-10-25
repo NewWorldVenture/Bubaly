@@ -46,6 +46,15 @@ const LIST_COLORS: Record<string, string> = {
   rose:   'bg-rose-500/20 text-rose-400',
   teal:   'bg-teal-500/20 text-teal-400',
 };
+// A swatch shows only its colour; its name is what a screen reader hears.
+const LIST_COLOR_NAME_KEYS: Record<string, string> = {
+  violet: 'shared.colorName.violet',
+  blue: 'shared.colorName.blue',
+  green: 'shared.colorName.green',
+  amber: 'shared.colorName.amber',
+  rose: 'shared.colorName.rose',
+  teal: 'shared.colorName.teal',
+};
 
 const LIST_ICONS = ['📋', '🏠', '💼', '🛒', '🎯', '📚', '🏋️', '✈️', '💡', '🎉'];
 
@@ -696,7 +705,7 @@ function NewListModal({ familyId, selfId, onClose, onCreated }: {
           {() => (
             <div className="flex gap-2">
               {Object.keys(LIST_COLORS).map((c) => (
-                <button key={c} type="button" onClick={() => setColor(c)}
+                <button key={c} type="button" onClick={() => setColor(c)} aria-label={tr(LIST_COLOR_NAME_KEYS[c])} aria-pressed={color === c}
                   className={cn('h-7 w-7 rounded-full', LIST_COLORS[c], color === c && 'ring-2 ring-offset-2 ring-brand')} />
               ))}
             </div>
