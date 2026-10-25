@@ -636,7 +636,7 @@ async function StepsPanel() {
       <div className="mt-[41px] grid gap-7 lg:grid-cols-5">
         {WORK_STEPS.map(([Icon, title, body], index) => (
           <article key={title} className="relative min-h-[175px] rounded-[13px] border border-white/[0.09] bg-white/[0.04] px-3 pb-3 pt-7 text-center shadow-[inset_0_1px_0_rgba(255,255,255,.025)]">
-            <span className="absolute -top-[29px] left-1/2 grid h-[38px] w-[38px] -translate-x-1/2 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-700 text-[15px] font-semibold shadow-[0_8px_20px_rgba(90,48,220,.32)]">{index + 1}</span>
+            <span className="absolute -top-[29px] left-1/2 grid h-[38px] w-[38px] -translate-x-1/2 place-items-center rounded-full bg-gradient-to-br from-violet-600 to-indigo-700 text-[15px] font-semibold text-white shadow-[0_8px_20px_rgba(90,48,220,.32)]">{index + 1}</span>
             {index < 4 && <><span className="absolute -top-[10px] left-[68%] hidden w-[82%] border-t border-dashed border-violet-500/65 lg:block" /><ArrowRight className="absolute -right-[35px] -top-[16px] hidden h-3 w-3 text-violet-400 lg:block" /></>}
             <Icon className="mx-auto h-[45px] w-[45px] text-violet-500" strokeWidth={1.8} />
             <h3 className="mt-3 text-[11px] font-semibold">{t(title)}</h3>
