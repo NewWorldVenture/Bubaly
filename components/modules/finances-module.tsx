@@ -4,7 +4,7 @@ import { BILL_READ_CONTRACT, readCompleteBills } from '@/lib/finance/bills';
 
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import {
   Plus, Link2, MoreHorizontal, Wallet, PiggyBank, CreditCard, TrendingUp, Landmark,
@@ -539,13 +539,15 @@ export function FinancesModule() {
       </div>
 
       {addOpen && (
-        <AddTransactionModal familyId={familyId} userId={userId} selfId={selfId} accounts={accounts} members={members}
-          onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); refreshTransactions(); success(tr('financesModule.transactionAdded')); }}
+        <AddTransactionModal key={`${familyId}:${userId}`} familyId={familyId} userId={userId} selfId={selfId} accounts={accounts} members={members}
+          onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); success(tr('financesModule.transactionAdded')); }}
+          onCommitted={refreshTransactions}
           onError={toastError} />
       )}
       {linkOpen && (
-        <LinkAccountModal familyId={familyId} userId={userId}
-          onClose={() => setLinkOpen(false)} onSaved={() => { setLinkOpen(false); void refreshAccounts(); success(tr('financesModule.accountLinked')); }}
+        <LinkAccountModal key={`${familyId}:${userId}`} familyId={familyId} userId={userId}
+          onClose={() => setLinkOpen(false)} onSaved={() => { setLinkOpen(false); success(tr('financesModule.accountLinked')); }}
+          onCommitted={() => { void refreshAccounts(); }}
           onError={toastError} />
       )}
     </div>
@@ -599,16 +601,20 @@ function BillsCalendar({ month, bills, onPrev, onNext }: { month: Date; bills: B
   );
 }
 
-function AddTransactionModal({ familyId, userId, selfId, accounts, members, onClose, onSaved, onError }: {
+function AddTransactionModal({ familyId, userId, selfId, accounts, members, onClose, onSaved, onCommitted, onError }: {
   familyId: string; userId: string; selfId: string | null; accounts: Account[];
-  members: ReturnType<typeof useApp>['members']; onClose: () => void; onSaved: () => void; onError: (m: string) => void;
+  members: ReturnType<typeof useApp>['members']; onClose: () => void; onSaved: () => void; onCommitted: () => void; onError: (m: string) => void;
 }) {
   const tr = useTranslations();
   const { family } = useApp();
   const [loading, setLoading] = useState(false);
+  const active = useRef(true);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+  function close() { active.current = false; onClose(); }
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!active.current || loading) return;
     const f = new FormData(e.currentTarget);
     const name = String(f.get('name') ?? '').trim();
     const amount = Number(f.get('amount'));
@@ -623,13 +629,15 @@ function AddTransactionModal({ familyId, userId, selfId, accounts, members, onCl
       accountId: String(f.get('account_id') ?? '') || null,
       memberId: String(f.get('member_id') ?? '') || null,
     });
-    setLoading(false);
-    if (!res.ok) return reportRefusal(res, onError);
-    onSaved();
+    if (active.current) setLoading(false);
+    if (!res.ok) { if (active.current) reportRefusal(res, onError); return; }
+    // A dismissed save can still commit; refresh without closing a newer draft.
+    onCommitted();
+    if (active.current) { active.current = false; onSaved(); }
   }
 
   return (
-    <Modal open title={tr('finances.addTransaction')} onClose={onClose}>
+    <Modal open title={tr('finances.addTransaction')} onClose={close}>
       <form onSubmit={submit} className="space-y-4">
         <Field label={tr('finances.description')} required>{(id) => <Input id={id} name="name" autoFocus placeholder={tr('finances.wholeFoodsMarket')} />}</Field>
         <div className="grid grid-cols-2 gap-3">
@@ -645,7 +653,7 @@ function AddTransactionModal({ familyId, userId, selfId, accounts, members, onCl
           <Field label={tr('finances.person')}>{(id) => <Select id={id} name="member_id" defaultValue={selfId ?? ''}><option value="">—</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
         </div>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>{tr('finances.cancel')}</Button>
+          <Button type="button" variant="ghost" onClick={close}>{tr('finances.cancel')}</Button>
           <Button type="submit" loading={loading}>{tr('finances.addTransaction')}</Button>
         </div>
       </form>
@@ -653,13 +661,17 @@ function AddTransactionModal({ familyId, userId, selfId, accounts, members, onCl
   );
 }
 
-function LinkAccountModal({ familyId, userId, onClose, onSaved, onError }: {
-  familyId: string; userId: string; onClose: () => void; onSaved: () => void; onError: (m: string) => void;
+function LinkAccountModal({ familyId, userId, onClose, onSaved, onCommitted, onError }: {
+  familyId: string; userId: string; onClose: () => void; onSaved: () => void; onCommitted: () => void; onError: (m: string) => void;
 }) {
   const tr = useTranslations();
   const [loading, setLoading] = useState(false);
+  const active = useRef(true);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+  function close() { active.current = false; onClose(); }
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!active.current || loading) return;
     const f = new FormData(e.currentTarget);
     const name = String(f.get('name') ?? '').trim();
     if (!name) return onError(tr('financesModule.nameTheAccount'));
@@ -672,12 +684,13 @@ function LinkAccountModal({ familyId, userId, onClose, onSaved, onError }: {
       balance: Number(f.get('balance')) || 0,
       currency: 'USD',
     });
-    setLoading(false);
-    if (error) return onError(describeDbError(error));
-    onSaved();
+    if (active.current) setLoading(false);
+    if (error) { if (active.current) onError(describeDbError(error)); return; }
+    onCommitted();
+    if (active.current) { active.current = false; onSaved(); }
   }
   return (
-    <Modal open title={tr('finances.linkAccount')} description={tr('financesModule.addAnAccountToTrack')} onClose={onClose}>
+    <Modal open title={tr('finances.linkAccount')} description={tr('financesModule.addAnAccountToTrack')} onClose={close}>
       <form onSubmit={submit} className="space-y-4">
         <Field label={tr('finances.accountName')} required>{(id) => <Input id={id} name="name" autoFocus placeholder={tr('finances.jointChecking')} />}</Field>
         <div className="grid grid-cols-2 gap-3">
@@ -689,7 +702,7 @@ function LinkAccountModal({ familyId, userId, onClose, onSaved, onError }: {
           <Field label={tr('finances.last4')} hint={tr('financesModule.optional')}>{(id) => <Input id={id} name="last_four" maxLength={4} placeholder="4567" />}</Field>
         </div>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>{tr('finances.cancel')}</Button>
+          <Button type="button" variant="ghost" onClick={close}>{tr('finances.cancel')}</Button>
           <Button type="submit" loading={loading}>{tr('finances.linkAccount')}</Button>
         </div>
       </form>
