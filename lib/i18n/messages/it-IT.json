@@ -17116,5 +17116,6 @@
   "displayGrid.notesUnavailable": "Le note non sono disponibili.",
   "feedback.couldNotLoadTheBoard": "La bacheca delle idee non può essere caricata in questo momento. Riprova tra poco.",
   "feedbackFeedbackBoard.yourVotesCouldNotBeRead": "I tuoi voti non possono essere letti in questo momento, quindi la votazione è in pausa. Aggiorna per riprovare.",
-  "actions.tripRecommendationsInvalid": "Questi consigli di viaggio non possono essere salvati: non hanno la forma prevista o sono troppo grandi."
+  "actions.tripRecommendationsInvalid": "Questi consigli di viaggio non possono essere salvati: non hanno la forma prevista o sono troppo grandi.",
+  "filesHubModule.sensitiveStaysInVault": "I file nella cartella {category} restano nell’archivio protetto, dove solo un genitore o un altro adulto può aprirli."
 }

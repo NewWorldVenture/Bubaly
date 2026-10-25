@@ -17116,5 +17116,6 @@
   "displayGrid.notesUnavailable": "Les notes sont indisponibles.",
   "feedback.couldNotLoadTheBoard": "Le tableau d’idées n’a pas pu être chargé pour le moment. Réessayez dans un instant.",
   "feedbackFeedbackBoard.yourVotesCouldNotBeRead": "Vos votes n’ont pas pu être lus pour le moment, le vote est donc en pause. Actualisez pour réessayer.",
-  "actions.tripRecommendationsInvalid": "Ces recommandations de voyage n’ont pas pu être enregistrées : elles n’ont pas la forme attendue ou sont trop volumineuses."
+  "actions.tripRecommendationsInvalid": "Ces recommandations de voyage n’ont pas pu être enregistrées : elles n’ont pas la forme attendue ou sont trop volumineuses.",
+  "filesHubModule.sensitiveStaysInVault": "Les fichiers du dossier {category} restent dans le coffre-fort sécurisé, où seul un parent ou un autre adulte peut les ouvrir."
 }

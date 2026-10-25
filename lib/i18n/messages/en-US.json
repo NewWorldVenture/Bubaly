@@ -17116,5 +17116,6 @@
   "displayGrid.notesUnavailable": "Notes are unavailable.",
   "feedback.couldNotLoadTheBoard": "The idea board could not be loaded right now. Try again in a moment.",
   "feedbackFeedbackBoard.yourVotesCouldNotBeRead": "Your votes could not be read just now, so voting is paused. Refresh to try again.",
-  "actions.tripRecommendationsInvalid": "Those trip recommendations could not be saved: they are not in the expected shape, or they are too large."
+  "actions.tripRecommendationsInvalid": "Those trip recommendations could not be saved: they are not in the expected shape, or they are too large.",
+  "filesHubModule.sensitiveStaysInVault": "Files in the {category} folder stay in the Secure Vault, where only a parent or another adult can open them."
 }
