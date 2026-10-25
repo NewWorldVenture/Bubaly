@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { isWithheldFromGuest } from '@/lib/auth/guest-scope';
 import { createServer } from '@/lib/supabase/server';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -107,6 +108,10 @@ export async function POST(req: NextRequest) {
     let system: string;
     let messages: AIMessage[];
     if (purpose === 'inbox_reply') {
+      // Drafting from an inbox message follows the same guest boundary as the page.
+      if (ctx.active.role === 'guest' && isWithheldFromGuest('/dashboard/inbox')) {
+        return NextResponse.json({ error: t('actions.forbidden') }, { status: 403 });
+      }
       const communicationId = typeof body.communicationId === 'string' ? body.communicationId.trim() : '';
       if (!communicationId) return NextResponse.json({ error: t('assist.noMessagesProvided') }, { status: 400 });
       // The caller's own client: RLS decides whether this member may read it.

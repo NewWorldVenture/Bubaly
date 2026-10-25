@@ -101,7 +101,7 @@ export default async function FamilyAutomationPage() {
         action={manager ? (
           <Link
             href="/dashboard/concierge"
-            className="focus-ring inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+            className="focus-ring inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:brightness-95"
           >
             <Plus className="h-4 w-4" aria-hidden /> {t('dashboardFamilyAutomation.askBubalyForARoutine')}
           </Link>

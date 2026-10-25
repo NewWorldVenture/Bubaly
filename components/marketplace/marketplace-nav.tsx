@@ -108,7 +108,7 @@ export function MarketplaceNav() {
       <div className="space-y-3 border-t border-border/60 px-3 py-3">
         <Link
           href={`${BASE}/browse?post=1`}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-95"
         >
           <Plus className="h-4 w-4" /> {t('marketplaceNav.postAnItem')}
         </Link>

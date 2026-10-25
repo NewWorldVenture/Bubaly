@@ -447,7 +447,7 @@ export function ShoppingModule() {
 
       {/* Bought → pantry (+ the purchase, only when someone typed an amount) */}
       {boughtOpen && activeListId && (
-        <BoughtModal listId={activeListId} items={checkedItems}
+        <BoughtModal key={`${familyId}:${userId}:${activeListId}`} listId={activeListId} items={checkedItems}
           onClose={() => setBoughtOpen(false)}
           onRefresh={() => { void refreshItems(); }}
           onDone={() => { setBoughtOpen(false); void refreshItems(); }} />
@@ -644,10 +644,13 @@ function BoughtModal({ listId, items, onClose, onRefresh, onDone }: {
   const [saving, setSaving] = useState(false);
   const [amount, setAmount] = useState('');
   const [merchant, setMerchant] = useState('');
+  const active = useRef(true);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+  function close() { active.current = false; onClose(); }
 
   async function confirm(e: React.FormEvent) {
     e.preventDefault();
-    if (saving) return;
+    if (!active.current || saving) return;
     const typed = amount.trim();
     const parsed = typed ? Number(typed.replace(',', '.')) : null;
     if (typed && (!Number.isFinite(parsed) || (parsed as number) <= 0)) {
@@ -661,7 +664,10 @@ function BoughtModal({ listId, items, onClose, onRefresh, onDone }: {
         amount: parsed,
         merchant: merchant.trim() || null,
       });
-      if (!result.ok) { toastError(result.error); return; }
+      if (!result.ok) { if (active.current) toastError(result.error); return; }
+      // A dismissed trip can still finish. Read back committed lines without
+      // closing a newer visit or publishing the retired visit's feedback.
+      if (!active.current) { onRefresh(); return; }
       // Every line's outcome is said, whatever happened to the lines beside
       // it. A trip is settled line by line, so one result can hold all four:
       // lines counted, lines left to count by hand, lines that failed, lines
@@ -705,16 +711,17 @@ function BoughtModal({ listId, items, onClose, onRefresh, onDone }: {
       if (result.purchaseError) toastError(`${stocked} ${t('shoppingModule.thePurchaseWasNotRecorded', { reason: result.purchaseError })}`);
       else if (result.purchaseRecorded) success(`${stocked} ${t('shoppingModule.purchaseRecordedOnTheHousehold')}`);
       else success(stocked);
+      active.current = false;
       onDone();
     } catch (err) {
-      toastError(describeDbError(err));
+      if (active.current) toastError(describeDbError(err));
     } finally {
-      setSaving(false);
+      if (active.current) setSaving(false);
     }
   }
 
   return (
-    <Modal open onClose={onClose} title={t('shoppingModule.bought')}>
+    <Modal open onClose={close} title={t('shoppingModule.bought')}>
       <form onSubmit={confirm} className="space-y-4">
         <div>
           <p className="mb-2 text-sm font-medium">{t('shoppingModule.whatYouBought')}</p>
@@ -743,7 +750,7 @@ function BoughtModal({ listId, items, onClose, onRefresh, onDone }: {
         </Field>
         <p className="text-[11px] text-muted">{t('shoppingModule.leaveTheTotalBlankIf')}</p>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>{t('shopping.cancel')}</Button>
+          <Button type="button" variant="ghost" onClick={close}>{t('shopping.cancel')}</Button>
           <Button type="submit" loading={saving}>{t('shoppingModule.putItInThePantry')}</Button>
         </div>
       </form>

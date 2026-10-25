@@ -151,7 +151,7 @@ export function ConsentManager() {
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => void commit(presetAcceptAll(), 'banner_accept_all')}
-                  className="rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-brand-fg transition hover:opacity-90"
+                  className="rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-brand-fg transition hover:brightness-95"
                 >
                   {t('consentManager.acceptAll')}
                 </button>
@@ -266,7 +266,7 @@ function PreferenceCenter({
           <button onClick={onAcceptAll} className="rounded-lg border border-border px-4 py-2 text-xs font-semibold transition hover:bg-elevated">
             {t('consentManager.acceptAll')}
           </button>
-          <button onClick={() => onSave({ ...state, necessary: true })} className="rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-brand-fg transition hover:opacity-90">
+          <button onClick={() => onSave({ ...state, necessary: true })} className="rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-brand-fg transition hover:brightness-95">
             {t('consentManager.saveChoices')}
           </button>
         </div>

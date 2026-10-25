@@ -80,7 +80,7 @@ export function QuickAdd({
         type="button"
         onClick={openForm}
         className={cn(
-          'inline-flex items-center gap-1.5 rounded-xl bg-brand px-3.5 py-2 text-sm font-semibold text-white transition hover:opacity-90',
+          'inline-flex items-center gap-1.5 rounded-xl bg-brand px-3.5 py-2 text-sm font-semibold text-white transition hover:brightness-95',
           buttonClassName,
         )}
       >

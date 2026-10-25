@@ -134,7 +134,7 @@ function Question({
           <button
             disabled={pending || multi.length === 0}
             onClick={() => onChoose(multi)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-xs font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-50"
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-xs font-bold text-brand-fg transition hover:brightness-95 disabled:opacity-50"
           >
             {t('profileNudge.save')} <ArrowRight className="h-3.5 w-3.5" />
           </button>

@@ -77,7 +77,7 @@ export default async function AutomationPage() {
               ))}
             </div>
           </div>
-          <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{tr('adminMarketingAutomation.createWorkflow')}</SubmitButton>
+          <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:brightness-95">{tr('adminMarketingAutomation.createWorkflow')}</SubmitButton>
         </form>
       </Card>
     </div>

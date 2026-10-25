@@ -117,7 +117,7 @@ export function ContactTimelineModule({
         </div>
         <button
           onClick={() => setComposerOpen((v) => !v)}
-          className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:opacity-90"
+          className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:brightness-95"
         >
           {composerOpen ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
           {composerOpen ? tr('home.close') : tr('contactTimeline.logTouch')}
@@ -180,7 +180,7 @@ export function ContactTimelineModule({
             <input name="note" placeholder={tr('contactTimeline.noteOptional')}
               className="h-10 flex-1 rounded-xl border border-border bg-bg px-3 text-sm text-fg outline-none ring-brand/50 placeholder:text-muted focus:ring-2" />
             <button type="submit" disabled={pending}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-brand px-5 text-sm font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-60">
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-brand px-5 text-sm font-bold text-brand-fg transition hover:brightness-95 disabled:opacity-60">
               {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} {tr('contactTimeline.logIt')}
             </button>
           </div>
@@ -315,7 +315,7 @@ function ReconnectDrafter({ contactId, name }: { contactId: string; name: string
               <p className={cn('mt-2 whitespace-pre-wrap text-sm leading-relaxed', pending ? 'text-muted' : 'text-fg')}>{message}</p>
               <div className="mt-2.5 flex items-center gap-2">
                 <button onClick={copy}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-xs font-bold text-brand-fg transition hover:opacity-90">
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-xs font-bold text-brand-fg transition hover:brightness-95">
                   {copied ? <CheckIcon className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} {copied ? tr('adminMarketingAssistant.copied') : tr('family.copy')}
                 </button>
                 <button onClick={() => draft(tone)} disabled={pending}
