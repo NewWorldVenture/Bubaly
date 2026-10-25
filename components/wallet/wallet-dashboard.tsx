@@ -229,7 +229,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
                     <HandCoins className="h-3.5 w-3.5" />{' '}{tr('walletDashboard.spend')}</button>
                   {canManage && (
                     <button onClick={() => setAddFor(c)}
-                      className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 transition">
+                      className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:brightness-95 transition">
                       <Plus className="h-3.5 w-3.5" /> Add
                     </button>
                   )}

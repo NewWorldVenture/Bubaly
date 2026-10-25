@@ -105,7 +105,7 @@ function GenerateCTA({ onGenerate, loading }: { onGenerate: () => void; loading:
       <h2 className="text-2xl font-bold text-fg mb-3">{t('weeklyBriefing.weeklyAiBriefing')}</h2>
       <p className="text-muted max-w-md mb-8">{t('weeklyBriefingModule.lookBackAtHowLast')}</p>
       <Button onClick={onGenerate} disabled={loading}
-        className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-8 py-3 rounded-xl font-semibold text-base h-auto gap-2">
+        className="bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-800 hover:to-teal-800 text-white px-8 py-3 rounded-xl font-semibold text-base h-auto gap-2">
         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
         {loading ? 'Planning your week…' : 'Generate Weekly Briefing'}
       </Button>

@@ -195,7 +195,7 @@ function ProposeForm({ pending, onSubmit, onCancel }: {
         className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-xs outline-none focus:border-brand" />
       <div className="flex gap-2">
         <button onClick={submit} disabled={pending}
-          className="inline-flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-50">
+          className="inline-flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-bold text-brand-fg transition hover:brightness-95 disabled:opacity-50">
           {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <MapPin className="h-3 w-3" />} {tr('handoff.proposePickup')}
         </button>
         <button onClick={onCancel} className="text-xs text-muted hover:text-fg">{tr('handoff.cancel')}</button>

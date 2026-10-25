@@ -104,7 +104,7 @@ export default async function MarketingPlatformPage() {
           <h2 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">{t('adminMarketingPlatform.pagesRulesAndAutomation')}</h2>
           <p className="mt-1 max-w-2xl text-sm text-muted">{t('platform.everyPlatformPageIsVersioned')}</p>
         </div>
-        <Link href="#new-page" className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90"><Plus className="h-4 w-4" /> {t('adminMarketingPlatform.newPage')}</Link>
+        <Link href="#new-page" className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:brightness-95"><Plus className="h-4 w-4" /> {t('adminMarketingPlatform.newPage')}</Link>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
@@ -134,7 +134,7 @@ export default async function MarketingPlatformPage() {
               <input name="slug" placeholder={t('adminMarketingPlatform.slugAutoFromTitle')} className={inputCls} />
               <input name="summary" placeholder={t('adminMarketingPlatform.oneSentencePromise')} className={inputCls} />
               <textarea name="body" rows={4} placeholder={t('adminMarketingPlatform.sourceFactsOrEditorialBrief')} className={areaCls} />
-              <SubmitButton className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand/90"><WandSparkles className="h-4 w-4" /> {t('adminMarketingPlatform.createAndQueue')}</SubmitButton>
+              <SubmitButton className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:brightness-95"><WandSparkles className="h-4 w-4" /> {t('adminMarketingPlatform.createAndQueue')}</SubmitButton>
             </form>
           </Card>
 

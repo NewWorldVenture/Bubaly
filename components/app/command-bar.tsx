@@ -234,7 +234,7 @@ export function CommandBar() {
         className="relative z-10 w-full max-w-xl overflow-hidden rounded-2xl popover-surface shadow-glass animate-fade-in"
         onKeyDown={onKeyDown}
       >
-        <div className="flex items-center gap-2 border-b border-border px-4">
+        <div className="flex items-center gap-2 border-b border-border px-4 focus-within:ring-2 focus-within:ring-inset focus-within:ring-brand">
           <Search className="h-4 w-4 shrink-0 text-muted" />
           <input
             ref={inputRef}

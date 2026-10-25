@@ -551,7 +551,7 @@ function NoteModal({ note, onClose, onSaved }: {
               )}
               <div className="mt-3 flex justify-end">
                 <button type="button" onClick={applyInsights}
-                  className="rounded-lg bg-brand px-3 py-1 text-xs font-semibold text-white hover:bg-brand/90 transition">
+                  className="rounded-lg bg-brand px-3 py-1 text-xs font-semibold text-white hover:brightness-95 transition">
                   {t('notes.addToNote')}
                 </button>
               </div>

@@ -403,7 +403,7 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
                 {t('settingsModule.giveGetWhenTheyUpgrade', { give: fmtMoney(referral.referredRewardCents), get: fmtMoney(referral.referrerRewardCents) })}
               </p>
             </div>
-            <Link href="/referrals" className="shrink-0 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90">
+            <Link href="/referrals" className="shrink-0 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:brightness-95">
               {t('settingsModule.referAFamily')}
             </Link>
             <button type="button" onClick={() => setShowReferralCta(false)} className="shrink-0 rounded-lg p-1.5 text-muted hover:text-fg" aria-label={t('settingsModule.dismiss')}>

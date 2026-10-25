@@ -99,13 +99,13 @@ export function SiteHeader() {
               "Get started" pill next to the menu button so the homepage always
               has a visible primary action without opening a menu. Placed before
               the desktop pill so it is the first "Get started" link in DOM order. */}
-          <Link href="/welcome" className="inline-flex h-8 items-center whitespace-nowrap rounded-full bg-gradient-to-r from-blue-500 to-violet-600 px-3 text-[10px] font-semibold text-brand-fg shadow-glow transition hover:brightness-110 coarse:min-h-11 sm:hidden">
+          <Link href="/welcome" className="inline-flex h-8 items-center whitespace-nowrap rounded-full bg-gradient-to-r from-blue-600 to-violet-600 px-3 text-[10px] font-semibold text-brand-fg shadow-glow transition hover:brightness-95 coarse:min-h-11 sm:hidden">
             {t('marketing.getStarted')}
           </Link>
           <Link href="/login" className="hidden h-8 items-center px-3 text-[10px] font-medium text-muted transition hover:text-fg coarse:min-h-11 sm:inline-flex">
             {t('marketing.logIn')}
           </Link>
-          <Link href="/welcome" className="hidden h-8 items-center rounded-full bg-gradient-to-r from-blue-500 to-violet-600 px-5 text-[10px] font-semibold text-brand-fg shadow-glow transition hover:brightness-110 coarse:min-h-11 sm:inline-flex">
+          <Link href="/welcome" className="hidden h-8 items-center rounded-full bg-gradient-to-r from-blue-600 to-violet-600 px-5 text-[10px] font-semibold text-brand-fg shadow-glow transition hover:brightness-95 coarse:min-h-11 sm:inline-flex">
             {t('marketing.getStartedFree')}
           </Link>
           <button
@@ -143,7 +143,7 @@ export function SiteHeader() {
               <Link href="/login" className="focus-ring inline-flex min-h-11 flex-1 items-center justify-center rounded-xl border border-border bg-surface px-3 py-3 text-sm font-semibold text-fg hover:bg-elevated" onClick={() => setOpen(false)}>
                 {t('marketing.logIn')}
               </Link>
-              <Link href="/welcome" className="focus-ring inline-flex min-h-11 flex-1 items-center justify-center rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-3 py-3 text-sm font-semibold text-brand-fg hover:brightness-110" onClick={() => setOpen(false)}>
+              <Link href="/welcome" className="focus-ring inline-flex min-h-11 flex-1 items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 px-3 py-3 text-sm font-semibold text-brand-fg hover:brightness-95" onClick={() => setOpen(false)}>
                 {t('marketing.getStartedFree')}
               </Link>
             </div>
