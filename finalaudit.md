@@ -1,5 +1,9 @@
 # Final Production Audit
 
+## Final full types expose a narrow prefault output-type mismatch — 2026-10-25T04:07:06.335837+00:00
+
+Preserve the final `ab98beb282ff948c4a23299e554caa0acfdc13e7` typecheck failure: nine diagnostics in unchanged onboarding actions report that appearance may be undefined. The runtime default tests and 81 whole validation files /1,439 cases pass, but `.optional().prefault({})` retains an optional output type. Before editing, allocate only `lib/validation.ts` to remove the redundant inner `.optional()`: `onboardingAppearanceSchema.prefault({})` handles undefined itself and preserves nested defaults while restoring the required output contract. No action cast, suppression, caller change, audit closure or production operation is allowed by this scope. The published original PR1090 source and its first hosted runs remain distinct evidence. Freeze the successor, obtain independent static review, rerun actual onboarding/signup whole tests and fresh full types before updating the PR.
+
 ## Preserve credential length while qualifying the necessary upstream migration — 2026-10-25T04:03:28.175900+00:00
 
 Frozen candidate `9561a0f4598dc03cf3667219c858b9761bb25ea1` passes 8,852 tests in 457 whole files selected from the production Zod-consumer dependency graph, with zero failures, skips or todos. The run finished naturally before an attempted interruption; the unsuccessful kill did not affect the completed result. Original failed audits, the first 281/282 focused result and the first full typecheck failure remain retained. These passes belong to that source, before the credential correction below.
