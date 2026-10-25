@@ -37,7 +37,11 @@ export type ContactInput = z.infer<typeof contactSchema>;
 export const signUpSchema = z.object({
   fullName: z.string().trim().min(2, 'Please enter your name').max(120),
   email: emailSchema,
-  password: z.string().min(8, 'Use at least 8 characters').max(72),
+  // Keep signup aligned with recovery's UTF-16 password.length checks. Zod 4's
+  // string min/max count Unicode code points, which differ for astral text.
+  password: z.string()
+    .refine((password) => password.length >= 8, 'Use at least 8 characters')
+    .refine((password) => password.length <= 72, 'Use at most 72 characters'),
 });
 export type SignUpInput = z.infer<typeof signUpSchema>;
 
