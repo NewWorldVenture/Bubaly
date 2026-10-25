@@ -50,7 +50,7 @@ export default async function LandingPagesPage() {
                    <input name="cta_label" defaultValue={typeof (p.metadata as Record<string, unknown> | null)?.cta_label === 'string' ? (p.metadata as Record<string, unknown>).cta_label as string : ''} placeholder={t('landingPages.ctaLabel')} className={inputCls} />
                    <input name="cta_href" defaultValue={typeof (p.metadata as Record<string, unknown> | null)?.cta_href === 'string' ? (p.metadata as Record<string, unknown>).cta_href as string : ''} placeholder={t('landingPages.ctaLink')} className={inputCls} />
                    <textarea name="body" rows={4} defaultValue={p.body ?? ''} placeholder={t('landingPages.bodyCopy')} className="sm:col-span-2 w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
-                   <SubmitButton className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90 sm:col-span-2">{t('landingPages.saveChanges')}</SubmitButton>
+                   <SubmitButton className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:brightness-95 sm:col-span-2">{t('landingPages.saveChanges')}</SubmitButton>
                  </form>
                </details>
              </div>
@@ -92,7 +92,7 @@ export default async function LandingPagesPage() {
           <input name="cta_label" placeholder={t('adminMarketingLandingPages.ctaLabelEGGetStarted')} className={inputCls} />
           <input name="cta_href" placeholder={t('adminMarketingLandingPages.ctaLinkSignupOrHttps')} className={inputCls} />
           <p className="text-xs text-muted">{t('adminMarketingLandingPages.pagesAreCreatedAsDraftsUse')} <strong>{t('adminMarketingLandingPages.publish')}</strong> {t('adminMarketingLandingPages.toMakeThemLiveAt')} <span className="font-mono">/lp/&lt;slug&gt;</span>.</p>
-          <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingLandingPages.createPage')}</SubmitButton>
+          <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:brightness-95">{t('adminMarketingLandingPages.createPage')}</SubmitButton>
         </form>
       </Card>
     </div>

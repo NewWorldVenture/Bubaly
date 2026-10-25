@@ -30,7 +30,7 @@ import ts from 'typescript';
 /** Elements `disabled` actually disables: native form controls, and <Button>, which renders a <button>. */
 const DISABLEABLE = /^(button|input|select|textarea|fieldset|optgroup|option|Button)$/;
 
-export type Site = { at: string; file: string; line: string; tag: string; classes: string[]; text: boolean; exempt: boolean };
+export type Site = { at: string; file: string; line: string; tag: string; classes: string[]; text: boolean; ownText: boolean; exempt: boolean };
 
 /** Every JSX element with a className in one source file. */
 export function scanSource(file: string, src: string): Site[] {
@@ -50,6 +50,7 @@ export function scanSource(file: string, src: string): Site[] {
           tag: open.tagName.getText(sf),
           classes: classStrings(className.initializer).join(' ').split(/\s+/).filter(Boolean),
           text: carriesText(node),
+          ownText: carriesText(node, true),
           exempt: literallyTrue(attribute(open, 'aria-hidden', sf))
             || (DISABLEABLE.test(open.tagName.getText(sf)) && literallyTrue(attribute(open, 'disabled', sf))),
         });
@@ -157,12 +158,25 @@ function classStrings(expr: ts.Node): string[] {
   return out;
 }
 
-/** Whether an element renders words or numbers: JSX text, or an expression that is not markup. */
-export function carriesText(node: ts.JsxElement | ts.JsxSelfClosingElement): boolean {
+/** A class that paints an element's own background colour, so text inside it sits on that, not on its parent's fill. */
+const OWN_FILL = /^bg-(?!transparent$|clip-|gradient-|none$|cover$|contain$|center$|no-repeat$|fixed$)/;
+
+/**
+ * Whether an element renders words or numbers: JSX text, or an expression that
+ * is not markup. With `onOwnFill`, text inside a child element that paints its
+ * own background (a tooltip, a badge) is that child's, not this element's, and
+ * text inside a child marked aria-hidden is decoration.
+ */
+export function carriesText(node: ts.JsxElement | ts.JsxSelfClosingElement, onOwnFill = false): boolean {
   if (ts.isJsxSelfClosingElement(node)) return false;
+  const paints = (el: ts.JsxElement) => {
+    const className = attribute(el.openingElement, 'className', el.getSourceFile());
+    return !!className?.initializer && classStrings(className.initializer).join(' ').split(/\s+/).some((c) => OWN_FILL.test(c));
+  };
   const content = (x: ts.Expression | undefined): boolean => {
     if (!x) return false;
     if (ts.isParenthesizedExpression(x)) return content(x.expression);
+    if (onOwnFill && ts.isJsxElement(x) && (paints(x) || literallyTrue(attribute(x.openingElement, 'aria-hidden', x.getSourceFile())))) return false;
     if (ts.isJsxElement(x) || ts.isJsxFragment(x)) return x.children.some(child);
     if (ts.isJsxSelfClosingElement(x)) return false;
     if (ts.isBinaryExpression(x) && x.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) return content(x.right);

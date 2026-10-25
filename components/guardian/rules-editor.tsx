@@ -109,7 +109,7 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
         </p>
         <button
           onClick={() => setCreating(true)}
-          className="flex items-center gap-1.5 rounded-xl bg-brand px-3 py-2 text-xs font-semibold text-white hover:bg-brand/90 transition shrink-0"
+          className="flex items-center gap-1.5 rounded-xl bg-brand px-3 py-2 text-xs font-semibold text-white hover:brightness-95 transition shrink-0"
         >
           <Plus className="h-3.5 w-3.5" /> {tr('rulesEditor.newRule')}
         </button>
@@ -380,7 +380,7 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
           <button
             onClick={async () => { if (!form.name.trim()) return; setSaving(true); await onSave(form); setSaving(false); }}
             disabled={saving || !form.name.trim()}
-            className="flex-1 rounded-xl bg-brand py-2.5 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-50 transition"
+            className="flex-1 rounded-xl bg-brand py-2.5 text-sm font-semibold text-white hover:brightness-95 disabled:opacity-50 transition"
           >
             {saving ? 'Creating…' : 'Create Rule'}
           </button>

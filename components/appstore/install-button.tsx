@@ -45,7 +45,7 @@ export function InstallButton({ appId, installed: initial, available = true }: {
         'inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold transition disabled:opacity-60',
         installed
           ? 'border border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/15'
-          : 'bg-brand text-brand-fg hover:opacity-90',
+          : 'bg-brand text-brand-fg hover:brightness-95',
       )}
     >
       {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" />

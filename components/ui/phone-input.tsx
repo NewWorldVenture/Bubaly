@@ -140,7 +140,7 @@ export function PhoneInput({
           className="absolute top-full left-0 z-50 mt-1 w-72 rounded-xl border border-border bg-surface shadow-glass"
         >
           {/* Search */}
-          <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
+          <div className="flex items-center gap-2 border-b border-border px-3 py-2.5 focus-within:ring-2 focus-within:ring-inset focus-within:ring-brand">
             <Search className="h-3.5 w-3.5 shrink-0 text-muted" />
             <input
               ref={searchRef}

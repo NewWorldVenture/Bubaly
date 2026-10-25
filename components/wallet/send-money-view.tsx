@@ -205,7 +205,7 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
 
           <button type="button" onClick={() => setStep('confirm')}
             disabled={!isValidAmount}
-            className="w-full max-w-xs rounded-2xl bg-brand py-3.5 text-base font-bold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-50">
+            className="w-full max-w-xs rounded-2xl bg-brand py-3.5 text-base font-bold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50">
             {t('sendMoney.continue')}
           </button>
           {amountCents > 0 && !isValidAmount && (
@@ -244,7 +244,7 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
           </div>
 
           <button type="button" onClick={send} disabled={sending}
-            className="w-full rounded-2xl bg-brand py-3.5 text-base font-bold text-white transition hover:bg-brand/90 disabled:opacity-60">
+            className="w-full rounded-2xl bg-brand py-3.5 text-base font-bold text-white transition hover:brightness-95 disabled:opacity-60">
             {sending ? 'Sending…' : `Send ${formatCents(amountCents)}`}
           </button>
           <button type="button" onClick={() => router.push('/wallet')}

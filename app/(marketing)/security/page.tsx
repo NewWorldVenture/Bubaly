@@ -161,7 +161,7 @@ export default async function SecurityPage() {
               </div>
             )}
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="#ai-trust" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-6 py-3 text-sm font-bold shadow-glow transition hover:-translate-y-0.5">
+              <Link href="#ai-trust" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 px-6 py-3 text-sm font-bold text-brand-fg shadow-glow transition hover:-translate-y-0.5">
                 {t('trustCenter.aiTitle')}{' '}<ArrowRight className="h-4 w-4" aria-hidden />
               </Link>
               <Link href="#ledger" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/15 bg-white/[0.03] px-6 py-3 text-sm font-bold transition hover:bg-white/[0.06]">{t('trustCenter.ledgerLink')}</Link>
@@ -459,7 +459,7 @@ export default async function SecurityPage() {
               <h2 className="text-3xl font-black">{t('security.ourCommitmentToYou')}</h2>
               <p className="mt-4 text-sm leading-7 text-white/65">{t('security.commitmentBody')}</p>
               <div className="mt-6 flex flex-wrap gap-3">
-                <Link href="/privacy" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-6 py-3 text-sm font-bold shadow-glow">{t('security.readOurPrivacyPolicy')}{' '}<ExternalLink className="h-4 w-4" aria-hidden />
+                <Link href="/privacy" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 px-6 py-3 text-sm font-bold text-brand-fg shadow-glow">{t('security.readOurPrivacyPolicy')}{' '}<ExternalLink className="h-4 w-4" aria-hidden />
                 </Link>
                 <Link href="/terms" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/15 bg-white/[0.03] px-6 py-3 text-sm font-bold transition hover:bg-white/[0.06]">{t('security.termsOfService')}</Link>
               </div>
@@ -502,7 +502,7 @@ export default async function SecurityPage() {
               <p className="mt-1 text-sm text-white/55">{t('security.teamIsHereToHelp')}</p>
             </div>
             <div className="flex gap-3">
-              <a href="mailto:security@bubaly.com" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-6 py-3 text-sm font-bold shadow-glow">
+              <a href="mailto:security@bubaly.com" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 px-6 py-3 text-sm font-bold text-brand-fg shadow-glow">
                 <Mail className="h-4 w-4" aria-hidden />{' '}{t('security.contactSecurityTeam')}</a>
             </div>
           </div>

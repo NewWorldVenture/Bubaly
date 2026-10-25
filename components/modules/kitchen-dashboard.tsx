@@ -292,7 +292,7 @@ function LeftoverSection({ data, onAdd }: { data: KitchenData; onAdd: () => void
           <Refrigerator className="h-4 w-4" /> {tr('kitchenDashboard.leftovers')}
         </h2>
         <button onClick={onAdd} disabled={data.leftoversMissing}
-          className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 transition disabled:opacity-50">
+          className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:brightness-95 transition disabled:opacity-50">
           <Plus className="h-3.5 w-3.5" /> Log
         </button>
       </div>
@@ -506,7 +506,7 @@ function ChefModal({ onClose }: { onClose: () => void }) {
 
             <div className="flex justify-between border-t border-border pt-3">
               <Button variant="ghost" onClick={() => { setReply(null); setSource(null); }}>{tr('kitchenDashboard.askAgain')}</Button>
-              <Link href="/dashboard/meals" className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 transition" onClick={onClose}>
+              <Link href="/dashboard/meals" className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white hover:brightness-95 transition" onClick={onClose}>
                 <CalendarDays className="h-4 w-4" /> {tr('kitchenDashboard.openMealPlan')}
               </Link>
             </div>

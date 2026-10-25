@@ -41,7 +41,7 @@ export default async function CampaignsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted">{total.toLocaleString()} campaign{total === 1 ? '' : 's'}</p>
-        <Link href="/admin/marketing/campaigns/new" className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90">
+        <Link href="/admin/marketing/campaigns/new" className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white hover:brightness-95">
           <Plus className="h-4 w-4" /> {t('adminMarketingCampaigns.newCampaign')}
         </Link>
       </div>

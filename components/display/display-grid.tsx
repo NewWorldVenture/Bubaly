@@ -830,7 +830,7 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
               <button onClick={add} className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white hover:bg-white/10"><Plus className="h-4 w-4" /> {tr('displayGrid.addTile')}</button>
               <button onClick={resetDefault} className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/70 hover:bg-white/10">{tr('displayGrid.resetLayout')}</button>
               <button onClick={cancel} disabled={saving || dismissing} className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white hover:bg-white/10 disabled:opacity-60"><X className="h-4 w-4" /> {tr('displayGrid.cancel')}</button>
-              <button onClick={save} disabled={saving || dismissing} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-1.5 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-60"><Check className="h-4 w-4" /> {saving ? 'Saving…' : 'Save'}</button>
+              <button onClick={save} disabled={saving || dismissing} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-1.5 text-sm font-semibold text-white hover:brightness-95 disabled:opacity-60"><Check className="h-4 w-4" /> {saving ? 'Saving…' : 'Save'}</button>
             </div>
           </div>
         )}
