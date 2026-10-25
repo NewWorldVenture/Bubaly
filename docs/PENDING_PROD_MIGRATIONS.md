@@ -144,6 +144,8 @@ source allocations are not evidence that production applied any migration.
 | 0520 proposed, held | `0520_a_guest_does_not_read_the_front_desks_call_history_or_the_hub.sql` | A row of `call_logs` or `family_communications` is not read by a guest of its family: 0509's restrictive guard, `not is_family_guest(family_id)`, on the two tables behind guest-withheld pages that 0509's list left out. Needs 0509 first. Follows the account holder's decision on ROLE-SCOPE-001; requested on #771 (comment 6402247950), not yet confirmed. |
 | 0521 proposed, held | `0521_a_call_in_the_front_desk_history_is_written_by_no_member.sql` | `call_logs` is written by no member: 0092's member insert and update policies dropped, INSERT and UPDATE revoked from anon and authenticated; the members' read and the managers' delete unchanged. Requested on #771 (comment 6402247950), not yet confirmed. |
 | 0522 proposed, held | `0522_a_guest_does_not_change_the_households_tasks_and_reminders.sql` | 0464's guest guard (`household_write_is_not_a_guests()`, BEFORE INSERT, UPDATE and DELETE) on `todo_lists`, `todo_items`, `reminder_lists` and `family_reminders`. Follows ROLE-M03; KIDS-O01's two triggers and Support's reminder DB half. Requested on #771 (comment 6402500834), not yet confirmed. |
+| 0523 proposed, held | `0523_a_member_changes_only_the_rows_they_can_read.sql` | `a_row_you_cannot_read_is_not_yours_to_change()` (SECURITY INVOKER) BEFORE UPDATE OR DELETE and AFTER UPDATE on `home_warranties`, `vehicle_registrations`, `vacation_documents`, `voice_commands`, `wallet_cards`, `wallet_passes`, `wallet_rewards`, `auto_insurance_policies`, `home_locations`, `utility_bills`, `vacation_medical_information` and `family_communications`: a signed-in caller changes only rows they read. Follows the held read rules; requested on #771 (comment 6402627160), not yet confirmed. |
+| 0524 proposed, held | `0524_a_guest_adds_nothing_to_the_areas_withheld_from_them.sql` | 0464's guest guard on `auto_insurance_policies`, `driving_trips`, `family_communications`, `home_locations`, `utility_bills`, `vacation_medical_information`, `wallet_cards`, `wallet_passes` and `wallet_rewards`. Follows ROLE-M03 and ROLE-SCOPE-001; requested on #771 (comment 6402627160), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4781,6 +4783,98 @@ Dropping any one table's trigger turns the probe red on that table. 184 of
 families, try to vote in one family's poll under their member id from the
 other family and confirm 42501; then vote as their own member there and
 confirm it lands.
+
+## `0523` (proposed, held) — a member rewrote and deleted rows they could not read
+
+`supabase/reserved/0523_a_member_changes_only_the_rows_they_can_read.sql`
+— **held**: requested on #771 in comment 6402627160. Not yet confirmed.
+**Takes effect with the held read rules** (0509, 0514, 0515, 0517, 0520):
+without them every member reads every row and it refuses nothing.
+
+**Severity: medium (a child deleted a parent's warranties, registrations,
+travel documents and voice commands, and a teen's wallet cards; a guest
+deleted the household's bills and insurance, all without reading one). Deploy
+order: after the read rules.** Those read rules are SELECT policies. An UPDATE
+or DELETE with no WHERE and no column read, which PostgREST sends for an
+unfiltered `PATCH` or `DELETE`, is checked against its own command's policies
+only, and on these twelve tables those are still `is_family_member(family_id)`.
+Measured with every held file through 0522 applied, one unfiltered statement
+each: the child (0514, 0515, 0517 tables) and the guest (0509, 0520 tables),
+reading 0 rows, updated and deleted `OK 1` throughout (the Hub's delete is a
+manager's).
+
+**Database.** `a_row_you_cannot_read_is_not_yours_to_change()`, SECURITY
+INVOKER with a pinned search_path, asks as the caller whether they read the row
+being changed (BEFORE UPDATE OR DELETE) and the row an update leaves (AFTER
+UPDATE), and refuses a no with 42501 ("A record you cannot see is not yours to
+change"). The table's own read decides, so it follows whatever read rule is
+installed. A trigger rather than restrictive policies, for 0464's reasons: a
+raise a screen can show, and `gated-write-tables` and the client guard keep
+their inventory unchanged. The service role and session-less writers are
+exempt; a definer function or a cascade runs as the owner. Nothing widens, no
+read changes, inserts are untouched.
+
+**Proof:** `.github/workflows/blind-writes-runtime.yml` applies the five read
+rules, requires the held probe
+`docs/audit/reserved/a-member-changes-only-the-rows-they-can-read-check.sql`
+to fail on the defect with no control or precondition failing, applies 0523
+twice and requires it to pass, then re-runs the five read rules' held probes
+and five released probes over these tables. The passing run shows:
+- the child and the guest, reading none of the rows, are refused an
+  unfiltered update and delete (42501), and every row reads as written;
+- the teen's unfiltered update cannot hand their own card to the child (with a
+  WHERE the read rule already holds the new row), and the teen still renames
+  it;
+- the parent updates and deletes each row by id; the service role updates
+  every row;
+- **wiring:** 24 triggers, the guard SECURITY INVOKER, search_path pinned, not
+  executable by PUBLIC or anon;
+- **N1** (triggers disabled): the child deletes the parent's warranty;
+- **M1** (the guard SECURITY DEFINER): the child's delete lands;
+- **M2** (no AFTER UPDATE trigger): the teen hands the card on.
+
+All 189 released probes pass with the read rules and 0523, and with every held
+file applied twice.
+
+**After approved release:** as a test child, send an unfiltered `DELETE` to
+`/rest/v1/home_warranties` and confirm 42501 and that a parent's warranty
+remains.
+
+## `0524` (proposed, held) — a guest added to areas withheld from them
+
+`supabase/reserved/0524_a_guest_adds_nothing_to_the_areas_withheld_from_them.sql`
+— **held**: requested on #771 in comment 6402627160. Not yet confirmed.
+
+**Severity: low to medium (a guest who cannot see the household's bills,
+insurance or wallet could still plant rows the parents read as their own).
+Deploy order: any.** The held 0509 and 0520 withhold these areas from a guest;
+nine of their tables still took a guest's INSERT (`OK 1` each, measured with
+every held file through 0522 applied): `auto_insurance_policies`,
+`driving_trips`, `family_communications`, `home_locations`, `utility_bills`,
+`vacation_medical_information`, `wallet_cards`, `wallet_passes`,
+`wallet_rewards`.
+
+**Database.** 0464's `household_write_is_not_a_guests()` on the nine, as 0498
+and the held 0522 did elsewhere: `trg_<table>_not_a_guests`, BEFORE INSERT,
+UPDATE and DELETE, 42501. No new function; every other role writes as before.
+No application change: every page over these tables is withheld from a guest.
+
+**Proof:** `.github/workflows/guest-withheld-writes-runtime.yml` requires the
+held probe
+`docs/audit/reserved/a-guest-adds-nothing-to-the-areas-withheld-from-them-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0524 twice and requires it to pass, then re-runs 0464's probe and three
+released probes over these tables. The passing run shows the guest's insert
+refused by 0464's guard in all nine and no guest row landing; the parent and
+the child still adding one each; the guard wired on all nine; **N1** (guards
+disabled): the guest's insert lands in all nine; **M1** (`utility_bills`'
+guard off INSERT): the guest's bill lands.
+
+All 189 released probes pass with 0524 applied, and with every held file
+applied twice.
+
+**After approved release:** as a test guest, try to insert a `utility_bills`
+row and confirm 42501.
 
 ## `0522` (proposed, held) — a guest changed the household's tasks and reminders
 
