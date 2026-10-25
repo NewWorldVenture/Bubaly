@@ -2,7 +2,10 @@
 
 // Settings card to turn the App Lock on/off and set or change the 4-digit PIN.
 // The PIN is hashed on the client (buildAppLockConfig); only { enabled, salt, hash }
-// is sent to the server action — the plaintext PIN never leaves the device.
+// is sent to the server action — setting a PIN never sends the plaintext. (The
+// lock screen does send it, to unlockAppAction, which checks it on the server.)
+// Whether this browser is unlocked is an httpOnly cookie the server actions set
+// and clear; this card cannot touch it, and does not need to.
 import { useEffect, useState } from 'react';
 import { Lock, ShieldCheck } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
@@ -11,8 +14,8 @@ import { useApp } from '@/components/app/app-context';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
-import { buildAppLockConfig, isValidPin, isAppLockConfig, unlockKey, type AppLockConfig } from '@/lib/security/app-lock';
-import { saveAppLockConfig } from '@/app/(app)/settings/app-lock-actions';
+import { buildAppLockConfig, isValidPin, isAppLockConfig, type AppLockConfig } from '@/lib/security/app-lock';
+import { lockAppAction, saveAppLockConfig } from '@/app/(app)/settings/app-lock-actions';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -80,20 +83,26 @@ export function AppLockSettings() {
     setSaving(true);
     const res = await save(next);
     setSaving(false);
+    // This device is already in the app — never lock yourself out on toggle:
+    // the save that turns the lock on also unlocks this browser for it.
     if (!res.ok) { toastError(res.error); return; }
-    try {
-      // This device is already authenticated — never lock yourself out on toggle.
-      if (value) sessionStorage.setItem(unlockKey(userId), '1');
-      else sessionStorage.removeItem(unlockKey(userId));
-    } catch { /* ignore */ }
     setConfig(next);
     success(value ? t('appLockSettings.appLockIsOn') : t('appLockSettings.appLockTurnedOff'));
   }
 
-  // Re-lock immediately on this device: drop the session unlock flag and reload so
-  // the gate renders the PIN screen again.
-  function lockNow() {
-    try { sessionStorage.removeItem(unlockKey(userId)); } catch { /* ignore */ }
+  // Re-lock immediately on this device: the server drops this browser's unlock
+  // cookie, and the reload renders the PIN screen in place of the app. A
+  // request that never completed leaves the app unlocked, and says so.
+  async function lockNow() {
+    setSaving(true);
+    try {
+      await lockAppAction();
+    } catch (error: unknown) {
+      console.error('[app-lock] lock now did not complete', error);
+      setSaving(false);
+      toastError(t('appLockActions.couldNotSaveAppLockSettings'));
+      return;
+    }
     window.location.reload();
   }
 
@@ -115,9 +124,9 @@ export function AppLockSettings() {
     }
     const res = await save(cfg);
     setSaving(false);
+    // This device is already in the app: the save unlocks this browser for the
+    // new PIN (and every other browser now needs it).
     if (!res.ok) { toastError(res.error); return; }
-    // This device is already authenticated — count it as unlocked for this session.
-    try { if (nextEnabled) sessionStorage.setItem(unlockKey(userId), '1'); } catch { /* ignore */ }
     setConfig(cfg);
     setModalOpen(false);
     success(nextEnabled ? t('appLockSettings.appLockIsOn') : t('appLockSettings.pinUpdated'));

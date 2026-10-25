@@ -1,122 +1,112 @@
 'use client';
 
-// The opt-in App Lock gate. When the user has enabled a 4-digit PIN, returning to
-// the app shows an "Enter your PIN" screen before any content renders. It can NEVER
-// trap anyone: a "Sign out" escape is always present (forgot PIN → sign out → email
-// sign-in clears it). Unlock is session-scoped (sessionStorage), so it re-locks when
-// the tab/session ends or the account changes. No redirects, no loop risk.
-import { useEffect, useState, useCallback, useRef } from 'react';
+// The opt-in App Lock screen. The (app) layout renders it INSTEAD of the app
+// when the user has a PIN on and this browser has not unlocked it — the
+// decision is made on the server, so no app content reaches a locked browser,
+// and neither does the PIN's salt or hash. The PIN is checked by
+// `unlockAppAction` on the server, which also keeps the attempt count (durably:
+// a reload does not reset it). A right PIN sets a session-scoped unlock cookie
+// and this screen asks the router to re-render, which brings the app.
+//
+// It can NEVER trap anyone: a "Sign out" escape is always present. No
+// redirects, no loop risk.
+import { useEffect, useState, useCallback, useRef, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { Lock, Delete, LogOut } from 'lucide-react';
-import { verifyPin, unlockKey } from '@/lib/security/app-lock';
+import { unlockAppAction, type UnlockResult } from '@/app/(app)/settings/app-lock-actions';
 import { cn } from '@/lib/utils/cn';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { SignOutForm } from '@/components/auth/sign-out-form';
 import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 
-export function AppLockGate({
-  enabled, salt, hash, userId, children,
-}: {
-  enabled: boolean;
-  salt: string;
-  hash: string;
-  userId: string;
-  children: React.ReactNode;
-}) {
+export function AppLockGate() {
   const tr = useTranslations();
-  const [mounted, setMounted] = useState(false);
-  const [unlocked, setUnlocked] = useState(false);
+  const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
   const [digits, setDigits] = useState('');
-  const [error, setError] = useState(false);
+  // 'wrong' shakes and clears itself; 'unavailable' (the check could not run)
+  // stays until the next key, so it can be read.
+  const [error, setError] = useState<'wrong' | 'unavailable' | null>(null);
   const [checking, setChecking] = useState(false);
-  const [attempts, setAttempts] = useState(0);
-  const [cooldownUntil, setCooldownUntil] = useState(0); // epoch ms
+  const [cooldownUntil, setCooldownUntil] = useState(0); // epoch ms, from the server's retryAfter
   const [nowMs, setNowMs] = useState(() => Date.now());
 
-  const MAX_ATTEMPTS = 5;
-  const COOLDOWN_MS = 30_000;
   const cooldownLeft = Math.max(0, Math.ceil((cooldownUntil - nowMs) / 1000));
   const inCooldown = cooldownLeft > 0;
+  const busy = checking || refreshing;
 
-  useEffect(() => {
-    setMounted(true);
-    if (!enabled) { setUnlocked(true); return; }
-    try {
-      if (sessionStorage.getItem(unlockKey(userId)) === '1') setUnlocked(true);
-    } catch { /* ignore */ }
-  }, [enabled, userId]);
-
-  // Tick the cooldown countdown; clear the attempt count when it elapses.
+  // Tick the cooldown countdown. The server holds the count; this only shows it.
   useEffect(() => {
     if (cooldownUntil === 0) return;
     const id = setInterval(() => {
       const t = Date.now();
       setNowMs(t);
-      if (t >= cooldownUntil) { setCooldownUntil(0); setAttempts(0); setDigits(''); }
+      if (t >= cooldownUntil) { setCooldownUntil(0); setDigits(''); }
     }, 250);
     return () => clearInterval(id);
   }, [cooldownUntil]);
 
   const submit = useCallback(async (pin: string) => {
     setChecking(true);
-    const ok = await verifyPin(pin, { salt, hash });
-    setChecking(false);
-    if (ok) {
-      try { sessionStorage.setItem(unlockKey(userId), '1'); } catch { /* ignore */ }
-      setUnlocked(true);
-    } else {
-      // Brute-force guard: after MAX_ATTEMPTS wrong tries, lock the keypad for a
-      // cooldown. The "Sign out" escape stays available throughout.
-      setAttempts((a) => {
-        const next = a + 1;
-        if (next >= MAX_ATTEMPTS) setCooldownUntil(Date.now() + COOLDOWN_MS);
-        return next;
-      });
-      setError(true);
-      setTimeout(() => { setError(false); setDigits(''); }, 600);
+    let res: UnlockResult;
+    try {
+      res = await unlockAppAction(pin);
+    } catch (e: unknown) {
+      // A server action REJECTS when the request never completes (offline, a
+      // deploy mid-flight). Say so rather than call it a wrong PIN.
+      console.error('[app-lock] unlock did not complete', e);
+      res = { ok: false, reason: 'unavailable' };
     }
-  }, [salt, hash, userId]);
+    setChecking(false);
+    if (res.ok) {
+      // The unlock cookie is set; the layout renders the app on the re-render.
+      startRefresh(() => router.refresh());
+      return;
+    }
+    setDigits('');
+    if (res.reason === 'rate_limited') {
+      setNowMs(Date.now());
+      setCooldownUntil(Date.now() + res.retryAfter * 1000);
+      return;
+    }
+    if (res.reason === 'unavailable') { setError('unavailable'); return; }
+    setError('wrong');
+    setTimeout(() => setError(null), 600);
+  }, [router]);
 
   const press = useCallback((d: string) => {
-    if (checking || error || inCooldown) return;
-    setDigits((prev) => {
-      if (prev.length >= 4) return prev;
-      const next = prev + d;
-      if (next.length === 4) void submit(next);
-      return next;
-    });
-  }, [checking, error, inCooldown, submit]);
+    if (busy || error === 'wrong' || inCooldown || digits.length >= 4) return;
+    if (error) setError(null);
+    const next = digits + d;
+    setDigits(next);
+    // Submitted here, not inside a state updater: React may run an updater
+    // twice, and every submit now spends one of the server's attempts.
+    if (next.length === 4) void submit(next);
+  }, [busy, error, inCooldown, digits, submit]);
 
   const back = useCallback(() => setDigits((p) => p.slice(0, -1)), []);
 
   // Hardware keyboard support on the lock screen.
   useEffect(() => {
-    if (unlocked || !enabled || !mounted) return;
     const onKey = (e: KeyboardEvent) => {
       if (/^\d$/.test(e.key)) press(e.key);
       else if (e.key === 'Backspace') back();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [unlocked, enabled, mounted, press, back]);
+  }, [press, back]);
 
-  // While the lock screen covers the app, lock the page behind it so mobile
-  // touch-scroll can't drag the protected content out from under the overlay.
-  useLockBodyScroll(enabled && !unlocked);
+  // While the lock screen is up, lock the page behind it so mobile
+  // touch-scroll cannot move it. The screen is only ever rendered locked.
+  useLockBodyScroll(true);
 
-  // Same condition as the scroll lock above, and it has to be: passing a literal
-  // `true` here would run the effect once on mount, find no dialog (this
-  // component returns `children` while unlocked), and never re-run — so a gate
-  // that locks AFTER mount would have had no focus trap at all. No `onClose`:
-  // a lock screen is not dismissible, and the trap holds without an exit.
+  // No `onClose`: a lock screen is not dismissible, and the trap holds without
+  // an exit. Always active, because this component is only mounted while the
+  // layout has decided the browser is locked.
   const dialogRef = useRef<HTMLDivElement>(null);
-  useDialogBehavior(dialogRef, enabled && !unlocked, { lockScroll: false });
+  useDialogBehavior(dialogRef, true, { lockScroll: false });
 
-  // Not locked → render the app normally.
-  if (!enabled || unlocked) return <>{children}</>;
-
-  // Locked: never render protected content behind the overlay (and avoid an SSR flash
-  // before mount by showing the lock chrome immediately).
   return (
     <div
       ref={dialogRef}
@@ -134,34 +124,36 @@ export function AppLockGate({
         <p className="mt-1 text-sm text-muted">{tr('appLockGate.bubalyIsLockedForYourPrivacy')}</p>
 
         {/* PIN dots */}
-        <div className={cn('mt-7 flex items-center gap-4', error && 'animate-shake')}>
+        <div className={cn('mt-7 flex items-center gap-4', error === 'wrong' && 'animate-shake')}>
           {[0, 1, 2, 3].map((i) => (
             <span key={i}
               className={cn('h-3.5 w-3.5 rounded-full border transition',
-                error ? 'border-rose-500 bg-rose-500' :
+                error === 'wrong' ? 'border-rose-500 bg-rose-500' :
                 i < digits.length ? 'border-brand bg-brand' : 'border-border bg-transparent')} />
           ))}
         </div>
         {inCooldown ? (
           <p className="mt-3 text-xs font-medium text-amber-400">{tr('appLockGate.tooManyAttemptsTryAgainIn')} {cooldownLeft}s</p>
-        ) : error ? (
+        ) : error === 'wrong' ? (
           <p className="mt-3 text-xs font-medium text-rose-400">{tr('appLockGate.wrongPinTryAgain')}</p>
+        ) : error === 'unavailable' ? (
+          <p role="alert" className="mt-3 max-w-[16rem] text-center text-xs font-medium text-rose-400">{tr('appLock.stayingLockedUntilWeCanCheck')}</p>
         ) : null}
 
         {/* Keypad */}
         <div className="mt-8 grid grid-cols-3 gap-3">
           {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((n) => (
-            <button key={n} onClick={() => press(n)} disabled={checking || inCooldown}
+            <button key={n} onClick={() => press(n)} disabled={busy || inCooldown}
               className="h-16 w-16 rounded-full border border-border bg-surface/50 text-2xl font-semibold transition hover:bg-elevated active:scale-95 disabled:opacity-50">
               {n}
             </button>
           ))}
           <span />
-          <button onClick={() => press('0')} disabled={checking || inCooldown}
+          <button onClick={() => press('0')} disabled={busy || inCooldown}
             className="h-16 w-16 rounded-full border border-border bg-surface/50 text-2xl font-semibold transition hover:bg-elevated active:scale-95 disabled:opacity-50">
             0
           </button>
-          <button onClick={back} disabled={checking || digits.length === 0} aria-label={tr('appLockGate.delete')}
+          <button onClick={back} disabled={busy || digits.length === 0} aria-label={tr('appLockGate.delete')}
             className="grid h-16 w-16 place-items-center rounded-full text-muted transition hover:bg-elevated active:scale-95 disabled:opacity-30">
             <Delete className="h-6 w-6" />
           </button>

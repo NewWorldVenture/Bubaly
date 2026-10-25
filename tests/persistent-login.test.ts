@@ -316,7 +316,7 @@ describe('the app keeps the session and the server render in step', () => {
 
   it('keeps refreshing while the App Lock screen is up', () => {
     // Otherwise unlocking with the PIN after a long idle lands on /login.
-    expect(at(layout, '<SessionKeeper userId={user.id} />')).toBeLessThan(at(layout, 'AppLockGate enabled'));
+    expect(at(layout, '<SessionKeeper userId={user.id} />')).toBeLessThan(at(layout, '<AppLockGate />'));
   });
 
   it('revives on the events that follow a long absence', () => {

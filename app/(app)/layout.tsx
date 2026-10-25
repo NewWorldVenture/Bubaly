@@ -1,7 +1,9 @@
+import { cookies } from 'next/headers';
 import { createServer } from '@/lib/supabase/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { AppLockGate } from '@/components/app/app-lock-gate';
 import { isAppLockConfig } from '@/lib/security/app-lock';
+import { APP_UNLOCK_COOKIE, isAppUnlocked } from '@/lib/security/app-lock-server';
 import { closedFamilyStanding, resolveEntitlement } from '@/lib/server/entitlement';
 import { isSuperAdmin } from '@/lib/supabase/auth';
 import { TrialPaywallGate } from '@/components/app/trial-paywall-gate';
@@ -15,10 +17,11 @@ import { ConfirmProvider } from '@/components/ui/confirm';
 // Shared layout for ALL authenticated (app) routes — dashboard, wallet, economy,
 // admin, family, missions, etc. It does two things: mounts the SessionKeeper so
 // a signed-in user stays signed in until they sign out (see that component),
-// and applies the opt-in App Lock — when the signed-in user has set a PIN, the
-// whole app is gated behind the lock screen (not just the dashboard). It
-// intentionally does NOT enforce auth/redirects — each section's own layout
-// still does that — so this can never change sign-in behavior.
+// and applies the opt-in App Lock — when the signed-in user has set a PIN and
+// this browser has not unlocked it, the whole app is replaced by the lock
+// screen (not just the dashboard), on the server. It intentionally does NOT
+// enforce auth/redirects — each section's own layout still does that — so
+// this can never change sign-in behavior.
 // The authenticated app keeps the WHOLE catalogue. Its client components reach
 // 3,791 keys across 368 namespaces and call t() with a non-literal argument in
 // 96 places, so no static subset can be proved complete — and behind a login
@@ -98,11 +101,11 @@ async function GatedShell({
   // error. App Lock is the opposite case — the thing it withholds is exactly
   // what the user asked to have withheld.
   //
-  // It cannot fail closed by rendering the gate: `AppLockGate` verifies the PIN
-  // against the `salt` and `hash` from this very read, so a gate without them
-  // would lock the user out permanently rather than asking for their PIN. The
-  // honest closed answer is to withhold `children` — the protected content —
-  // and say why, which is retryable and leaks nothing. Audit C1-S9-44.
+  // It cannot fail closed by rendering the gate: without this read we do not
+  // know the user HAS a PIN, and asking one who never set one for a PIN could
+  // only ever reject. The honest closed answer is to withhold `children` — the
+  // protected content — and say why, which is retryable and leaks nothing.
+  // Audit C1-S9-44.
   const { data: prefs, error: prefsError } = await supabase
     .from('user_preferences')
     .select('notification_prefs')
@@ -119,19 +122,25 @@ async function GatedShell({
   const appLockRaw = (prefs?.notification_prefs as Record<string, unknown> | null)?.appLock;
   const appLock = isAppLockConfig(appLockRaw) ? appLockRaw : null;
 
+  // App Lock is decided HERE, on the server. The gate used to be handed the
+  // PIN's `salt` and `hash` and `children`, and to decide in the browser: the
+  // salt, the hash and the whole page sat in the RSC payload under the
+  // overlay, for anyone holding the device to read (and the 10,000 PINs to be
+  // tried offline). Now a locked request gets the lock screen and nothing else — no
+  // app, no salt, no hash — and the PIN is checked by `unlockAppAction`, which
+  // sets the unlock cookie this reads (lib/security/app-lock-server.ts). The
+  // cookie lasts until the browser closes, across its tabs; the sessionStorage
+  // flag it replaces lasted for one tab.
+  const locked = appLock?.enabled === true
+    && !isAppUnlocked(user.id, appLock, (await cookies()).get(APP_UNLOCK_COOKIE)?.value);
+
   // The keeper sits outside the App Lock gate on purpose: the session must keep
   // refreshing while the lock screen is up, so unlocking with the PIN lands on a
   // live session rather than a login page.
   return (
     <>
       <SessionKeeper userId={user.id} />
-      {appLock?.enabled
-        ? (
-          <AppLockGate enabled salt={appLock.salt} hash={appLock.hash} userId={user.id}>
-            {children}
-          </AppLockGate>
-        )
-        : children}
+      {locked ? <AppLockGate /> : children}
     </>
   );
 }

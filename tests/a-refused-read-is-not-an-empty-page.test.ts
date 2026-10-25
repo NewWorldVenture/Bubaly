@@ -286,9 +286,8 @@ describe('a security control the user chose does not fail open (C1-S9-44)', () =
   });
 
   it('it does not impersonate the lock screen it cannot verify against', () => {
-    // `AppLockGate` checks the PIN against the `salt` and `hash` from this very
-    // read, so a gate rendered without them could only ever reject — locking
-    // the user out permanently rather than asking for their PIN.
+    // Without this read we do not know the user HAS a PIN, so a lock screen
+    // here could ask one who never set one for a PIN it can only reject.
     const fallback = bodyOf(layout(), 'async function AppLockUnavailable', '\n}');
     expect(fallback).not.toContain('AppLockGate');
     expect(fallback).not.toContain('salt');

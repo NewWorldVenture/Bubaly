@@ -22,6 +22,16 @@ vi.mock('@/lib/supabase/auth', () => ({
   requireUserContext: async () => ({ user: { id: 'user-1' }, active: { familyId: 'family-1', role: 'parent', member: { id: 'm1' } } }),
 }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
+// saveAppLockConfig reads this browser's unlock and sets a new one for the PIN
+// it saves (lib/security/app-lock-server.ts); a jar stands in for the request.
+vi.mock('next/headers', () => {
+  const jar = new Map<string, string>();
+  return { cookies: async () => ({
+    get: (name: string) => (jar.has(name) ? { name, value: jar.get(name)! } : undefined),
+    set: (name: string, value: string) => { jar.set(name, value); },
+    delete: (arg: string | { name: string }) => { jar.delete(typeof arg === 'string' ? arg : arg.name); },
+  }) };
+});
 
 const { mergeNotificationPrefs } = await import('@/lib/preferences/notification-prefs');
 const { saveAppLockConfig } = await import('@/app/(app)/settings/app-lock-actions');
@@ -121,7 +131,9 @@ describe('mergeNotificationPrefs', () => {
 
 describe('the writers use it', () => {
   it('App Lock turned on while a shortcut save lands keeps both', async () => {
-    interleaveAfterRead(1, () => anotherWriterSets('captureShortcuts', ['grocery', 'tasks'], '2026-09-27T10:00:02.000Z'));
+    // Read 1 is the action's own check that this browser is not held by the
+    // lock; read 2 is the merge's, and the other writer lands after THAT one.
+    interleaveAfterRead(2, () => anotherWriterSets('captureShortcuts', ['grocery', 'tasks'], '2026-09-27T10:00:02.000Z'));
     expect(await saveAppLockConfig(LOCK)).toEqual({ ok: true });
     expect(prefs()).toMatchObject({ appLock: LOCK, captureShortcuts: ['grocery', 'tasks'], googleCalendarToken: 'enc:v1:old' });
   });
