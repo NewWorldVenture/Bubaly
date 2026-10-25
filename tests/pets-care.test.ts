@@ -68,10 +68,12 @@ describe('upcomingCare', () => {
 
 describe('careSummary', () => {
   it('counts overdue and due-soon', () => {
+    // Three different care items: records sharing a pet, kind and title are one
+    // series, whose latest entry alone sets the next due date.
     const records = [
-      rec({ id: 'a', pet_id: 'p1', next_due: '2026-06-10' }), // overdue
-      rec({ id: 'b', pet_id: 'p1', next_due: '2026-06-28' }), // due soon
-      rec({ id: 'c', pet_id: 'p1', next_due: '2026-12-01' }), // upcoming
+      rec({ id: 'a', pet_id: 'p1', title: 'Dental', next_due: '2026-06-10' }), // overdue
+      rec({ id: 'b', pet_id: 'p1', title: 'Checkup', next_due: '2026-06-28' }), // due soon
+      rec({ id: 'c', pet_id: 'p1', title: 'Allergy shot', next_due: '2026-12-01' }), // upcoming
     ];
     const s = careSummary(2, records, TODAY);
     expect(s.pets).toBe(2);
