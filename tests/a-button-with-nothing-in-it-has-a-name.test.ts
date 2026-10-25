@@ -59,7 +59,7 @@ describe('a button with nothing in it has a name', () => {
     expect(todos).toContain('aria-label={tr(LIST_COLOR_NAME_KEYS[c])} aria-pressed={color === c}');
     const en = JSON.parse(readFileSync('lib/i18n/messages/en-US.json', 'utf8')) as Record<string, string>;
     const keys = [...`${habits}\n${notes}\n${todos}`.matchAll(/'(shared\.colorName\.[a-z]+)'/g)].map((m) => m[1]);
-    expect(keys.length).toBe(7 + 9 + 6);
+    expect(keys.length).toBe(8 + 9 + 6);
     for (const k of keys) expect(en[k], k).toBeTruthy();
   });
 

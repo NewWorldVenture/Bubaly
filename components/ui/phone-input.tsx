@@ -98,6 +98,11 @@ export function PhoneInput({
     triggerRef.current?.focus();
   }
 
+  /** Escape closes the list here, rather than reaching a dialog the field sits in. */
+  function onEscape(e: React.KeyboardEvent) {
+    if (e.key === 'Escape') { e.stopPropagation(); close(); }
+  }
+
   function selectCountry(c: CountryDialCode) {
     setCountry(c);
     close();
@@ -144,11 +149,9 @@ export function PhoneInput({
 
       {/* Dropdown */}
       {open && (
-        // The panel holds the search field and the list; only the list is the listbox. Escape closes it here
-        // rather than letting it reach a dialog the field sits in.
+        // The panel holds the search field and the list; only the list is the listbox.
         <div
           ref={panelRef}
-          onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } }}
           className="absolute top-full left-0 z-50 mt-1 w-72 rounded-xl border border-border bg-surface shadow-glass"
         >
           {/* Search */}
@@ -160,6 +163,7 @@ export function PhoneInput({
               placeholder={tr('phoneInput.searchCountryOrCode')}
               aria-label={tr('phoneInput.searchCountryOrCode')}
               aria-controls={listId}
+              onKeyDown={onEscape}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted"
@@ -177,6 +181,7 @@ export function PhoneInput({
                     role="option"
                     aria-selected={active}
                     onClick={() => selectCountry(c)}
+                    onKeyDown={onEscape}
                     className={cn(
                       'flex w-full items-center gap-3 px-3 py-2 text-sm transition hover:bg-elevated',
                       active && 'bg-brand/10 font-semibold text-brand-text',

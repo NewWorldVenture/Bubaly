@@ -43,7 +43,7 @@ const COLORS = [
   { id: 'amber', labelKey: 'shared.colorName.amber', dot: 'bg-amber-500', soft: 'bg-amber-500/10', ring: 'border-amber-500/40', text: 'text-amber-500' },
   { id: 'orange', labelKey: 'shared.colorName.orange', dot: 'bg-orange-500', soft: 'bg-orange-500/10', ring: 'border-orange-500/40', text: 'text-orange-500' },
   { id: 'rose', labelKey: 'shared.colorName.rose', dot: 'bg-rose-500', soft: 'bg-rose-500/10', ring: 'border-rose-500/40', text: 'text-rose-500' },
-  { id: 'pink', dot: 'bg-pink-500', soft: 'bg-pink-500/10', ring: 'border-pink-500/40', text: 'text-pink-500' },
+  { id: 'pink', labelKey: 'shared.colorName.pink', dot: 'bg-pink-500', soft: 'bg-pink-500/10', ring: 'border-pink-500/40', text: 'text-pink-500' },
 ] as const;
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
