@@ -17,7 +17,7 @@ beforeEach(()=>{
   const u=new URL(String(input));if(u.origin!=='https://synthetic-todo-family.invalid')throw Error('unexpected SDK destination');const table=u.pathname.split('/').pop(),method=init.method||'GET',body=init.body?JSON.parse(init.body):null;requests.push({table,method,body,query:Object.fromEntries(u.searchParams)});
   const response=(body:any,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json'}});
   if(method==='GET'&&table==='family_members'){
-   expect(u.searchParams.get('select')).toBe('id,family_id');expect(u.searchParams.get('family_id')).toBe('eq.'+family);expect([member,foreignMember]).toContain(u.searchParams.get('id')?.slice(3));
+   expect(u.searchParams.get('select')).toBe('id,family_id,is_active');expect(u.searchParams.get('family_id')).toBe('eq.'+family);expect([member,foreignMember]).toContain(u.searchParams.get('id')?.slice(3));
    if(mode==='member-error')return response({code:'SYNTHETIC',message:'Synthetic member lookup refused'},400);
    if(mode==='member-throw')throw Error('Synthetic member transport rejected');
    if(mode==='member-multiple')return response([{id:member,family_id:family},{id:member,family_id:family}]);
@@ -27,6 +27,7 @@ beforeEach(()=>{
    if(mode==='member-primitive')return response([7]);
    if(mode==='member-null-row')return response([null]);
    if(mode==='member-missing')return response([]);
+   if(mode==='member-inactive')return response([{id:member,family_id:family,is_active:false}]);
    const roster=[{id:member,family_id:family,is_active:true},{id:foreignMember,family_id:foreignFamily,is_active:true}];return response(roster.filter(r=>(!u.searchParams.has('id')||u.searchParams.get('id')==='eq.'+r.id)&&(!u.searchParams.has('family_id')||u.searchParams.get('family_id')==='eq.'+r.family_id)));
   }
   if(method==='GET'&&table==='todo_lists'){
@@ -79,7 +80,7 @@ for(const target of ['foreign','own','null'] as const)it('assignTodo '+target+' 
 });
 
 const writePath=(kind:'create'|'update'|'assign',assigneeId:string|null)=>kind==='create'?createTodo(scope(),{title:'Synthetic new task',listId:'eeeeeeee-eeee-4eee-8eee-000000000001',assigneeId}):kind==='update'?updateTodoAction(ownTask,{assigneeId}):assignTodo(scope(),ownTask,assigneeId);
-for(const kind of ['create','update','assign'] as const)for(const m of ['member-error','member-throw','member-multiple','member-wrong-id','member-wrong-family','member-missing-family','member-primitive','member-null-row','member-missing'])it(kind+' refuses '+m+' before any task write',async()=>{
+for(const kind of ['create','update','assign'] as const)for(const m of ['member-error','member-throw','member-multiple','member-wrong-id','member-wrong-family','member-missing-family','member-primitive','member-null-row','member-missing','member-inactive'])it(kind+' refuses '+m+' before any task write',async()=>{
  mode=m;const result=await writePath(kind,member);expect(result.ok).toBe(false);expect(requests.filter(r=>r.method!=='GET')).toEqual([]);expect(rows).toHaveLength(2);expect(rows[0].assigned_to_id).toBe(member);expect(state.revalidated).toEqual([]);expect(state.activity).toEqual([]);
 });
 for(const kind of ['create','update','assign'] as const)it(kind+' explicit null skips the member lookup',async()=>{

@@ -13,12 +13,12 @@ import {
   Sparkles, CreditCard, TrendingDown, ArrowUpRight,
 } from 'lucide-react';
 import {
-  adminNoteKindMeta, filterAdminNotes, countByKind,
+  adminNoteKindMeta, filterAdminNotes, NOTIFICATION_KIND_ORDER,
   type AdminNotificationRow,
 } from '@/lib/admin/notifications';
 import { markAdminNotesReadAction } from '@/app/(app)/admin/notifications-actions';
 import { cn } from '@/lib/utils/cn';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useHydrationSafeFormat } from '@/components/i18n/use-format';
 
 const ICONS: Record<string, typeof Bell> = {
@@ -42,8 +42,18 @@ function timeAgo(iso: string, fmtDate: (v: string) => string): string {
   return fmtDate(iso);
 }
 
-export function AdminNotificationsList({ notifications }: { notifications: AdminNotificationRow[] }) {
+/**
+ * `notifications` is the newest few hundred, listed; `totals` are the whole
+ * feed's, counted (the page's head:true counts). The chips and Mark all read
+ * go by the totals, which a tally of the list stopped at, and the list says
+ * when it holds only part of the feed.
+ */
+export function AdminNotificationsList({ notifications, totals }: {
+  notifications: AdminNotificationRow[];
+  totals: { all: number; unread: number; byKind: Record<string, number> };
+}) {
   const t = useTranslations();
+  const locale = useLocale().code;
   const { fmtDate } = useHydrationSafeFormat();
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -51,21 +61,15 @@ export function AdminNotificationsList({ notifications }: { notifications: Admin
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const counts = useMemo(() => countByKind(notifications), [notifications]);
-  const unread = useMemo(() => notifications.filter((n) => !n.is_read).length, [notifications]);
+  const counts = totals.byKind;
+  const unread = totals.unread;
   const visible = useMemo(
     () => filterAdminNotes(notifications, { kind, unreadOnly }),
     [notifications, kind, unreadOnly],
   );
 
-  // Only the kinds actually present get a chip, in a stable, sensible order.
-  const kindChips = useMemo(() => {
-    const order = [
-      'feedback_new', 'github_sync', 'github_error', 'support_ticket',
-      'marketplace_report', 'family_signup', 'subscription', 'subscription_churn', 'info',
-    ];
-    return order.filter((k) => counts[k]);
-  }, [counts]);
+  // Only the kinds the feed actually holds get a chip.
+  const kindChips = NOTIFICATION_KIND_ORDER.filter((k) => counts[k]);
 
   function markRead(ids?: string[]) {
     start(async () => {
@@ -92,7 +96,7 @@ export function AdminNotificationsList({ notifications }: { notifications: Admin
             kind === 'all' ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:bg-elevated',
           )}
         >
-          All <span className="ml-1 font-normal">{notifications.length}</span>
+          All <span className="ml-1 font-normal">{totals.all.toLocaleString(locale)}</span>
         </button>
         {kindChips.map((k) => {
           const meta = adminNoteKindMeta(k);
@@ -106,7 +110,7 @@ export function AdminNotificationsList({ notifications }: { notifications: Admin
                 kind === k ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:bg-elevated',
               )}
             >
-              {meta.label} <span className="ml-1 font-normal">{counts[k]}</span>
+              {meta.label} <span className="ml-1 font-normal">{counts[k].toLocaleString(locale)}</span>
             </button>
           );
         })}
@@ -134,6 +138,10 @@ export function AdminNotificationsList({ notifications }: { notifications: Admin
           )}
         </div>
       </div>
+
+      {totals.all > notifications.length && (
+        <p className="text-xs text-muted">{t('adminCeiling.listAndFiltersShowTheNewest', { shown: notifications.length.toLocaleString(locale), total: totals.all.toLocaleString(locale) })}</p>
+      )}
 
       {/* List */}
       <div className="overflow-hidden rounded-xl border border-border bg-surface/40">

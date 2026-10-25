@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { AIProviderConfig } from '@/lib/ai/provider';
 import type { AIEngine, AIConfigView } from '@/lib/ai/models';
+import { settle } from '@/lib/supabase/settle';
 
 type DB = SupabaseClient<Database>;
 
@@ -24,7 +25,12 @@ type StoredConfig = {
  */
 export async function getAIConfig(supabase: DB): Promise<AIProviderConfig> {
   const { data } = await supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle();
-  const stored = (data?.value ?? {}) as StoredConfig;
+  return configFrom(data?.value);
+}
+
+/** The stored value over the environment. */
+function configFrom(value: unknown): AIProviderConfig {
+  const stored = (value ?? {}) as StoredConfig;
   // OpenAI-only deployment: provider is always 'openai' regardless of what was stored.
   return {
     provider: 'openai',
@@ -32,6 +38,28 @@ export async function getAIConfig(supabase: DB): Promise<AIProviderConfig> {
     anthropicKey: stored.anthropicKey || process.env.ANTHROPIC_API_KEY || null,
     openaiKey: stored.openaiKey || process.env.OPENAI_API_KEY || null,
   };
+}
+
+/** The AI config with its real keys, or the read that could not be made. */
+export type AIConfigRead =
+  | { config: AIProviderConfig; error: null }
+  | { config: null; error: { message: string } };
+
+/**
+ * getAIConfig for the admin console's Test connection, which asks whether the
+ * STORED config works. getAIConfig drops its read's error, so a refused or
+ * unreachable read is "nothing stored" and the environment answers: the test
+ * said "No OpenAI key configured" over a key saved in the console, or tested
+ * the environment's key and model and called the stored config OK (review
+ * R9-2-ADMIN-TEST-CONNECTION-FAILED-READ-IS-NO-KEY). The admin caller gets the
+ * error and says the settings could not be read. getAIConfig itself is
+ * unchanged: for the runtime callers the environment is the documented
+ * fallback. Settled, so a transport rejection arrives the same way.
+ */
+export async function readAIConfig(supabase: DB): Promise<AIConfigRead> {
+  const { data, error } = await settle(supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle());
+  if (error) return { config: null, error };
+  return { config: configFrom(data?.value), error: null };
 }
 
 /**
@@ -48,16 +76,36 @@ export async function getOpenAIKey(supabase: DB): Promise<string> {
   }
 }
 
-export async function getAIConfigView(supabase: DB): Promise<AIConfigView> {
-  const { data } = await supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle();
+/** The admin console's view of the AI config, or the read that could not be made. */
+export type AIConfigViewRead =
+  | { view: AIConfigView; error: null }
+  | { view: null; error: { message: string } };
+
+/**
+ * The UI-safe AI config for the admin console.
+ *
+ * The app_settings error used to be dropped, so a refused or unreachable read
+ * became `{}`: "no stored key, default model". /admin/ai then preselected the
+ * first model over the stored one and offered a Save that wrote it,
+ * /admin/settings read "OPENAI_API_KEY not set" and /admin/marketing/settings
+ * "Set OPENAI_API_KEY", none of which anyone had read. The caller now gets the
+ * error and says the config is unavailable. Settled, so a transport rejection
+ * arrives the same way rather than as a throw.
+ */
+export async function getAIConfigView(supabase: DB): Promise<AIConfigViewRead> {
+  const { data, error } = await settle(supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle());
+  if (error) return { view: null, error };
   const stored = (data?.value ?? {}) as StoredConfig;
   return {
-    provider: 'openai',
-    model: stored.model || process.env.AI_MODEL || null,
-    anthropicKeySet: Boolean(stored.anthropicKey || process.env.ANTHROPIC_API_KEY),
-    openaiKeySet: Boolean(stored.openaiKey || process.env.OPENAI_API_KEY),
-    anthropicFromEnv: !stored.anthropicKey && Boolean(process.env.ANTHROPIC_API_KEY),
-    openaiFromEnv: !stored.openaiKey && Boolean(process.env.OPENAI_API_KEY),
+    view: {
+      provider: 'openai',
+      model: stored.model || process.env.AI_MODEL || null,
+      anthropicKeySet: Boolean(stored.anthropicKey || process.env.ANTHROPIC_API_KEY),
+      openaiKeySet: Boolean(stored.openaiKey || process.env.OPENAI_API_KEY),
+      anthropicFromEnv: !stored.anthropicKey && Boolean(process.env.ANTHROPIC_API_KEY),
+      openaiFromEnv: !stored.openaiKey && Boolean(process.env.OPENAI_API_KEY),
+    },
+    error: null,
   };
 }
 
@@ -80,8 +128,9 @@ export async function setAIConfig(
   // Audit C1-S9-76.
   const { data, error: readError } = await supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle();
   if (readError) throw readError;
-  const stored = (data?.value ?? {}) as StoredConfig;
+  const stored = (data?.value && typeof data.value === 'object' && !Array.isArray(data.value) ? data.value : {}) as StoredConfig;
   const next: StoredConfig = {
+    ...stored,            // what the form does not edit (the per-task `models` map lib/ai/routing.ts reads) stays
     provider: 'openai',   // OpenAI-only deployment
     model: input.model || null,
     anthropicKey: input.anthropicKey?.trim() ? input.anthropicKey.trim() : stored.anthropicKey ?? null,

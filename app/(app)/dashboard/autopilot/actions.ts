@@ -11,8 +11,8 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveSuggestion, type ResolutionResult } from '@/lib/services/autopilot';
 
 const inputSchema = z.object({
-  suggestionId: z.string().uuid(), updatedAt: z.string().datetime({ offset: true }),
-  expectedFamilyId: z.string().uuid(), expectedUserId: z.string().uuid(),
+  suggestionId: z.string().guid(), updatedAt: z.string().datetime({ offset: true }),
+  expectedFamilyId: z.string().guid(), expectedUserId: z.string().guid(),
   action: z.enum(['reminder', 'dismiss']),
 }).strict();
 

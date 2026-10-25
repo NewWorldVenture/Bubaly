@@ -24,16 +24,28 @@ type Asset = Tables<'marketing_assets'>;
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
 const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
 
+/** The newest videos the list holds, and the newest uploads the picker offers. */
+const LISTED = 300;
+const PICKER_SHOWN = 200;
+
 const PROVIDER_LABEL: Record<VideoProvider, string> = { youtube: 'YouTube', vimeo: 'Vimeo', upload: 'Uploaded' };
 
 export default async function VideoPage() {
   const tr = await getTranslations();
   const supabase = createServiceClient();
-  const [videosResult, assetsResult] = await settleAll([
-    supabase.from('marketing_videos').select('*').is('deleted_at', null).order('created_at', { ascending: false }).limit(300),
-    supabase.from('marketing_assets').select('id, name').eq('kind', 'video').is('deleted_at', null).order('created_at', { ascending: false }).limit(200),
+  // "N videos · N published" counted the list, the newest 300, and the
+  // uploaded-video picker offered the newest 200 without saying so (coverage
+  // sweep round 9, class B). Both figures are head:true counts now, the list
+  // says when it holds part of the catalog, and the picker when it offers part.
+  const counted = () => supabase.from('marketing_videos').select('id', { count: 'exact', head: true }).is('deleted_at', null);
+  const [videosResult, assetsResult, videoCountResult, publishedCountResult, assetCountResult] = await settleAll([
+    supabase.from('marketing_videos').select('*').is('deleted_at', null).order('created_at', { ascending: false }).limit(LISTED),
+    supabase.from('marketing_assets').select('id, name').eq('kind', 'video').is('deleted_at', null).order('created_at', { ascending: false }).limit(PICKER_SHOWN),
+    counted(),
+    counted().eq('status', 'published'),
+    supabase.from('marketing_assets').select('id', { count: 'exact', head: true }).eq('kind', 'video').is('deleted_at', null),
   ]);
-  const readError = videosResult.error ?? assetsResult.error;
+  const readError = videosResult.error ?? assetsResult.error ?? videoCountResult.error ?? publishedCountResult.error ?? assetCountResult.error;
   if (readError) {
     console.error('[admin-marketing-video] video read failed', readError);
     return <AdminVideoReadError />;
@@ -42,7 +54,9 @@ export default async function VideoPage() {
   const { data: assetData } = assetsResult;
   const videos = (videoData ?? []) as Video[];
   const videoAssets = (assetData ?? []) as Pick<Asset, 'id' | 'name'>[];
-  const published = videos.filter((v) => v.status === 'published').length;
+  const videoCount = videoCountResult.count ?? 0;
+  const published = publishedCountResult.count ?? 0;
+  const pickerInPart = (assetCountResult.count ?? 0) > videoAssets.length;
 
   return (
     <div className="space-y-5">
@@ -74,8 +88,14 @@ export default async function VideoPage() {
           <SubmitButton className={btnCls}>{tr('adminMarketingVideo.addVideo')}</SubmitButton>
         </form>
         <p className="mt-3 text-xs text-muted">
-          {videos.length} video{videos.length === 1 ? '' : 's'} · {published} {tr('adminMarketingVideo.publishedPasteAUrlOrPick')}
+          {videoCount.toLocaleString()} video{videoCount === 1 ? '' : 's'} · {published.toLocaleString()} {tr('adminMarketingVideo.publishedPasteAUrlOrPick')}
         </p>
+        {pickerInPart && (
+          <p className="mt-1 text-xs text-muted">{tr('adminCeiling.pickerOffersTheNewest', { picker: tr('adminMarketingVideo.uploadedVideo'), shown: videoAssets.length.toLocaleString(), total: (assetCountResult.count ?? 0).toLocaleString() })}</p>
+        )}
+        {videoCount > videos.length && (
+          <p className="mt-1 text-xs text-muted">{tr('adminCeiling.listShowsTheNewest', { shown: videos.length.toLocaleString(), total: videoCount.toLocaleString() })}</p>
+        )}
       </Card>
 
       {videos.length === 0 ? (

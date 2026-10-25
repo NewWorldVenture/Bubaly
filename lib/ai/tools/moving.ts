@@ -178,7 +178,7 @@ export const movingTools: ToolDefinition[] = [
       : `"${output.task.title}" was already on the move`),
     resource: (output) => ({ table: 'move_tasks', id: output.task.id }),
     execute: async (scope, input) => {
-      const assignee = await resolveAssigneeId(scope, input);
+      const assignee = await resolveAssigneeId(scope, input, { requireActive: true });
       if (!assignee.ok) return assignee;
       const res = await addTask(scope, {
         moveId: input.move_id ?? null, title: input.title, category: input.category ?? null, offsetDays: input.offset_days ?? null, dueDate: input.due_date ?? null,

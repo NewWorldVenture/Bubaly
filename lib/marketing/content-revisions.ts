@@ -29,7 +29,7 @@ export type RevisionDate = `${number}-${number}-${number}`;
  * disagree. These must reflect an actual policy revision, not a deploy.
  */
 export const LEGAL_REVISED = {
-  '/privacy': '2026-10-04',
+  '/privacy': '2026-10-23',
   '/terms': '2026-10-04',
   '/cookies': '2026-06-24',
   '/acceptable-use': '2026-06-24',
@@ -49,8 +49,8 @@ export const PAGE_REVISED = {
   '/ai': '2026-09-09',
   '/mobile': '2026-10-04',
   '/family-display': '2026-09-09',
-  '/security': '2026-10-04',
-  '/faq': '2026-10-04',
+  '/security': '2026-10-23',
+  '/faq': '2026-10-23',
   '/blog': '2026-09-07',
   '/contact': '2026-09-07',
 } as const satisfies Record<string, RevisionDate>;

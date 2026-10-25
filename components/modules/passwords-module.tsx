@@ -3,8 +3,11 @@
 // Family Wi-Fi & Passwords vault. Shared family credentials (Wi-Fi, logins,
 // PINs, cards) backed by public.family_credentials (family-scoped RLS).
 // Secrets are masked by default and revealed on demand; copy never requires a
-// reveal. Fully wired: realtime read, create/update, soft-delete, search,
+// reveal. Fully wired: realtime read, create/update, delete, search,
 // category filter, favorite, empty/error/loading states, toasts, confirms.
+// Delete is a real DELETE: the vault stores secrets in plain text, nothing ever
+// purged a `deleted_at` row, and the SELECT policy served it to every manager's
+// direct REST read for ever while the toast said it was gone.
 
 import { useMemo, useState, useEffect } from 'react';
 import { firstName } from '@/lib/utils/format';
@@ -159,10 +162,16 @@ export function PasswordsModule() {
   async function remove(c: Credential) {
     setConfirmDel(null);
     const sb = createClient();
-    // A SOFT delete: a refused one leaves the credential in the vault while the
-    // toast says it is gone, which is the worst version of this for a password.
+    // A HARD delete. This used to stamp `deleted_at`, and no code path or cron
+    // ever purged a stamped row: the plaintext secret stayed in the table
+    // indefinitely, returned by `GET /rest/v1/family_credentials` to any
+    // manager's stepped-up session, while the family believed it gone. The
+    // delete policies (0296 family_credentials_delete, 0391's step-up guard)
+    // admit exactly the actor the soft-delete UPDATE did. A refused one is
+    // still zero rows, and still leaves the credential in the vault while the
+    // toast would say it is gone, so the rows are read back.
     const { data: rows, error: err } = await sb.from('family_credentials')
-      .update({ deleted_at: new Date().toISOString() }).eq('id', c.id).eq('family_id', familyId).select('id');
+      .delete().eq('id', c.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('passwordsModule.entryDeleted')); refresh();

@@ -221,7 +221,7 @@ describe('shipped provenance binds the original licensed bytes', () => {
     });
     const matching = walk('public').filter((file) => /\.(?:png|jpe?g|webp|gif|avif)$/i.test(file))
       .filter((file) => createHash('sha256').update(readFileSync(file)).digest('hex') === asset.sha256);
-    expect(matching).toEqual(['public/blog/harvested-carrot.jpg']);
+    expect(matching).toEqual([join('public', 'blog', 'harvested-carrot.jpg')]);
     expect(asset.localPath).toMatch(/^\/blog\/[a-z0-9-]+\.jpg$/);
     expect(new URL(asset.sourceUrl).origin).toBe('https://commons.wikimedia.org');
     expect(new URL(asset.licenseUrl).origin).toBe('https://creativecommons.org');

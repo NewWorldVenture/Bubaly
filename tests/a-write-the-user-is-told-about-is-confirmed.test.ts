@@ -882,8 +882,10 @@ describe('an order transition is claimed, not assumed (C1-S9-56)', () => {
     const body = bodyOf(marketplaceActions, 'export async function setOrderStatusAction', 'return { ok: true };');
     expect(body).toContain('readFamilyOrders(ctx.active.familyId, (scope) => scope(');
     // `seller_member` rides along for the seller-only steps
-    // (tests/an-order-is-finished-by-its-seller.test.ts).
-    expect(body).toContain(".select('id, status, family_id, seller_member')");
+    // (tests/an-order-is-finished-by-its-seller.test.ts), and `kind` for the
+    // pickup a cancel takes down
+    // (tests/a-cancelled-loan-takes-down-the-pickup-its-start-claimed.test.ts).
+    expect(body).toContain(".select('id, status, family_id, seller_member, kind')");
     expect(body.match(/\.eq\('family_id', order\.family_id\)/g) ?? []).toHaveLength(1);
   });
 

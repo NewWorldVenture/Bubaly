@@ -60,6 +60,17 @@ export async function leaveCircleAction(circleId: string): Promise<Result> {
   if (!circleId) return { ok: false, error: t('actions.invalidCircle') };
   const ctx = await requireUserContext();
   const sb = await createServer();
+  // A member family leaving withdraws only its own rows. The family that
+  // FOUNDED the circle leaving dissolves it: marketplace_leave_circle (0176)
+  // deletes the circle, and with it every other household's membership and
+  // shares. That is the same decision as creating it, so it is a parent's or
+  // an adult's. The RPC checks only family membership, so the check is here.
+  if (!isManager(ctx.active.role)) {
+    const { data: membership, error: roleError } = await sb.from('marketplace_circle_members')
+      .select('role').eq('circle_id', circleId).eq('family_id', ctx.active.familyId).maybeSingle();
+    if (roleError) return actionFailure('check the circle', t('community.couldNotLeaveTheCircle'), roleError);
+    if (membership?.role === 'owner') return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
+  }
   const { error } = await sb.rpc('marketplace_leave_circle', {
     p_family: ctx.active.familyId, p_circle: circleId,
   });
@@ -74,8 +85,9 @@ export async function shareListingAction(listingId: string, circleId: string): P
   const ctx = await requireUserContext();
   // Sharing puts the listing in front of the circle's other households, who
   // can then bid on it, buy it and arrange to collect it: the same decision as
-  // creating or joining the circle. Unsharing and leaving only withdraw, and
-  // stay open to every member.
+  // creating or joining the circle. Unsharing and leaving a circle another
+  // family founded only withdraw, and stay open to every member (dissolving
+  // one's own circle does not: leaveCircleAction).
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
   const sb = await createServer();
   const { error } = await sb.from('marketplace_listing_shares').insert({

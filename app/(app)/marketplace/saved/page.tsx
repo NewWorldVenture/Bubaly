@@ -8,6 +8,7 @@ import { SaveButton } from '@/components/marketplace/save-button';
 import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/lib/marketplace/listings';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { ErrorState } from '@/components/ui/states';
+import { readCircleListingsById } from '@/lib/marketplace/circle-reads';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -41,10 +42,28 @@ export default async function MarketplaceSavedPage() {
   }
 
   const ids = (saves ?? []).map((s) => s.listing_id);
-  const { data: listings } = ids.length
-    ? await sb.from('marketplace_listings').select('id, title, kind, status, price_cents, rent_period, location').in('id', ids)
-    : { data: [] };
-  const byId = new Map((listings ?? []).map((l) => [l.id, l]));
+  const { data: listings, error: listingsError } = ids.length
+    ? await sb.from('marketplace_listings').select('id, title, kind, status, price_cents, rent_period').in('id', ids)
+    : { data: [], error: null };
+  // A save on another family's listing (the listing page offers the heart
+  // there) is stored, but the table stopped returning that listing when 0483
+  // dropped the circle read, so the save fell to the `l ? … : []` below and
+  // never showed here. Those listings come from the circle view, which has
+  // every column this list renders (lib/marketplace/circle-reads.ts).
+  const found = new Set((listings ?? []).map((l) => l.id));
+  const { data: shared, error: sharedError } = listingsError
+    ? { data: [], error: null }
+    : await readCircleListingsById<{ id: string; title: string; kind: string; status: string; price_cents: number; rent_period: string | null }>(
+      sb, ids.filter((id) => !found.has(id)), 'id, title, kind, status, price_cents, rent_period');
+  if (listingsError || sharedError) {
+    console.error('[marketplace-saved] Saved listings read failed', listingsError ?? sharedError);
+    return (
+      <div className="space-y-5">
+        <ErrorState message={t('marketplaceSaved.couldNotLoadYourSavedItems')} />
+      </div>
+    );
+  }
+  const byId = new Map([...(listings ?? []), ...(shared ?? [])].map((l) => [l.id, l]));
 
   const rows = (saves ?? []).flatMap((s) => {
     const l = byId.get(s.listing_id);

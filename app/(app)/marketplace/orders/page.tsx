@@ -5,13 +5,13 @@ import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { OrderControls, ReviewForm } from '@/components/marketplace/order-controls';
 import { HandoffPanel, type HandoffData } from '@/components/marketplace/handoff-panel';
-import type { HandoffStatus, HandoffRole, LocationKind } from '@/lib/marketplace/handoff';
-import { formatCents } from '@/lib/marketplace/listings';
+import { holdsHandoffCode, isLoanKind, type HandoffStatus, type HandoffRole, type LocationKind } from '@/lib/marketplace/handoff';
+import { formatCents, priceLabel, type RentPeriod } from '@/lib/marketplace/listings';
 import { marketplaceServiceFeeCents, orderFeeBreakdown } from '@/lib/marketplace/fee-policy';
 import { returnStatus, returnLabel } from '@/lib/marketplace/returns';
 import { todayKeyFor } from '@/lib/services/scope';
 import { readFamilyOrders } from '@/lib/marketplace/schema-compat';
-import { readCircleTitles } from '@/lib/marketplace/circle-reads';
+import { readCircleListingsById } from '@/lib/marketplace/circle-reads';
 import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
@@ -58,9 +58,15 @@ export default async function MarketplaceOrdersPage() {
   // agreed in a negotiation carries the SELLER's family_id and this family as
   // buyer_family_id (proposed economy SQL, section 2). Without that column it
   // is the seller-family read it always was (readFamilyOrders).
+  // Filtered to this member's own orders BEFORE the cap. The read was the
+  // family's 100 newest, filtered afterwards, so a member's older live order
+  // (a long borrow) fell out once the family had 100 newer ones, and its
+  // controls and hand-off panel with it. A second `or` is ANDed with the
+  // family scope's.
   const { data: orders, error: ordersError } = await readFamilyOrders(familyId, (scope) => scope(sb
     .from('marketplace_orders')
-    .select('id, listing_id, buyer_member, seller_member, kind, status, amount_cents, ends_on, returned_at, created_at'))
+    .select('id, family_id, listing_id, buyer_member, seller_member, kind, status, amount_cents, ends_on, returned_at, created_at'))
+    .or(`buyer_member.eq.${selfId},seller_member.eq.${selfId}`)
     .order('created_at', { ascending: false })
     .limit(100));
 
@@ -91,19 +97,22 @@ export default async function MarketplaceOrdersPage() {
   const mine = (orders ?? []).filter((o) => o.buyer_member === selfId || o.seller_member === selfId);
   const listingIds = [...new Set(mine.map((o) => o.listing_id))];
   const { data: listings, error: listingsError } = listingIds.length
-    ? await sb.from('marketplace_listings').select('id, title').in('id', listingIds)
+    ? await sb.from('marketplace_listings').select('id, title, rent_period').in('id', listingIds)
     : { data: [], error: null };
   // A won listing is another family's: the table no longer returns it once
   // the circle view exists, so its title comes from the view.
   const found = new Set((listings ?? []).map((l) => l.id));
   const { data: circleTitles, error: circleTitlesError } = listingsError
     ? { data: [], error: null }
-    : await readCircleTitles(sb, listingIds.filter((id) => !found.has(id)));
+    : await readCircleListingsById<{ id: string; title: string; rent_period: string | null }>(
+      sb, listingIds.filter((id) => !found.has(id)), 'id, title, rent_period');
   if (listingsError || circleTitlesError) {
     console.error('[marketplace-orders] Listing titles read failed', listingsError ?? circleTitlesError);
     dataWarnings.push('Listing titles');
   }
-  const titleOf = new Map([...(listings ?? []), ...(circleTitles ?? [])].map((l) => [l.id, l.title]));
+  const listingRows = [...(listings ?? []), ...(circleTitles ?? [])];
+  const titleOf = new Map(listingRows.map((l) => [l.id, l.title]));
+  const rentPeriodOf = new Map(listingRows.map((l) => [l.id, l.rent_period as RentPeriod | null]));
 
   const { data: members, error: membersError } = await sb.from('family_members').select('id, display_name').eq('family_id', familyId);
   if (membersError) {
@@ -136,13 +145,18 @@ export default async function MarketplaceOrdersPage() {
     dataWarnings.push('Handoff coordination');
   }
   const handoffByOrder = new Map((handoffs ?? []).map((h) => [h.order_id, h]));
-  const handoffFor = (orderId: string): HandoffData => {
+  const handoffFor = (orderId: string, viewerRole: HandoffRole): HandoffData => {
     const h = handoffByOrder.get(orderId);
     if (!h) return null;
+    const proposerRole = h.proposer_role as HandoffRole;
     return {
-      status: h.status as HandoffStatus, proposerRole: h.proposer_role as HandoffRole,
+      status: h.status as HandoffStatus, proposerRole,
       meetAt: h.meet_at, locationLabel: h.location_label, locationKind: h.location_kind as LocationKind,
-      confirmCode: h.confirm_code, notes: h.notes, hasCalendar: !!h.calendar_event_id,
+      // The code is the confirmer's to share and the proposer's to enter. Sent
+      // to both screens (these props reach the browser), either party alone
+      // could read it and enter it, and "complete in person" proved nothing.
+      confirmCode: holdsHandoffCode(viewerRole, proposerRole) ? h.confirm_code : null,
+      notes: h.notes, hasCalendar: !!h.calendar_event_id,
     };
   };
 
@@ -165,7 +179,20 @@ export default async function MarketplaceOrdersPage() {
           {mine.map((o) => {
             const role = o.buyer_member === selfId ? 'buyer' : 'seller';
             const other = role === 'buyer' ? nameOf(o.seller_member) : nameOf(o.buyer_member);
-            const fee = o.amount_cents > 0 ? orderFeeBreakdown(o.amount_cents, serviceFeeCents) : null;
+            const loan = isLoanKind(o.kind);
+            // A rent or a borrow carries the listing's per-period RATE as its
+            // amount: no term is stored, so no charge was ever computed. It is
+            // shown as the rate it is ("$5/day"), not as what one side pays and
+            // the other receives.
+            const amountLabel = loan && o.kind === 'rent'
+              ? priceLabel('rent', o.amount_cents, rentPeriodOf.get(o.listing_id) ?? null, locale.code, t)
+              : formatCents(o.amount_cents, locale.code);
+            const fee = o.amount_cents > 0 && !loan ? orderFeeBreakdown(o.amount_cents, serviceFeeCents) : null;
+            // The review is filed under the order's family (0359 checks it).
+            // The buyer from another household is not in that family, so the
+            // database refuses every review they write; the form is not offered.
+            const reviewable = o.family_id === familyId;
+            const handoff = handoffFor(o.id, role);
             const retStatus = returnStatus({ kind: o.kind, status: o.status, endsOn: o.ends_on, returnedAt: o.returned_at }, todayKey);
             const retLabel = retStatus === 'not_applicable' ? null : returnLabel(retStatus, o.ends_on, todayKey);
             return (
@@ -178,7 +205,7 @@ export default async function MarketplaceOrdersPage() {
                     </span>
                   )}
                   <p className="min-w-0 flex-1 truncate text-sm font-medium">{titleOf.get(o.listing_id) ?? 'Listing'}</p>
-                  {o.amount_cents > 0 && <span className="text-sm font-semibold text-brand-text">{formatCents(o.amount_cents, locale.code)}</span>}
+                  {o.amount_cents > 0 && <span className="text-sm font-semibold text-brand-text">{amountLabel}</span>}
                 </div>
                 <p className="mt-1 text-xs text-muted">
                   {role === 'buyer' ? t('orders.gettingFrom', { name: other }) : t('orders.gettingFromYou', { name: other })} · {o.kind}
@@ -200,17 +227,17 @@ export default async function MarketplaceOrdersPage() {
                 )}
                 <div className="mt-2.5 flex flex-wrap items-center gap-2">
                   <OrderControls orderId={o.id} status={o.status} viewerRole={role} />
-                  {o.status === 'completed' && !reviewed.has(o.id) && <ReviewForm orderId={o.id} />}
+                  {o.status === 'completed' && reviewable && !reviewed.has(o.id) && <ReviewForm orderId={o.id} />}
                   {o.status === 'completed' && reviewed.has(o.id) && (
                     <p className="text-xs text-muted">{t('orders.youReviewedThisExchange')}</p>
                   )}
                 </div>
                 {/* Pickup coordination for physical exchanges still in flight. */}
                 {['confirmed', 'active'].includes(o.status) && o.kind !== 'donate' && (
-                  <HandoffPanel orderId={o.id} viewerRole={role === 'buyer' ? 'buyer' : 'seller'} handoff={handoffFor(o.id)} />
+                  <HandoffPanel orderId={o.id} viewerRole={role} handoff={handoff} loan={loan} />
                 )}
-                {handoffFor(o.id)?.status === 'completed' && !['confirmed', 'active'].includes(o.status) && (
-                  <HandoffPanel orderId={o.id} viewerRole={role === 'buyer' ? 'buyer' : 'seller'} handoff={handoffFor(o.id)} />
+                {handoff?.status === 'completed' && !['confirmed', 'active'].includes(o.status) && (
+                  <HandoffPanel orderId={o.id} viewerRole={role} handoff={handoff} loan={loan} />
                 )}
               </li>
             );

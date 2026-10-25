@@ -11,7 +11,7 @@ import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import {
   SAFE_SPOTS, suggestedMeetTimes, meetSummary, statusLabel, isSafePublicSpot,
-  canConfirm, canCancel, canComplete, type HandoffStatus, type HandoffRole, type LocationKind,
+  canConfirm, canCancel, canEnterHandoffCode, holdsHandoffCode, type HandoffStatus, type HandoffRole, type LocationKind,
 } from '@/lib/marketplace/handoff';
 import {
   proposeHandoffAction, confirmHandoffAction, cancelHandoffAction, completeHandoffAction,
@@ -24,8 +24,10 @@ export type HandoffData = {
   notes: string | null; hasCalendar: boolean;
 } | null;
 
-export function HandoffPanel({ orderId, viewerRole, handoff }: {
+export function HandoffPanel({ orderId, viewerRole, handoff, loan = false }: {
   orderId: string; viewerRole: HandoffRole; handoff: HandoffData;
+  /** A rent or a borrow: the code confirms the pickup and starts the loan, it does not finish the order. */
+  loan?: boolean;
 }) {
   const tr = useTranslations();
   const router = useRouter();
@@ -45,7 +47,8 @@ export function HandoffPanel({ orderId, viewerRole, handoff }: {
   }
   function confirm() {
     start(async () => {
-      const res = await confirmHandoffAction(orderId);
+      // What this screen showed: a reschedule since then is refused, not confirmed.
+      const res = await confirmHandoffAction(orderId, { meetAt: handoff?.meetAt ?? null, locationLabel: handoff?.locationLabel ?? null });
       if (!res.ok) { toastError(res.error); return; }
       success(tr('handoffPanel.confirmedAddedToYourCalendar')); router.refresh();
     });
@@ -105,11 +108,11 @@ export function HandoffPanel({ orderId, viewerRole, handoff }: {
         </div>
       )}
 
-      {/* Confirmed → show the code + complete-in-person input. */}
+      {/* Confirmed → the confirmer holds the code; the proposer enters it in person. */}
       {h.status === 'confirmed' && (
         <div className="mt-2.5 space-y-2">
           {h.hasCalendar && <p className="flex items-center gap-1 text-[11px] text-muted"><CalendarCheck className="h-3 w-3" /> {tr('handoff.addedToYourFamilyCalendar')}</p>}
-          {h.confirmCode && (
+          {h.confirmCode && holdsHandoffCode(viewerRole, h.proposerRole) && (
             <div className="flex items-center gap-2 rounded-lg border border-dashed border-brand/40 bg-brand/5 px-3 py-2">
               <KeyRound className="h-4 w-4 text-brand-text" />
               <div>
@@ -119,7 +122,14 @@ export function HandoffPanel({ orderId, viewerRole, handoff }: {
               <span className="ml-auto max-w-[9rem] text-[10px] text-muted">{tr('handoff.shareThisWhenYouMeetTo')}</span>
             </div>
           )}
-          {canComplete(h.status) && <CompleteForm orderId={orderId} onDone={() => { success(tr('handoffPanel.handedOffOrderComplete')); router.refresh(); }} onError={toastError} />}
+          {canEnterHandoffCode(h.status, viewerRole, h.proposerRole) && (
+            <CompleteForm
+              orderId={orderId}
+              submitLabel={loan ? tr('handoff.confirmPickup') : tr('handoff.complete')}
+              onDone={() => { success(loan ? tr('handoffPanel.pickedUpLoanStarted') : tr('handoffPanel.handedOffOrderComplete')); router.refresh(); }}
+              onError={toastError}
+            />
+          )}
           {canCancel(h.status) && <button onClick={cancel} disabled={pending} className="text-[11px] text-muted transition hover:text-rose-400">{tr('handoff.cancelPickup')}</button>}
         </div>
       )}
@@ -194,7 +204,7 @@ function ProposeForm({ pending, onSubmit, onCancel }: {
   );
 }
 
-function CompleteForm({ orderId, onDone, onError }: { orderId: string; onDone: () => void; onError: (m: string) => void }) {
+function CompleteForm({ orderId, submitLabel, onDone, onError }: { orderId: string; submitLabel: string; onDone: () => void; onError: (m: string) => void }) {
   const tr = useTranslations();
   const [code, setCode] = useState('');
   const [pending, start] = useTransition();
@@ -212,7 +222,7 @@ function CompleteForm({ orderId, onDone, onError }: { orderId: string; onDone: (
         className="h-9 flex-1 rounded-lg border border-border bg-bg px-3 font-mono text-sm uppercase tracking-widest outline-none focus:border-brand" />
       <button onClick={submit} disabled={pending}
         className="inline-flex h-9 items-center gap-1 rounded-lg bg-emerald-500/15 px-3 text-xs font-bold text-emerald-600 transition hover:bg-emerald-500/25 disabled:opacity-50 dark:text-emerald-400">
-        {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} {tr('handoff.complete')}
+        {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} {submitLabel}
       </button>
     </div>
   );

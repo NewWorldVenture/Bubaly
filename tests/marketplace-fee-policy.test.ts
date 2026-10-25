@@ -46,6 +46,22 @@ describe('marketplace fee policy', () => {
       expect(b.lines.find((l) => l.key === 'total')?.amountCents).toBe(5090);
     });
 
+    // N20: no card is charged for a marketplace order, so there is no
+    // processing fee to net out of the service fee. With the engine's default
+    // 2.9% + 30¢ allocated, a $20.00 order with the 90¢ fee told the buyer
+    // "$0.90 service fee" and the seller "Bubaly takes $0.00".
+    it('what the buyer pays less what the seller receives is what Bubaly takes', () => {
+      for (const amount of [100, 2000, 5000, 123_456]) {
+        for (const fee of [0, 90, 250]) {
+          const b = orderFeeBreakdown(amount, fee);
+          expect(b.stripeFeeCents, `${amount}/${fee}`).toBe(0);
+          expect(b.buyerTotalCents - b.sellerNetCents, `${amount}/${fee}`).toBe(b.platformReceivesCents);
+          expect(b.platformReceivesCents, `${amount}/${fee}`).toBe(fee);
+        }
+      }
+      expect(orderFeeBreakdown(2000, 90)).toMatchObject({ buyerTotalCents: 2090, sellerNetCents: 2000, platformReceivesCents: 90 });
+    });
+
     it('clamps a non-positive amount to a zero breakdown', () => {
       const b = orderFeeBreakdown(0, 0);
       expect(b.buyerTotalCents).toBe(0);

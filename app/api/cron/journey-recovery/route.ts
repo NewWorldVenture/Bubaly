@@ -57,13 +57,21 @@ export async function GET(req: NextRequest) {
       const email = profile?.email ?? null;
       if (!email) continue;
       try {
-        await fireAutomationEvent(supabase, {
+        // The result is READ: a failed send (`failures`) or a refused read or
+        // reservation (`errors`) is a nudge that did not go out, not a fired
+        // one. The subject stays inside its window and is re-swept next run.
+        const outcome = await fireAutomationEvent(supabase, {
           trigger: 'onboarding_abandoned',
           email,
           subjectKey: eventSubjectKey('onboarding_abandoned', [r.user_id]),
           context: { userId: r.user_id },
         });
-        onboardingFired += 1;
+        if (outcome.failures > 0 || outcome.errors > 0) {
+          failed++;
+          console.error(`onboarding_abandoned nudge did not go out for ${r.user_id}:`, outcome);
+        } else {
+          onboardingFired += 1;
+        }
       } catch (e) { failed++; console.error(`onboarding_abandoned fire failed for ${r.user_id}:`, e); }
     }
   } catch (e) { failed++; console.error('journey-recovery: onboarding sweep failed', e); }
@@ -84,13 +92,18 @@ export async function GET(req: NextRequest) {
     const stalled = selectAbandonedDemoLeads((data ?? []) as DemoLead[], now);
     for (const l of stalled) {
       try {
-        await fireAutomationEvent(supabase, {
+        const outcome = await fireAutomationEvent(supabase, {
           trigger: 'demo_abandoned',
           email: l.email!,
           subjectKey: eventSubjectKey('demo_abandoned', [l.email]),
           context: { source: 'demo' },
         });
-        demoFired += 1;
+        if (outcome.failures > 0 || outcome.errors > 0) {
+          failed++;
+          console.error(`demo_abandoned nudge did not go out for ${l.email}:`, outcome);
+        } else {
+          demoFired += 1;
+        }
       } catch (e) { failed++; console.error(`demo_abandoned fire failed for ${l.email}:`, e); }
     }
   } catch (e) { failed++; console.error('journey-recovery: demo sweep failed', e); }

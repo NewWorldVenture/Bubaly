@@ -45,6 +45,12 @@ type ConsentBody = {
   gpc?: boolean;
 };
 
+// A visitor's own consent state is a per-visitor answer, like /api/blog/like
+// and /api/blog/save's: never cacheable by anything between this server and
+// the browser. Next sends a dynamic route handler's response as-is, with no
+// Cache-Control of its own, so the header is stated here (audit U1).
+const NO_STORE = { 'Cache-Control': 'no-store' } as const;
+
 export async function POST(req: NextRequest) {
   const t = await getTranslations();
   const limited = await enforceRequestRateLimit(createServiceClient(), `consent:post:${clientIp(req.headers)}`, { limit: 30, windowMs: 60_000 });
@@ -85,10 +91,10 @@ export async function POST(req: NextRequest) {
   try {
     await recordConsentEvents(supabase, { anonymousId, decisions, source, gpc, userAgent });
     const state = await getConsentState(supabase, anonymousId, { gpc });
-    return NextResponse.json({ ok: true, state });
+    return NextResponse.json({ ok: true, state }, { headers: NO_STORE });
   } catch (error) {
     console.error('[mkt-consent] consent persistence failed', error);
-    return NextResponse.json({ error: t('consent.consentIsTemporarilyUnavailablePlease') }, { status: 503 });
+    return NextResponse.json({ error: t('consent.consentIsTemporarilyUnavailablePlease') }, { status: 503, headers: NO_STORE });
   }
 }
 
@@ -113,9 +119,9 @@ export async function GET(req: NextRequest) {
   const supabase = createServiceClient();
   try {
     const state = await getConsentState(supabase, anonymousId, { gpc });
-    return NextResponse.json({ ok: true, state });
+    return NextResponse.json({ ok: true, state }, { headers: NO_STORE });
   } catch (error) {
     console.error('[mkt-consent] consent read failed', error);
-    return NextResponse.json({ error: t('consent.consentIsTemporarilyUnavailablePlease') }, { status: 503 });
+    return NextResponse.json({ error: t('consent.consentIsTemporarilyUnavailablePlease') }, { status: 503, headers: NO_STORE });
   }
 }

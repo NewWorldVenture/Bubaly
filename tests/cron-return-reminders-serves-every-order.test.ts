@@ -32,6 +32,9 @@ vi.mock('@/lib/services/scope', async (importOriginal) => ({
   systemScopeForFamily: async (_db: unknown, familyId: string) => ({ familyId, tz: 'UTC' }),
 }));
 vi.mock('@/lib/services/notifications', () => ({
+  // The route words each notice for the day it will be read (quiet hours can
+  // hold it to the next morning); nothing is held in this fixture.
+  deliveryTimeFor: async () => ({ sendAt: new Date().toISOString(), deferred: false }),
   notify: async (scope: { familyId: string }, n: { title: string; relatedId: string | null }) => {
     state.notified.push({ familyId: scope.familyId, relatedId: n.relatedId, title: n.title });
     return { ok: true, data: { created: 1 } };
@@ -47,6 +50,7 @@ vi.mock('@/lib/supabase/server', () => ({
       let limit: number | null = null;
       let range: { from: number; to: number } | null = null;
       let patch: Row | null = null;
+      let targetId: unknown = null;
       const rowsFor = () => {
         if (table !== 'marketplace_orders') {
           return [{ id: 'listing-1', title: 'The ladder' }];
@@ -60,15 +64,20 @@ vi.mock('@/lib/supabase/server', () => ({
         select: () => b,
         in: () => b,
         not: () => b,
+        is: () => b,
         order: (c: string) => { if (table === 'marketplace_orders') state.orderedBy.push(c); return b; },
         limit: (n: number) => { limit = n; return b; },
         range: (from: number, to: number) => { range = { from, to }; return b; },
         update: (p: Row) => { patch = p; return b; },
-        eq: (_c: string, v: unknown) => {
-          state.stamps.push({ id: v, ...(patch ?? {}) });
-          return Promise.resolve({ error: null });
+        eq: (c: string, v: unknown) => { if (c === 'id') targetId = v; return b; },
+        then: (resolve: (v: unknown) => void) => {
+          // The stamp is a claim confirmed by its rows (`.update(...).eq('id').is(column, null).select('id')`).
+          if (patch) {
+            state.stamps.push({ id: targetId, ...patch });
+            return resolve({ data: [{ id: targetId }], error: null });
+          }
+          return resolve({ data: rowsFor(), error: null });
         },
-        then: (resolve: (v: unknown) => void) => resolve({ data: rowsFor(), error: null }),
       });
       return b;
     },
@@ -108,10 +117,12 @@ describe('return reminders reach every due order', () => {
     const res = await GET(req());
     const body = await res.json();
 
+    // The due-soon nudge carries its own identity (`<order>:due`), apart from
+    // the overdue alert's, so neither suppresses the other in notify()'s guard.
     expect(
       state.notified.map((n) => n.relatedId),
       'the order due today was never looked at, and the run reported itself clean',
-    ).toEqual(['order-1050']);
+    ).toEqual(['order-1050:due']);
     expect(body).toMatchObject({ ok: true, reminded: 1, overdue: 0, failed: 0 });
     expect(res.status).toBe(200);
     // Only the order that was told gets its dedupe stamp.

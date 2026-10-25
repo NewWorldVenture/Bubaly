@@ -3,9 +3,12 @@ import Link from 'next/link';
 import { Gift, Trophy, Coins, Settings2, Users, Sparkles } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAllAsQuery, readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { computeTier, TIER_LABELS, DEFAULT_LOYALTY, type Tier } from '@/lib/marketing/loyalty';
 import { RewardRow, AddReward, type Reward } from './reward-editor';
 import { RedemptionRow, type Redemption } from './redemption-row';
@@ -18,19 +21,61 @@ export const dynamic = 'force-dynamic';
 
 const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring';
 const TIER_TONE: Record<Tier, 'neutral' | 'brand' | 'warning'> = { bronze: 'neutral', silver: 'brand', gold: 'warning' };
+/** Rows a summed read may page through before it is reported as a prefix (one round trip per 1,000). */
+const SUM_ROW_CEILING = 25_000;
+/** The award form's family picker offers at most this many families, and says so when there are more. */
+const FAMILY_OPTION_CEILING = 25_000;
 
 export default async function LoyaltyPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
 
-  const [settingsResult, rewardsResult, accountsResult, redemptionsResult, familiesResult] = await settleAll([
+  // The lists below are the top 100 members and the newest 100 redemptions;
+  // the tiles above them are the whole program. Members and Pending
+  // redemptions are exact counts, and Points outstanding pages every account
+  // on the id: counted from the lists, they stopped at 100 apiece, and every
+  // balance below the hundredth was left out of what the program owes.
+  const [
+    settingsResult, rewardsResult, accountsResult, redemptionsResult, familiesResult,
+    memberCountResult, pendingCountResult, activeRewardCountResult, rewardCountResult, redemptionCountResult, balancesResult,
+  ] = await settleAll([
     supabase.from('loyalty_settings').select('*').eq('singleton', true).maybeSingle(),
     supabase.from('loyalty_rewards').select('*').is('deleted_at', null).order('sort', { ascending: true }).limit(200),
     supabase.from('loyalty_accounts').select('*').order('lifetime_points', { ascending: false }).limit(100),
     supabase.from('loyalty_redemptions').select('*').order('created_at', { ascending: false }).limit(100),
-    supabase.from('families').select('id, name').limit(1000),
+    // The award form's family picker. The rows above are labelled from their
+    // own families, read below, not from this list. It was `.limit(1000)` with
+    // no order: past a thousand families it offered an arbitrary thousand and
+    // said nothing. It offers the first FAMILY_OPTION_CEILING by id now, and
+    // says so when there are more (an options list, read with failOnMax: false).
+    readAllAsQuery((from, to) =>
+      supabase.from('families').select('id, name').order('id').range(from, to), { max: FAMILY_OPTION_CEILING, failOnMax: false }),
+    supabase.from('loyalty_accounts').select('id', { count: 'exact', head: true }),
+    supabase.from('loyalty_redemptions').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    // Active rewards counted the catalog's list, the first 200 (coverage sweep
+    // round 9, class B); it is a head:true count now, as are every reward, so
+    // the catalog can say when it lists part of them.
+    supabase.from('loyalty_rewards').select('id', { count: 'exact', head: true }).is('deleted_at', null).eq('is_active', true),
+    supabase.from('loyalty_rewards').select('id', { count: 'exact', head: true }).is('deleted_at', null),
+    supabase.from('loyalty_redemptions').select('id', { count: 'exact', head: true }),
+    // Summed while families earn and spend, so paged on the id: an offset read
+    // counts a balance twice when an account is opened between two pages.
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('loyalty_accounts').select('id, points_balance');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
   ]);
-  const readError = settingsResult.error ?? rewardsResult.error ?? accountsResult.error ?? redemptionsResult.error ?? familiesResult.error;
+  // Points outstanding past its ceiling costs that one tile. Before the tiles
+  // were whole-program figures this page always rendered, and the rewards,
+  // the redemption queue, the award form and the program settings are work an
+  // operator still has to do; the tile says it is not shown instead of showing
+  // part of the balance. Any other failure is still the read-error state.
+  const balancesCeiling = 'truncated' in balancesResult && balancesResult.truncated;
+  const readError = settingsResult.error ?? rewardsResult.error ?? accountsResult.error ?? redemptionsResult.error ?? familiesResult.error
+    ?? memberCountResult.error ?? pendingCountResult.error ?? activeRewardCountResult.error ?? rewardCountResult.error ?? redemptionCountResult.error
+    ?? (balancesCeiling ? null : balancesResult.error);
+  if (balancesCeiling) console.warn('[admin-marketing-loyalty] the balance read reached its ceiling; Points outstanding is not shown');
   if (readError) {
     console.error('[admin-marketing-loyalty] loyalty read failed', readError);
     return <AdminLoyaltyReadError />;
@@ -45,10 +90,21 @@ export default async function LoyaltyPage() {
   const rewardRows = (rewards ?? []) as Reward[];
   const accountRows = accounts ?? [];
   const redemptionRows = redemptions ?? [];
-  const nameById = new Map((families ?? []).map((f) => [f.id, f.name]));
 
-  const totalOutstanding = accountRows.reduce((sum, a) => sum + a.points_balance, 0);
-  const pendingCount = redemptionRows.filter((r) => r.status === 'pending').length;
+  // Name each listed row from ITS family. A thousand families from an
+  // unordered read named whichever thousand came back, and every member or
+  // redemption from a family past them read "Unknown family".
+  const listedFamilyIds = [...new Set([...accountRows.map((a) => a.family_id), ...redemptionRows.map((r) => r.family_id)])];
+  const labelsResult = await readInChunks(listedFamilyIds, (chunk) => supabase.from('families').select('id, name').in('id', chunk));
+  if (labelsResult.error) {
+    console.error('[admin-marketing-loyalty] loyalty read failed', labelsResult.error);
+    return <AdminLoyaltyReadError />;
+  }
+  const nameById = new Map(labelsResult.data.map((f) => [f.id, f.name]));
+
+  const totalOutstanding = (balancesResult.data ?? []).reduce((sum, a) => sum + a.points_balance, 0);
+  const memberCount = memberCountResult.count ?? 0;
+  const pendingCount = pendingCountResult.count ?? 0;
   const thresholds = { silverAt: set?.tier_silver_at ?? DEFAULT_LOYALTY.tier_silver_at, goldAt: set?.tier_gold_at ?? DEFAULT_LOYALTY.tier_gold_at };
 
   const redemptionView: Redemption[] = redemptionRows.map((r) => ({
@@ -59,6 +115,14 @@ export default async function LoyaltyPage() {
 
   return (
     <div className="space-y-5">
+      <PartialReadBanner
+        title={t('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
+        failures={balancesCeiling ? [t('adminMarketingLoyalty.pointsOutstanding')] : []}
+      />
+      <PartialReadBanner
+        title={t('adminCeiling.offeredInPart', { n: FAMILY_OPTION_CEILING.toLocaleString() })}
+        failures={'truncated' in familiesResult && familiesResult.truncated ? [t('adminMarketingLoyalty.awardFamilyPicker')] : []}
+      />
       <div className="flex items-center gap-2">
         <Trophy className="h-5 w-5 text-brand-text" />
         <div>
@@ -70,15 +134,18 @@ export default async function LoyaltyPage() {
 
       {/* Stats */}
       <div className="grid gap-3 sm:grid-cols-4">
-        <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.members')}</p><p className="mt-1 text-3xl font-bold leading-none">{accountRows.length}</p></Card>
-        <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.pointsOutstanding')}</p><p className="mt-1 text-3xl font-bold leading-none">{totalOutstanding.toLocaleString()}</p></Card>
-        <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.activeRewards')}</p><p className="mt-1 text-3xl font-bold leading-none">{rewardRows.filter((r) => r.is_active).length}</p></Card>
+        <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.members')}</p><p className="mt-1 text-3xl font-bold leading-none">{memberCount}</p></Card>
+        <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.pointsOutstanding')}</p><p className="mt-1 text-3xl font-bold leading-none">{balancesCeiling ? t('strategyMetrics.unavailable') : totalOutstanding.toLocaleString()}</p></Card>
+        <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.activeRewards')}</p><p className="mt-1 text-3xl font-bold leading-none">{activeRewardCountResult.count ?? 0}</p></Card>
         <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.pendingRedemptions')}</p><p className="mt-1 text-3xl font-bold leading-none">{pendingCount}</p></Card>
       </div>
 
       {/* Rewards catalog */}
       <Card>
         <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Gift className="h-4 w-4 text-brand-text" /> {t('adminMarketingLoyalty.rewardsCatalog')}</h3>
+        {(rewardCountResult.count ?? 0) > rewardRows.length && (
+          <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsPart', { shown: rewardRows.length.toLocaleString(), total: (rewardCountResult.count ?? 0).toLocaleString() })}</p>
+        )}
         {rewardRows.length === 0 ? (
           <EmptyState icon={Gift} title={t('adminMarketingLoyalty.noRewardsYet')} description={t('loyalty.addYourFirstRewardSo')} />
         ) : (
@@ -90,6 +157,9 @@ export default async function LoyaltyPage() {
       {/* Redemptions queue */}
       <Card>
         <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> {t('adminMarketingLoyalty.redemptions')} {pendingCount > 0 && <Badge tone="warning">{pendingCount} pending</Badge>}</h3>
+        {(redemptionCountResult.count ?? 0) > redemptionView.length && (
+          <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsTheNewest', { shown: redemptionView.length.toLocaleString(), total: (redemptionCountResult.count ?? 0).toLocaleString() })}</p>
+        )}
         {redemptionView.length === 0 ? (
           <EmptyState icon={Sparkles} title={t('adminMarketingLoyalty.noRedemptionsYet')} description={t('loyalty.redemptionsFromFamiliesWillAppear')} />
         ) : (
@@ -100,6 +170,9 @@ export default async function LoyaltyPage() {
       {/* Members + manual award */}
       <Card>
         <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Users className="h-4 w-4 text-brand-text" /> {t('adminMarketingLoyalty.members')}</h3>
+        {memberCount > accountRows.length && (
+          <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsPart', { shown: accountRows.length.toLocaleString(), total: memberCount.toLocaleString() })}</p>
+        )}
         {accountRows.length === 0 ? (
           <EmptyState icon={Users} title={t('adminMarketingLoyalty.noMembersYet')} description={t('loyalty.accountsAreCreatedAutomaticallyWhen')} />
         ) : (

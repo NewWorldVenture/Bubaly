@@ -46,3 +46,19 @@ export function rotateForRun<T>(items: readonly T[], runIndex: number): T[] {
   const offset = rotationOffset(items.length, runIndex);
   return [...items.slice(offset), ...items.slice(0, offset)];
 }
+
+/**
+ * `items` rotated for one run of a cron that fires on several fixed slots a day
+ * (lib/server/cron-slot.ts lastDailySlot names the run). The DAY picks the start,
+ * so the one slot that is guaranteed to fire (vercel.json's) walks the whole
+ * sequence above by itself; slot `k` of `slotsPerDay` starts k/slotsPerDay of the
+ * ring further on, so a second run of the same day serves a new slice instead of
+ * the first run's prefix again. Numbering runs by the half day instead would hand
+ * the guaranteed run only even indices, and vdc of an even index is below 0.5: its
+ * starts would never leave the first half of the ring.
+ */
+export function rotateForSlot<T>(items: readonly T[], run: { day: number; slot: number }, slotsPerDay: number): T[] {
+  const base = rotateForRun(items, run.day);
+  const shift = slotsPerDay > 1 ? Math.floor((base.length * (run.slot % slotsPerDay)) / slotsPerDay) : 0;
+  return [...base.slice(shift), ...base.slice(0, shift)];
+}

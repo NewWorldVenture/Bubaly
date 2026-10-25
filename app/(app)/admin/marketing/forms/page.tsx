@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ClipboardList, ExternalLink } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
-import { settleAll } from '@/lib/supabase/settle';
+import { settle, settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { createForm, setFormStatus } from '../actions';
@@ -17,19 +17,24 @@ const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3
 export default async function FormsPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const [formsResult, submissionsResult] = await settleAll([
+  const formsResult = await settle(
     supabase.from('marketing_forms').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
-    supabase.from('marketing_form_submissions').select('form_id'),
-  ]);
+  );
+  const { data: forms } = formsResult;
+  // One exact `head: true` count per form. Reading every submission's form_id
+  // and tallying in memory was answered with at most `db-max-rows` (1,000) and
+  // no error, so once public form posts passed a thousand the per-form counts
+  // stopped growing — and a form whose submissions all sat outside that prefix
+  // read 0. A count is not rows; it is not capped.
+  const countResults = await settleAll((forms ?? []).map((f) =>
+    supabase.from('marketing_form_submissions').select('id', { count: 'exact', head: true }).eq('form_id', f.id)));
+  const submissionsResult = { error: countResults.find((r) => r.error)?.error ?? null };
   const readError = formsResult.error ?? submissionsResult.error;
   if (readError) {
     console.error('[admin-marketing-forms] form read failed', readError);
     return <AdminFormsReadError />;
   }
-  const { data: forms } = formsResult;
-  const { data: subs } = submissionsResult;
-  const countByForm = new Map<string, number>();
-  for (const s of subs ?? []) countByForm.set(s.form_id, (countByForm.get(s.form_id) ?? 0) + 1);
+  const countByForm = new Map<string, number>((forms ?? []).map((f, i) => [f.id, countResults[i].count ?? 0]));
 
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">

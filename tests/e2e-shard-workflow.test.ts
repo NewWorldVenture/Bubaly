@@ -38,7 +38,7 @@ function requireShardGraph(candidate: Workflow) {
   expect(job.if).toBeUndefined();
   expect(job['continue-on-error']).toBeUndefined();
   expect(job.name).toBe('E2E shard (${{ matrix.shard }}/${{ matrix.shardTotal }})');
-  expect(job.strategy).toEqual({ 'fail-fast': false, matrix: { shard: [1, 2, 3, 4], shardTotal: [4] } });
+  expect(job.strategy).toEqual({ 'fail-fast': false, matrix: { shard: [1, 2, 3, 4, 5, 6, 7, 8], shardTotal: [8] } });
   for (const entry of job.steps) expect(entry['continue-on-error']).toBeUndefined();
 
   const smoke = step(job, smokeName);
@@ -123,8 +123,8 @@ function aggregateResults(results: unknown, candidate = graph()) {
   new Function('process', source.slice(prefix.length, -suffix.length))({ env: { CI_DEPENDENCIES: JSON.stringify(results) } });
 }
 
-describe('four complete E2E shards preserve each owned qualification and cleanup', () => {
-  it('the actual YAML preserves all four shards, required checks and per-runner ownership phases', () => {
+describe('eight complete E2E shards preserve each owned qualification and cleanup', () => {
+  it('the actual YAML preserves all eight shards, required checks and per-runner ownership phases', () => {
     requireShardGraph(graph());
   });
   it('the actual aggregate accepts only a successful E2E matrix including cleanup', () => {
@@ -142,12 +142,12 @@ describe('four complete E2E shards preserve each owned qualification and cleanup
     expect(() => aggregateResults(results)).toThrow();
   });
   it.each([
-    ['missing shard', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.shard = [1, 2, 3]; }],
-    ['duplicate shard', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.shard = [1, 2, 3, 3]; }],
-    ['invalid shard', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.shard = [0, 1, 2, 3]; }],
-    ['wrong total', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.shardTotal = [8]; }],
-    ['excluded shard', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.exclude = [{ shard: 4 }]; }],
-    ['extra shard', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.include = [{ shard: 5 }]; }],
+    ['missing shard', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.shard = [1, 2, 3, 4, 5, 6, 7]; }],
+    ['duplicate shard', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.shard = [1, 2, 3, 4, 5, 6, 7, 7]; }],
+    ['invalid shard', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.shard = [0, 1, 2, 3, 4, 5, 6, 7]; }],
+    ['wrong total', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.shardTotal = [4]; }],
+    ['excluded shard', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.exclude = [{ shard: 8 }]; }],
+    ['extra shard', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.include = [{ shard: 9 }]; }],
     ['fail-fast', (copy: Workflow) => { copy.jobs.e2e.strategy!['fail-fast'] = true; }],
     ['serialized shards', (copy: Workflow) => { copy.jobs.e2e.strategy!['max-parallel'] = 1; }],
     ['filtered projects', (copy: Workflow) => { step(copy.jobs.e2e, smokeName).run += ' --project=chromium'; }],
@@ -158,7 +158,7 @@ describe('four complete E2E shards preserve each owned qualification and cleanup
     ['lost Auth gate', (copy: Workflow) => { copy.jobs.e2e.steps = copy.jobs.e2e.steps.filter((entry) => entry.name !== authName); }],
     ['lost SQL gate', (copy: Workflow) => { copy.jobs.e2e.steps = copy.jobs.e2e.steps.filter((entry) => entry.name !== 'Verify home brief kind uniqueness in disposable PostgreSQL'); }],
     ['lost modern bill', (copy: Workflow) => { copy.jobs.e2e.steps = copy.jobs.e2e.steps.filter((entry) => entry.name !== modernName); }],
-    ['modern bill accidentally sharded', (copy: Workflow) => { step(copy.jobs.e2e, modernName).run += ' --shard=1/4'; }],
+    ['modern bill accidentally sharded', (copy: Workflow) => { step(copy.jobs.e2e, modernName).run += ' --shard=1/8'; }],
     ['cleanup only on success', (copy: Workflow) => { step(copy.jobs.e2e, cleanupName).if = 'success()'; }],
     ['cleanup failure ignored', (copy: Workflow) => { step(copy.jobs.e2e, cleanupName)['continue-on-error'] = true; }],
     ['stack job identity changed', (copy: Workflow) => { copy.jobs.other = copy.jobs.e2e; delete copy.jobs.e2e; }],
@@ -181,10 +181,10 @@ describe('four complete E2E shards preserve each owned qualification and cleanup
     expect(wrapper.split(forwarding)).toHaveLength(2);
     const calls: { module: string; args: string[] }[] = [];
     const invoke = new Function('process', 'run', `let testStatus; ${forwarding} return testStatus;`);
-    expect(invoke({ argv: ['node', 'scripts/run-e2e.mjs', '--shard=3/4'] }, (module: string, args: string[]) => {
+    expect(invoke({ argv: ['node', 'scripts/run-e2e.mjs', '--shard=3/8'] }, (module: string, args: string[]) => {
       calls.push({ module, args }); return 0;
     })).toBe(0);
-    expect(calls).toEqual([{ module: 'node_modules/@playwright/test/cli.js', args: ['test', '--shard=3/4'] }]);
+    expect(calls).toEqual([{ module: 'node_modules/@playwright/test/cli.js', args: ['test', '--shard=3/8'] }]);
     for (const file of ['scripts/ci-recurring-bill-anchor-fixture.mjs', 'scripts/ci-home-brief-kind-runtime.mjs', 'tests/messages-authenticated-rpc-race.test.ts']) {
       expect(readFileSync(file, 'utf8')).toContain("GITHUB_JOB");
       expect(readFileSync(file, 'utf8')).toContain("'e2e'");

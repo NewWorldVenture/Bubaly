@@ -120,6 +120,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   // seven seconds.
   const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
 
+  // Only unmount owns this cleanup. Cleaning up on each list change would
+  // restart clocks for notices that are already visible.
+  useEffect(() => {
+    const owned = timers.current;
+    return () => {
+      for (const pending of owned.values()) clearTimeout(pending);
+      owned.clear();
+    };
+  }, []);
+
   const dismiss = useCallback((id: number) => {
     const pending = timers.current.get(id);
     if (pending) clearTimeout(pending);
@@ -203,18 +213,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     const id = ++counter.current;
     hapticFor(tone);
     setToasts((t) => [...t, { id, tone, message, action }]);
-    if (!queueRef.current) {
-      // Actionable toasts linger a little longer so there's time to tap them.
-      schedule(id, action ? LIFETIME.action : LIFETIME.plain);
-      return;
-    }
-    // Queue mode: the new notice is the one on screen, so it alone counts down;
-    // the one it displaces gets a full window again when it shows. Not while
-    // the stack is held: a notice that arrives under a pointer or focus waits.
-    for (const pending of timers.current.values()) clearTimeout(pending);
-    timers.current.clear();
-    if (!paused.current && !expandedRef.current) schedule(id, action ? LIFETIME.action : LIFETIME.plain);
-  }, [schedule]);
+    // Enqueueing can precede a concurrent commit by an arbitrary amount. The
+    // visibility effect below starts this notice's window only after it is on
+    // screen, and keeps the previous visible notice's clock until that commit.
+  }, []);
 
   // Keep the clocks matching what is on screen when the mode, the list or the
   // "+N" state changes: in queue mode the newest notice alone, unless held or

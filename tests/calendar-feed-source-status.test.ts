@@ -88,19 +88,20 @@ describe('source archive status and native counts remain distinct through actual
   it('cron reports archived UID groups separately from zero native writes', async () => {
     const response = await GET(new NextRequest('https://synthetic.invalid/api/cron/calendar-feeds'));
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ ok: true, feeds: 1, synced: 1, imported: 0, failed: 0, busy: 0, sourceGroups: 2 });
+    expect(await response.json()).toEqual({ ok: true, feeds: 1, synced: 1, imported: 0, failed: 0, busy: 0, unreached: 0, sourceGroups: 2 });
   });
 
   it('cron keeps review-held archives counted without reporting successful display readiness', async () => {
     h.sync.mockResolvedValue({ ok: false, error: 'Review held', revisionReview: true, sourceGroups: 2 });
     const response = await GET(new NextRequest('https://synthetic.invalid/api/cron/calendar-feeds'));
     expect(response.status).toBe(502);
-    expect(await response.json()).toEqual({ ok: false, feeds: 1, synced: 0, imported: 0, failed: 1, busy: 0, sourceGroups: 2 });
+    expect(await response.json()).toEqual({ ok: false, feeds: 1, synced: 0, imported: 0, failed: 1, busy: 0, unreached: 0, sourceGroups: 2 });
   });
 
   it('native cron response shape remains unchanged', async () => {
     h.sync.mockResolvedValue({ ok: true, imported: 7 });
     const response = await GET(new NextRequest('https://synthetic.invalid/api/cron/calendar-feeds'));
-    expect(await response.json()).toEqual({ ok: true, feeds: 1, synced: 1, imported: 7, failed: 0, busy: 0 });
+    // `unreached` counts the feeds a run's budget cut off: a failed run when non-zero.
+    expect(await response.json()).toEqual({ ok: true, feeds: 1, synced: 1, imported: 7, failed: 0, busy: 0, unreached: 0 });
   });
 });

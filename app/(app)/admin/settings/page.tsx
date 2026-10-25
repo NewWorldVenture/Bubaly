@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { CheckCircle2, XCircle, Server, Plug, ShieldCheck, Database, UsersRound, Sparkles, CreditCard, Share2 } from 'lucide-react';
+import { CheckCircle2, CircleAlert, XCircle, Server, Plug, ShieldCheck, Database, UsersRound, Sparkles, CreditCard, Share2 } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getAIConfigView } from '@/lib/ai/settings';
 import { Card } from '@/components/ui/card';
@@ -37,17 +37,19 @@ export default async function AdminSettingsPage() {
 
   // Resolve the *live* OpenAI status (admin-saved config in app_settings → env
   // fallback), so the row reflects the model and key source the app actually
-  // uses at runtime rather than a bare env presence check. Best-effort: a read
-  // failure degrades to the env signal instead of failing the whole page.
-  const ai = await getAIConfigView(supabase).catch(() => null);
-  const openaiReady = ai ? ai.openaiKeySet : !!process.env.OPENAI_API_KEY;
-  const openaiModel = ai?.model ?? process.env.AI_MODEL ?? 'default model';
-  const openaiFromEnv = ai?.openaiFromEnv ?? true;
-  const openaiDetail = openaiReady
-    ? `${openaiModel} · key from ${openaiFromEnv ? 'env (OPENAI_API_KEY)' : 'admin console'}`
-    : 'OPENAI_API_KEY not set';
+  // uses at runtime rather than a bare env presence check. A failed read is
+  // Unavailable, not the env signal: the stored key and model are what the app
+  // uses, and an unread one is not "not set" (nor "set", from the env alone).
+  const { view: ai, error: aiError } = await getAIConfigView(supabase);
+  if (aiError) console.error('[admin-settings] AI config read failed', aiError);
+  const unavailable = t('strategyMetrics.unavailable');
+  const openaiReady: boolean | null = ai ? ai.openaiKeySet : null;
+  const openaiDetail = !ai ? '—'
+    : ai.openaiKeySet
+      ? `${ai.model ?? 'default model'} · key from ${ai.openaiFromEnv ? 'env (OPENAI_API_KEY)' : 'admin console'}`
+      : 'OPENAI_API_KEY not set';
 
-  const providers = [
+  const providers: { name: string; ready: boolean | null; detail: string }[] = [
     { name: 'Supabase (database, auth, storage)', ready: !!process.env.NEXT_PUBLIC_SUPABASE_URL, detail: host(process.env.NEXT_PUBLIC_SUPABASE_URL) },
     { name: 'Stripe (payments)', ready: !!process.env.STRIPE_SECRET_KEY, detail: 'STRIPE_SECRET_KEY' },
     { name: 'Resend (email)', ready: !!process.env.RESEND_API_KEY, detail: 'RESEND_API_KEY' },
@@ -64,7 +66,7 @@ export default async function AdminSettingsPage() {
     { label: 'Supabase project', value: host(process.env.NEXT_PUBLIC_SUPABASE_URL) },
     { label: 'App URL', value: process.env.NEXT_PUBLIC_APP_URL ?? '—' },
     { label: 'AI provider', value: 'OpenAI' },
-    { label: 'AI model', value: ai?.model ?? process.env.AI_MODEL ?? 'default' },
+    { label: 'AI model', value: ai ? ai.model ?? 'default' : unavailable },
     { label: 'Super administrators', value: String(superAdmins ?? 0) },
   ];
 
@@ -95,9 +97,11 @@ export default async function AdminSettingsPage() {
                   <p className="truncate">{p.name}</p>
                   <p className="truncate text-xs text-muted">{p.detail}</p>
                 </div>
-                {p.ready
-                  ? <span className="inline-flex shrink-0 items-center gap-1 text-success"><CheckCircle2 className="h-4 w-4" />{' '}{t('settings.connected')}</span>
-                  : <span className="inline-flex shrink-0 items-center gap-1 text-muted"><XCircle className="h-4 w-4" />{' '}{t('settings.notSet')}</span>}
+                {p.ready === null
+                  ? <span className="inline-flex shrink-0 items-center gap-1 text-muted"><CircleAlert className="h-4 w-4" />{' '}{unavailable}</span>
+                  : p.ready
+                    ? <span className="inline-flex shrink-0 items-center gap-1 text-success"><CheckCircle2 className="h-4 w-4" />{' '}{t('settings.connected')}</span>
+                    : <span className="inline-flex shrink-0 items-center gap-1 text-muted"><XCircle className="h-4 w-4" />{' '}{t('settings.notSet')}</span>}
               </li>
             ))}
           </ul>

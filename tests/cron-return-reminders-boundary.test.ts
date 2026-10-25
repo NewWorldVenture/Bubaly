@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { at, bodyOf } from './helpers/source-order';
 
 const returnReminders = readFileSync('app/api/cron/return-reminders/route.ts', 'utf8');
 const modelRefresh = readFileSync('app/api/cron/model-refresh/route.ts', 'utf8');
@@ -8,16 +9,33 @@ describe('scheduled recovery persistence boundaries', () => {
   it('return reminders fail after listing, notification, or dedupe-stamp failures', () => {
     expect(returnReminders).toContain('listingError');
     // A notification that did not go out must COUNT as a failure, so the cron
-    // reports 502 instead of a clean run — and it must not stamp
-    // `overdue_notified_at` / `due_reminder_sent_at` on an order nobody was told
-    // about, which would suppress the nudge forever. This was pinned by the name
-    // of a local (`notificationError`) and broke when the route moved to
-    // notify() while still doing both; the property is what matters.
+    // reports 502 instead of a clean run — and it must not leave
+    // `overdue_notified_at` / `due_reminder_sent_at` stamped on an order nobody
+    // was told about, which would suppress the nudge forever. The stamp is now
+    // a CLAIM taken before the send (fenced on the column being unset, so two
+    // overlapping runs cannot both send) and handed back when the send did not
+    // go out; the property — stamped only when told, failed when not — is what
+    // matters, and both halves are pinned.
     expect(returnReminders).toMatch(/const notified = await notifyFamily\(/);
-    expect(returnReminders).toMatch(/if \(!notified \|\| stampError\) \{/);
-    // The stamp is only written when the notification actually went out.
-    expect(returnReminders).toMatch(/notified\s*\n?\s*\? await admin\.from\('marketplace_orders'\)\.update/);
-    expect(returnReminders).toContain('stampError');
+    // The claim is confirmed by its rows and precedes the send; a refused claim
+    // is a failure, a lost one is another run's.
+    expect(returnReminders).toMatch(/\.update\(stampPatch\(column, nowIso\)\)\.eq\('id', orderId\)\.is\(column, null\)\.select\('id'\)/);
+    for (const column of ['overdue_notified_at', 'due_reminder_sent_at'] as const) {
+      const branch = bodyOf(returnReminders, `const claim = await claimStamp('${column}', o.id);`, `await restoreStamp('${column}', o.id);`);
+      expect(branch).toContain("if (claim === 'error') { failed++; continue; }");
+      expect(branch).toContain("if (claim === 'taken') continue;");
+      expect(branch).toContain('const notified = await notifyFamily(');
+      // Not told → the claim is handed back AND the run fails.
+      expect(branch).toMatch(/if \(!notified\) \{[\s\S]*?await restoreStamp\('/);
+      expect(returnReminders.slice(at(returnReminders, `await restoreStamp('${column}', o.id);`)).split('\n').slice(0, 3).join('\n')).toContain('failed++;');
+    }
+    // The hand-back is fenced on this run's own stamp, and confirmed.
+    expect(returnReminders).toMatch(/\.update\(stampPatch\(column, null\)\)\.eq\('id', orderId\)\.eq\(column, nowIso\)\.select\('id'\)/);
+    // Delivered means a row for THIS identity exists, not merely that notify() answered ok.
+    expect(returnReminders).toContain('return sent.ok && (sent.data.created > 0 || sent.data.duplicates > 0);');
+    // The overdue alert has its own identity and is said once; the due-soon nudge its own.
+    expect(returnReminders).toContain("relatedType: 'marketplace_orders', relatedId: `${o.id}:overdue`, once: true,");
+    expect(returnReminders).toContain("relatedType: 'marketplace_orders', relatedId: `${o.id}:due`,");
     expect(returnReminders).toContain('const ok = failed === 0;');
     expect(returnReminders).toContain('{ status: ok ? 200 : 502 }');
   });

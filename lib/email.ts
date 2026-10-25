@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { Resend } from 'resend';
 import { appBaseUrl } from '@/lib/server/app-url';
 import { isChildLoginEmail } from '@/lib/onboarding/child-login';
+import { withEmailDeadline } from '@/lib/email-deadline';
 
 let resendClient: Resend | null = null;
 
@@ -93,9 +94,13 @@ export async function sendReactEmail({
       ...(replyTo ? { replyTo } : {}),
     };
     const sender = getResend().emails;
-    const { error } = idempotencyKey
-      ? await sender.send(payload, { idempotencyKey })
-      : await sender.send(payload);
+    // Bounded (lib/email-deadline.ts): the SDK's fetch has no timeout, and one
+    // provider connection that never answers held a cron's whole batch past
+    // its budget into the platform's kill. Past the deadline this is a failed
+    // send like any other.
+    const { error } = await withEmailDeadline(idempotencyKey
+      ? sender.send(payload, { idempotencyKey })
+      : sender.send(payload));
 
     if (error) {
       console.error('[email failed]', error);

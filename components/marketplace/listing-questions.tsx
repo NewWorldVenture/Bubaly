@@ -18,7 +18,12 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Question = Tables<'marketplace_questions'>;
 
-export function ListingQuestions({ listingId, isOwner }: { listingId: string; isOwner: boolean }) {
+export function ListingQuestions({ listingId, isOwner, canAsk = true }: {
+  listingId: string;
+  isOwner: boolean;
+  /** False for a guest, who views the household and does not ask on its behalf. */
+  canAsk?: boolean;
+}) {
   const t = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -39,7 +44,7 @@ export function ListingQuestions({ listingId, isOwner }: { listingId: string; is
 
   async function ask(e: React.FormEvent) {
     e.preventDefault();
-    if (!asking.trim()) return;
+    if (!asking.trim() || !canAsk) return;
     if (!meId) { toastError(t('listingQuestions.joinTheFamilyAsA')); return; }
     setBusy(true);
     const { error } = await createClient().from('marketplace_questions').insert({
@@ -59,7 +64,7 @@ export function ListingQuestions({ listingId, isOwner }: { listingId: string; is
         <MessageSquare className="h-4 w-4 text-brand-text" /> {t('listingQuestions.questions')}{rows.length > 0 ? ` (${rows.length})` : ''}
       </h2>
 
-      {!isOwner && meId && (
+      {!isOwner && meId && canAsk && (
         <form onSubmit={ask} className="mb-4 flex items-start gap-2">
           <textarea
             value={asking} onChange={(e) => setAsking(e.target.value)}

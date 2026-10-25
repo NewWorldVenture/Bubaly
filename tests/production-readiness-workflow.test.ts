@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
+import { at } from './helpers/source-order';
 
 const workflow = readFileSync(resolve(process.cwd(), '.github/workflows/ci.yml'), 'utf8');
 
@@ -131,5 +132,83 @@ describe('all complete timezone suites remain required while CI runs concurrentl
     const copy = structuredClone(load(workflow));
     mutate(copy);
     expect(() => requireQualityGraph(copy)).toThrow();
+  });
+});
+
+const productionSource = readFileSync(resolve(process.cwd(), '.github/workflows/supabase-production-migrations.yml'), 'utf8');
+const manualProductionApply = "success() && github.event_name == 'workflow_dispatch' && inputs.apply == true";
+const metadataHistoryCommand = 'node scripts/audit-production-migration-state.mjs --enforce-history';
+function requireReadOnlyProductionGraph(candidate: Workflow) {
+  const job = candidate.jobs['migrate-and-verify'];
+  expect(job['continue-on-error']).toBeUndefined();
+  expect(job.env?.SUPABASE_TELEMETRY_DISABLED).toBe('1');
+  expect(job.env?.DO_NOT_TRACK).toBe('1');
+  const steps = job.steps!;
+  const held = steps.find(step => step.name === 'Refuse generic production apply while migrations are held')!;
+  expect(held.if).toBe("github.event_name == 'workflow_dispatch' && inputs.apply == true");
+  expect(held.run).toContain('exit 1');
+  const cli = steps.find(step => step.uses === 'supabase/setup-cli@v1')!;
+  const link = steps.find(step => step.name === 'Link production project')!;
+  expect(cli.if).toBe(manualProductionApply); expect(link.if).toBe(manualProductionApply);
+  expect(link.run).toBe('supabase link --project-ref "$SUPABASE_PROJECT_REF"');
+  expect(at(steps, held)).toBeLessThan(at(steps, cli));
+  expect(at(steps, held)).toBeLessThan(at(steps, link));
+  for (const step of steps.filter(step => step.uses === 'supabase/setup-cli@v1' || /(?:^|\n)\s*supabase\s/.test(step.run ?? ''))) {
+    expect(step.if).toBe(manualProductionApply);
+    expect(step.env?.SUPABASE_TELEMETRY_DISABLED).toBeUndefined();
+    expect(step.env?.DO_NOT_TRACK).toBeUndefined();
+    expect(step['continue-on-error']).toBeUndefined();
+  }
+  const verify = steps.find(step => step.name === 'Verify remote migration ledger')!;
+  expect(verify.run).toBe(metadataHistoryCommand); expect(verify.if).toBeUndefined();
+  expect(verify['continue-on-error']).toBeUndefined();
+  expect(steps.some(step => /supabase migration list/.test(step.run ?? ''))).toBe(false);
+  const artifact = steps.find(step => step.name === 'Retain metadata-only migration audit')!;
+  expect(artifact.if).toBe('always()'); expect(artifact.uses).toBe('actions/upload-artifact@v4');
+  expect((artifact as Step & { with: Record<string, unknown> }).with.path).toBe('.next/production-schema-audit.json');
+  const credentials = steps.find(step => step.name === 'Validate production credentials')!;
+  expect(credentials.if).toBeUndefined(); expect(credentials.run).toContain('set -euo pipefail');
+  for (const key of ['SUPABASE_ACCESS_TOKEN', 'SUPABASE_PROJECT_REF', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_ANON_KEY']) {
+    expect(credentials.run).toContain(`test -n "$${key}"`);
+    expect(job.env?.[key]).toBe(`\${{ secrets.${key} }}`);
+  }
+  const required = [
+    'npm run db:audit:migrations', 'npm run db:audit:queries', metadataHistoryCommand, 'npm run db:audit:schema',
+    'npm run marketing:verify:remote', 'npm run marketing:verify:public:remote', 'npm run marketing:verify:assets:remote',
+    'npm run marketing:verify:coverage:remote', 'npm run marketing:verify:runtime:remote',
+  ];
+  for (const command of required) {
+    const found = steps.filter(step => step.run === command);
+    expect(found).toHaveLength(1); expect(found[0].if).toBeUndefined(); expect(found[0]['continue-on-error']).toBeUndefined();
+  }
+  for (const step of steps.filter(step => /(?:supabase db push|--apply)/.test(step.run ?? ''))) expect(step.if).toBe(manualProductionApply);
+}
+
+describe('automatic production verification cannot initialize a remote CLI login role', () => {
+  it('uses the existing read-only metadata audit directly and enforces history', () => {
+    const steps = load(productionSource).jobs['migrate-and-verify'].steps!;
+    expect(steps.find(step => step.name === 'Verify remote migration ledger')?.run).toBe(metadataHistoryCommand);
+  });
+  it('gates CLI setup and linking behind successful explicit dispatch apply', () => {
+    const steps = load(productionSource).jobs['migrate-and-verify'].steps!;
+    expect(steps.find(step => step.uses === 'supabase/setup-cli@v1')?.if).toBe(manualProductionApply);
+    expect(steps.find(step => step.name === 'Link production project')?.if).toBe(manualProductionApply);
+  });
+  it('keeps the complete parsed workflow read-only automatically without weakening other gates', () => {
+    requireReadOnlyProductionGraph(load(productionSource));
+  });
+  it.each([
+    ['automatic CLI setup', (copy: Workflow) => { delete copy.jobs['migrate-and-verify'].steps!.find(step => step.uses === 'supabase/setup-cli@v1')!.if; }],
+    ['automatic linking', (copy: Workflow) => { delete copy.jobs['migrate-and-verify'].steps!.find(step => step.name === 'Link production project')!.if; }],
+    ['CLI history verification', (copy: Workflow) => { copy.jobs['migrate-and-verify'].steps!.find(step => step.name === 'Verify remote migration ledger')!.run = 'supabase migration list --linked'; }],
+    ['missing history enforcement', (copy: Workflow) => { copy.jobs['migrate-and-verify'].steps!.find(step => step.name === 'Verify remote migration ledger')!.run = 'node scripts/audit-production-migration-state.mjs'; }],
+    ['ignored history failure', (copy: Workflow) => { copy.jobs['migrate-and-verify'].steps!.find(step => step.name === 'Verify remote migration ledger')!['continue-on-error'] = true; }],
+    ['lost failure artifact', (copy: Workflow) => { copy.jobs['migrate-and-verify'].steps!.find(step => step.name === 'Retain metadata-only migration audit')!.if = 'success()'; }],
+    ['omitted schema check', (copy: Workflow) => { copy.jobs['migrate-and-verify'].steps = copy.jobs['migrate-and-verify'].steps!.filter(step => step.run !== 'npm run db:audit:schema'); }],
+    ['missing required credential', (copy: Workflow) => { copy.jobs['migrate-and-verify'].steps!.find(step => step.name === 'Validate production credentials')!.run = 'echo skipped'; }],
+    ['CLI telemetry opt-in', (copy: Workflow) => { delete copy.jobs['migrate-and-verify'].env!.SUPABASE_TELEMETRY_DISABLED; }],
+  ] as const)('the parsed production graph rejects %s', (_name, mutate) => {
+    const copy = structuredClone(load(productionSource)); mutate(copy);
+    expect(() => requireReadOnlyProductionGraph(copy)).toThrow();
   });
 });

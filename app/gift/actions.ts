@@ -43,6 +43,18 @@ export async function submitGiftPledgeAction(input: {
   if (linkReadError) return { ok: false, error: describeActionError(linkReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!link || !link.is_active) return { ok: false, error: t('actions.thisGiftLinkIsNo') };
 
+  // A closed family's link is dead too. `is_active` was the only gate, so a
+  // giver's pledge to a family that had closed its account (families.closed_at)
+  // was recorded as pending and sat there indefinitely: every delivery cron
+  // skips a closed family's notices, so nobody was told, while the giver was
+  // told it was recorded. /api/ai/gift already refuses the same family; the
+  // page (app/gift/[token]) now answers as it does for a retired link. A read
+  // that fails is not a closed family (C1-S9-75's rule).
+  const { data: family, error: familyReadError } = await supabase
+    .from('families').select('closed_at').eq('id', link.family_id).maybeSingle();
+  if (familyReadError) return { ok: false, error: describeActionError(familyReadError, t('actions.couldNotCheckThatRefresh')) };
+  if (family?.closed_at) return { ok: false, error: t('actions.thisGiftLinkIsNo') };
+
   // Anti-abuse: cap pending pledges per link.
   const { count, error: countError } = await supabase
     .from('gift_payments').select('id', { count: 'exact', head: true })

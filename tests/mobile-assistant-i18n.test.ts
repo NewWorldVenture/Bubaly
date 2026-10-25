@@ -50,7 +50,9 @@ describe('assistant-only mobile locale catalogue', () => {
     expect(parseTranscribeResponse(503, { code: 'not_configured' }, t)).toMatchObject({ ok: false, error: messages[locale]['mobileAssistant.voiceNotConfigured'] });
     expect(parseTranscribeResponse(503, { code: 'unavailable' }, t)).toMatchObject({ ok: false, error: messages[locale]['mobileAssistant.familyUnavailable'] });
     expect(parseTranscribeResponse(503, { error: 'Provider temporarily offline' }, t)).toMatchObject({ ok: false, error: 'Provider temporarily offline' });
-    expect(parseAssistantResponse(409, { code: 'family_changed' }, t)).toMatchObject({ ok: false, error: messages[locale]['mobileAssistant.contextChanged'] });
+    // 409 family_changed names the remedy (the phone and the server disagree about the active family); a malformed header stays the generic context copy.
+    expect(parseAssistantResponse(409, { code: 'family_changed' }, t)).toMatchObject({ ok: false, error: messages[locale]['mobileAssistant.familyMismatch'] });
+    expect(parseAssistantResponse(400, { code: 'invalid_family' }, t)).toMatchObject({ ok: false, error: messages[locale]['mobileAssistant.contextChanged'] });
     expect(parseAssistantResponse(503, { code: 'unavailable' }, t)).toMatchObject({ ok: false, error: messages[locale]['mobileAssistant.familyUnavailable'] });
     expect(parseAssistantResponse(503, { code: 'not_configured' }, t)).toMatchObject({ ok: false, error: messages[locale]['mobileAssistant.notConfigured'] });
   });

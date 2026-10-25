@@ -60,6 +60,9 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.spyOn(console, 'warn').mockImplementation(() => {});
   db = createInMemorySupabase({ rpc: { marketplace_close_auction: closeAuction } });
+  // The cron settles the auctions of OPEN families only (families.closed_at),
+  // so every seller these cases name has an open family row.
+  db.seed('families', ['a', 'b', 'bin', 'old', 'gone', 'live'].map((id) => ({ id: `seller-${id}`, closed_at: null })));
   harness.db = db;
   harness.notify.mockReset();
   harness.notify.mockResolvedValue({ ok: true, data: { created: 1 } });

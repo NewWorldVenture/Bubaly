@@ -87,9 +87,10 @@ export async function GET(req: NextRequest) {
     // fate, so the row is never swept again; the nudge itself is deduped on
     // (workflow_id, subject_key). A refused write nudges nobody and counts as a
     // failure: the row stays pending and the next run tries again.
+    const claimedAt = new Date().toISOString();
     const { data: claimed, error: markError } = await supabase
       .from('checkout_sessions')
-      .update({ status: 'abandoned', abandoned_at: new Date().toISOString() })
+      .update({ status: 'abandoned', abandoned_at: claimedAt })
       .eq('session_id', s.session_id)
       .eq('status', 'pending')
       .select('session_id');
@@ -100,18 +101,45 @@ export async function GET(req: NextRequest) {
     }
     if (wroteNoRows(claimed)) continue;
     if (paidSince(s)) { superseded += 1; continue; }
+    // The row is claimed BEFORE the nudge, so a nudge that did not go out would
+    // never be swept again. Hand the row back — only while it is still this
+    // run's claim (status and stamp as written) — so the next run retries it
+    // inside the session's window. A hand-back that matches nothing is a row
+    // the webhook completed or another run took in between: nothing to retry.
+    const unclaim = async () => {
+      const { data: restored, error: restoreError } = await supabase
+        .from('checkout_sessions')
+        .update({ status: 'pending', abandoned_at: null })
+        .eq('session_id', s.session_id)
+        .eq('status', 'abandoned')
+        .eq('abandoned_at', claimedAt)
+        .select('session_id');
+      if (restoreError || wroteNoRows(restored)) {
+        console.error(`checkout_abandoned claim could not be handed back for ${s.session_id}; the nudge is lost:`, restoreError ?? 'no rows updated');
+      }
+    };
     try {
-      await fireAutomationEvent(supabase, {
+      // The result is READ. `fireAutomationEvent` reports a failed send as
+      // `failures` and a refused read or reservation as `errors`; counting the
+      // call itself as `fired` answered 200 ok for a nudge nobody received.
+      const outcome = await fireAutomationEvent(supabase, {
         trigger: 'checkout_abandoned',
         email: s.email,
         name: s.name,
         subjectKey: eventSubjectKey('checkout_abandoned', [s.session_id]),
         context: { sessionId: s.session_id },
       });
-      fired += 1;
+      if (outcome.failures > 0 || outcome.errors > 0) {
+        failed += 1;
+        console.error(`checkout_abandoned nudge did not go out for ${s.session_id}:`, outcome);
+        await unclaim();
+      } else {
+        fired += 1;
+      }
     } catch (e) {
       failed += 1;
       console.error(`checkout_abandoned fire failed for ${s.session_id}:`, e);
+      await unclaim();
     }
   }
 

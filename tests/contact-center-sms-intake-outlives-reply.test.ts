@@ -10,6 +10,7 @@ import { createHmac } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
+import { rateLimitHit } from './helpers/rate-limit-rpc';
 
 const mocks = vi.hoisted(() => ({ getUser: vi.fn(), admin: vi.fn(), concierge: vi.fn(), planner: vi.fn() }));
 vi.mock('@supabase/ssr', () => ({ createServerClient: () => ({ auth: { getUser: mocks.getUser } }) }));
@@ -42,12 +43,17 @@ beforeEach(() => {
   vi.stubEnv('NODE_ENV', 'production'); vi.stubEnv('NEXT_PUBLIC_APP_URL', ORIGIN);
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://synthetic.supabase.co'); vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'test-anon');
   vi.stubEnv('TWILIO_ACCOUNT_SID', `AC${'a'.repeat(32)}`); vi.stubEnv('TWILIO_AUTH_TOKEN', TOKEN); vi.stubEnv('TWILIO_PHONE_NUMBER', '+15555550999');
+  // The concierge budget keys the sender's number, which the durable limiter
+  // digests under a server secret (lib/contact-center/inbound-budget.ts).
+  vi.stubEnv('INTERNAL_SECRET', 'synthetic-internal-secret');
   vi.stubGlobal('fetch', network); vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   network.mockResolvedValue(Response.json({ sid: `SM${'1'.repeat(32)}`, status: 'queued' }, { status: 201 }));
   mocks.getUser.mockResolvedValue({ data: { user: null }, error: null });
   mocks.planner.mockResolvedValue({ routed: true, requestId: 'synthetic-request', runId: null, paperworkItemId: null, reason: 'routed' });
   db = createInMemorySupabase({ uniques: { notifications: [['id']], ai_tool_calls: [['id'], ['family_id', 'idempotency_key']], family_inbox_messages: [['channel', 'provider_ref']], app_settings: [['key']] },
-    defaults: { family_inbox_messages: { ai_handled: false, direction: 'inbound', status: 'new' }, notifications: { is_read: false, sent_at: null, pushed_at: null } } });
+    defaults: { family_inbox_messages: { ai_handled: false, direction: 'inbound', status: 'new' }, notifications: { is_read: false, sent_at: null, pushed_at: null } },
+    rpc: { rate_limit_hit: rateLimitHit } });
   db.seed('families', [{ id: FAMILY, name: 'Synthetic family', timezone: 'UTC' }]);
   db.seed('family_contact_channels', [{ family_id: FAMILY, phone_number: '+15555550100', forward_to_phone: '+15555550300', ai_concierge_enabled: false }]);
   mocks.admin.mockReturnValue(db);
