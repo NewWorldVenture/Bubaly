@@ -219,7 +219,7 @@ export const finalizeOnboardingSchema = z.object({
   family: createFamilySchema,
   details: familyDetailsBaseSchema,
   members: z.array(draftMemberSchema).max(30).default([]),
-  appearance: onboardingAppearanceSchema.optional().prefault({}),
+  appearance: onboardingAppearanceSchema.prefault({}),
   calendarImport: onboardingCalendarImportSchema.optional().default({ source: '', events: [] }),
 });
 export type FinalizeOnboardingInput = z.infer<typeof finalizeOnboardingSchema>;
