@@ -30,7 +30,7 @@ import { sourceFiles } from './helpers/hover-reveals';
 const STOP = /^(hover:)?(from|via|to)-(.+)$/;
 const TEXT = /^text-(.+)$/;
 const NOT_A_TEXT_COLOUR = /^(xs|sm|base|lg|xl|\dxl|\[\d|left|center|right|justify|start|end|wrap|nowrap|balance|pretty|ellipsis|clip)/;
-const BRIGHTER = /^hover:brightness-(\d+)$/;
+const BRIGHTNESS = /^hover:brightness-(\d+)$/;
 const TOKENS = tokensOf('.dark {');
 
 /** A colour class's value — a theme token, a palette shade or an arbitrary hex — per theme, or null when it is translucent or unknown. */
@@ -58,7 +58,9 @@ function unreadableOnGradient(sites: Site[]): string[] {
     if (!own.length && !onGrounds) { out.push(`${s.at}: inherits its text colour`); continue; }
     const inks = own.length ? own : ['text-fg'];
     if (s.classes.some((c) => /^hover:opacity-\d+$/.test(c))) out.push(`${s.at}: fades its text on hover`);
-    const brighter = Math.max(1, ...s.classes.map((c) => Number(BRIGHTER.exec(c)?.[1] ?? 0) / 100));
+    // A hover brightness filter scales every sRGB channel of the element, its text as well as its fill.
+    const factor = Number(s.classes.map((c) => BRIGHTNESS.exec(c)?.[1]).find(Boolean) ?? 100) / 100;
+    const lit = (c: number[]) => c.map((v) => Math.min(255, Math.round(v * factor)));
     let worst = { ratio: Infinity, why: '' };
     for (const [theme, selector] of THEMES) {
       const t = tokensOf(selector);
@@ -68,10 +70,9 @@ function unreadableOnGradient(sites: Site[]): string[] {
           const [, hover, , name] = STOP.exec(stop)!;
           const c = colourOf(name, t);
           if (!fg || !c) continue;
-          const lit = c.map((v) => Math.min(255, Math.round(v * brighter)));
-          const states: [string, number[]][] = hover ? [['hovered', lit]] : [['at rest', c], ['hovered', lit]];
-          for (const [state, bg] of states) {
-            const ratio = contrast(fg, bg);
+          const states: [string, number[], number[]][] = hover ? [['hovered', lit(fg), lit(c)]] : [['at rest', fg, c], ['hovered', lit(fg), lit(c)]];
+          for (const [state, front, back] of states) {
+            const ratio = contrast(front, back);
             if (ratio < worst.ratio) worst = { ratio, why: `${theme}, ${state}: ${ink} on ${stop}` };
           }
         }
