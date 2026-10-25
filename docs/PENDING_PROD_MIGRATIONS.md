@@ -143,6 +143,7 @@ source allocations are not evidence that production applied any migration.
 | 0517 proposed, held | `0517_a_personal_record_is_read_by_managers_and_its_member.sql` | A row of `insurance_policies`, `family_insurance_policies`, `vacation_documents` or `voice_commands` is read by a manager of its family or the member it is about, inside `is_family_member(family_id)`; `vacation_medical_information` and `health_providers` also by a caregiver. The two travel tables' FOR ALL policies are split so their member-wide writes stay exactly as they were. Decided by the account holder (the audit's open sensitive-table finding, personal-records group); requested on #771 (comment 6109587749), not yet confirmed. |
 | 0520 proposed, held | `0520_a_guest_does_not_read_the_front_desks_call_history_or_the_hub.sql` | A row of `call_logs` or `family_communications` is not read by a guest of its family: 0509's restrictive guard, `not is_family_guest(family_id)`, on the two tables behind guest-withheld pages that 0509's list left out. Needs 0509 first. Follows the account holder's decision on ROLE-SCOPE-001; requested on #771 (comment 6402247950), not yet confirmed. |
 | 0521 proposed, held | `0521_a_call_in_the_front_desk_history_is_written_by_no_member.sql` | `call_logs` is written by no member: 0092's member insert and update policies dropped, INSERT and UPDATE revoked from anon and authenticated; the members' read and the managers' delete unchanged. Requested on #771 (comment 6402247950), not yet confirmed. |
+| 0522 proposed, held | `0522_a_guest_does_not_change_the_households_tasks_and_reminders.sql` | 0464's guest guard (`household_write_is_not_a_guests()`, BEFORE INSERT, UPDATE and DELETE) on `todo_lists`, `todo_items`, `reminder_lists` and `family_reminders`. Follows ROLE-M03; KIDS-O01's two triggers and Support's reminder DB half. Requested on #771 (comment 6402500834), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4780,6 +4781,58 @@ Dropping any one table's trigger turns the probe red on that table. 184 of
 families, try to vote in one family's poll under their member id from the
 other family and confirm 42501; then vote as their own member there and
 confirm it lands.
+
+## `0522` (proposed, held) — a guest changed the household's tasks and reminders
+
+`supabase/reserved/0522_a_guest_does_not_change_the_households_tasks_and_reminders.sql`
+— **held**: requested on #771 in comment 6402500834. Not yet confirmed.
+
+**Severity: medium (an invited guest renamed and deleted the family's to-do
+and reminder lists, added tasks and reminders, and ticked or completed other
+members'). Deploy order: any.** 0464 (ROLE-M03) refuses a guest's writes on
+the eight resources `/family/permissions` names, and the held 0498 on
+`calendar_feeds` and `grocery_lists`; every model of the product says a guest
+views ("Guest: View the shared calendar, lists and plans"). The household's
+tasks and reminders were outside both lists. Measured on a replay of main with
+every held file through 0521 applied, as an active guest: `todo_lists` and
+`reminder_lists` insert, rename and delete `OK 1`; `todo_items` and
+`family_reminders` insert and another member's tick or completion `OK 1`
+(their deletes are already filtered by 0479). This is KIDS-O01's "two
+triggers" and the database half of Support's 6370895638 (a).
+
+**Database.** 0464's own function on the four tables, as 0498 did:
+`trg_<table>_not_a_guests`, BEFORE INSERT, UPDATE and DELETE, raising 42501
+("A guest can see the household but not change it"). No new function. Every
+other role writes as before under the policies already there; the service role
+and session-less writers stay exempt. `ensure_default_todo_list` (0443) is
+SECURITY INVOKER, so a guest's first capture is refused at the insert.
+
+**App:** `app/(app)/dashboard/todos/actions.ts` already refuses a guest; a
+guest's reminder write answers 42501 ("You don't have permission") until
+Support's reminder app half lands.
+
+**Proof:** `.github/workflows/guest-tasks-runtime.yml` requires the held probe
+`docs/audit/reserved/a-guest-does-not-change-the-households-tasks-and-reminders-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0522 twice and requires it to pass, then re-runs 0464's
+`a-guest-views-the-household` probe and the seven released probes over these
+tables. The passing run shows:
+- as an active guest, inserting and changing each of the four are refused by
+  0464's guard (42501, its own sentence), deleting the two lists too (the task
+  and the reminder are filtered by 0479 first), and nothing changes;
+- the guest still reads all four;
+- the parent inserts, updates and deletes a row of their own in each; the teen,
+  the child and the caregiver each insert and update one;
+- **wiring:** each table carries the guard before insert, update and delete;
+- **N1** (the four guards disabled): the guest's insert lands in all four;
+- **M1** (`todo_items`' guard on INSERT alone): the guest ticks the task.
+
+All 189 released probes pass with 0522 applied, and with every held file
+applied twice.
+
+**After approved release:** sign a test guest in and try to add a task and a
+reminder, and to rename a list; confirm each is refused with "You don't have
+permission" and nothing changes.
 
 ## `0520` (proposed, held) — a guest read the front desk's call history and the Hub
 
