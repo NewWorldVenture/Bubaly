@@ -202,7 +202,7 @@ export function ExitIntent() {
           <a
             href={offer.cta_href}
             onClick={() => track(offer.id, 'conversion')}
-            className="mt-6 inline-flex rounded-xl bg-brand px-6 py-3 font-semibold text-brand-fg hover:bg-brand/90"
+            className="mt-6 inline-flex rounded-xl bg-brand px-6 py-3 font-semibold text-brand-fg hover:brightness-95"
           >
             {offer.cta_label || 'Get started'}
           </a>

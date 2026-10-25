@@ -180,7 +180,7 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
                   <button
                     onClick={() => run(() => startMilestoneAction(kid.id, m.title), 'start-' + m.title, `Added “${m.title}” to ${kid.display_name}'s ladder.`)}
                     disabled={pending}
-                    className="flex-shrink-0 rounded-lg bg-brand px-3 py-2 text-xs font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-50">
+                    className="flex-shrink-0 rounded-lg bg-brand px-3 py-2 text-xs font-bold text-brand-fg transition hover:brightness-95 disabled:opacity-50">
                     {busy === 'start-' + m.title ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Start'}
                   </button>
                 </div>
