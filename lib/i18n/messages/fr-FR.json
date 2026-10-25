@@ -17186,5 +17186,6 @@
   "marketplace.anAuctionTakesBidsNotInterest": "Ceci est une enchère : enchérissez plutôt.",
   "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Les questions entre deux foyers ne sont pas encore ouvertes.",
   "assistantActions.couldNotReadTheBoard": "Impossible de lire la place de marché pour le moment. Réessayez dans un instant.",
-  "negotiations.theOtherSideActedAtTheSameMoment": "L’autre partie a agi sur cette offre au même moment. Actualisez la page et réessayez."
+  "negotiations.theOtherSideActedAtTheSameMoment": "L’autre partie a agi sur cette offre au même moment. Actualisez la page et réessayez.",
+  "filesHubModule.sensitiveStaysInVault": "Les fichiers du dossier {category} restent dans le coffre-fort sécurisé, où seul un parent ou un autre adulte peut les ouvrir."
 }
