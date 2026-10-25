@@ -283,7 +283,7 @@ function FeaturePicker({ mode, features, onClose, onPick }: {
   return (
     <Modal open onClose={onClose} title={mode === 'replace' ? 'Replace button' : 'Add a button'}>
       <div className="space-y-3">
-        <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2">
+        <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
           <Search className="h-4 w-4 text-muted" />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('quickActions.searchFeatures')} autoFocus className="w-full bg-transparent text-sm outline-none placeholder:text-muted" />
         </div>
