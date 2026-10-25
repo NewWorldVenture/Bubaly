@@ -48,9 +48,13 @@ export async function getAutoOverview(familyId: string, reader: MoneyReader, tod
     getInspections(familyId), getPolicies(familyId, reader), getRentals(familyId),
   ]);
   const nameById = new Map(vehicles.map((v) => [v.id, vehicleLabel(v)]));
+  // A sold car's papers are not renewals, and neither are a deleted car's
+  // (its soft delete does not reach them): only the cars still on the road.
+  const onTheRoad = new Set(vehicles.filter((v) => v.status !== 'sold' && v.status !== 'retired').map((v) => v.id));
   const renewals = buildRenewals({
     licenses, registrations, inspections, policies,
     vehicleName: (id) => (id ? nameById.get(id) ?? null : null),
+    currentVehicle: (id) => onTheRoad.has(id),
     todayKey,
   });
   return { vehicles, policies, rentals, renewals };
