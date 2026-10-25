@@ -24,6 +24,8 @@ import type { ServiceScope } from '@/lib/services/types';
 import { calendarTools } from '@/lib/ai/tools/calendar';
 import { describeWhen } from '@/lib/ai/tools/types';
 import { expandEventsInZone } from '@/lib/calendar/recurrence';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
 const FAMILY = 'family-1';
@@ -412,6 +414,104 @@ describe('the week asked for is a week of the series as written', () => {
     expect(result.ok, 'the series was moved to a date that does not have the week asked for').toBe(false);
     expect(writes).toHaveLength(0);
     expect(instant(row('club-1').starts_at)).toBe('2026-09-30T20:00:00.000Z');
+  });
+});
+
+describe('a series changed between all-day and timed is mapped on the clock it will be saved with', () => {
+  // The move was mapped and checked on the STORED mode's clock (dates, for an
+  // all-day series) while the row was saved in the new one, so an all-day week
+  // turned into "4:00 PM Tuesday" was saved at 16:00 on September's New York
+  // clock and the calendar showed 17:00 on 3 November.
+  const ALL_DAY = 'market-1';
+  const seedAllDay = (ends: string | null) => db.seed('calendar_events', [{
+    ...row(SWIM), id: ALL_DAY, title: 'Market stall', starts_at: '2026-09-01T00:00:00.000Z', ends_at: ends, all_day: true,
+  }]);
+  /** What the calendar reads for the event on the family's 3 November (and 4th, for an all-day row). */
+  async function onNovember3(id: string, tz = TZ) {
+    const read = await readCalendarOccurrences(db as never, FAMILY, instantCalendarBounds('2026-11-03T05:00:00.000Z', '2026-11-04T05:00:00.000Z', tz), tz, {
+      columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day'],
+    });
+    if (read.error) throw new Error(read.error.message);
+    return (read.data ?? []).filter((o) => o.id === id).map((o) => ({ starts_at: instant(o.starts_at), ends_at: instant(o.ends_at), all_day: o.all_day }));
+  }
+
+  it.each([
+    ['an explicit end', '2026-09-02T00:00:00.000Z', { ends_at: '2026-11-03T17:00:00' }, '2026-11-03T22:00:00.000Z', '2026-09-01T21:00:00.000Z'],
+    ['no end', '2026-09-02T00:00:00.000Z', { ends_at: null }, null, null],
+    ['a new end on a series that had none', null, { ends_at: '2026-11-03T17:00:00' }, '2026-11-03T22:00:00.000Z', '2026-09-01T21:00:00.000Z'],
+  ])('all-day to 16:00 in New York with %s lands at 16:00 on 3 November', async (_variant, seedEnd, end, novemberEnd, masterEnd) => {
+    seedAllDay(seedEnd);
+    const result = await tool('calendar.updateEvent').execute(scope, {
+      event_id: ALL_DAY, starts_at: '2026-11-03T16:00:00', ...end, all_day: false, occurrence_starts_at: '2026-11-03T00:00:00.000Z',
+    });
+    expect(result.ok, result.ok ? '' : result.error).toBe(true);
+    if (!result.ok) return;
+    expect((result.data as { when: string }).when).toBe(describeWhen('2026-11-03T21:00:00.000Z', TZ, NOW));
+    expect(row(ALL_DAY).all_day).toBe(false);
+    expect(instant(row(ALL_DAY).starts_at), 'the series was saved on the date clock').toBe('2026-09-01T20:00:00.000Z');
+    expect(instant(row(ALL_DAY).ends_at)).toBe(masterEnd);
+    expect(await onNovember3(ALL_DAY), 'the calendar does not show the week at the time asked for')
+      .toEqual([{ starts_at: '2026-11-03T21:00:00.000Z', ends_at: novemberEnd, all_day: false }]);
+  });
+
+  it('all-day to 19:00 the evening before, in New York, lands that evening', async () => {
+    // 19:00 on 2 November in New York is midnight Greenwich on the 3rd: the
+    // same instant as the all-day week, on another date and another clock.
+    seedAllDay('2026-09-02T00:00:00.000Z');
+    const result = await tool('calendar.updateEvent').execute(scope, {
+      event_id: ALL_DAY, starts_at: '2026-11-02T19:00:00', ends_at: '2026-11-02T20:00:00', all_day: false, occurrence_starts_at: '2026-11-03T00:00:00.000Z',
+    });
+    expect(result.ok, result.ok ? '' : result.error).toBe(true);
+    expect(instant(row(ALL_DAY).starts_at)).toBe('2026-08-31T23:00:00.000Z');
+    const week = expandEventsInZone([row(ALL_DAY)], new Date('2026-11-02T00:00:00Z'), new Date('2026-11-04T00:00:00Z'), TZ).map((o) => instant(o.starts_at));
+    expect(week).toEqual(['2026-11-03T00:00:00.000Z']);
+  });
+
+  it('all-day to timed in a UTC family lands where asked', async () => {
+    seedAllDay('2026-09-02T00:00:00.000Z');
+    scope = { ...scope, tz: 'UTC' };
+    const result = await tool('calendar.updateEvent').execute(scope, {
+      event_id: ALL_DAY, starts_at: '2026-11-03T16:00:00', ends_at: '2026-11-03T17:00:00', all_day: false, occurrence_starts_at: '2026-11-03T00:00:00.000Z',
+    });
+    expect(result.ok, result.ok ? '' : result.error).toBe(true);
+    expect(instant(row(ALL_DAY).starts_at)).toBe('2026-09-01T16:00:00.000Z');
+    expect(await onNovember3(ALL_DAY, 'UTC')).toEqual([{ starts_at: '2026-11-03T16:00:00.000Z', ends_at: '2026-11-03T17:00:00.000Z', all_day: false }]);
+  });
+
+  it('timed to all-day in New York keeps the week on its date', async () => {
+    const result = await tool('calendar.updateEvent').execute(scope, {
+      event_id: SWIM, starts_at: '2026-11-03T00:00:00Z', ends_at: '2026-11-04T00:00:00Z', all_day: true, occurrence_starts_at: '2026-11-03T21:00:00.000Z',
+    });
+    expect(result.ok, result.ok ? '' : result.error).toBe(true);
+    expect(row(SWIM).all_day).toBe(true);
+    expect(instant(row(SWIM).starts_at)).toBe('2026-09-01T00:00:00.000Z');
+    expect(instant(row(SWIM).ends_at)).toBe('2026-09-02T00:00:00.000Z');
+    expect(await onNovember3(SWIM)).toEqual([{ starts_at: '2026-11-03T00:00:00.000Z', ends_at: '2026-11-04T00:00:00.000Z', all_day: true }]);
+  });
+
+  it('a late-evening week made all-day keeps the date it had in New York, not Greenwich\'s', async () => {
+    // 19:30 on Tuesday 3 November in New York is Wednesday 00:30 Greenwich;
+    // September's 19:30 is still Tuesday there. The dates are the family's.
+    db.seed('calendar_events', [{
+      ...row(SWIM), id: 'study-1', title: 'Study group', starts_at: '2026-09-01T23:30:00.000Z', ends_at: '2026-09-02T00:30:00.000Z',
+    }]);
+    const result = await tool('calendar.updateEvent').execute(scope, {
+      event_id: 'study-1', starts_at: '2026-11-03T00:00:00Z', ends_at: '2026-11-04T00:00:00Z', all_day: true, occurrence_starts_at: '2026-11-04T00:30:00.000Z',
+    });
+    expect(result.ok, result.ok ? '' : result.error).toBe(true);
+    expect(instant(row('study-1').starts_at)).toBe('2026-09-01T00:00:00.000Z');
+    expect(await onNovember3('study-1')).toEqual([{ starts_at: '2026-11-03T00:00:00.000Z', ends_at: '2026-11-04T00:00:00.000Z', all_day: true }]);
+  });
+
+  it('a change of mode with no new start is refused before anything is written', async () => {
+    seedAllDay('2026-09-02T00:00:00.000Z');
+    const writes = watchWrites();
+    const result = await tool('calendar.updateEvent').execute(scope, {
+      event_id: ALL_DAY, ends_at: '2026-11-03T17:00:00', all_day: false, occurrence_starts_at: '2026-11-03T00:00:00.000Z',
+    });
+    expect(result.ok).toBe(false);
+    expect(writes).toHaveLength(0);
+    expect(row(ALL_DAY).all_day).toBe(true);
   });
 });
 
