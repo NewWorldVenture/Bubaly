@@ -504,7 +504,7 @@ export function MealsModule() {
         {/* ── RECIPES TAB ───────────────────────────────────────── */}
         {tab === 'recipes' && (
           <div className="py-3">
-            <div className="mb-3 flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-2">
+            <div className="mb-3 flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-2 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
               <Search className="h-4 w-4 text-muted" />
               <input value={recipeSearch} onChange={(e) => setRecipeSearch(e.target.value)} placeholder={tr('meals.searchRecipes')}
                 className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted" />

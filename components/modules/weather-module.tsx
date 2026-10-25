@@ -256,7 +256,7 @@ export function WeatherModule() {
       {adding && (
         <div className="rounded-2xl border border-border bg-surface/40 p-4">
           <form onSubmit={runSearch} className="flex gap-2">
-            <div className="flex h-10 flex-1 items-center gap-2 rounded-xl border border-border bg-surface/60 px-3">
+            <div className="flex h-10 flex-1 items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
               <Search className="h-4 w-4 text-muted" />
               <input autoFocus value={query} inputMode="search" enterKeyHint="search" onChange={(e) => setQuery(e.target.value)} placeholder={t('weather.searchForACity')} className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
             </div>

@@ -124,23 +124,11 @@ function bareFocus(file: string, src: string): Bare[] {
   return found;
 }
 
-// Text fields that still show only their caret, by file and count: composers,
-// command palettes and admin filters, outside this change. Pinned so the list
-// can only shrink.
-const CARET_ONLY: Record<string, number> = {
-  'components/admin/admin-shell.tsx': 1,
-  'components/admin/filter-bar.tsx': 1,
-  'components/app/command-bar.tsx': 1,
-  'components/dashboard/quick-actions.tsx': 1,
-  'components/modules/assistant-module.tsx': 2,
-  'components/modules/closet-module.tsx': 1,
-  'components/modules/contact-center-module.tsx': 1,
-  'components/modules/meals-module.tsx': 1,
-  'components/modules/messages-module.tsx': 2,
-  'components/modules/weather-module.tsx': 1,
-  'components/ui/phone-input.tsx': 1,
-  'components/wallet/pay-handle-manager.tsx': 1,
-};
+// Text fields that show only their caret, by file and count. There were 14
+// (composers, command palettes, admin and module filters); each now rings
+// while it has focus (see the pins below), so the list is empty and a new
+// caret-only field fails here.
+const CARET_ONLY: Record<string, number> = {};
 
 const files = [...sourceFiles('components'), ...sourceFiles('app')];
 const all = files.flatMap((f) => {
@@ -181,6 +169,25 @@ describe('a focused control shows it', () => {
     expect(fill).not.toMatch(/\bbg-/); // the full-size child paints no background
     // The recipe card is overflow-hidden under a positioned photo: an offset ring was covered on every side.
     expect(src('components/modules/recipes-module.tsx')).toContain(`className="flex flex-1 flex-col p-4 text-left ${INSET}">`);
+    // The text fields that showed only their caret: a bordered box rings outside
+    // itself; a row flush with a clipped panel rings inside; the assistant's
+    // composer turns its own border full brand under its existing glow.
+    const RING_INSET = 'focus-within:ring-2 focus-within:ring-inset focus-within:ring-brand';
+    for (const [f, box] of [
+      ['components/admin/admin-shell.tsx', 'rounded-xl border border-border bg-surface/40 px-3 text-muted'],
+      ['components/admin/filter-bar.tsx', 'rounded-lg border border-border bg-surface/60 px-2.5 text-muted'],
+      ['components/dashboard/quick-actions.tsx', 'rounded-xl border border-border bg-surface/60 px-3 py-2'],
+      ['components/modules/closet-module.tsx', 'rounded-xl border border-border bg-surface/60 px-2 py-1'],
+      ['components/modules/contact-center-module.tsx', 'rounded-lg border border-border bg-bg px-2'],
+      ['components/modules/meals-module.tsx', 'rounded-xl border border-border bg-surface/60 px-3 py-2'],
+      ['components/modules/messages-module.tsx', 'rounded-xl border border-border bg-surface/40 p-2'],
+      ['components/modules/weather-module.tsx', 'rounded-xl border border-border bg-surface/60 px-3'],
+      ['components/wallet/pay-handle-manager.tsx', 'rounded-lg border border-border bg-bg px-2'],
+    ]) expect(src(f), f).toContain(`${box} ${PILL}">`);
+    expect(src('components/app/command-bar.tsx')).toContain(`border-b border-border px-4 ${RING_INSET}">`);
+    expect(src('components/modules/messages-module.tsx')).toContain(`border-b border-border px-4 py-2 ${RING_INSET}">`);
+    expect(src('components/ui/phone-input.tsx')).toContain(`border-b border-border px-3 py-2.5 ${RING_INSET}">`);
+    expect(src('components/modules/assistant-module.tsx').match(/"ai-composer flex items-(end|center) gap-2 border p[xy]?-3 [^"]*focus-within:border-brand /g)).toHaveLength(2);
     // A preset avatar's selection is already a ring, so its focus is an outline outside it.
     expect(src('components/ui/avatar-picker.tsx')).toContain('focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand');
   });

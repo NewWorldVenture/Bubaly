@@ -54,7 +54,7 @@ export function FilterSearchInput({ name, defaultValue, placeholder }: {
   placeholder: string;
 }) {
   return (
-    <label className="flex h-9 min-w-[14rem] flex-1 items-center gap-2 rounded-lg border border-border bg-surface/60 px-2.5 text-muted">
+    <label className="flex h-9 min-w-[14rem] flex-1 items-center gap-2 rounded-lg border border-border bg-surface/60 px-2.5 text-muted focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
       <Search className="h-4 w-4 shrink-0" />
       <input
         name={name}

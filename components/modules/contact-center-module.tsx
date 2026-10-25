@@ -99,7 +99,7 @@ export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, 
           )}
           {canManage && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <div className="flex min-w-0 flex-1 items-center rounded-lg border border-border bg-bg px-2">
+              <div className="flex min-w-0 flex-1 items-center rounded-lg border border-border bg-bg px-2 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
                 <input
                   value={local}
                   onChange={(e) => setLocal(normalizeEmailLocal(e.target.value))}
