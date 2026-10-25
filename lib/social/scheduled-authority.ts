@@ -14,7 +14,7 @@ export class ScheduledPublishError extends Error {
 export function scheduleFailure(key = 'storageUnavailable'): never { throw new ScheduledPublishError(`socialSchedule.${key}`); }
 export const SCHEDULE_TOOL = 'social.scheduled_publish';
 export type ScheduleDb = SupabaseClient<Database>;
-const uuid = z.string().uuid();
+const uuid = z.string().guid();
 const actorSchema = z.object({ userId: uuid, memberId: uuid }).strict();
 const targetSchema = z.object({ id: uuid, accountId: uuid, platform: z.literal('x'), providerAccountId: z.string().regex(/^[1-9][0-9]{0,19}$/) }).strict();
 const snapshotSchema = z.object({

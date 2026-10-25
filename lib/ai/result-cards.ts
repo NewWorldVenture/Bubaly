@@ -76,8 +76,8 @@ const sourceClock = z.discriminatedUnion('kind', [
     && (clock.kind === 'date' || +v.slice(9, 11) <= 23 && +v.slice(11, 13) <= 59 && +v.slice(13, 15) <= 59);
 }, 'Invalid source clock');
 export const CalendarConflictReferenceSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('native'), eventId: z.string().uuid() }).strict(),
-  z.object({ kind: z.literal('source'), feedId: z.string().uuid(), uid: sourceIdentity, revisionId: z.string().uuid(), original: sourceClock }).strict(),
+  z.object({ kind: z.literal('native'), eventId: z.string().guid() }).strict(),
+  z.object({ kind: z.literal('source'), feedId: z.string().guid(), uid: sourceIdentity, revisionId: z.string().guid(), original: sourceClock }).strict(),
 ]);
 const conflictInstant = z.string().datetime({ offset: true });
 const conflictSubjectFields = {
@@ -86,11 +86,11 @@ const conflictSubjectFields = {
 };
 export const CalendarConflictSubjectSchema = z.discriminatedUnion('kind', [
   z.object({ ...conflictSubjectFields, kind: z.literal('native'),
-    reference: z.object({ kind: z.literal('native'), eventId: z.string().uuid() }).strict(),
-    eventId: z.string().uuid(), readOnly: z.boolean(), mutable: z.boolean(),
+    reference: z.object({ kind: z.literal('native'), eventId: z.string().guid() }).strict(),
+    eventId: z.string().guid(), readOnly: z.boolean(), mutable: z.boolean(),
   }).strict(),
   z.object({ ...conflictSubjectFields, kind: z.literal('source'),
-    reference: z.object({ kind: z.literal('source'), feedId: z.string().uuid(), uid: sourceIdentity, revisionId: z.string().uuid(), original: sourceClock }).strict(),
+    reference: z.object({ kind: z.literal('source'), feedId: z.string().guid(), uid: sourceIdentity, revisionId: z.string().guid(), original: sourceClock }).strict(),
     readOnly: z.literal(true), mutable: z.literal(false),
   }).strict(),
 ]).refine(subject => (subject.kind !== 'native' || subject.eventId === subject.reference.eventId && subject.mutable === !subject.readOnly)

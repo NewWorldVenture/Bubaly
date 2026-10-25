@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const UUID = z.string().uuid();
+const UUID = z.string().guid();
 const DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
 const INSTANT = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|([+-])(\d{2}):(\d{2}))$/;
 const MIN_INSTANT = Date.parse('0001-01-01T00:00:00Z');

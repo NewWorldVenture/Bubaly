@@ -2,12 +2,25 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   completeProfileOnboardingSchema,
+  finalizeOnboardingSchema,
   inviteMemberActionSchema,
   localMemberActionSchema,
   previewCalendarImportSchema,
 } from '@/lib/validation';
 
 describe('onboarding failure safety', () => {
+  it('keeps omitted appearance defaults and legacy PostgreSQL GUID inputs', () => {
+    const appearance = finalizeOnboardingSchema.shape.appearance;
+    expect(appearance.parse(undefined)).toEqual({ avatarUrl: '' });
+    expect(appearance.parse({})).toEqual({ avatarUrl: '' });
+    expect(appearance.parse({ avatarUrl: 'https://example.test/avatar.png', pin: '1234' }))
+      .toEqual({ avatarUrl: 'https://example.test/avatar.png', pin: '1234' });
+    const familyId = '00000000-0000-0000-0000-000000000001';
+    expect(localMemberActionSchema.safeParse({ familyId, displayName: 'Kid', role: 'child' }).success).toBe(true);
+    expect(localMemberActionSchema.safeParse({ familyId: 'not-a-uuid', displayName: 'Kid', role: 'child' }).success).toBe(false);
+    expect(localMemberActionSchema.safeParse({ familyId: familyId + '0', displayName: 'Kid', role: 'child' }).success).toBe(false);
+  });
+
   it('bounds and validates runtime action payloads', () => {
     expect(previewCalendarImportSchema.safeParse({ source: 'paste', icsText: 'x'.repeat(200_001) }).success).toBe(false);
     expect(previewCalendarImportSchema.safeParse({ source: 'demo' }).success).toBe(true);

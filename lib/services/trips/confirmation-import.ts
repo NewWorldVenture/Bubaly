@@ -13,7 +13,7 @@ import {
   type ConfirmationPreview, type ConfirmationResult,
 } from '@/lib/vacations/confirmation-import';
 
-const uuid = z.string().uuid();
+const uuid = z.string().guid();
 const previewInputSchema = z.object({
   vacationId: uuid,
   source: confirmationSourceSchema,
@@ -65,7 +65,7 @@ const subscriptionsSchema = z.array(z.object({
   status: z.enum(['active', 'trialing']),
 }).strict());
 const settingsSchema = z.object({
-  value: z.record(z.enum(['off', 'free', 'basic', 'plus'])),
+  value: z.record(z.string(), z.enum(['off', 'free', 'basic', 'plus'])),
 }).strict();
 
 /** Fresh reads through the supplied authenticated client, including receipt retries. */

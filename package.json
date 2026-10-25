@@ -114,7 +114,7 @@
     "stripe": "^22.2.2",
     "tailwind-merge": "^2.5.4",
     "web-push": "^3.6.7",
-    "zod": "^3.23.8"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",

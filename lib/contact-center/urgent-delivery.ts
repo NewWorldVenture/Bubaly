@@ -54,7 +54,7 @@ const inputSchema = z.object({
   subject: z.string().max(MAX_SUBJECT).nullable(), body: z.string().max(MAX_BODY), summary: z.string().max(MAX_SUMMARY), intent: z.literal('urgent'),
 }).strict();
 const outputSchema = z.object({
-  version: z.literal(1), revision: z.string().uuid(),
+  version: z.literal(1), revision: z.string().guid(),
   phase: z.enum(['queued', 'dispatching', 'accepted', 'unknown', 'rejected', 'legacy_unknown', 'in_app_only']),
   notificationDone: z.boolean(), drain: z.boolean(), retryAt: z.string().datetime().nullable(),
   destination: z.string().max(32).nullable(), providerSid: z.string().regex(/^(SM|MM)[0-9a-f]{32}$/i).nullable(),
@@ -287,7 +287,7 @@ export async function attemptUrgentDelivery(admin: Admin, id: string, familyId: 
   }
 }
 
-const cursorSchema = z.object({ id: z.string().uuid(), createdAt: z.string().datetime({ offset: true }) }).strict();
+const cursorSchema = z.object({ id: z.string().guid(), createdAt: z.string().datetime({ offset: true }) }).strict();
 /** Fair bounded traversal, including poison/held rows, without altering intake timestamps. */
 export async function drainUrgentDeliveries(admin: Admin, options: { limit?: number; now?: Date } = {}) {
   const limit = Math.min(20, Math.max(1, options.limit ?? 10)), started = Date.now();
