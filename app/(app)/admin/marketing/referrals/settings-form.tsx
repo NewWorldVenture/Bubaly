@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { ReferralConfig } from '@/lib/referrals/core';
+import { MAX_REFERRAL_REWARD_CENTS, type ReferralConfig } from '@/lib/referrals/core';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { SubmitButton } from '@/components/ui/submit-button';
 
@@ -23,12 +23,12 @@ export function ReferralSettingsForm({ config, action }: {
       </label>
       <label className="block">
         <span className="text-xs text-muted">{t('adminMarketingReferralsSettingsForm.referrerReward')}</span>
-        <input type="number" name="referrerRewardDollars" min="0" step="0.5" defaultValue={(config.referrerRewardCents / 100).toString()}
+        <input type="number" name="referrerRewardDollars" min="0" max={MAX_REFERRAL_REWARD_CENTS / 100} step="0.5" defaultValue={(config.referrerRewardCents / 100).toString()}
           className="mt-1 h-9 w-full rounded-lg border border-border bg-bg px-3" />
       </label>
       <label className="block">
         <span className="text-xs text-muted">{t('adminMarketingReferralsSettingsForm.referredReward')}</span>
-        <input type="number" name="referredRewardDollars" min="0" step="0.5" defaultValue={(config.referredRewardCents / 100).toString()}
+        <input type="number" name="referredRewardDollars" min="0" max={MAX_REFERRAL_REWARD_CENTS / 100} step="0.5" defaultValue={(config.referredRewardCents / 100).toString()}
           className="mt-1 h-9 w-full rounded-lg border border-border bg-bg px-3" />
       </label>
       <label className="block">

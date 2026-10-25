@@ -10,17 +10,18 @@ import { listAllAuthUsers } from '@/lib/server/list-all-auth-users';
 import { sendReactEmail, APP_URL } from '@/lib/email';
 import { InviteEmail } from '@/lib/emails/invite';
 import { emailSchema } from '@/lib/validation';
-import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
+import { readStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { stripeFromKey } from '@/lib/stripe';
-import { REMOVED_MEMBER_PATCH, isManager, type MemberRole } from '@/lib/constants/roles';
+import { REMOVED_MEMBER_PATCH, inviteRolesLostOnRoleChange, isManager, type MemberRole } from '@/lib/constants/roles';
 import { REMOVED_CHILD_BAN_MARKER, isChildLoginAccount, memberHasAKidLogin, revokeRemovedChildLogin } from '@/lib/server/child-account';
 import type { PlanId } from '@/lib/constants/plans';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
+import { settleAll } from '@/lib/supabase/settle';
 import { isValidTimezone } from '@/lib/time/zoned';
 import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
 import { forgetMemberLocation } from '@/lib/location/retention';
-import { closePendingInvitesFor } from '@/lib/server/member-invites';
+import { closePendingInvitesFor, revokeInvitesIssuedBy } from '@/lib/server/member-invites';
 import { recordTrustChange } from '@/lib/trust/ledger';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
@@ -162,9 +163,13 @@ export async function adminCreateFamilyAction(input: {
   const authOwner = matches[0];
 
   // The display name still comes from the profile — a self-chosen name is
-  // exactly what that column is for. Only the IDENTITY moved.
-  const { data: ownerProfile } = await supabase
+  // exactly what that column is for. Only the IDENTITY moved. A failed read is
+  // not "no name": dropped, it saved the address's local part as the parent's
+  // display_name (review R10-CREATE-FAMILY-OWNER-NAME-READ-DROPPED). Nothing is
+  // created until it answers.
+  const { data: ownerProfile, error: ownerProfileError } = await supabase
     .from('profiles').select('full_name').eq('id', authOwner.id).maybeSingle();
+  if (ownerProfileError) return actionFailure(ownerProfileError, t('actions.couldNotCheckThatRefresh'));
   const owner = {
     id: authOwner.id,
     full_name: ownerProfile?.full_name ?? null,
@@ -267,9 +272,13 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result<
   if (!forgotten.ok) console.error('[admin-action] removed member location was not cleared', { memberId, failures: forgotten.failures });
   // Every pending invite to them is revoked too, or a second one they hold
   // brings them back (accept_invite reactivates the row). Stands if it fails.
-  const invitesRevoked = await closePendingInvitesFor(supabase, member.family_id, member, 'revoked');
+  // So are the pending invites THEY issued, which accept_invite would still
+  // honour at the role they chose (revokeInvitesIssuedBy).
+  const invitesToThemClosed = await closePendingInvitesFor(supabase, member.family_id, member, 'revoked');
+  const invitesByThemRevoked = await revokeInvitesIssuedBy(supabase, member.family_id, member.user_id);
+  const invitesRevoked = invitesToThemClosed && invitesByThemRevoked;
 
-  await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name, login_revocation: loginRevocation, location_forgotten: forgotten.ok, invites_revoked: invitesRevoked } });
+  await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name, login_revocation: loginRevocation, location_forgotten: forgotten.ok, invites_revoked: invitesRevoked, invites_they_issued_revoked: invitesByThemRevoked } });
   revalidatePath('/admin/users');
   const warning = loginRevocation === 'failed'
     ? t('familyModule.removedButLoginStillActive')
@@ -279,7 +288,7 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result<
 }
 
 /** Updates a member's display name and role. */
-export async function adminUpdateMemberAction(memberId: string, input: { displayName: string; role: MemberRole }): Promise<Result> {
+export async function adminUpdateMemberAction(memberId: string, input: { displayName: string; role: MemberRole }): Promise<Result<{ warning?: string }>> {
   const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
@@ -316,9 +325,15 @@ export async function adminUpdateMemberAction(memberId: string, input: { display
       context: { memberId, from: target.role, to: input.role, by: 'super_admin' },
     });
   }
-  await adminAuditLog({ familyId: member.family_id, action: 'update', resource: 'family_members', resourceId: memberId, metadata: { display_name: displayName, role: input.role } });
+  // A demotion revokes the pending invites they sent at a role they may no
+  // longer give, as the household's editor does (updateFamilyMemberAction).
+  // The role change stands if it fails; the audit row and the console say so.
+  const invitesRevoked = !roleChanges || await revokeInvitesIssuedBy(
+    supabase, member.family_id, target.user_id, inviteRolesLostOnRoleChange(target.role, input.role),
+  );
+  await adminAuditLog({ familyId: member.family_id, action: 'update', resource: 'family_members', resourceId: memberId, metadata: { display_name: displayName, role: input.role, invites_they_issued_revoked: invitesRevoked } });
   revalidatePath('/admin/users');
-  return { ok: true };
+  return invitesRevoked ? { ok: true } : { ok: true, data: { warning: t('familyModule.roleChangedButInviteStillOpen') } };
 }
 
 /** Plans a super-admin can assign from the console (free + the paid tiers). */
@@ -492,7 +507,14 @@ export async function testStripeConnectionAction(): Promise<Result<{ livemode: b
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
   try {
-    const settings = await getStripeSettings();
+    // A failed read is not "nothing saved": the environment's key would answer
+    // for the stored one, or "no key" would be said over a saved one (review
+    // R9-2-ADMIN-TEST-CONNECTION-FAILED-READ-IS-NO-KEY).
+    const { settings, error: readError } = await readStripeSettings();
+    if (readError) {
+      console.error('[admin-action] stripe settings read failed', readError);
+      return { ok: false, error: t('stripe.couldNotLoadStripeFinancial') };
+    }
     const key = effectiveSecretKey(settings);
     if (!key) return { ok: false, error: t('actions.noStripeSecretKeyConfigured') };
     // balance.retrieve needs no id and fails fast on a bad/expired key.
@@ -515,10 +537,21 @@ export async function adminResendInviteAction(inviteId: string): Promise<Result>
   if (inviteReadError) return { ok: false, error: describeActionError(inviteReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!invite || invite.status !== 'pending') return { ok: false, error: t('actions.inviteIsNoLongerPending') };
 
-  const { data: family } = await supabase.from('families').select('name').eq('id', invite.family_id).maybeSingle();
-  const inviterName = invite.invited_by
-    ? (await supabase.from('profiles').select('full_name, email').eq('id', invite.invited_by).maybeSingle()).data
-    : null;
+  // Read with their errors. Dropped, a failed read sent the real invitee a
+  // reminder to join "a family" from "A family admin", reported as a resend
+  // (review R9-2-RESEND-INVITE-FAILED-NAME-READS-SENT-AS-GENERIC). Nothing is
+  // sent until both answer; a family or inviter that is really gone still
+  // reads as the generic words.
+  const [familyRes, inviterRes] = await settleAll([
+    supabase.from('families').select('name').eq('id', invite.family_id).maybeSingle(),
+    invite.invited_by
+      ? supabase.from('profiles').select('full_name, email').eq('id', invite.invited_by).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+  const nameReadError = familyRes.error ?? inviterRes.error;
+  if (nameReadError) return { ok: false, error: describeActionError(nameReadError, t('actions.couldNotCheckThatRefresh')) };
+  const family = familyRes.data;
+  const inviterName = inviterRes.data;
 
   const { ok, skipped } = await sendReactEmail({
     to: invite.email,

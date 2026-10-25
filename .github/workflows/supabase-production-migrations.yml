@@ -50,6 +50,8 @@ jobs:
       NEXT_PUBLIC_SUPABASE_URL: https://${{ secrets.SUPABASE_PROJECT_REF }}.supabase.co
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_TELEMETRY_DISABLED: '1'
+      DO_NOT_TRACK: '1'
 
     steps:
       - uses: actions/checkout@v4
@@ -69,6 +71,7 @@ jobs:
           cache: npm
 
       - uses: supabase/setup-cli@v1
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.apply == true
         with:
           version: 2.109.1
 
@@ -95,17 +98,12 @@ jobs:
         run: npm run db:audit:queries
 
       - name: Link production project
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.apply == true
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
       - name: Verify remote migration ledger
         shell: bash
-        run: |
-          set -euo pipefail
-          if ! supabase migration list --linked; then
-            echo "Remote Supabase migration history is unavailable or out of sync. Repair the reviewed migration ledger before db push." >&2
-            exit 1
-          fi
-          node scripts/audit-production-migration-state.mjs --enforce-history
+        run: node scripts/audit-production-migration-state.mjs --enforce-history
 
       - name: Retain metadata-only migration audit
         if: always()

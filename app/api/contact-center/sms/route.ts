@@ -2,6 +2,11 @@
 // Files the text into the unified inbox, runs the AI concierge (summary + intent
 // + reply), auto-replies via TwiML, and escalates genuine urgencies to the
 // family's human fallback number. Every request requires a valid signature.
+//
+// Anyone who knows the number can text it, so the concierge (one model call)
+// and the auto-reply are each budgeted per sender and per family over a day,
+// as the email lane's are — see lib/contact-center/inbound-budget.ts for the
+// figures and why (audit RV1-N1-sibling-sms-voice).
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
@@ -15,7 +20,9 @@ import { captureInboundWithUrgency, attemptUrgentDelivery } from '@/lib/contact-
 import { runConcierge } from '@/lib/contact-center/concierge';
 import { autoReplyText, classifyIntent, summarizeInbound } from '@/lib/contact-center/routing';
 import { safeContactText } from '@/lib/contact-center/text';
-import { attachSmsReply, prepareSmsReply, reserveSmsReply, type SmsReplyReceipt } from '@/lib/contact-center/sms-reply';
+import { withheldConcierge } from '@/lib/contact-center/inbound-mail';
+import { conciergeBudgetAllows, smsReplyBudgetAllows } from '@/lib/contact-center/inbound-budget';
+import { attachSmsReply, prepareSmsReply, readSmsReply, reserveSmsReply, type SmsReplyReceipt } from '@/lib/contact-center/sms-reply';
 import { captureSmsIngress, readSmsIngress, readLegacySmsReplyForIngress, readLegacyUrgentForIngress, type SmsIngressReceipt } from '@/lib/contact-center/sms-ingress';
 import { appBaseUrl } from '@/lib/server/app-url';
 
@@ -145,6 +152,17 @@ export async function POST(req: NextRequest) {
   const familyLabel = familyResult.data?.name || 'the family';
   const boundSid = legacyReply?.binding.smsSid ?? legacyUrgent?.inputs.providerRef ?? ingress?.binding.smsSid ?? sid;
 
+  // The concierge (a model call) is budgeted per sender number and per family
+  // number BEFORE the model is asked. Over budget the text is still filed —
+  // with the deterministic classification the concierge itself falls back to —
+  // and no auto-reply is prepared; a replay of a text whose reply was already
+  // prepared keeps that frozen candidate rather than being classified again
+  // (lib/contact-center/inbound-budget.ts; audit RV1-N1-sibling-sms-voice).
+  const withinConciergeBudget = await conciergeBudgetAllows('sms', familyId, from);
+  if (!withinConciergeBudget) {
+    console.warn('[contact-center] inbound SMS over the concierge budget: filed with the deterministic classification; auto-reply withheld', { familyId });
+  }
+
   let replyReceipt: SmsReplyReceipt | null = null;
   let result: Pick<Awaited<ReturnType<typeof runConcierge>>, 'summary' | 'intent'>;
   try {
@@ -152,24 +170,32 @@ export async function POST(req: NextRequest) {
       if (!channel || channel.family_id !== familyId || channel.phone_number !== to) {
         return new NextResponse('Contact Center temporarily unavailable', { status: 503 });
       }
-      replyReceipt = await prepareSmsReply(admin, { familyId, channelId: channel.family_id, smsSid: boundSid, from, to, body }, async signal => {
-        signal.throwIfAborted();
-        const candidate = await runConcierge({ channel: 'sms', from: from ?? undefined, text: body, familyLabel, signal });
-        signal.throwIfAborted();
-        const { locale } = await getLocaleContext();
-        const suppression = channel.ai_concierge_enabled === false ? 'disabled'
-          : candidate.intent === 'spam' ? 'spam'
-          : !from || !/^\+[1-9]\d{6,14}$/.test(from) ? 'unsupported_recipient' : null;
-        const reply = suppression ? null : candidate.intent === 'urgent'
-          ? (await getTranslations())('contactUrgent.replySaved')
-          : candidate.reply || autoReplyText(candidate.intent, familyLabel);
-        signal.throwIfAborted();
-        return { summary: candidate.summary, intent: candidate.intent, reply, locale: locale.code, suppression };
-      });
-      result = replyReceipt.candidate;
+      const binding = { familyId, channelId: channel.family_id, smsSid: boundSid, from, to, body };
+      if (!withinConciergeBudget) {
+        replyReceipt = await readSmsReply(admin, binding);
+        result = replyReceipt?.candidate ?? withheldConcierge(body, familyLabel);
+      } else {
+        replyReceipt = await prepareSmsReply(admin, binding, async signal => {
+          signal.throwIfAborted();
+          const candidate = await runConcierge({ channel: 'sms', from: from ?? undefined, text: body, familyLabel, signal });
+          signal.throwIfAborted();
+          const { locale } = await getLocaleContext();
+          const suppression = channel.ai_concierge_enabled === false ? 'disabled'
+            : candidate.intent === 'spam' ? 'spam'
+            : !from || !/^\+[1-9]\d{6,14}$/.test(from) ? 'unsupported_recipient' : null;
+          const reply = suppression ? null : candidate.intent === 'urgent'
+            ? (await getTranslations())('contactUrgent.replySaved')
+            : candidate.reply || autoReplyText(candidate.intent, familyLabel);
+          signal.throwIfAborted();
+          return { summary: candidate.summary, intent: candidate.intent, reply, locale: locale.code, suppression };
+        });
+        result = replyReceipt.candidate;
+      }
     } else {
       // Retain unsupported/legacy intake without inventing a unique reply occasion.
-      result = await runConcierge({ channel: 'sms', from: from ?? undefined, text: body, familyLabel });
+      result = withinConciergeBudget
+        ? await runConcierge({ channel: 'sms', from: from ?? undefined, text: body, familyLabel })
+        : withheldConcierge(body, familyLabel);
     }
   } catch (error) {
     // Filing the text matters more than answering it. Twilio does not retry an
@@ -241,6 +267,15 @@ export async function POST(req: NextRequest) {
       if (replyReceipt.phase === 'queued') {
         origin = new URL(BASE_URL);
         if (origin.origin !== BASE_URL || !['http:', 'https:'].includes(origin.protocol)) throw new Error('Invalid callback origin');
+        // Budgeted per sender number and per family number, charged only for
+        // a reply that is about to be emitted (a replay of one already sent is
+        // past `queued` and never reaches this line). Over budget — or with
+        // the limiter unreadable — the text is filed and only the reply is
+        // withheld: the bound a loop between two auto-responders runs into.
+        if (!await smsReplyBudgetAllows(familyId, replyReceipt.binding.from)) {
+          console.warn('[contact-center] SMS auto-reply withheld: over budget', { familyId });
+          return xml('');
+        }
       }
       const reserved = await reserveSmsReply(admin, replyReceipt, { accountSid });
       if (reserved.emission !== null) {

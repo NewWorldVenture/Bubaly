@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
-import { rateLimitDb } from '@/lib/server/rate-limit-db';
+import { rateLimitDb, rateLimitDbVerdict } from '@/lib/server/rate-limit-db';
 
 function client(result: unknown) {
   return { rpc: vi.fn().mockResolvedValue(result) } as never;
@@ -41,6 +41,33 @@ describe('durable rate-limit boundary', () => {
   it('supports an explicit availability-first override', async () => {
     await expect(rateLimitDb(client({ data: null, error: new Error('db down') }), 'legacy:key', { failOpen: true }))
       .resolves.toEqual({ ok: true, retryAfter: 0 });
+  });
+});
+
+// An arbiter (a limit of one: the first hit wins) answers a repeat and an
+// outage differently, so the verdict keeps them apart where rateLimitDb folds
+// them together (app/reviews/new/actions.ts).
+describe('durable rate-limit verdict', () => {
+  it('tells an allowed hit, a refusal and an outage apart', async () => {
+    const allowed = client({ data: [{ allowed: true, retry_after: 0 }], error: null });
+    await expect(rateLimitDbVerdict(allowed, 'review:text:abc', { limit: 1, windowMs: 86_400_000 })).resolves.toEqual({ verdict: 'allowed' });
+    expect((allowed as { rpc: ReturnType<typeof vi.fn> }).rpc).toHaveBeenCalledWith('rate_limit_hit', {
+      p_key: 'review:text:abc',
+      p_limit: 1,
+      p_window_seconds: 86_400,
+    });
+    await expect(rateLimitDbVerdict(client({ data: [{ allowed: false, retry_after: 0 }], error: null }), 'refused:key'))
+      .resolves.toEqual({ verdict: 'refused', retryAfter: 1 });
+    await expect(rateLimitDbVerdict(client({ data: [{ allowed: false, retry_after: 42.2 }], error: null }), 'refused:key'))
+      .resolves.toEqual({ verdict: 'refused', retryAfter: 43 });
+  });
+
+  it('answers unavailable, never refused, for RPC errors, empty data, malformed rows and thrown calls', async () => {
+    await expect(rateLimitDbVerdict(client({ data: null, error: new Error('db down') }), 'error:key')).resolves.toEqual({ verdict: 'unavailable' });
+    await expect(rateLimitDbVerdict(client({ data: [], error: null }), 'empty:key')).resolves.toEqual({ verdict: 'unavailable' });
+    await expect(rateLimitDbVerdict(client({ data: [{ allowed: 'no' }], error: null }), 'shape:key')).resolves.toEqual({ verdict: 'unavailable' });
+    const throwing = { rpc: vi.fn().mockRejectedValue(new Error('network down')) } as never;
+    await expect(rateLimitDbVerdict(throwing, 'throw:key')).resolves.toEqual({ verdict: 'unavailable' });
   });
 });
 

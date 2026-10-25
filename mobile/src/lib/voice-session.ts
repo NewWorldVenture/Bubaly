@@ -16,6 +16,8 @@ export type VoiceSessionDependencies = {
   stop: () => Promise<void>;
   recordingUri: () => string | null;
   transcribe: (context: VoiceContext, uri: string, signal: AbortSignal) => Promise<string>;
+  /** Remove a recording the turn is done with (recordings.ts). Best effort; its failure never fails the turn. */
+  discard?: (uri: string) => Promise<void>;
   ask: (context: VoiceContext, text: string, signal: AbortSignal) => Promise<AssistantReply>;
   phase: (phase: VoicePhase) => void;
   user: (text: string) => void;
@@ -58,10 +60,20 @@ export class VoiceSession {
     this.nativeQueue = next.catch(() => undefined);
     return next;
   }
+  /** Delete a recording the turn is done with. Never throws: cleanup is not a reason to fail a turn. */
+  private async discard(uri: string) {
+    try { await this.deps.discard?.(uri); } catch (error) { console.warn('[voice-session] recording not removed', error); }
+  }
   private async release(owner?: number) {
     if (owner !== undefined && this.nativeOwner !== owner) return;
     try {
-      if (this.prepared) { await this.deps.stop(); this.prepared = false; }
+      if (this.prepared) {
+        await this.deps.stop(); this.prepared = false;
+        // A recording stopped here was never sent: an invalidated or failed
+        // turn. It is removed rather than left in the cache.
+        const uri = this.deps.recordingUri();
+        if (uri) await this.discard(uri);
+      }
     } finally {
       if (this.audioClaimed) { await this.deps.audioMode(false); this.audioClaimed = false; }
       if (!this.prepared && !this.audioClaimed) this.nativeOwner = null;
@@ -132,14 +144,26 @@ export class VoiceSession {
         try { await this.deps.stop(); this.prepared = false; return this.deps.recordingUri(); }
         finally { await this.deps.audioMode(false); this.audioClaimed = false; if (!this.prepared) this.nativeOwner = null; }
       });
-      this.check(op);
-      if (!uri) throw new VoiceSessionError('mobileAssistant.emptyRecording');
-      await this.fresh(op); this.setPhase('transcribing');
-      const text = await this.deps.transcribe(this.latest(op), uri, op.abort.signal);
+      const text = await this.transcribeAndDiscard(op, uri);
       this.check(op);
       if (!text.trim()) throw new VoiceSessionError('mobileAssistant.noSpeech');
       await this.submit(op, text.trim());
     } catch (error) { await this.failed(op, error); }
+  }
+  /**
+   * The recording is a means to the transcript. Whatever happens to the turn
+   * from here — a changed context, a refused upload, Stop, success — the file
+   * is removed once the transcriber is done with it; nothing else ever would
+   * be, and every spoken request used to stay in the cache for the next person
+   * who signed in on the phone.
+   */
+  private async transcribeAndDiscard(op: Operation, uri: string | null): Promise<string> {
+    try {
+      this.check(op);
+      if (!uri) throw new VoiceSessionError('mobileAssistant.emptyRecording');
+      await this.fresh(op); this.setPhase('transcribing');
+      return await this.deps.transcribe(this.latest(op), uri, op.abort.signal);
+    } finally { if (uri) await this.discard(uri); }
   }
   async send(text: string) {
     if (!text.trim()) return;

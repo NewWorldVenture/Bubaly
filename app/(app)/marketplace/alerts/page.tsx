@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { AlertTriangle, BellRing, Sparkles } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { SaveButton } from '@/components/marketplace/save-button';
@@ -23,6 +24,8 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 export const dynamic = 'force-dynamic';
 
+type CandidateRow = MatchableListing & { rent_period: string | null };
+
 export default async function MarketplaceAlertsPage() {
   const t = await getTranslations();
   // Prices follow the READER's locale — the marketplace helpers require it.
@@ -37,9 +40,17 @@ export default async function MarketplaceAlertsPage() {
     sb.from('marketplace_saved_searches')
       .select('id, label, query, kind, category, max_price_cents, last_seen_at, created_at')
       .eq('family_id', familyId).eq('member_id', meId).order('created_at', { ascending: false }),
-    sb.from('marketplace_listings')
-      .select('id, title, description, kind, category, price_cents, rent_period, status, created_at, member_id')
-      .eq('family_id', familyId).order('created_at', { ascending: false }).limit(400),
+    // Every listing an alert can match (only an open one can), paged on id.
+    // The read was the family's 400 newest in EVERY status, so once 400 newer
+    // rows existed, closed ones included, an older open listing fell out of
+    // "N matches on the board".
+    readAllByIdAsQuery<CandidateRow>((after, limit) => {
+      let q = sb.from('marketplace_listings')
+        .select('id, title, description, kind, category, price_cents, rent_period, status, created_at, member_id')
+        .eq('family_id', familyId).in('status', ['available', 'pending']);
+      if (after) q = q.gt('id', after);
+      return q.order('id').limit(limit);
+    }, { max: 50_000 }),
     sb.from('marketplace_saves').select('listing_id').eq('family_id', familyId).eq('member_id', meId),
   ]);
 
@@ -56,7 +67,7 @@ export default async function MarketplaceAlertsPage() {
     dataWarnings.push('Saved listings');
   }
 
-  const candidates = (listings ?? []) as (MatchableListing & { rent_period: string | null })[];
+  const candidates: CandidateRow[] = listings ?? [];
   const savedIds = new Set((saves ?? []).map((s) => s.listing_id));
   const rows = searches ?? [];
 

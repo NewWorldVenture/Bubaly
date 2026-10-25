@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { ShieldCheck, Mail, UserX, Clock, Activity, Lock, KeyRound, EyeOff, FileCheck } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
-import { settle } from '@/lib/supabase/settle';
+import { settle, settleAll } from '@/lib/supabase/settle';
+import { listAllAuthUsers } from '@/lib/server/list-all-auth-users';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar } from '@/components/ui/avatar';
@@ -22,17 +24,37 @@ const POSTURE = [
   { icon: ShieldCheck, title: 'Super admin allowlist with zero read access', detail: 'The super_admins table has RLS enabled with no policies — not even the super admin’s own session can query it. Only a SECURITY DEFINER function may consult it.' },
 ];
 
+/** The funnel's five statuses, each counted exactly. */
+const INVITE_STATUSES = ['pending', 'accepted', 'expired', 'revoked', 'declined'] as const;
+/** Pages of 1,000 auth users read before the list is refused as a prefix. */
+const AUTH_USER_PAGES = 25;
+
 export default async function AdminSecurityPage() {
   const tr = await getTranslations();
   const t = await getTranslations();
   const supabase = createServiceClient();
 
-  const [invitesResult, authUsersResult, auditLogsResult, familiesResult] = await Promise.all([
-    settle(supabase.from('invites').select('status')),
-    supabase.auth.admin.listUsers({ perPage: 1000 }),
+  // Every account statistic was taken from ONE page of listUsers, and the
+  // invite funnel from an unbounded `invites.select('status')`. GoTrue honours
+  // perPage 1000 for the first page and says nothing about the rest; PostgREST
+  // caps the invites read at 1,000 rows with no error. So past a thousand
+  // accounts or invites every figure here was a prefix presented as a total.
+  // The invite counts are now exact `head: true` counts per status, and the
+  // users are read page by page to an empty page (lib/server/list-all-auth-
+  // users.ts); passing AUTH_USER_PAGES is an error that lands in the existing
+  // read-error state rather than a smaller platform.
+  const [inviteStatusResults, authUsersResult, auditLogsResult] = await Promise.all([
+    settleAll(INVITE_STATUSES.map((status) =>
+      supabase.from('invites').select('id', { count: 'exact', head: true }).eq('status', status))),
+    listAllAuthUsers(supabase, { maxPages: AUTH_USER_PAGES }),
     settle(supabase.from('audit_logs').select('id, family_id, actor_id, action, resource, metadata, created_at').order('created_at', { ascending: false }).limit(25)),
-    settle(supabase.from('families').select('id, name')),
   ]);
+  const invitesResult = { error: inviteStatusResults.find((r) => r.error)?.error ?? null };
+  // Only the families the listed audit rows name. The whole families table was
+  // read unbounded, which PostgREST answers with at most `db-max-rows` (1,000)
+  // rows, so a recent row for a family past them lost its family's name.
+  const auditFamilyIds = [...new Set((auditLogsResult.data ?? []).map((l) => l.family_id).filter((id): id is string => !!id))];
+  const familiesResult = await readInChunks(auditFamilyIds, (chunk) => supabase.from('families').select('id, name').in('id', chunk));
 
   const readError = invitesResult.error ?? authUsersResult.error ?? auditLogsResult.error ?? familiesResult.error;
   if (readError) {
@@ -49,19 +71,15 @@ export default async function AdminSecurityPage() {
     );
   }
 
-  const { data: invites } = invitesResult;
-  const { data: authUsers } = authUsersResult;
   const { data: auditLogs } = auditLogsResult;
   const { data: families } = familiesResult;
 
   const inviteCounts = { pending: 0, accepted: 0, expired: 0, revoked: 0, declined: 0 };
-  for (const inv of invites ?? []) {
-    if (inv.status in inviteCounts) inviteCounts[inv.status as keyof typeof inviteCounts]++;
-  }
-  const totalInvites = invites?.length ?? 0;
+  INVITE_STATUSES.forEach((status, i) => { inviteCounts[status] = inviteStatusResults[i].count ?? 0; });
+  const totalInvites = Object.values(inviteCounts).reduce((sum, n) => sum + n, 0);
   const acceptRate = totalInvites > 0 ? (inviteCounts.accepted / totalInvites) * 100 : 0;
 
-  const users = authUsers?.users ?? [];
+  const users = authUsersResult.users;
   const confirmedCount = users.filter((u) => u.email_confirmed_at).length;
   const unconfirmedCount = users.length - confirmedCount;
   const neverSignedIn = users.filter((u) => !u.last_sign_in_at).length;
@@ -82,8 +100,11 @@ export default async function AdminSecurityPage() {
 
   const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
   const actorIds = [...new Set((auditLogs ?? []).map((l) => l.actor_id).filter((x): x is string => !!x))];
+  // Settled: a transport failure REJECTS the query rather than resolving
+  // { data, error }, and unsettled it took the route's error boundary in place
+  // of the security activity read-error state below.
   const actorsResult = actorIds.length
-    ? await supabase.from('profiles').select('id, full_name, email').in('id', actorIds)
+    ? await settle(supabase.from('profiles').select('id, full_name, email').in('id', actorIds))
     : { data: [] as { id: string; full_name: string | null; email: string | null }[] };
   if ('error' in actorsResult && actorsResult.error) {
     console.error('[admin-security] actor profile read failed', actorsResult.error);

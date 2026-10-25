@@ -2,7 +2,9 @@ import type { Metadata } from 'next';
 import { Radar, Search, Link2, ShieldAlert } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { Card } from '@/components/ui/card';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import {
   rankKeywordOpportunities, keywordOpportunity, summarizeBacklinks, type BacklinkLike,
 } from '@/lib/marketing/competitive';
@@ -28,6 +30,10 @@ type Backlink = Tables<'backlinks'>;
 
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
 const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
+/** Backlinks the summary tiles, and keywords the ranking, may page through before they are reported as not shown (one round trip per 1,000). */
+const SUM_ROW_CEILING = 25_000;
+/** The keyword table lists this many of the best-ranked opportunities. */
+const KEYWORDS_SHOWN = 500;
 
 async function ReadFailure() {
   const t = await getTranslations();
@@ -47,28 +53,67 @@ export default async function CompetitivePage() {
   try {
     results = await settleAll([
       supabase.from('competitors').select('*').order('ranking', { nullsFirst: false }).limit(200),
-      supabase.from('keyword_intel').select('*').limit(500),
       supabase.from('backlinks').select('*').order('created_at', { ascending: false }).limit(500),
     ]);
   } catch {
     return <ReadFailure />;
   }
   if (results.some((result) => result.error)) return <ReadFailure />;
-  const [competitorsResult, keywordsResult, backlinksResult] = results;
+  const [competitorsResult, backlinksResult] = results;
+
+  // The lists are capped (200 competitors, 500 keywords, the newest 500
+  // backlinks); the tiles are everything tracked. Counted from the lists,
+  // Competitors and Keywords tracked stopped at the cap, and Active backlinks
+  // and Avg authority described the newest 500. The two counts are exact
+  // `head: true` counts and the backlinks are paged on the id to a real
+  // ceiling; past it those two tiles say they are not shown.
+  //
+  // The keyword table ranks opportunities, so it ranks every keyword, not 500
+  // that an unordered read happened to return (review
+  // R5-CRM-BOARD-AND-RANKING-FROM-CAPPED-LISTS): an opportunity's score is a
+  // product the database cannot order by, so the keywords are paged on the id
+  // to the ceiling, ranked here, and the best KEYWORDS_SHOWN are listed. Past
+  // the ceiling a ranking of part of them is no ranking: the table says it is
+  // not shown, and the add-keyword form stays.
+  const [competitorCountResult, keywordCountResult, backlinkSummaryResult, keywordsResult] = await settleAll([
+    supabase.from('competitors').select('id', { count: 'exact', head: true }),
+    supabase.from('keyword_intel').select('id', { count: 'exact', head: true }),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('backlinks').select('id, status, authority');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('keyword_intel').select('*');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
+  ]);
+  const backlinksCeiling = 'truncated' in backlinkSummaryResult && backlinkSummaryResult.truncated;
+  const keywordsCeiling = 'truncated' in keywordsResult && keywordsResult.truncated;
+  if (competitorCountResult.error || keywordCountResult.error || (!backlinksCeiling && backlinkSummaryResult.error)
+    || (!keywordsCeiling && keywordsResult.error)) return <ReadFailure />;
+
   const comps = (competitorsResult.data ?? []) as Competitor[];
-  const kws = rankKeywordOpportunities((keywordsResult.data ?? []) as Keyword[]);
+  // Highest opportunity first; equal scores in id order, so the cut is the same on every render.
+  const kws = rankKeywordOpportunities((keywordsResult.data ?? []) as Keyword[]).slice(0, KEYWORDS_SHOWN);
   const links = (backlinksResult.data ?? []) as Backlink[];
-  const bl = summarizeBacklinks(links as unknown as BacklinkLike[]);
+  const bl = summarizeBacklinks((backlinkSummaryResult.data ?? []) as unknown as BacklinkLike[]);
+  const unavailable = t('strategyMetrics.unavailable');
 
   const stats = [
-    { label: 'Competitors', value: comps.length, icon: Radar, tint: 'text-violet-400 bg-violet-500/15' },
-    { label: 'Keywords tracked', value: kws.length, icon: Search, tint: 'text-blue-400 bg-blue-500/15' },
-    { label: 'Active backlinks', value: bl.active, icon: Link2, tint: 'text-emerald-400 bg-emerald-500/15' },
-    { label: 'Avg authority', value: bl.avgAuthority, icon: ShieldAlert, tint: 'text-amber-400 bg-amber-500/15' },
+    { label: 'Competitors', value: competitorCountResult.count ?? 0, icon: Radar, tint: 'text-violet-400 bg-violet-500/15' },
+    { label: 'Keywords tracked', value: keywordCountResult.count ?? 0, icon: Search, tint: 'text-blue-400 bg-blue-500/15' },
+    { label: 'Active backlinks', value: backlinksCeiling ? unavailable : bl.active, ceiling: backlinksCeiling, icon: Link2, tint: 'text-emerald-400 bg-emerald-500/15' },
+    { label: 'Avg authority', value: backlinksCeiling ? unavailable : bl.avgAuthority, ceiling: backlinksCeiling, icon: ShieldAlert, tint: 'text-amber-400 bg-amber-500/15' },
   ];
 
   return (
     <div className="space-y-5">
+      <PartialReadBanner
+        title={t('adminCeiling.figuresNotShown', { n: SUM_ROW_CEILING.toLocaleString() })}
+        failures={[...stats.filter((s) => s.ceiling).map((s) => s.label), ...(keywordsCeiling ? [t('adminMarketingCompetitive.keywordIntelligence')] : [])]}
+      />
       <p className="text-sm text-muted">{t('adminMarketingCompetitive.trackCompetitorsFindKeywordOpportunitiesAnd')}</p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -89,6 +134,10 @@ export default async function CompetitivePage() {
           <input name="ranking" type="number" min="1" placeholder={t('adminMarketingCompetitive.rank1Top')} className={inputCls} />
           <SubmitButton className={btnCls}>{t('adminMarketingCompetitive.addCompetitor')}</SubmitButton>
         </form>
+        {/* The list is the first 200 by ranking, and the count above is every competitor (coverage sweep round 9). */}
+        {(competitorCountResult.count ?? 0) > comps.length && (
+          <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsPart', { shown: comps.length.toLocaleString(), total: (competitorCountResult.count ?? 0).toLocaleString() })}</p>
+        )}
         {comps.length === 0 ? <p className="py-3 text-center text-sm text-muted">{t('adminMarketingCompetitive.noCompetitorsTracked')}</p> : (
           <div className="space-y-1.5">
             {comps.map((c) => (
@@ -111,7 +160,7 @@ export default async function CompetitivePage() {
           <input name="our_rank" type="number" min="1" placeholder={t('adminMarketingCompetitive.ourRank')} className={inputCls} />
           <SubmitButton className={`${btnCls} lg:col-span-5`}>{t('adminMarketingCompetitive.addKeyword')}</SubmitButton>
         </form>
-        {kws.length === 0 ? <p className="py-3 text-center text-sm text-muted">{t('adminMarketingCompetitive.noKeywordsTracked')}</p> : (
+        {keywordsCeiling ? <p className="py-3 text-center text-sm text-muted">{unavailable}</p> : kws.length === 0 ? <p className="py-3 text-center text-sm text-muted">{t('adminMarketingCompetitive.noKeywordsTracked')}</p> : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-xs text-muted"><tr><th className="pb-2">{t('adminMarketingCompetitive.keyword')}</th><th className="pb-2">{t('adminMarketingCompetitive.volume')}</th><th className="pb-2">{t('adminMarketingCompetitive.difficulty')}</th><th className="pb-2">{t('adminMarketingCompetitive.ourRank')}</th><th className="pb-2">{t('adminMarketingCompetitive.opportunity')}</th><th className="pb-2"></th></tr></thead>
@@ -142,6 +191,14 @@ export default async function CompetitivePage() {
           <select name="status" defaultValue="active" aria-label={t('adminMarketingCompetitive.status')} className={inputCls}><option value="active">{t('adminMarketingCompetitive.active')}</option><option value="lost">{t('adminMarketingCompetitive.lost')}</option><option value="toxic">{t('adminMarketingCompetitive.toxic')}</option></select>
           <SubmitButton className={`${btnCls} lg:col-span-5`}>{t('adminMarketingCompetitive.addBacklink')}</SubmitButton>
         </form>
+        {/* The list is the newest 500; the tiles add up every backlink. */}
+        {!backlinksCeiling && (backlinkSummaryResult.data ?? []).length > links.length && (
+          <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsTheNewest', { shown: links.length.toLocaleString(), total: (backlinkSummaryResult.data ?? []).length.toLocaleString() })}</p>
+        )}
+        {/* Past the ceiling the list is certainly part of the backlinks, with no total to name. */}
+        {backlinksCeiling && (
+          <p className="mb-3 text-xs text-muted">{t('adminCeiling.listShowsTheNewestTotalNotShown', { shown: links.length.toLocaleString() })}</p>
+        )}
         {links.length === 0 ? <p className="py-3 text-center text-sm text-muted">{t('adminMarketingCompetitive.noBacklinksTracked')}</p> : (
           <div className="space-y-1.5">
             {links.map((l) => (

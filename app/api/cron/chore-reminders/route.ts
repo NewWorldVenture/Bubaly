@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
+import { CHORE_REMINDER_SLOT, lastWeeklySlot, weeklyWindow } from '@/lib/server/cron-slot';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { listAllAuthUsers } from '@/lib/server/list-all-auth-users';
@@ -35,7 +37,17 @@ export async function GET(req: NextRequest) {
 
   const supabase = createServiceClient();
 
-  const weekEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  // The occurrence this tick belongs to: the most recent Sunday 18:00 UTC slot
+  // at or before now, and the week it covers (lib/server/cron-slot.ts). Both
+  // schedulers fire this route at that minute and a 502 invites a replay by
+  // hand; with `weekEnd` taken from the clock and no key on the send, each tick
+  // rendered its own bytes and every member with open chores was reminded
+  // twice. Every tick for one slot now reads the same week and sends each
+  // member under one idempotency key, which the provider folds.
+  const slot = lastWeeklySlot(new Date(), CHORE_REMINDER_SLOT);
+  const weekEnd = weeklyWindow(slot).end;
+  const keyFor = (familyId: string, memberId: string) =>
+    `chore-reminders/${createHash('sha256').update(`${slot.toISOString()}|${familyId}|${memberId}`).digest('hex')}`;
 
   // Fetch open assignments due within the next 7 days
   // Every one, not the first thousand: an unbounded select stops at PostgREST's
@@ -72,6 +84,7 @@ export async function GET(req: NextRequest) {
 
   // Group by member_id
   type MemberBucket = {
+    memberId: string;
     userId: string;
     memberName: string;
     familyId: string;
@@ -90,6 +103,7 @@ export async function GET(req: NextRequest) {
     if (!byMember.has(a.member_id)) {
       // Fetch family name separately since chore_assignments doesn't join families
       byMember.set(a.member_id, {
+        memberId: a.member_id,
         userId: member.user_id,
         memberName: member.display_name,
         familyId: a.family_id,
@@ -199,12 +213,16 @@ export async function GET(req: NextRequest) {
   let unserved = 0;
   const startedAt = Date.now();
 
-  const remind = async ({ userId, memberName, familyId, familyName, chores }: MemberBucket) => {
+  const remind = async ({ memberId, userId, memberName, familyId, familyName, chores }: MemberBucket) => {
     if (emailBlocked.has(userId)) { skipped++; return; }
     const email = emailByUserId.get(userId);
     if (!email) { skipped++; return; }
     const { ok, skipped: notSent } = await sendReactEmail({
       to: email,
+      // One key per membership and slot — a person in two households gets each
+      // household's reminder — so a second tick for the same occurrence is
+      // folded by the provider rather than delivered again.
+      idempotencyKey: keyFor(familyId, memberId),
       subject: `${chores.length} chore${chores.length !== 1 ? 's' : ''} coming up this week`,
       react: React.createElement(ChoreReminderEmail, { memberName, familyName, chores, timeZone: familyZoneById.get(familyId) ?? 'UTC' }),
     });

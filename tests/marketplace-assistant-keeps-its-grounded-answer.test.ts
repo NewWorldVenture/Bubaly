@@ -19,7 +19,7 @@ const ctx = {
 };
 
 const LISTINGS = [
-  { id: 'l-1', title: 'Kids bike', kind: 'sell', category: 'sports', condition: 'good', price_cents: 4500, rent_period: null, status: 'active', member_id: 'member-2' },
+  { id: 'l-1', title: 'Kids bike', kind: 'sell', category: 'sports', condition: 'good', price_cents: 4500, rent_period: null, status: 'available', member_id: 'member-2' },
 ];
 
 function db() {
@@ -34,8 +34,15 @@ function db() {
           select: () => ({ eq: () => ({ gte: async () => ({ count: state.used, error: null }) }) }),
         };
       }
+      // Main reads the open board and open offers paged on id (readAllByIdAsQuery):
+      // one page, then an empty page after the last id.
       const rows = table === 'marketplace_listings' ? LISTINGS : [];
-      const chain = { select: () => chain, eq: () => chain, limit: async () => ({ data: rows, error: null }) };
+      let after = false;
+      const chain = {
+        select: () => chain, eq: () => chain, in: () => chain, order: () => chain,
+        gt: () => { after = true; return chain; },
+        limit: async () => ({ data: after ? [] : rows, error: null }),
+      };
       return chain;
     },
   };

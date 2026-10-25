@@ -550,7 +550,11 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
               catch { connected = false; stopped.abort(); } // cancel can precede the async start settling
             };
             let content = '';
-            let responseError: string | undefined;
+            // Saved with the turn as `responseError` (the message) and
+            // `responseErrorCode` (describeAIError's code), so the phone can show
+            // its own copy for the code instead of the admin-facing message.
+            // A stopped turn saves ASSISTANT_STOPPED as plain text, with no code.
+            let responseError: string | { message: string; code: string } | undefined;
             const actions: ExecutedAssistantAction[] = [];
             const cards: ResultCard[] = [];
             const runIds: string[] = [];
@@ -617,8 +621,9 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
                 obs.failed(streamErr, { partial: true });
                 // Saved with the answer, so a retry that finds this exchange
                 // before the row settles still knows it was cut off.
-                responseError = describeAIError(streamErr).message;
-                send({ type: 'error', error: responseError });
+                const described = describeAIError(streamErr);
+                responseError = { message: described.message, code: described.code };
+                send({ type: 'error', error: described.message });
               } else {
                 obs.used(provider.model, undefined);
               }

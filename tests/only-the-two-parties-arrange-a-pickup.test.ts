@@ -83,7 +83,10 @@ describe('arranging a marketplace pickup', () => {
 
   it('lets a party complete the pickup with the code', async () => {
     Object.assign(db.table('marketplace_handoffs')[0], { status: 'confirmed', confirm_code: 'ABC123' });
-    harness.memberId = 'member-b';
+    // The seller proposed this pickup, so the buyer confirmed it and holds the
+    // code; the seller is the party who enters it
+    // (tests/a-hand-off-code-is-one-partys-to-share.test.ts).
+    harness.memberId = 'member-s';
     expect(await completeHandoffAction({ orderId: 'order-1', code: 'ABC123' })).toEqual({ ok: true });
     expect(db.table('marketplace_orders')[0]).toMatchObject({ status: 'completed' });
   });

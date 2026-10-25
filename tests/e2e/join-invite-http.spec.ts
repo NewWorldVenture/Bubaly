@@ -21,6 +21,38 @@ const isAction = (request: Request, app: string) => {
     && request.method() === 'POST' && !!request.headers()['next-action'];
 };
 
+type InviteScenario = 'initial' | 'changed' | 'missing' | 'delayed-preview';
+const setupErrorTags: Readonly<Record<string, string>> = Object.freeze({
+  '23502': 'sqlstate_23502', '23503': 'sqlstate_23503', '23505': 'sqlstate_23505',
+  '23514': 'sqlstate_23514', '42501': 'sqlstate_42501', '57014': 'sqlstate_57014',
+  '40P01': 'sqlstate_40P01', '40001': 'sqlstate_40001', '08006': 'sqlstate_08006',
+  PGRST000: 'postgrest_000', PGRST001: 'postgrest_001', PGRST002: 'postgrest_002',
+  PGRST003: 'postgrest_003', PGRST116: 'postgrest_116', PGRST200: 'postgrest_200',
+  PGRST202: 'postgrest_202', PGRST204: 'postgrest_204', PGRST205: 'postgrest_205',
+  PGRST301: 'postgrest_301', PGRST302: 'postgrest_302',
+});
+function reportInviteSetupFailure(
+  scenario: InviteScenario, retry: number, ownerIndex: number,
+  result: { error: { code?: unknown } | null; data: unknown; status: unknown },
+) {
+  try {
+    const boundedInteger = (value: unknown, max: number) =>
+      typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= max ? value : null;
+    const code = result.error?.code;
+    // The code itself is never printed. Only this closed set of tags can leave
+    // memory; SDK messages, details, hints and request data remain private.
+    const codeTag = typeof code === 'string' && Object.hasOwn(setupErrorTags, code) ? setupErrorTags[code] : 'other';
+    const scenarioTag = scenario === 'initial' || scenario === 'changed' || scenario === 'missing' || scenario === 'delayed-preview'
+      ? scenario : 'other';
+    console.log('[owned-invite-setup-failure]', JSON.stringify({
+      stage: 'invite-insert', scenario: scenarioTag, retry: boundedInteger(retry, 100),
+      ownerIndex: boundedInteger(ownerIndex, 1), status: boundedInteger(result.status, 599),
+      rowCount: Array.isArray(result.data) ? boundedInteger(result.data.length, 1000) : null,
+      errorPresent: result.error !== null, codeTag,
+    }));
+  } catch { /* Diagnostic output cannot replace the original assertion or cleanup. */ }
+}
+
 function localAdmin(provider: string, key: string): Admin {
   requireLocalOrigin(provider);
   if (!key) throw new Error('Invite HTTP fixture requires the disposable backend service key.');
@@ -145,6 +177,7 @@ test.describe('invite ownership through real Next, Auth and PostgREST', () => {
             family_id: owner.familyId, email: invitee.email, role: 'parent', token: tokens[index],
             invited_by: owner.userId, status: 'pending', expires_at: new Date(Date.now() + 3_600_000).toISOString(),
           }).select('id');
+          if (!(!invite.error && invite.data?.length === 1)) reportInviteSetupFailure(scenario, testInfo.retry, index, invite);
           expect(!invite.error && invite.data?.length === 1, 'Create only the owned synthetic invitation').toBe(true);
         }
         context = await browser.newContext({ locale: 'en-US', timezoneId: 'UTC', serviceWorkers: 'block' });

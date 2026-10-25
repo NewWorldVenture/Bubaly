@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   Store, Plus, Search, Tag, Clock, HandHeart, Check, X, Pencil, Trash2,
-  ShoppingBag, Package, Gift, HelpCircle, MapPin, Inbox, Database, Repeat,
+  ShoppingBag, Package, Gift, HelpCircle, MapPin, Inbox, Repeat,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -63,13 +63,11 @@ const blank = {
 };
 
 export function MarketplaceModule({
-  canSeed = false,
   initialKind = 'all',
   initialCategory = 'all',
   initialQuery = '',
   autoOpenPost = null,
 }: {
-  canSeed?: boolean;
   initialKind?: ListingKind | 'all';
   initialCategory?: ListingCategory | 'all';
   initialQuery?: string;
@@ -79,19 +77,23 @@ export function MarketplaceModule({
   // Price chips are in the READER's notation — priceLabel requires their locale.
   const locale = useLocale();
   const askConfirm = useConfirm();
-  const { familyId, userId, members, selfMember } = useApp();
+  const { familyId, userId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
   const selfId = selfMember?.id ?? null;
+  // A guest views the board (lib/constants/roles.ts): posting, editing and
+  // reaching out about a listing act in the family's name, so they are not offered.
+  const canPost = role !== 'guest';
 
   const [kindFilter, setKindFilter] = useState<ListingKind | 'all'>(initialKind);
   const [catFilter, setCatFilter] = useState<ListingCategory | 'all'>(initialCategory);
   const [q, setQ] = useState(initialQuery);
-  const [modalOpen, setModalOpen] = useState(!!autoOpenPost);
+  const [modalOpen, setModalOpen] = useState(!!autoOpenPost && canPost);
   const [form, setForm] = useState(autoOpenPost ? { ...blank, kind: autoOpenPost } : blank);
   const [ownedPhotoPath, setOwnedPhotoPath] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [offersFor, setOffersFor] = useState<Listing | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [deciding, setDeciding] = useState(false);
 
   const { data: listings, loading, error } = useRealtimeQuery<Listing>({
     table: 'marketplace_listings', familyId, deps: [familyId],
@@ -143,6 +145,7 @@ export function MarketplaceModule({
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (!canPost) return;
     if (!form.title.trim()) { toastError(t('marketplaceModule.giveYourListingATitle')); return; }
     setSaving(true);
     const sb = createClient();
@@ -214,15 +217,19 @@ export function MarketplaceModule({
   // A member expresses interest / claims → creates an open offer + flips the
   // listing to "pending" so others see it's being discussed.
   async function makeOffer(l: Listing) {
-    if (busyId || !canOffer(l as ListingLike, selfId, offers ?? [])) return;
+    if (busyId || !canPost || !canOffer(l as ListingLike, selfId, offers ?? [])) return;
     setBusyId(l.id);
     try {
       const sb = createClient();
       const kind = l.kind === 'sell' || l.kind === 'rent' ? 'interest' : 'claim';
       // Insert the offer; a DB trigger flips an available listing to 'pending', and
       // a partial unique index makes a second open offer a no-op ("already sent").
+      // The interest carries the price on screen: accepting records the order
+      // at the offer's amount when it has one, and at the listing's price by
+      // then when it has none (0315), which the seller could have changed.
       const { error: err } = await sb.from('marketplace_offers').insert({
         family_id: familyId, listing_id: l.id, member_id: selfId, kind, created_by: userId,
+        amount_cents: kind === 'interest' ? l.price_cents : null,
       });
       if (err) {
         if (err.code === '23505') { success(t('marketplaceModule.youAlreadyReachedOutAbout')); return; }
@@ -236,26 +243,37 @@ export function MarketplaceModule({
 
   // Owner accepts an offer → one atomic, ownership-checked RPC claims the listing,
   // accepts this offer, declines the rest, and records the order.
+  //
+  // One decision at a time. Accept, then Decline before the accept answered,
+  // sent two RPCs that crossed: marketplace_accept_offer (0315) writes
+  // 'accepted' with no status predicate, so it could overwrite the decline
+  // this screen had just reported. The offer inbox on the listing page has
+  // always held one at a time; two tabs racing is the owner's SQL.
   async function acceptOffer(l: Listing, offer: Offer) {
-    const sb = createClient();
-    const { error: err } = await sb.rpc('marketplace_accept_offer', { p_offer: offer.id });
-    if (err) { toastError(describeDbError(err)); return; }
-    success(t('marketplace.handedOffTo', { name: memberName(offer.member_id) }));
-    setOffersFor(null);
+    if (deciding) return;
+    setDeciding(true);
+    try {
+      const sb = createClient();
+      const { error: err } = await sb.rpc('marketplace_accept_offer', { p_offer: offer.id });
+      if (err) { toastError(describeDbError(err)); return; }
+      success(t('marketplace.handedOffTo', { name: memberName(offer.member_id) }));
+      setOffersFor(null);
+    } finally {
+      setDeciding(false);
+    }
   }
 
   async function declineOffer(offer: Offer) {
-    const sb = createClient();
-    const { error: err } = await sb.rpc('marketplace_decline_offer', { p_offer: offer.id });
-    if (err) { toastError(describeDbError(err)); return; }
-    success(t('marketplaceModule.offerDeclined'));
-  }
-
-  async function markCompleted(l: Listing) {
-    const sb = createClient();
-    const { error: err } = await sb.rpc('marketplace_set_listing_status', { p_listing: l.id, p_status: 'completed' });
-    if (err) { toastError(describeDbError(err)); return; }
-    success(t('marketplaceModule.markedComplete'));
+    if (deciding) return;
+    setDeciding(true);
+    try {
+      const sb = createClient();
+      const { error: err } = await sb.rpc('marketplace_decline_offer', { p_offer: offer.id });
+      if (err) { toastError(describeDbError(err)); return; }
+      success(t('marketplaceModule.offerDeclined'));
+    } finally {
+      setDeciding(false);
+    }
   }
 
   if (loading) return <SkeletonList count={5} />;
@@ -271,13 +289,7 @@ export function MarketplaceModule({
         description={t('marketplaceModule.buySellRentBorrowOr')}
         action={
           <div className="flex items-center gap-2">
-            {canSeed && (
-              <Link href="/marketplace/seed"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted transition hover:bg-elevated hover:text-fg">
-                <Database className="h-4 w-4" /> {t('marketplace.seedTestData')}
-              </Link>
-            )}
-            <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('marketplace.postAListing')}</Button>
+            {canPost && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('marketplace.postAListing')}</Button>}
           </div>
         }
       />
@@ -305,7 +317,7 @@ export function MarketplaceModule({
       {visible.length === 0 ? (
         <EmptyState icon={Store} title={t('marketplace.nothingOnTheBoardYet')}
           description={t('marketplaceModule.postTheFirstItemSell')}
-          action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('marketplace.postAListing')}</Button>} />
+          action={canPost ? <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('marketplace.postAListing')}</Button> : undefined} />
       ) : (
         <>
           <p className="mb-3 text-xs text-muted">{availableCount(listings as ListingLike[])} {t('marketplace.available')} {visible.length} shown</p>
@@ -317,7 +329,13 @@ export function MarketplaceModule({
               const price = priceLabel(kind, l.price_cents, l.rent_period as RentPeriod | null, locale.code, t);
               const offerN = openOfferCount(l.id);
               const alreadyOffered = myOpenOffers.has(l.id);
-              const offerable = canOffer(l as ListingLike, selfId, offers ?? []);
+              const offerable = canPost && canOffer(l as ListingLike, selfId, offers ?? []);
+              // A live auction holding bids is not withdrawn or removed from the
+              // board: withdrawing leaves every bid 'active' and nobody is told
+              // (marketplace_set_listing_status does not close the bids). It
+              // closes on its own at its end time.
+              const holdsBids = l.sale_format === 'auction' && (l.bid_count ?? 0) > 0
+                && (l.status === 'available' || l.status === 'pending');
               return (
                 <div key={l.id} className="flex flex-col overflow-hidden rounded-2xl border border-border bg-surface/50">
                   <Link href={`/marketplace/item/${l.id}`} className="group block" aria-label={t('itemAction.view', { name: l.title })}>
@@ -366,16 +384,19 @@ export function MarketplaceModule({
                             <Inbox className="h-3.5 w-3.5" /> {offerN} {offerN === 1 ? 'offer' : 'offers'}
                           </Button>
                         )}
-                        {l.status === 'claimed' && (
-                          <Button size="sm" variant="outline" onClick={() => markCompleted(l)} className="h-7 gap-1 text-xs">
-                            <Check className="h-3.5 w-3.5" /> {t('marketplace.markComplete')}
-                          </Button>
+                        {/* No "Mark complete" here: it completed the LISTING and left
+                            its confirmed order open forever (no review, a hand-off
+                            panel that never went away). The order is finished on
+                            the Orders page, by its seller. */}
+                        {canPost && (
+                          <button onClick={() => openEdit(l)} aria-label={t('marketplace.edit')} className="ml-auto rounded p-1 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
                         )}
-                        <button onClick={() => openEdit(l)} aria-label={t('marketplace.edit')} className="ml-auto rounded p-1 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-                        {l.status !== 'withdrawn' && (
-                          <button onClick={() => withdraw(l)} aria-label={t('marketplace.withdraw')} className="rounded p-1 text-muted hover:bg-elevated hover:text-amber-300"><X className="h-3.5 w-3.5" /></button>
+                        {l.status !== 'withdrawn' && !holdsBids && (
+                          <button onClick={() => withdraw(l)} aria-label={t('marketplace.withdraw')} className={cn('rounded p-1 text-muted hover:bg-elevated hover:text-amber-300', !canPost && 'ml-auto')}><X className="h-3.5 w-3.5" /></button>
                         )}
-                        <button onClick={() => remove(l)} aria-label={t('marketplace.remove')} className="rounded p-1 text-muted hover:bg-elevated hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                        {!holdsBids && (
+                          <button onClick={() => remove(l)} aria-label={t('marketplace.remove')} className="rounded p-1 text-muted hover:bg-elevated hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                        )}
                       </>
                     ) : alreadyOffered ? (
                       <span className="inline-flex items-center gap-1 text-xs text-emerald-300"><Check className="h-3.5 w-3.5" /> {kind === 'sell' || kind === 'rent' ? 'Interest sent' : 'Claim sent'}</span>
@@ -486,8 +507,8 @@ export function MarketplaceModule({
                   </div>
                   {o.message && <p className="truncate text-xs text-muted">{o.message}</p>}
                 </div>
-                <Button size="sm" onClick={() => offersFor && acceptOffer(offersFor, o as Offer)} className="h-7 gap-1 text-xs"><Check className="h-3.5 w-3.5" /> {t('marketplace.accept')}</Button>
-                <button onClick={() => declineOffer(o as Offer)} aria-label={t('marketplace.decline')} className="rounded p-1 text-muted hover:text-rose-400"><X className="h-4 w-4" /></button>
+                <Button size="sm" onClick={() => offersFor && acceptOffer(offersFor, o as Offer)} disabled={deciding} aria-busy={deciding} className="h-7 gap-1 text-xs"><Check className="h-3.5 w-3.5" /> {t('marketplace.accept')}</Button>
+                <button onClick={() => declineOffer(o as Offer)} disabled={deciding} aria-label={t('marketplace.decline')} className="rounded p-1 text-muted hover:text-rose-400 disabled:opacity-50"><X className="h-4 w-4" /></button>
               </li>
             ))}
           </ul>

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getAdapter } from '@/lib/sync/registry';
-import { runProviderSync } from '@/lib/sync/engine/generic';
+import { runLeasedProviderSync } from '@/lib/sync/account-lease';
 import type { Json, SyncProviderEnum } from '@/lib/database.types';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 
@@ -85,6 +85,12 @@ export async function GET(req: NextRequest) {
   }
 
   let synced = 0, skipped = 0, failed = 0, auditFailed = 0, attempted = 0;
+  // An account another sync holds — a member pressed "Sync now" as this run
+  // reached it, or the two schedulers' runs share this batch — is neither
+  // synced nor failed: that sync is applying a snapshot at least as fresh as
+  // this one would (lib/sync/engine/generic.ts claimAccountLease). Counted
+  // apart, so a busy account does not turn the run red.
+  let busy = 0;
   const details: Record<string, unknown>[] = [];
 
   // The cursor names the last account this run took its turn at. It moves
@@ -109,7 +115,7 @@ export async function GET(req: NextRequest) {
   };
   // Without the cursor the next run would repeat this one: stop here.
   const cursorRefused = () => NextResponse.json(
-    { ok: false, error: t('providerSync.providerSynchronizationFailed'), synced, skipped, failed, auditFailed, scanned: accounts?.length ?? 0, details },
+    { ok: false, error: t('providerSync.providerSynchronizationFailed'), synced, skipped, busy, failed, auditFailed, scanned: accounts?.length ?? 0, details },
     { status: 500 },
   );
 
@@ -146,7 +152,14 @@ export async function GET(req: NextRequest) {
         details.push({ account: account.id, provider: account.provider, disabled: 'ownerRemoved' });
         continue;
       }
-      const result = await runProviderSync(admin, account, adapter);
+      // Under the account's lease (lib/sync/account-lease.ts): one sync of an
+      // account at a time, whichever caller asks.
+      const result = await runLeasedProviderSync(admin, account, adapter);
+      if (result.busy) {
+        busy++;
+        details.push({ account: account.id, provider: account.provider, busy: true });
+        continue;
+      }
       if (result.error) failed++; else synced++;
       details.push({
         account: account.id,
@@ -178,7 +191,7 @@ export async function GET(req: NextRequest) {
 
   const ok = failed === 0 && auditFailed === 0;
   return NextResponse.json(
-    { ok, synced, skipped, failed, auditFailed, scanned: accounts?.length ?? 0, details },
+    { ok, synced, skipped, busy, failed, auditFailed, scanned: accounts?.length ?? 0, details },
     { status: ok ? 200 : 502 },
   );
 }

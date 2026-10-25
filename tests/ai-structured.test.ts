@@ -89,9 +89,41 @@ describe('zodToStrictJsonSchema emits strict schemas at every level', () => {
   });
 
   it('refuses schemas it cannot represent faithfully rather than emitting a wrong one', () => {
-    expect(() => zodToStrictJsonSchema(z.object({ blob: z.record(z.string()) }))).toThrow(UnsupportedSchemaError);
+    expect(() => zodToStrictJsonSchema(z.object({ blob: z.record(z.string(), z.string()) }))).toThrow(UnsupportedSchemaError);
     expect(() => zodToStrictJsonSchema(z.object({ when: z.date() }))).toThrow(/Unsupported zod type ZodDate at when/);
     expect(() => zodToStrictJsonSchema(z.array(z.string()) as never)).toThrow(UnsupportedSchemaError);
+  });
+
+  it('keeps integer formats, enum entries and every literal value in Zod 4 schemas', () => {
+    const schema = zodToStrictJsonSchema(z.object({
+      count: z.int(),
+      width: z.int32(),
+      ratio: z.number(),
+      state: z.enum({ Ready: 'ready', Waiting: 'waiting' }).describe('current state'),
+      choice: z.literal(['meal', 'chore']).nullable(),
+      numberOrName: z.literal([7, 'seven']),
+    })) as Record<string, Record<string, Record<string, unknown>>>;
+    expect(schema.properties.count).toEqual({ type: 'integer' });
+    expect(schema.properties.width).toEqual({ type: 'integer' });
+    expect(schema.properties.ratio).toEqual({ type: 'number' });
+    expect(schema.properties.state).toEqual({ type: 'string', enum: ['ready', 'waiting'], description: 'current state' });
+    expect(schema.properties.choice).toEqual({ type: ['string', 'null'], enum: ['meal', 'chore', null] });
+    expect(schema.properties.numberOrName).toEqual({ anyOf: [{ type: 'integer', enum: [7] }, { type: 'string', enum: ['seven'] }] });
+    expect(() => zodToStrictJsonSchema(z.object({ state: z.enum({ Ready: 0, Waiting: 1 }) }))).toThrow(UnsupportedSchemaError);
+  });
+
+  it('still refuses refinements and transformations instead of hiding their behavior', () => {
+    const schemas = [
+      z.object({ name: z.string().refine((name) => name === 'allowed') }),
+      z.object({ name: z.string() }).refine((value) => value.name === 'allowed'),
+      z.object({ name: z.string() }).superRefine((value, ctx) => {
+        if (value.name !== 'allowed') ctx.addIssue({ code: 'custom', message: 'Not allowed' });
+      }),
+      z.object({ name: z.string().transform((name) => name.length) }),
+      z.object({ name: z.preprocess(String, z.string()) }),
+      z.object({ kind: z.union([z.literal('meal').refine(() => false), z.literal('chore')]) }),
+    ];
+    for (const schema of schemas) expect(() => zodToStrictJsonSchema(schema)).toThrow(UnsupportedSchemaError);
   });
 });
 
@@ -121,6 +153,35 @@ describe('conformNulls bridges strict-mode nulls to zod optionality', () => {
     ]);
     const conformed = conformNulls(schema, { kind: 'tool', name: 'calendar.createEvent', args: null });
     expect(schema.safeParse(conformed).success).toBe(true);
+  });
+
+  it('preserves discriminated branches, defaults and literal null without mutating the reply', () => {
+    const schema = z.object({
+      result: z.discriminatedUnion('kind', [
+        z.object({ kind: z.literal('tool'), args: z.string().optional(), count: z.number().default(1) }).strict(),
+        z.object({ kind: z.literal('note'), body: z.string().nullable() }).strict(),
+      ]),
+      nothing: z.literal(null).optional(),
+      maybe: z.literal(['yes', null]).optional(),
+    });
+    const input = { result: { kind: 'tool', args: null, count: null }, nothing: null, maybe: null };
+    const conformed = conformNulls(schema, input);
+    expect(conformed).toEqual({ result: { kind: 'tool' }, nothing: null, maybe: null });
+    expect(schema.parse(conformed)).toEqual({ result: { kind: 'tool', count: 1 }, nothing: null, maybe: null });
+    expect(input).toEqual({ result: { kind: 'tool', args: null, count: null }, nothing: null, maybe: null });
+    expect(zodToStrictJsonSchema(schema).additionalProperties).toBe(false);
+  });
+});
+
+describe('bounded Zod collection validation', () => {
+  it('rejects oversized arrays before validating their elements', () => {
+    const visits = vi.fn(() => true);
+    const schema = z.array(z.string().refine(visits)).max(2);
+    expect(schema.safeParse(['a', 'b', 'c']).success).toBe(false);
+    expect(visits).not.toHaveBeenCalled();
+    expect(schema.parse(['a', 'b'])).toEqual(['a', 'b']);
+    expect(visits).toHaveBeenCalledTimes(2);
+    expect(schema.safeParse(['a', 7]).success).toBe(false);
   });
 });
 
@@ -155,7 +216,7 @@ describe('structured()', () => {
     const repairMessages = calls[1].messages;
     // The model sees its own reply plus the exact zod complaint about it.
     expect(repairMessages.at(-2)?.content).toContain('"confidence":"high"');
-    expect(repairMessages.at(-1)?.content).toMatch(/confidence: Expected number/);
+    expect(repairMessages.at(-1)?.content).toMatch(/confidence: Invalid input: expected number, received string/);
     // Usage is summed across both attempts.
     expect(result.ok && result.usage).toEqual({ inputTokens: 20, outputTokens: 10, totalTokens: 30 });
   });

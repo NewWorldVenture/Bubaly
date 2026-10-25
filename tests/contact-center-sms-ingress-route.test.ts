@@ -57,6 +57,10 @@ function fixture() {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     global: { fetch: async (raw, init = {}) => {
       const url = new URL(String(raw)), table = url.pathname.split('/').pop()!;
+      // The durable limiter behind the concierge and reply budgets
+      // (lib/contact-center/inbound-budget.ts): every hit is within budget here,
+      // and it is not a table call, so it is kept out of the recorded order.
+      if (url.pathname === '/rest/v1/rpc/rate_limit_hit') return Response.json([{ allowed: true, retry_after: 0 }]);
       if (url.origin !== 'https://sms-ingress-route-fixture.invalid' || !(table in state.tables)) throw new Error('Unexpected fixture request');
       const call: Call = { table, method: init.method ?? 'GET', url,
         body: typeof init.body === 'string' ? JSON.parse(init.body) : null, signal: init.signal };
@@ -129,6 +133,8 @@ beforeEach(() => {
   vi.stubEnv('NODE_ENV', 'production'); vi.stubEnv('NEXT_PUBLIC_APP_URL', ORIGIN);
   vi.stubEnv('TWILIO_AUTH_TOKEN', TOKEN); vi.stubEnv('TWILIO_ACCOUNT_SID', '');
   vi.stubEnv('TWILIO_PHONE_NUMBER', ''); vi.stubEnv('ANTHROPIC_API_KEY', ''); vi.stubEnv('OPENAI_API_KEY', '');
+  // The budget keys carry the sender's number, digested under a server secret.
+  vi.stubEnv('INTERNAL_SECRET', 'synthetic-internal-secret');
   vi.spyOn(console, 'error').mockImplementation(() => {});
   f = fixture(); mocks.admin.mockReturnValue(f.client);
   mocks.resolve.mockImplementation(async () => { f.state.events.push('routing'); return { familyId: FAMILY, error: null }; });

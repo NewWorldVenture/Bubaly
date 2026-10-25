@@ -109,7 +109,7 @@ export const reminderTools: ToolDefinition[] = [
     summarize: (_input, output) => `Set a reminder: ${output.title}${output.when ? ` — ${output.when}` : ''}`,
     resource: (output) => ({ table: 'family_reminders', id: output.id }),
     execute: async (scope, input) => {
-      const assignee = await resolveAssigneeId(scope, input);
+      const assignee = await resolveAssigneeId(scope, input, { requireActive: true });
       if (!assignee.ok) return assignee;
 
       const res = await createReminder(scope, {

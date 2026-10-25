@@ -3,7 +3,7 @@
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { AEO_TAG } from '@/lib/marketing/aeo';
 import { requireMarketingAdmin, marketingActionFailure, logMarketingAudit } from '@/lib/marketing/admin';
-import { buildMarketingPagePath, isMarketingPageType, normalizeMarketingSlug, pageTypeConfig, retireAeoQuestionsForPath } from '@/lib/marketing/platform';
+import { buildMarketingPagePath, consoleOwnedContent, isMarketingPageType, normalizeMarketingSlug, pageTypeConfig, retireAeoQuestionsForPath } from '@/lib/marketing/platform';
 import type { Json } from '@/lib/database.types';
 
 function value(fd: FormData, key: string): string {
@@ -36,7 +36,9 @@ export async function createPlatformPage(formData: FormData): Promise<void> {
     title,
     summary: optional(formData, 'summary'),
     body: optional(formData, 'body'),
-    content: {},
+    // Stamped as the console's, so the legacy bridges can tell it from one of
+    // their mirrors by the row (admin reach N12-REGEN-REPAIR-SPEC).
+    content: consoleOwnedContent({}),
     seo: {},
     aeo: {},
     status: 'draft',
@@ -63,7 +65,7 @@ export async function updatePlatformPage(formData: FormData): Promise<void> {
   // before this save: `slug` and `status` are in the same form, so one submit can
   // rename the page and take it down together, and the answers still carry the
   // old `source_path`. Retiring by the recomputed path alone retired nothing.
-  const { data: stored, error: storedError } = await supabase.from('marketing_pages').select('path').eq('id', id).is('deleted_at', null).maybeSingle();
+  const { data: stored, error: storedError } = await supabase.from('marketing_pages').select('path, content').eq('id', id).is('deleted_at', null).maybeSingle();
   if (storedError || !stored) marketingActionFailure('update the marketing page', storedError ?? new Error('The page was not found.'));
   const { data, error } = await supabase.from('marketing_pages').update({
     page_type: pageType,
@@ -72,6 +74,12 @@ export async function updatePlatformPage(formData: FormData): Promise<void> {
     title,
     summary: optional(formData, 'summary'),
     body: optional(formData, 'body'),
+    // Admin reach N12-REGEN-CONSOLE-MOVE. A page the console moves is the
+    // console's from then on. A legacy mirror moved off its path kept the
+    // legacy page's marker, so that page's next edit retired it as an alias and
+    // the moved, published page 404'd; and a row with no marker moved onto
+    // another legacy page's slug would be read as that page's mirror.
+    ...(stored.path !== path ? { content: consoleOwnedContent(stored.content) } : {}),
     status: nextStatus,
     published_at: status === 'published' ? new Date().toISOString() : null,
     updated_by: actorId,

@@ -134,23 +134,27 @@ export function ChoresModule() {
   const selfMemberId = selfMember?.id ?? null;
   const memberChips = useCappedList(members);
 
+  // Capture the family day and cutoff on every ordinary render.
+  const todayKey = clock.todayKey();
+  const windowStart = clock.dayStart(-(pointsWindow === 'week' ? 7 : 30)).getTime();
+
   // Point-window filter for the leaderboard/points widgets.
   const windowed = useMemo(() => {
     if (pointsWindow === 'all') return data;
     // From the FAMILY's midnight, N calendar days back (TIME-003).
-    const since = clock.dayStart(-(pointsWindow === 'week' ? 7 : 30));
+    const since = new Date(windowStart);
     return data.filter((a) => {
       if (!isCompleted(a.status)) return true; // active rows unaffected by the window
       const ts = a.approved_at ?? a.submitted_at;
       return ts ? new Date(ts) >= since : true;
     });
-  }, [data, pointsWindow, clock]);
+  }, [data, pointsWindow, windowStart]);
 
   const asgLike = (rows: Assignment[]): AssignmentLike[] => rows.map((a) => ({ ...a, chore: a.chore }));
 
   const earners = useMemo(() => topEarners(members, asgLike(windowed)), [members, windowed]);
   const pointsMap = useMemo(() => pointsByMember(asgLike(windowed)), [windowed]);
-  const streaks = useMemo(() => streaksByMember(members, asgLike(data), clock.todayKey(), clock.timeZone), [members, data, clock]);
+  const streaks = useMemo(() => streaksByMember(members, asgLike(data), todayKey, clock.timeZone), [members, data, todayKey, clock.timeZone]);
   const familyPoints = useMemo(() => totalFamilyPoints(asgLike(windowed)), [windowed]);
   const progress = useMemo(() => rewardsProgress(members, asgLike(data), rewards ?? []), [members, data, rewards]);
 

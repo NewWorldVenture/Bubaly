@@ -264,6 +264,11 @@ const BOUNDED_NOT_IN: { file: string; list: string; why: string }[] = [
     list: 'SENSITIVE_MEMORY_CATEGORIES',
     why: 'a module constant of the two fact categories a non-manager is not shown (lib/memory/facts.ts)',
   },
+  {
+    file: 'app/(app)/admin/billing/page.tsx',
+    list: 'NAMED_PLANS',
+    why: 'Object.keys(PLAN_NAMES), a module constant of the seven plan slugs lib/constants/plans.ts names and prices',
+  },
 ];
 
 function handBuiltNotIn(): { file: string; list: string }[] {

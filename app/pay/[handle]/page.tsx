@@ -60,12 +60,17 @@ export default async function PayHandlePage({ params }: { params: Promise<{ hand
   if (phError) return <Unavailable t={t} />;
 
   if (ph && ph.is_active) {
-    // Find the newest active gift link for the target (a child, or any family link).
+    // Find the newest active gift link for the target (a child, or any family
+    // link) — of an OPEN family. A family that closed its account
+    // (families.closed_at) is never told about a pledge, so its Pay-ID lands
+    // on the same "no active gift link" shell a retired link does, as
+    // /gift/[token] and submitGiftPledgeAction now answer.
     let q = supabase
       .from('gift_links')
-      .select('token')
+      .select('token, family:families!inner(closed_at)')
       .eq('family_id', ph.family_id)
       .eq('is_active', true)
+      .is('family.closed_at', null)
       .order('created_at', { ascending: false })
       .limit(1);
     q = ph.child_wallet_id ? q.eq('child_wallet_id', ph.child_wallet_id) : q;

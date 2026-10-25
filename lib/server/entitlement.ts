@@ -16,6 +16,7 @@ import type { Database } from '@/lib/database.types';
 import { planLevel } from '@/lib/constants/plans';
 import { chooseActiveMembership } from '@/lib/auth/active-membership';
 import { intervalOfSlug } from '@/lib/billing/plans';
+import { isAdmin } from '@/lib/constants/roles';
 
 type DB = SupabaseClient<Database>;
 
@@ -171,5 +172,56 @@ export async function resolveEntitlement(
     return { ...ent, familyId: activeId };
   } catch {
     return { ...UNLOCKED_FALLBACK, familyId: null };
+  }
+}
+
+/** What the closed-account gate can offer: a way to reopen, or a way out to an open household. */
+export type ClosedFamilyStanding = {
+  /** A parent of the closed family; anyone else's reopen the action refuses. */
+  canReopen: boolean;
+  /** The member's OTHER active families that are not closed, by name. */
+  openFamilies: { id: string; name: string }[];
+};
+
+/**
+ * The standing the closed-account gate renders for this member.
+ *
+ * `resolveEntitlement` judges ONE family — the stored preference, else the
+ * earliest membership — and the gate it decides replaces every (app) route,
+ * with the family switcher (AppShell, rendered by the section layouts below
+ * the gate) out of reach. So a caregiver, guest or adult in two households
+ * whose active one a parent closed lost the open household too. This names
+ * the open ones so the gate can offer them, and whether the member is a parent
+ * of the closed family, so a reopen button is not shown to someone whose click
+ * the action would refuse. Read through the member's own client, under RLS.
+ *
+ * Fails to today's answer — no other families, reopen offered — so a read that
+ * cannot be made never hides a parent's reopen button.
+ */
+export async function closedFamilyStanding(supabase: DB, userId: string, closedFamilyId: string | null): Promise<ClosedFamilyStanding> {
+  const fallback: ClosedFamilyStanding = { canReopen: true, openFamilies: [] };
+  try {
+    const { data: members, error: membersError } = await supabase
+      .from('family_members').select('family_id, role').eq('user_id', userId).eq('is_active', true);
+    if (membersError) {
+      console.error('[entitlement] closed-family membership read failed', { userId, error: membersError });
+      return fallback;
+    }
+    const rows = members ?? [];
+    const role = rows.find((m) => m.family_id === closedFamilyId)?.role ?? null;
+    const canReopen = role === null ? true : isAdmin(role);
+    const otherIds = [...new Set(rows.map((m) => m.family_id).filter((id) => id !== closedFamilyId))];
+    if (!otherIds.length) return { canReopen, openFamilies: [] };
+    const { data: families, error: familiesError } = await supabase
+      .from('families').select('id, name').in('id', otherIds).is('closed_at', null)
+      .order('name', { ascending: true }).order('id', { ascending: true });
+    if (familiesError) {
+      console.error('[entitlement] closed-family alternatives read failed', { userId, error: familiesError });
+      return { canReopen, openFamilies: [] };
+    }
+    return { canReopen, openFamilies: (families ?? []).map((f) => ({ id: f.id, name: f.name })) };
+  } catch (error) {
+    console.error('[entitlement] closed-family standing read threw', { userId, error });
+    return fallback;
   }
 }

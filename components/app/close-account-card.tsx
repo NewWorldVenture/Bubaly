@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { closeAccountAction } from '@/app/(app)/account/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { reportRefusal } from '@/lib/auth/step-up-client';
 
 export function CloseAccountCard() {
   const t = useTranslations();
@@ -23,7 +24,9 @@ export function CloseAccountCard() {
     const res = await closeAccountAction();
     setBusy(false);
     if (res.ok) { success(t('closeAccountCard.yourAccountIsClosedYour')); window.location.reload(); }
-    else toastError(res.error);
+    // A refusal for the code carries where the code goes; reportRefusal takes
+    // the family there and back (lib/auth/step-up-client.ts).
+    else reportRefusal(res, toastError);
   }
 
   return (

@@ -81,6 +81,11 @@ async function authenticate(req: NextRequest): Promise<Authed | NextResponse> {
     if (bearer.reason === 'needs_family') {
       return NextResponse.json({ error: tr('ai.finishSettingUpYourFamily'), code: 'needs_family' }, { status: 403 });
     }
+    // The bearer context refuses a closed family itself (lib/supabase/bearer.ts),
+    // with the code and shape assertAIAccess answers for the same account.
+    if (bearer.reason === 'account_closed') {
+      return NextResponse.json({ error: tr('accountStanding.accountClosed'), code: 'account_closed', needLevel: 1 }, { status: 403 });
+    }
     return NextResponse.json({ error: tr('ai.accountContextIsTemporarilyUnavailable'), code: 'unavailable' }, { status: 503 });
   }
 
@@ -254,7 +259,10 @@ export async function POST(req: NextRequest) {
       signal: req.signal,
     };
     const prepared = await prepareAssistantTurn(input);
-    if (!prepared.ok) return NextResponse.json({ error: prepared.error }, { status: 500 });
+    // A code beside the message on every 500, so a native client can show its
+    // own copy: the phone used to fall through to this text, and
+    // describeAIError's text is written for the workspace admin.
+    if (!prepared.ok) return NextResponse.json({ error: prepared.error, code: 'context_unavailable' }, { status: 500 });
 
     if (json) {
       try {
@@ -277,6 +285,7 @@ export async function POST(req: NextRequest) {
     return new Response(createAssistantStream(input, prepared.turn), { headers: SSE_HEADERS });
   } catch (err) {
     console.error('[api/ai] error:', err);
-    return NextResponse.json({ error: describeAIError(err).message }, { status: 500 });
+    const described = describeAIError(err);
+    return NextResponse.json({ error: described.message, code: described.code }, { status: 500 });
   }
 }

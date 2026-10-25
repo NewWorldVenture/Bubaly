@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
 import { Lightbulb, ArrowBigUp, Rocket, Heart } from 'lucide-react';
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
-import { settle } from '@/lib/supabase/settle';
+import { settle, settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
-import { LEGEND_STATUSES, STATUS_META, KIND_ORDER, KIND_META, statusTally, kindTally, type IdeaRow } from '@/lib/feedback/board';
+import { LEGEND_STATUSES, STATUS_META, KIND_ORDER, KIND_META, type IdeaRow } from '@/lib/feedback/board';
 import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
 import { FeedbackBoard } from './feedback-board';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -23,9 +23,21 @@ const STEPS = [
 
 export default async function FeedbackPage() {
   const t = await getTranslations();
+  // The reader's locale, as the board's own note beside the rail formats with:
+  // without one the rail's counts were the server's (en-US) "1,337" beside the
+  // note's "1.337" (review R9-BOARD-RAIL-FORMATS-IN-SERVER-LOCALE).
+  const { locale } = await getLocaleContext();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const [admin, ideasRes, votesRes] = await Promise.all([
+  // The rail's "On the board" and status legend figures were tallied from the
+  // listed ideas, which are the top 400 at most, so past 400 they were the
+  // listed ideas' totals with nothing to say so (review
+  // R8B-PUBLIC-BOARD-TALLIES-FROM-LIMIT-400). They are head:true counts of the
+  // whole board now, one per kind and per legend status, and one of every idea
+  // so the list can say when it is only part of the board. A count that fails
+  // reads Unavailable; the board is still the board.
+  const counted = () => supabase.from('feedback_ideas').select('id', { count: 'exact', head: true });
+  const [admin, ideasRes, votesRes, totalRes, kindResults, statusResults] = await Promise.all([
     isSuperAdmin().catch((cause) => {
       console.warn('[feedback] super-admin check failed — denying', cause);
       return false;
@@ -39,6 +51,9 @@ export default async function FeedbackPage() {
       .order('pinned', { ascending: false }).order('vote_count', { ascending: false }).order('created_at', { ascending: false })
       .limit(400)),
     settle(supabase.from('feedback_votes').select('idea_id').eq('user_id', ctx.user.id).limit(1000)),
+    settle(counted()),
+    settleAll(KIND_ORDER.map((kind) => counted().eq('kind', kind))),
+    settleAll(LEGEND_STATUSES.map((status) => counted().eq('status', status))),
   ]);
 
   // A failed read is not an empty board. Unread ideas rendered "No ideas match
@@ -62,8 +77,15 @@ export default async function FeedbackPage() {
   const ideas = ((ideasRes.data ?? []) as Omit<IdeaRow, 'image_url'>[])
     .map((idea) => ({ ...idea, image_url: null })) as IdeaRow[];
   const votedIds = ((votesRes.data ?? []) as { idea_id: string }[]).map((v) => v.idea_id);
-  const tally = statusTally(ideas);
-  const kinds = kindTally(ideas);
+  const unavailable = t('strategyMetrics.unavailable');
+  const figure = (res: { count: number | null; error: unknown }) => {
+    if (res.error) console.error('[feedback] board count read failed', res.error);
+    return res.error ? unavailable : (res.count ?? 0).toLocaleString(locale.code);
+  };
+  const totalIdeas = totalRes.error ? null : totalRes.count ?? 0;
+  if (totalRes.error) console.error('[feedback] board count read failed', totalRes.error);
+  const kinds = Object.fromEntries(KIND_ORDER.map((kind, i) => [kind, figure(kindResults[i])]));
+  const tally = Object.fromEntries(LEGEND_STATUSES.map((status, i) => [status, figure(statusResults[i])]));
 
   return (
     <div className="pb-28">
@@ -106,7 +128,7 @@ export default async function FeedbackPage() {
       {/* Board + rail */}
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0">
-          <FeedbackBoard initialIdeas={ideas} votedIds={votedIds} votesUnavailable={votesUnavailable} userId={ctx.user.id} isSuperAdmin={admin} />
+          <FeedbackBoard initialIdeas={ideas} totalIdeas={totalIdeas} votedIds={votedIds} votesUnavailable={votesUnavailable} userId={ctx.user.id} isSuperAdmin={admin} />
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
