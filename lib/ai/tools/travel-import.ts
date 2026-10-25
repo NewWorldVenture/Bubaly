@@ -32,7 +32,7 @@ export const travelImportTools = [
     risk: 'low',
     readOnly: true,
     input: z.object({
-      vacationId: z.string().uuid(),
+      vacationId: z.string().guid(),
       source: confirmationSourceInputSchema,
       fields: confirmationFieldsInputSchema,
     }).strict(),

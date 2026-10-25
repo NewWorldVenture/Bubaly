@@ -22,7 +22,7 @@ function unavailable(stage: string): Access {
   return { ok: false, reason: 'unavailable', retryable: true };
 }
 
-const uuid = z.string().uuid();
+const uuid = z.string().guid();
 const membersSchema = z.array(z.object({
   id: uuid, family_id: uuid, user_id: uuid,
   role: z.enum(['parent', 'adult', 'teen', 'child', 'caregiver', 'guest']),

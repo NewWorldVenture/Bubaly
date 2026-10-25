@@ -85,7 +85,7 @@ const eventSchema = z.object({
   data: z.object({
     // Resend webhooks use a record; retain the array shape accepted by older
     // callbacks/fixtures, which matches the outbound email API's tag format.
-    tags: z.union([z.record(z.string()), z.array(z.object({ name: z.string(), value: z.string() }))]).optional(),
+    tags: z.union([z.record(z.string(), z.string()), z.array(z.object({ name: z.string(), value: z.string() }))]).optional(),
     to: z.union([z.string().trim().min(1), z.array(z.string().trim().min(1))]).optional(),
   }).passthrough().optional(),
 }).passthrough().refine((event) => {

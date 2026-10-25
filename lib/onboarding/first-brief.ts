@@ -29,7 +29,7 @@ const sourceClockSchema=z.discriminatedUnion('kind',[
 },'Invalid source clock');
 export const briefEventReferenceSchema=z.discriminatedUnion('kind',[
   z.object({kind:z.literal('native'),eventId:z.string().min(1).max(8192)}).strict(),
-  z.object({kind:z.literal('source'),feedId:z.string().uuid(),uid:z.string().min(1).max(4096).refine(value=>!/[\u0000-\u0008\u000a-\u001f\u007f]/.test(value)),revisionId:z.string().uuid(),original:sourceClockSchema}).strict(),
+  z.object({kind:z.literal('source'),feedId:z.string().guid(),uid:z.string().min(1).max(4096).refine(value=>!/[\u0000-\u0008\u000a-\u001f\u007f]/.test(value)),revisionId:z.string().guid(),original:sourceClockSchema}).strict(),
 ]);
 
 export interface BriefEvent {

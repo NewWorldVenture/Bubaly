@@ -37,23 +37,27 @@ export class UnsupportedSchemaError extends Error {
 }
 
 type ZodDef = {
-  typeName?: string;
-  description?: string;
+  type?: string;
   innerType?: ZodTypeAny;
-  type?: ZodTypeAny;
-  shape?: () => Record<string, ZodTypeAny>;
-  values?: string[] | Record<string, string | number>;
-  value?: unknown;
+  element?: ZodTypeAny;
+  shape?: Record<string, ZodTypeAny>;
+  entries?: Record<string, string | number>;
+  values?: unknown[];
   options?: ZodTypeAny[];
-  checks?: { kind: string }[];
+  format?: string;
+  checks?: { _zod: { def: { check: string; format?: string } } }[];
 };
 
 function defOf(t: ZodTypeAny): ZodDef {
-  return (t as unknown as { _def: ZodDef })._def ?? {};
+  return (t as unknown as { _zod: { def: ZodDef } })._zod.def;
 }
 
 function typeNameOf(t: ZodTypeAny): string {
-  return defOf(t).typeName ?? '';
+  const d = defOf(t);
+  // In v3 a refinement wrapped the schema in unsupported ZodEffects. In v4
+  // it lives on the original node: keep refusing it instead of dropping it.
+  if (d.checks?.some((check) => check._zod.def.check === 'custom')) return 'ZodEffects';
+  return d.type ? `Zod${d.type[0].toUpperCase()}${d.type.slice(1)}` : '';
 }
 
 /** The single wrapped type of ZodOptional / ZodNullable / ZodDefault. */
@@ -66,6 +70,7 @@ function innerOf(t: ZodTypeAny): ZodTypeAny | null {
 function acceptsNull(t: ZodTypeAny): boolean {
   const name = typeNameOf(t);
   if (name === 'ZodNullable' || name === 'ZodNull' || name === 'ZodAny' || name === 'ZodUnknown') return true;
+  if (name === 'ZodLiteral') return defOf(t).values?.includes(null) ?? false;
   if (name === 'ZodOptional' || name === 'ZodDefault') {
     const inner = innerOf(t);
     return inner ? acceptsNull(inner) : false;
@@ -77,10 +82,7 @@ function acceptsNull(t: ZodTypeAny): boolean {
 }
 
 function unionOptions(t: ZodTypeAny): ZodTypeAny[] {
-  const d = defOf(t);
-  const raw = d.options as ZodTypeAny[] | Map<unknown, ZodTypeAny> | undefined;
-  if (!raw) return [];
-  return Array.isArray(raw) ? raw : Array.from(raw.values());
+  return defOf(t).options ?? [];
 }
 
 /** Add `null` to an already-converted node, including inside `enum` and `anyOf`. */
@@ -109,10 +111,19 @@ function literalSchema(value: unknown, path: string): JsonSchema {
   throw new UnsupportedSchemaError('ZodLiteral', path);
 }
 
+function literalValuesSchema(values: unknown[], path: string): JsonSchema {
+  if (!values.length) throw new UnsupportedSchemaError('ZodLiteral', path);
+  const schemas = values.map((value) => literalSchema(value, path));
+  if (schemas.length === 1) return schemas[0];
+  const type = schemas[0].type;
+  if (type !== 'null' && schemas.every((schema) => schema.type === type)) return { type, enum: values };
+  return { anyOf: schemas };
+}
+
 function convert(t: ZodTypeAny, path: string): JsonSchema {
   const d = defOf(t);
-  const name = d.typeName ?? '';
-  const describe = (json: JsonSchema): JsonSchema => (d.description ? { ...json, description: d.description } : json);
+  const name = typeNameOf(t);
+  const describe = (json: JsonSchema): JsonSchema => (t.description ? { ...json, description: t.description } : json);
 
   switch (name) {
     case 'ZodOptional':
@@ -127,7 +138,11 @@ function convert(t: ZodTypeAny, path: string): JsonSchema {
     case 'ZodString':
       return describe({ type: 'string' });
     case 'ZodNumber': {
-      const isInt = (d.checks ?? []).some((c) => c.kind === 'int');
+      const integerFormats = ['safeint', 'int32', 'uint32'];
+      const isInt = integerFormats.includes(d.format ?? '') || (d.checks ?? []).some((check) => {
+        const checkDef = check._zod.def;
+        return checkDef.check === 'number_format' && integerFormats.includes(checkDef.format ?? '');
+      });
       return describe({ type: isInt ? 'integer' : 'number' });
     }
     case 'ZodBoolean':
@@ -135,24 +150,19 @@ function convert(t: ZodTypeAny, path: string): JsonSchema {
     case 'ZodNull':
       return describe({ type: 'null' });
     case 'ZodLiteral':
-      return describe(literalSchema(d.value, path));
+      return describe(literalValuesSchema(d.values ?? [], path));
     case 'ZodEnum': {
-      const values = (d.values ?? []) as string[];
-      if (!Array.isArray(values) || values.length === 0) throw new UnsupportedSchemaError(name, path);
-      return describe({ type: 'string', enum: [...values] });
-    }
-    case 'ZodNativeEnum': {
-      const values = Object.values((d.values ?? {}) as Record<string, string | number>);
+      const values = Object.values(d.entries ?? {});
       if (!values.length || values.some((v) => typeof v !== 'string')) throw new UnsupportedSchemaError(name, path);
       return describe({ type: 'string', enum: values as string[] });
     }
     case 'ZodArray': {
-      const element = (d.type ?? null) as ZodTypeAny | null;
+      const element = d.element;
       if (!element) throw new UnsupportedSchemaError(name, path);
       return describe({ type: 'array', items: convert(element, `${path}[]`) });
     }
     case 'ZodObject': {
-      const shape = typeof d.shape === 'function' ? d.shape() : {};
+      const shape = d.shape ?? {};
       const keys = Object.keys(shape);
       const properties: Record<string, JsonSchema> = {};
       for (const key of keys) properties[key] = convert(shape[key], path ? `${path}.${key}` : key);
@@ -167,7 +177,7 @@ function convert(t: ZodTypeAny, path: string): JsonSchema {
       if (literals.length === options.length) {
         // A union of same-typed literals collapses to a single enum, which the
         // model follows far more reliably than an anyOf of one-value branches.
-        const values = literals.map((o) => defOf(o).value);
+        const values = literals.flatMap((o) => defOf(o).values ?? []);
         const kinds = new Set(values.map((v) => (typeof v === 'number' && Number.isInteger(v) ? 'integer' : typeof v)));
         if (kinds.size === 1) {
           const kind = [...kinds][0];
@@ -220,7 +230,7 @@ export function conformNulls(schema: ZodTypeAny, value: unknown): unknown {
     }
     case 'ZodObject': {
       if (value === null || typeof value !== 'object' || Array.isArray(value)) return value;
-      const shape = typeof defOf(schema).shape === 'function' ? defOf(schema).shape!() : {};
+      const shape = defOf(schema).shape ?? {};
       const source = value as Record<string, unknown>;
       const out: Record<string, unknown> = {};
       for (const [key, raw] of Object.entries(source)) {
@@ -235,7 +245,7 @@ export function conformNulls(schema: ZodTypeAny, value: unknown): unknown {
     }
     case 'ZodArray': {
       if (!Array.isArray(value)) return value;
-      const element = (defOf(schema).type ?? null) as ZodTypeAny | null;
+      const element = defOf(schema).element;
       if (!element) return value;
       return value.map((item) => conformNulls(element, item));
     }

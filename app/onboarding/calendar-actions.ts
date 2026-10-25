@@ -55,7 +55,7 @@ export async function startCalendarConnectionAction(input: z.infer<typeof startS
 export async function previewConnectedCalendarAction(accountId: string) {
   const t = await getTranslations();
   try {
-    if (!z.string().uuid().safeParse(accountId).success) return { ok: false as const, error: t('connectedCalendar.unavailable') };
+    if (!z.string().guid().safeParse(accountId).success) return { ok: false as const, error: t('connectedCalendar.unavailable') };
     const db = await createServer();
     const auth = await db.auth.getUser();
     if (auth.error || !auth.data.user) return { ok: false as const, error: t('connectedCalendar.unavailable') };
