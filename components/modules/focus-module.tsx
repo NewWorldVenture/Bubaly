@@ -247,11 +247,11 @@ function FocusQueue() {
 
           <div className="flex items-center gap-3">
             {current.complete ? (
-              <button onClick={onDone} disabled={saving} className="flex items-center gap-2 rounded-xl bg-brand px-6 py-3 text-sm font-semibold text-white hover:bg-brand/90 transition disabled:opacity-50">
+              <button onClick={onDone} disabled={saving} className="flex items-center gap-2 rounded-xl bg-brand px-6 py-3 text-sm font-semibold text-white hover:brightness-95 transition disabled:opacity-50">
                 <Check className="h-4 w-4" /> {tr('focus.markDone')}
               </button>
             ) : (
-              <button onClick={onDone} disabled={saving} className="flex items-center gap-2 rounded-xl bg-brand px-6 py-3 text-sm font-semibold text-white hover:bg-brand/90 transition disabled:opacity-50">
+              <button onClick={onDone} disabled={saving} className="flex items-center gap-2 rounded-xl bg-brand px-6 py-3 text-sm font-semibold text-white hover:brightness-95 transition disabled:opacity-50">
                 {current.kind === 'chore' ? 'Submit for approval' : 'Next event'} <ArrowRight className="h-4 w-4" />
               </button>
             )}

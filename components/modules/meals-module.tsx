@@ -613,7 +613,7 @@ export function MealsModule() {
               </div>
               {selectedDinnerRecipeUrl && (
                 <a href={selectedDinnerRecipeUrl} target="_blank" rel="noreferrer"
-                  className="mt-2 block rounded-lg bg-brand py-2 text-center text-xs font-semibold text-brand-fg transition hover:opacity-90">
+                  className="mt-2 block rounded-lg bg-brand py-2 text-center text-xs font-semibold text-brand-fg transition hover:brightness-95">
                   {tr('meals.viewRecipe')}
                 </a>
               )}

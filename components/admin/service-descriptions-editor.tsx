@@ -149,7 +149,7 @@ export function ServiceDescriptionsEditor({ groups, overrides }: {
                           onClick={() => persist(it.key, value)}
                           className={cn(
                             'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50',
-                            justSaved === it.key ? 'bg-emerald-500/15 text-emerald-300' : 'bg-brand text-brand-fg hover:opacity-90',
+                            justSaved === it.key ? 'bg-emerald-500/15 text-emerald-300' : 'bg-brand text-brand-fg hover:brightness-95',
                           )}
                         >
                           {isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : justSaved === it.key ? <Check className="h-3.5 w-3.5" /> : null}

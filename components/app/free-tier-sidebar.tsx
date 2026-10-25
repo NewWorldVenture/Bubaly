@@ -258,7 +258,7 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
           <button
             type="button" disabled={busy || inTierHrefs.length === 0}
             onClick={() => onPinAll(inTierHrefs)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg transition hover:opacity-90 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg transition hover:brightness-95 disabled:opacity-50"
           >
             <ListPlus className="h-3.5 w-3.5" /> {t('freeTierSidebar.pinAllInMyPlan')}
           </button>

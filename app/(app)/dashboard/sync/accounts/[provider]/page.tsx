@@ -241,7 +241,7 @@ export default async function SyncProviderPage({
             // so merely opening this page overwrote the state and cleared the
             // calendar-onboarding continuation, and a click went through an
             // RSC fetch that fails cross-origin before falling back.
-            <a href={setup.connectHref} className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg shadow-glow transition hover:opacity-90">
+            <a href={setup.connectHref} className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg shadow-glow transition hover:brightness-95">
               {t('dashboardSyncAccounts.connect')} {PROVIDER_LABELS[provider]}
             </a>
           )}

@@ -355,7 +355,7 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
             </div>
             <div className="flex gap-2 border-t border-brand/20 p-3">
               <button type="button" onClick={goToDestination}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand py-2.5 text-sm font-semibold text-white hover:bg-brand/90">
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand py-2.5 text-sm font-semibold text-white hover:brightness-95">
                 {t('captureShell.goTo')} {routed.destination} <ArrowRight className="h-4 w-4" />
               </button>
               <button type="button" onClick={() => { if (isCurrent() && !lifetime.current.pending) { nextIntent(); setRouted(null); } }}
@@ -366,7 +366,7 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
           </div>
         ) : (
           <button type="button" disabled={!text.trim() || routing || !!reviewHref} onClick={handleSubmit}
-            className="mb-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-4 text-sm font-bold text-white transition hover:bg-brand/90 disabled:opacity-40">
+            className="mb-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-4 text-sm font-bold text-white transition hover:brightness-95 disabled:opacity-40">
             {routing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
             {routing ? 'Capturing…' : 'Capture with AI'}
           </button>

@@ -74,7 +74,7 @@ export function AutomationApproval({ id }: { id: string }) {
       <div className="flex items-center gap-2">
         <button
           type="button" disabled={pending} onClick={() => act('approved')}
-          className={cn('inline-flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50')}
+          className={cn('inline-flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:brightness-95 disabled:opacity-50')}
         >
           {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} {t('recordActions.approve')}
         </button>
