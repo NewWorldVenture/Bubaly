@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { ChevronDown, Search } from 'lucide-react';
 import {
   COUNTRY_DIAL_CODES,
@@ -49,6 +49,8 @@ export function PhoneInput({
   const [query, setQuery] = useState('');
   const panelRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listId = useId();
 
   const filtered = query
     ? COUNTRY_DIAL_CODES.filter(
@@ -71,7 +73,8 @@ export function PhoneInput({
   useEffect(() => {
     if (!open) return;
     function handle(e: MouseEvent) {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+      // The button toggles the list itself; counting it as outside would close the list on mousedown and reopen it on click.
+      if (panelRef.current && !panelRef.current.contains(e.target as Node) && !triggerRef.current?.contains(e.target as Node)) {
         setOpen(false);
         setQuery('');
       }
@@ -88,10 +91,16 @@ export function PhoneInput({
     }
   }, [open]);
 
-  function selectCountry(c: CountryDialCode) {
-    setCountry(c);
+  /** Close the list and hand focus back to the button that opened it, so a keyboard user is not left on <body>. */
+  function close() {
     setOpen(false);
     setQuery('');
+    triggerRef.current?.focus();
+  }
+
+  function selectCountry(c: CountryDialCode) {
+    setCountry(c);
+    close();
   }
 
   return (
@@ -105,10 +114,12 @@ export function PhoneInput({
       <div className="flex h-11 overflow-hidden rounded-xl border border-border bg-surface/60 transition focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/30">
         {/* Dial-code picker button */}
         <button
+          ref={triggerRef}
           type="button"
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
           aria-haspopup="listbox"
+          aria-controls={open ? listId : undefined}
           aria-label={tr('phoneAuth.countryLabel', { name: country.name })}
           className="flex shrink-0 items-center gap-1.5 border-r border-border bg-elevated px-3 transition hover:bg-elevated/80"
         >
@@ -133,10 +144,11 @@ export function PhoneInput({
 
       {/* Dropdown */}
       {open && (
+        // The panel holds the search field and the list; only the list is the listbox. Escape closes it here
+        // rather than letting it reach a dialog the field sits in.
         <div
           ref={panelRef}
-          role="listbox"
-          aria-label={tr('phoneInput.selectCountry')}
+          onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } }}
           className="absolute top-full left-0 z-50 mt-1 w-72 rounded-xl border border-border bg-surface shadow-glass"
         >
           {/* Search */}
@@ -146,6 +158,8 @@ export function PhoneInput({
               ref={searchRef}
               type="text"
               placeholder={tr('phoneInput.searchCountryOrCode')}
+              aria-label={tr('phoneInput.searchCountryOrCode')}
+              aria-controls={listId}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted"
@@ -153,11 +167,11 @@ export function PhoneInput({
           </div>
 
           {/* Country list */}
-          <ul className="max-h-52 overflow-y-auto py-1">
+          {filtered.length > 0 && <ul id={listId} role="listbox" aria-label={tr('phoneInput.selectCountry')} className="max-h-52 overflow-y-auto py-1">
             {filtered.map((c) => {
               const active = c.code === country.code;
               return (
-                <li key={c.code}>
+                <li key={c.code} role="none">
                   <button
                     type="button"
                     role="option"
@@ -177,10 +191,10 @@ export function PhoneInput({
                 </li>
               );
             })}
-            {filtered.length === 0 && (
-              <li className="px-3 py-4 text-center text-sm text-muted">{tr('phoneInput.noCountriesFound')}</li>
-            )}
-          </ul>
+          </ul>}
+          {filtered.length === 0 && (
+            <p className="px-3 py-4 text-center text-sm text-muted">{tr('phoneInput.noCountriesFound')}</p>
+          )}
         </div>
       )}
     </div>
