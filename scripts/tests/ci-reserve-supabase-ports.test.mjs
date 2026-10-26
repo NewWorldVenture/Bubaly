@@ -92,12 +92,39 @@ test('inline service tables cannot bypass explicit fixed-port validation', () =>
     const f = fixture({ config: source }); assert.throws(() => f.run(), /UNSUPPORTED_CONFIG_INLINE_TABLE/); assert.equal(f.writes, 0);
   }
 });
+const guardCommand = '\n          node scripts/ci-reserve-supabase-ports.mjs\n';
+const npmCommand = '\n        run: npm ci\n';
+const startCommand = '\n          supabase start\n';
+function assertWorkflowGuard(workflow) {
+  const job = workflow.indexOf('\n  e2e:\n');
+  assert.ok(job >= 0, 'E2E job must exist');
+  const e2e = workflow.slice(job);
+  assert.match(e2e, /version: 2\.109\.1/);
+  const guard = e2e.indexOf(guardCommand);
+  const npm = e2e.indexOf(npmCommand);
+  const start = e2e.indexOf(startCommand);
+  assert.ok(guard >= 0, 'Reservation command must exist');
+  assert.ok(npm >= 0, 'Dependency installation must exist');
+  assert.ok(start >= 0, 'Actual full startup command must exist');
+  assert.ok(guard < npm, 'Reservation must precede dependency installation');
+  assert.ok(guard < start, 'Reservation must precede full startup');
+}
 test('guard remains before npm and full startup, with the reviewed CLI version pinned', () => {
   const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-  const e2e = workflow.slice(workflow.indexOf('\n  e2e:\n'));
-  assert.match(e2e, /version: 2\.109\.1/);
-  assert.ok(e2e.indexOf('node scripts/ci-reserve-supabase-ports.mjs') < e2e.indexOf('run: npm ci'));
-  assert.ok(e2e.indexOf('node scripts/ci-reserve-supabase-ports.mjs') < e2e.indexOf('supabase start'));
+  assertWorkflowGuard(workflow);
+});
+test('workflow oracle rejects omitted commands/job and reservation reordered after npm/start', () => {
+  const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+  const job = workflow.indexOf('\n  e2e:\n');
+  assert.ok(job >= 0);
+  const e2e = workflow.slice(job);
+  for (const token of ['\n  e2e:\n', guardCommand, npmCommand, startCommand]) {
+    assert.ok(e2e.includes(token));
+    assert.throws(() => assertWorkflowGuard(e2e.replace(token, '\n')));
+  }
+  for (const after of [npmCommand, startCommand]) {
+    assert.throws(() => assertWorkflowGuard(e2e.replace(guardCommand, '\n').replace(after, after + guardCommand)));
+  }
 });
 test('tracked config is accepted without rewriting production/default service URLs', () => {
   assert.doesNotThrow(() => assertFixedConfig(readFileSync(new URL('../../supabase/config.toml', import.meta.url), 'utf8')));
