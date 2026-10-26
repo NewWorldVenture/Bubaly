@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 import { has, nodes, render, text, type Node } from './helpers/module-harness';
 import { resetHookSlots } from './helpers/hook-slots';
+import { at } from './helpers/source-order';
 
 // The Vacation Planner's "Next trip" was a trip that had ended.
 //
@@ -99,8 +100,8 @@ describe('the Vacation Planner\'s next trip', () => {
     const tree = screen();
     const top = hero(tree);
     const order = links(tree).filter((n) => n !== top).map((n) => String(n.props.href).split('/')[3]);
-    expect(order.indexOf('disney')).toBeLessThan(order.indexOf('lake'));
-    expect(order.indexOf('someday')).toBeLessThan(order.indexOf('spring'));
+    expect(at(order, 'disney')).toBeLessThan(at(order, 'lake'));
+    expect(at(order, 'someday')).toBeLessThan(at(order, 'spring'));
     expect(order).toHaveLength(4);
   });
 });
