@@ -86,13 +86,15 @@ export function IntelligenceModule({
       if (error) { toastError(describeDbError(error)); return; }
       if (wroteNoRows(saved)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
       setData(saved as Consent[]);
-      // Leaving, or switching a scope off, takes the family's stored
-      // contribution with it now (design doc §2.7), as "Left the network —
-      // nothing is shared" says. The nightly aggregation only re-reads
-      // consent, so until a run got all the way to its prune the row stayed,
-      // and every aggregate built from it with it. The next run rebuilds
-      // whatever is still consented. Zero rows is the ordinary answer for a
-      // family that has not contributed yet.
+      // Leaving, or switching off a scope that contributes (toggleScope
+      // below), takes the family's stored contribution with it now (design
+      // doc §2.7). The nightly aggregation only re-reads consent, so until a
+      // run got all the way to its prune the row stayed. The published figures
+      // are not rebuilt by this delete or by the next night: they are held for
+      // the publication epoch, and the family's share of them goes with the
+      // next epoch's snapshot (lib/network/aggregate.ts, PUBLICATION_EPOCH).
+      // Zero rows is the ordinary answer for a family that has not
+      // contributed yet.
       if (narrows) {
         const { error: forgetError } = await createClient().from('network_contributions')
           .delete().eq('family_id', familyId).select('family_id');

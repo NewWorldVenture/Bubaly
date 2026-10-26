@@ -111,8 +111,11 @@ export default async function IntelligencePage() {
   };
 
   // Published aggregates for THIS family's cohort (RLS already restricts rows to
-  // opted-in scopes), fresh ones only — a run that kept failing left rows
-  // behind with families inside them who have since withdrawn.
+  // opted-in scopes), fresh ones only — rows a run that kept failing left
+  // behind are not the network's answer. Fresh says the cron still stands
+  // behind the figures, not that a family that withdrew is out of them: the
+  // held snapshot keeps its share until the next epoch's (aggregate.ts,
+  // AGGREGATE_MAX_AGE_MS).
   //
   // `cohort_size` is not selected here. It is the TRUE family count beside the
   // noised `count`, and through this read any member of the family — a child

@@ -10,7 +10,8 @@
 //   3. AGGREGATE — once per publication epoch (aggregate.ts, PUBLICATION_EPOCH):
 //      run the pure k-anonymity + DP + gating core over the contributions and
 //      replace network_aggregates with the publish-safe rows. Every other night
-//      of the epoch holds that snapshot unchanged.
+//      of the epoch holds that snapshot unchanged. One run at a time does
+//      this (NETWORK_PUBLICATION_LEASE_KEY), however many overlap.
 // Nothing here can bypass aggregate.ts's guarantees.
 
 import { createHmac } from 'node:crypto';
@@ -21,12 +22,13 @@ import { readAllInChunks, writeInChunks } from '@/lib/supabase/chunked-in';
 import type { Database } from '@/lib/database.types';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 import { isManager } from '@/lib/constants/roles';
+import { claimLease, releaseLease } from '@/lib/server/app-settings-lease';
 import {
   contributionFeatures, bedtimeToMinutes, typicalWeeklySpend, type ContributionInput,
 } from './contribution';
 import {
   aggregateContributions, cohortKey, contributesToNetwork, laplaceNoise, filterMetricsByScopes, publicationEpoch,
-  AGG_DEFAULTS, type Contribution, type NoiseCell, type NoiseFn,
+  AGG_DEFAULTS, type Contribution, type NoiseCell, type NoiseFn, type PublicationEpoch,
 } from './aggregate';
 import type { ConsentScope } from './insights';
 import { describeActionError } from '@/lib/supabase/errors';
@@ -41,7 +43,22 @@ export type AggregateResult = {
   epoch?: string;
   /** True when the epoch's snapshot was already published and the run left it unchanged. */
   held?: boolean;
+  /** True when another run held the publication: this one refreshed the contributions and left the figures to it. */
+  deferred?: boolean;
 };
+
+/**
+ * The claim a run takes before it holds or publishes the figures, in
+ * app_settings (lib/server/app-settings-lease.ts). See step 4 of
+ * runNetworkAggregation.
+ */
+export const NETWORK_PUBLICATION_LEASE_KEY = 'network_aggregate_publication:v1';
+/**
+ * Ten times the cron route's 60-second maxDuration: a holder is gone long
+ * before its claim expires, so no two runs are ever inside the publication at
+ * once. A holder that died frees it after this.
+ */
+export const NETWORK_PUBLICATION_LEASE_MS = 10 * 60_000;
 
 /** Roles whose members count as children for chores-per-child and bedtime. */
 export const CHILD_ROLES = new Set(['child', 'teen']);
@@ -239,8 +256,11 @@ function familyZone(c: ConsentRow): string {
  * it. A consent whose author is an ACTIVE member of that family in a
  * non-manager role is not honoured. An author who is no longer a member (or
  * whose account is gone, `consented_by` null) cannot be judged from here and is
- * left to the owner's re-consent sweep, as are scope switches, which record no
- * author at all.
+ * left to the owner's re-consent sweep. A scope switch records its author: the
+ * module writes the manager who made it to `consented_by` and `consented_at`
+ * (intelligence-module.tsx, toggleScope), so a manager's switch takes over a
+ * consent a non-manager wrote, and this check then honours it. Only switches
+ * made before that change recorded no author, and those are the sweep's too.
  */
 async function consentsByNonManagers(sb: DB, consents: ConsentRow[]): Promise<{ error: unknown; families: Set<string> }> {
   const authorOf = new Map(consents.filter((c) => c.consented_by).map((c) => [c.family_id, c.consented_by as string]));
@@ -300,8 +320,9 @@ function noiseKey(): string | null {
  *    leaver was in a stable band after 90 nights each side.
  *
  * The epoch bounds both, and defeats neither outright. Inside an epoch the
- * cron does not republish at all (runNetworkAggregation holds the snapshot),
- * so no published figure changes and two nights have nothing to difference.
+ * cron does not republish at all (runNetworkAggregation holds the snapshot,
+ * and overlapping runs take the publication one at a time), so no published
+ * figure changes and two nights have nothing to difference.
  * The epoch is in the key, so the next epoch draws every band afresh, whether
  * or not its counts moved, and the diff across a boundary says neither which
  * bands nor which cohorts did.
@@ -324,11 +345,15 @@ function noiseKey(): string | null {
  * further takes a larger scale, coarser rounding or a longer epoch, and that
  * is the owner's call, not this function's.
  *
- * The vector stays in the key for the one case the hold cannot rule out: two
- * publishes in one epoch (overlapping runs). With the same state they publish
- * the same figures. With a changed state every band of the metric draws
- * afresh (one extra sample), never the same noise on a different count, which
- * would subtract to the exact change.
+ * The vector stays in the key for the one case neither the hold nor the claim
+ * can rule out: a second publish in one epoch because this epoch's rows were
+ * removed from outside the run (an operator clearing the table). With the same
+ * state it publishes the same figures. With a changed state every band of the
+ * metric draws afresh (one extra sample), never the same noise on a different
+ * count, which would subtract to the exact change. Overlapping runs are not
+ * that case: one holds the publication (NETWORK_PUBLICATION_LEASE_KEY) and
+ * the other leaves the figures to it, and the prune never reaches this
+ * epoch's rows.
  */
 export function stickyNoise(key: string, epoch: string): NoiseFn {
   return (scale, cell) => laplaceNoise(scale, () => cellUniform(key, epoch, cell));
@@ -465,17 +490,49 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
   }
   if (contributionFailures > 0) return { ok: false, error: 'failed to persist family contributions', contributors: contributions.length, aggregates: 0 };
 
-  // 4. HOLD — inside a publication epoch the published figures do not change.
+  // 4. CLAIM — one run at a time holds or publishes.
+  //    The hold asks whether this epoch's snapshot is there, and the publish
+  //    overwrites every row on its key, so two runs side by side each acted on
+  //    what the other was changing. Overlap is real: vercel.json and
+  //    scripts/cron-dispatch.mjs can both call the route at 03:00, and a cron
+  //    event can be delivered twice. A later-started run that held first, then
+  //    pruned after an earlier run had re-stamped the snapshot back to its own
+  //    `now`, deleted the whole snapshot, and the next night, finding nothing
+  //    to hold, published the epoch a second time from a changed state. Two
+  //    first runs of an epoch both published, the second over the first. The
+  //    run that holds this claim is the only one that writes
+  //    network_aggregates. One that finds it held has refreshed the
+  //    contributions above and leaves the figures to the holder; one that
+  //    cannot read or write it fails rather than guess. A publish the database
+  //    itself keys on the epoch is the owner's migration; until it lands, this
+  //    claim is the fence.
+  const epoch = publicationEpoch(now);
+  const lease = await claimLease(sb, NETWORK_PUBLICATION_LEASE_KEY, { ttlMs: NETWORK_PUBLICATION_LEASE_MS, now });
+  if (!lease.claimed) {
+    if (lease.reason === 'held') return { ok: true, contributors: contributions.length, aggregates: 0, epoch: epoch.key, deferred: true };
+    return { ok: false, error: 'failed to claim the publication', contributors: contributions.length, aggregates: 0 };
+  }
+  try {
+    return await holdOrPublish(sb, contributions, key, epoch, now);
+  } finally {
+    await releaseLease(sb, NETWORK_PUBLICATION_LEASE_KEY, lease.token);
+  }
+}
+
+/** Steps 5 to 7 of runNetworkAggregation, run only by the holder of the publication claim. */
+async function holdOrPublish(
+  sb: DB, contributions: Contribution[], key: string, epoch: PublicationEpoch, now: Date,
+): Promise<AggregateResult> {
+  // 5. HOLD — inside a publication epoch the published figures do not change.
   //    If this epoch's snapshot is already published, the run stands behind it
   //    again — `computed_at` re-stamped, so readers' 36-hour freshness rule
   //    still says the cron is alive — and changes nothing a reader can see:
   //    no join, leave or band change inside the epoch reaches a figure, so
   //    two nights of one epoch have nothing to difference. The contributions
-  //    above are still refreshed nightly (the prune, and each family's own
-  //    compare line, depend on them); they reach the figures at the next
-  //    epoch. A network that published nothing yet this epoch (the launch
-  //    gate not met) has no snapshot to hold, and publishes when it first can.
-  const epoch = publicationEpoch(now);
+  //    are still refreshed nightly (the prune, and each family's own compare
+  //    line, depend on them); they reach the figures at the next epoch. A
+  //    network that published nothing yet this epoch (the launch gate not
+  //    met) has no snapshot to hold, and publishes when it first can.
   // `computed_at` is a real column (0135, timestamptz); the hand-kept Update
   // type in lib/database.types.ts lists only what the republish used to change.
   const restamp = { computed_at: now.toISOString() } as never;
@@ -486,7 +543,7 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
   if (holdError) return { ok: false, error: describeActionError(holdError), contributors: contributions.length, aggregates: 0 };
   const held = (standing ?? []).length;
 
-  // 5. AGGREGATE (once per epoch) — pure k-anonymity + sticky DP noise (one
+  // 6. AGGREGATE (once per epoch) — pure k-anonymity + sticky DP noise (one
   //    draw per band per epoch, see stickyNoise) + launch gate.
   const aggregates = held > 0 ? [] : aggregateContributions(contributions, {
     minCohort: AGG_DEFAULTS.minCohort,
@@ -494,10 +551,13 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
     noise: stickyNoise(key, epoch.key),
   });
 
-  // 6. Publish: upsert the new set on the natural key, THEN prune rows this run
-  //    didn't touch (stale computed_at) — after a hold, the leftovers of an
-  //    earlier epoch whose own prune failed. Avoids the delete-all-then-insert
-  //    window where a failed insert would leave the table silently empty.
+  // 7. Publish: upsert the new set on the natural key, THEN prune the rows of
+  //    EARLIER epochs — after a publish, every row the upsert did not replace;
+  //    after a hold, the leftovers of an epoch whose own prune failed. Never
+  //    this epoch's: pruned below this run's own `now`, the held snapshot went
+  //    whenever another run had re-stamped it earlier than that. Avoids the
+  //    delete-all-then-insert window where a failed insert would leave the
+  //    table silently empty.
   if (aggregates.length) {
     const { error: upsertErr } = await sb.from('network_aggregates').upsert(
       aggregates.map((a) => ({
@@ -510,7 +570,7 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
   }
   // Rows deliberately not checked: zero is the ordinary "nothing older" run.
   // Audit C1-S9-69.
-  const { error: pruneErr } = await sb.from('network_aggregates').delete().lt('computed_at', now.toISOString());
+  const { error: pruneErr } = await sb.from('network_aggregates').delete().lt('computed_at', epoch.start.toISOString());
   if (pruneErr) return { ok: false, error: describeActionError(pruneErr), contributors: contributions.length, aggregates: held || aggregates.length };
 
   return { ok: true, contributors: contributions.length, aggregates: held || aggregates.length, epoch: epoch.key, held: held > 0 };

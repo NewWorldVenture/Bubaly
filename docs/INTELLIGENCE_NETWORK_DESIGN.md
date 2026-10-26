@@ -92,7 +92,11 @@ Runs daily, service role:
    → **skip** (never written). Else compute the statistic, add DP noise (keyed on
    the epoch), write/replace the `network_aggregates` row. Every other night of
    the epoch holds that snapshot unchanged and only re-stamps `computed_at`, so
-   readers' 36-hour freshness rule still sees a live cron.
+   readers' 36-hour freshness rule still sees a live cron. One run at a time
+   holds or publishes (a claim in `app_settings`); a run that overlaps it
+   refreshes the contributions and leaves the figures alone, and the prune
+   only removes earlier epochs' rows, so overlapping runs neither publish an
+   epoch twice nor delete its snapshot.
 3. **Serve.** `visibleInsights()` maps `network_aggregates` rows a family is
    entitled to (opted-in scope) into `InsightCandidate`s; the k-floor is re-checked
    at read time as defense-in-depth.

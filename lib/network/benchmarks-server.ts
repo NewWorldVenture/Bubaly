@@ -63,9 +63,11 @@ export type AggregatesRead = { ok: true; aggregates: NetworkAggregate[]; compute
  * Every published benchmark row at or above the floor, newest computation first.
  *
  * Only FRESH rows count as published (`freshAggregatesSince`). The table keeps
- * whatever the last successful run wrote, and every run that fails before its
- * republish leaves it in place — with a family that withdrew since still inside
- * it — for as long as the cron keeps failing. Past the age limit the page, the
+ * whatever the last successful run wrote, and every run that fails before it
+ * stands behind the figures again leaves them in place for as long as the
+ * cron keeps failing. (A family that withdrew is inside fresh figures too,
+ * until the next epoch's snapshot: freshness says the cron is alive, not who
+ * is in the figures.) Past the age limit the page, the
  * export and the report fall to their empty state instead. `computedAt` is
  * still the newest row's, stale or not, so the report can say when the
  * aggregation last wrote anything. Inside a publication epoch every run that

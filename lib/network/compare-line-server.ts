@@ -37,8 +37,11 @@ export async function loadCompareLine(sb: DB, familyId: string, now: Date = new 
   }
   if (!contribution) return null;
 
-  // Fresh rows only: aggregates a run that kept failing left behind still hold
-  // the families who withdrew since, and are no longer the network's answer.
+  // Fresh rows only: rows a run that kept failing left behind are no longer
+  // the network's answer. Fresh says the cron still stands behind the
+  // figures, not that a family that withdrew is out of them: the held
+  // snapshot keeps its share until the next epoch's (aggregate.ts,
+  // AGGREGATE_MAX_AGE_MS).
   const { data: rows, error: aggregateError } = await sb.from('network_aggregates')
     .select('scope, cohort_key, metric, value, count, cohort_size')
     .eq('cohort_key', contribution.cohort_key).eq('scope', 'benchmarks')

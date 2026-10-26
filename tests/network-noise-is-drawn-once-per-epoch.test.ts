@@ -149,7 +149,10 @@ describe('the cron publishes once per epoch and holds the snapshot on every othe
     expect(stale).toMatchObject({ ok: true, aggregates: [] });
   });
 
-  it('a second publish inside one epoch (the snapshot gone, as overlapping runs could leave it) draws the same figures for the same state', async () => {
+  // Overlapping runs no longer leave the snapshot gone
+  // (tests/network-overlapping-runs-publish-once-per-epoch.test.ts); an
+  // operator clearing the table still can.
+  it('a second publish inside one epoch (the snapshot removed from outside the run) draws the same figures for the same state', async () => {
     expect(await runNetworkAggregation(db as unknown as DB, SEPTEMBER)).toMatchObject({ ok: true, held: false });
     const snapshot = published();
     db.replace('network_aggregates', []);
@@ -259,5 +262,33 @@ describe('what averaging recovers from the budget (the reviewer\'s probe, per ep
     expect(comment).toContain('The BUDGET is one fresh sample per published band per epoch');
     expect(comment).toContain('averaging epochs still converges on the true count');
     expect(comment).not.toMatch(/repetition adds nothing|averaging (many nights )?recovers nothing/);
+  });
+});
+
+describe('the comments around the held snapshot say what the code does (N7-N11-stale-comments)', () => {
+  // Line and block comments alike, read as one line of prose.
+  const prose = (file: string) => readFileSync(file, 'utf8').replace(/\n\s*(?:\/\/|\*)\s?/g, ' ').replace(/\s+/g, ' ');
+  const server = prose('lib/network/aggregate-server.ts');
+
+  it('a scope switch records its author, and overlapping runs are not a second publish', () => {
+    expect(server).not.toContain('scope switches, which record no author');
+    expect(server).toContain('A scope switch records its author');
+    expect(server).not.toContain('two publishes in one epoch (overlapping runs)');
+    expect(server).toContain('Overlapping runs are not that case');
+  });
+
+  it('a withdrawal leaves the published figures with the next epoch, not the next run', () => {
+    const consentModule = prose('components/modules/intelligence-module.tsx');
+    expect(consentModule).not.toContain('Leaving, or switching a scope off, takes');
+    expect(consentModule).not.toContain('every aggregate built from it with it');
+    expect(consentModule).toContain("the family's share of them goes with the next epoch's snapshot");
+  });
+
+  it('a fresh row says the cron is alive, not that a family that withdrew is out of it', () => {
+    for (const file of ['lib/network/compare-line-server.ts', 'app/(app)/dashboard/intelligence/page.tsx']) {
+      const reader = prose(file);
+      expect(reader, file).not.toMatch(/still hold the families who withdrew since|with families inside them who have since withdrawn/);
+      expect(reader, file).toContain('Fresh says the cron still stands behind the figures, not that a family that withdrew is out of them');
+    }
   });
 });
