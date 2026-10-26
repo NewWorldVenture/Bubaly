@@ -101,6 +101,10 @@ export function TripsModule() {
   const selectedItems = selected ? (itemsByTrip.get(selected.id) ?? []) : [];
 
   // ── Trip CRUD ─────────────────────────────────────────────
+  // `trips` and `trip_items` are not in the realtime publication, so no event
+  // ever brings a write back to this screen: each confirmed write re-reads what
+  // it changed. Without that a created trip or item never appeared (and was
+  // created again), a tick snapped back, and a removed row stayed.
   function openNewTrip() { setTripForm(blankTrip); setTripModal(true); }
   function openEditTrip(t: Trip) {
     setTripForm({
@@ -130,6 +134,7 @@ export function TripsModule() {
     if (wroteNoRows(rows)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(tripForm.id ? 'Trip updated' : 'Trip created');
     setTripModal(false);
+    void refreshTrips();
   }
   async function removeTrip(t: Trip) {
     if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: t.name }), body: tr('trips.deleteTripBody') }))) return;
@@ -139,6 +144,7 @@ export function TripsModule() {
     if (wroteNoRows(rows)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(tr('tripsModule.tripDeleted'));
     if (selectedId === t.id) setSelectedId(null);
+    void refreshTrips();
   }
   function toggleTraveler(id: string) {
     setTripForm((f) => ({ ...f, traveler_ids: f.traveler_ids.includes(id) ? f.traveler_ids.filter((x) => x !== id) : [...f.traveler_ids, id] }));
@@ -161,12 +167,15 @@ export function TripsModule() {
     if (err) { toastError(describeDbError(err)); return; }
     success(tr('tripsModule.itemAdded'));
     setItemModal(false);
+    void refreshItems();
   }
   async function toggleItem(it: TripItem) {
     const sb = createClient();
     const { data: rows, error: err } = await sb.from('trip_items').update({ is_done: !it.is_done }).eq('id', it.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(rows)) toastError(tr('errors.thatChangeWasNotSaved'));
+    // Without the re-read the box stayed empty and the next tap wrote "done" again.
+    else void refreshItems();
   }
   async function removeItem(it: TripItem) {
     if (!(await askConfirm({ title: tr('confirm.removeNamed', { name: it.label }), body: tr('confirm.cannotBeUndone') }))) return;
@@ -174,6 +183,7 @@ export function TripsModule() {
     const { data: rows, error: err } = await sb.from('trip_items').delete().eq('id', it.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(rows)) toastError(tr('errors.thatChangeWasNotSaved'));
+    else void refreshItems();
   }
 
   const fmtRange = (t: Trip) => {
@@ -188,6 +198,55 @@ export function TripsModule() {
   if (loading) return <SkeletonList count={5} />;
   const loadError = error || itemsError;
   if (loadError) return <ErrorState message={typeof loadError === 'string' ? loadError : 'Failed to load trips'} onRetry={() => { refreshTrips(); refreshItems(); }} />;
+
+  // Rendered on BOTH views: the Edit pencil lives on the detail view, and with
+  // the dialog only on the list view it set `tripModal` and showed nothing.
+  const tripDialog = (
+    <Modal open={tripModal} onClose={() => setTripModal(false)} title={tripForm.id ? tr('dialogTitle.editTrip') : tr('dialogTitle.newTrip')}>
+      <form onSubmit={saveTrip} className="space-y-4">
+        <Field label={tr('trips.tripName')} required>
+          {(id) => <Input id={id} value={tripForm.name} onChange={(e) => setTripForm((f) => ({ ...f, name: e.target.value }))} placeholder={tr('trips.eGSummerAtTheLake')} autoFocus />}
+        </Field>
+        <Field label={tr('trips.destination')}>
+          {(id) => <Input id={id} value={tripForm.destination} onChange={(e) => setTripForm((f) => ({ ...f, destination: e.target.value }))} placeholder={tr('trips.lakeTahoeCa')} />}
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={tr('trips.startDate')}>
+            {(id) => <Input id={id} type="date" value={tripForm.start_date} onChange={(e) => setTripForm((f) => ({ ...f, start_date: e.target.value }))} />}
+          </Field>
+          <Field label={tr('trips.endDate')}>
+            {(id) => <Input id={id} type="date" value={tripForm.end_date} onChange={(e) => setTripForm((f) => ({ ...f, end_date: e.target.value }))} />}
+          </Field>
+        </div>
+        <Field label={tr('trips.status')}>
+          {(id) => (
+            <Select id={id} value={tripForm.status} onChange={(e) => setTripForm((f) => ({ ...f, status: e.target.value as TripStatus }))}>
+              {(Object.keys(TRIP_STATUS_LABELS) as TripStatus[]).map((s) => <option key={s} value={s}>{tr(TRIP_STATUS_KEYS[s])}</option>)}
+            </Select>
+          )}
+        </Field>
+        <div>
+          <span className="block text-sm font-medium text-fg mb-1.5">{tr('trips.travelers')}</span>
+          <div className="flex flex-wrap gap-1.5">
+            {members.map((m) => (
+              <button key={m.id} type="button" onClick={() => toggleTraveler(m.id)}
+                className={cn('inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition',
+                  tripForm.traveler_ids.includes(m.id) ? 'bg-brand text-white border-brand' : 'bg-surface/50 text-muted border-border hover:text-fg')}>
+                <Avatar name={m.display_name} size={16} />{m.display_name}
+              </button>
+            ))}
+          </div>
+        </div>
+        <Field label={tr('trips.notes')}>
+          {(id) => <Textarea id={id} value={tripForm.notes} onChange={(e) => setTripForm((f) => ({ ...f, notes: e.target.value }))} placeholder={tr('trips.flightsBudgetIdeas')} />}
+        </Field>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="outline" onClick={() => setTripModal(false)}>{tr('trips.cancel')}</Button>
+          <Button type="submit" disabled={savingTrip}>{savingTrip ? 'Saving…' : tripForm.id ? 'Save changes' : 'Create trip'}</Button>
+        </div>
+      </form>
+    </Modal>
+  );
 
   // ── Trip detail view ──────────────────────────────────────
   if (selected) {
@@ -318,6 +377,7 @@ export function TripsModule() {
             </div>
           </form>
         </Modal>
+        {tripDialog}
       </div>
     );
   }
@@ -381,51 +441,7 @@ export function TripsModule() {
         </div>
       )}
 
-      {/* Trip modal */}
-      <Modal open={tripModal} onClose={() => setTripModal(false)} title={tripForm.id ? tr('dialogTitle.editTrip') : tr('dialogTitle.newTrip')}>
-        <form onSubmit={saveTrip} className="space-y-4">
-          <Field label={tr('trips.tripName')} required>
-            {(id) => <Input id={id} value={tripForm.name} onChange={(e) => setTripForm((f) => ({ ...f, name: e.target.value }))} placeholder={tr('trips.eGSummerAtTheLake')} autoFocus />}
-          </Field>
-          <Field label={tr('trips.destination')}>
-            {(id) => <Input id={id} value={tripForm.destination} onChange={(e) => setTripForm((f) => ({ ...f, destination: e.target.value }))} placeholder={tr('trips.lakeTahoeCa')} />}
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label={tr('trips.startDate')}>
-              {(id) => <Input id={id} type="date" value={tripForm.start_date} onChange={(e) => setTripForm((f) => ({ ...f, start_date: e.target.value }))} />}
-            </Field>
-            <Field label={tr('trips.endDate')}>
-              {(id) => <Input id={id} type="date" value={tripForm.end_date} onChange={(e) => setTripForm((f) => ({ ...f, end_date: e.target.value }))} />}
-            </Field>
-          </div>
-          <Field label={tr('trips.status')}>
-            {(id) => (
-              <Select id={id} value={tripForm.status} onChange={(e) => setTripForm((f) => ({ ...f, status: e.target.value as TripStatus }))}>
-                {(Object.keys(TRIP_STATUS_LABELS) as TripStatus[]).map((s) => <option key={s} value={s}>{tr(TRIP_STATUS_KEYS[s])}</option>)}
-              </Select>
-            )}
-          </Field>
-          <div>
-            <span className="block text-sm font-medium text-fg mb-1.5">{tr('trips.travelers')}</span>
-            <div className="flex flex-wrap gap-1.5">
-              {members.map((m) => (
-                <button key={m.id} type="button" onClick={() => toggleTraveler(m.id)}
-                  className={cn('inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition',
-                    tripForm.traveler_ids.includes(m.id) ? 'bg-brand text-white border-brand' : 'bg-surface/50 text-muted border-border hover:text-fg')}>
-                  <Avatar name={m.display_name} size={16} />{m.display_name}
-                </button>
-              ))}
-            </div>
-          </div>
-          <Field label={tr('trips.notes')}>
-            {(id) => <Textarea id={id} value={tripForm.notes} onChange={(e) => setTripForm((f) => ({ ...f, notes: e.target.value }))} placeholder={tr('trips.flightsBudgetIdeas')} />}
-          </Field>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setTripModal(false)}>{tr('trips.cancel')}</Button>
-            <Button type="submit" disabled={savingTrip}>{savingTrip ? 'Saving…' : tripForm.id ? 'Save changes' : 'Create trip'}</Button>
-          </div>
-        </form>
-      </Modal>
+      {tripDialog}
     </div>
   );
 }
