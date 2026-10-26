@@ -54,7 +54,7 @@ beforeEach(() => {
   live.refreshes = 0;
 });
 
-describe('contacts show only their current verified read', () => {
+describe('contacts retain authorized cached reads and follow current selection rows', () => {
   it('shows a verified emergency contact and its phone', () => {
     expect(text(show())).toContain(NAME);
     expect(text(show())).toContain(OLD_PHONE);
@@ -72,16 +72,16 @@ describe('contacts show only their current verified read', () => {
     expect(text(show())).not.toContain(NAME);
     expect(text(show())).not.toContain(OLD_PHONE);
   });
-  it('hides cached names and emergency phones until the stale read is verified', () => {
+  it('retains cached names and emergency phones while revalidation is pending', () => {
     live.read.stale = true;
-    expect(hasRole('status')).toBe(true);
-    expect(text(show())).not.toContain(NAME);
-    expect(text(show())).not.toContain(OLD_PHONE);
+    expect(hasRole('status')).toBe(false);
+    expect(text(show())).toContain(NAME);
+    expect(text(show())).toContain(OLD_PHONE);
   });
-  it('does not mistake an unverified empty cache for an empty contact book', () => {
+  it('retains the last-synced empty contact book while revalidation is pending', () => {
     live.read.data = []; live.read.stale = true;
-    expect(hasRole('status')).toBe(true);
-    expect(hasEmpty()).toBe(false);
+    expect(hasRole('status')).toBe(false);
+    expect(hasEmpty()).toBe(true);
   });
   it('shows an actionable failed read instead of cached contact details', () => {
     live.read.error = 'Synthetic read unavailable'; live.read.stale = true;
@@ -89,10 +89,16 @@ describe('contacts show only their current verified read', () => {
     expect(text(show())).toContain('Synthetic read unavailable');
     expect(text(show())).not.toContain(OLD_PHONE);
   });
-  it('does not hide a known read error behind a loading flag', () => {
-    live.read.error = 'Synthetic read unavailable'; live.read.loading = true; live.read.stale = true;
+  it('treats a failed empty read as an error and permits a successful empty retry', async () => {
+    live.read.data = []; live.read.error = 'Synthetic read unavailable'; live.read.loading = false; live.read.stale = true;
     expect(hasRole('alert')).toBe(true);
     expect(hasRole('status')).toBe(false);
+    expect(hasEmpty()).toBe(false);
+    const retry = nodes(show()).find(node => node.type === 'button' && text(node) === 'Retry contacts')!;
+    await click(retry);
+    expect(live.refreshes).toBe(1);
+    expect(hasRole('alert')).toBe(false);
+    expect(hasEmpty()).toBe(true);
   });
   it('retry re-reads and reveals a verified healthy contact', async () => {
     live.read.error = 'Synthetic read unavailable'; live.read.stale = true;
@@ -124,11 +130,12 @@ describe('contacts show only their current verified read', () => {
     expect(text(show())).toContain(OLD_PHONE);
     expect(nodes(show()).filter(node => node.props['aria-expanded'] === true)).toHaveLength(1);
   });
-  it('preserves search state across verification without displaying cached rows', () => {
+  it('preserves search state and cached rows while revalidation is pending', () => {
     const input = nodes(show()).find(node => node.type === 'input' && typeof node.props.onChange === 'function')!;
     change(input, 'Synthetic');
     live.read.stale = true;
-    expect(text(show())).not.toContain(OLD_PHONE);
+    expect(text(show())).toContain(OLD_PHONE);
+    expect(nodes(show()).find(node => node.type === 'input')?.props.value).toBe('Synthetic');
     live.read.stale = false;
     expect(nodes(show()).find(node => node.type === 'input')?.props.value).toBe('Synthetic');
     expect(text(show())).toContain(OLD_PHONE);

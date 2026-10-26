@@ -92,7 +92,7 @@ export function ContactsModule() {
   // the "All (N)" count, the category tabs and search, which then said "No
   // contacts found" for someone the family has. Past the ceiling the read
   // fails and the screen says so, rather than showing a prefix as the book.
-  const { data: contacts, loading, stale, error, refresh } = useRealtimeQuery<Contact>({
+  const { data: contacts, loading, error, refresh } = useRealtimeQuery<Contact>({
     table: 'family_contacts', familyId, deps: [familyId],
     fetcher: (sb) => readAllAsQuery<Contact>((from, to) =>
       sb.from('family_contacts').select('*').eq('family_id', familyId)
@@ -102,7 +102,8 @@ export function ContactsModule() {
   });
 
   // A realtime refresh can update or remove a contact while its detail panel
-  // is open. Keep the selection, but display only the current verified row.
+  // is open. Keep the selection, but display the row supplied by this read
+  // rather than a captured snapshot. Authorized last-synced rows still work.
   const selected = contacts.find((contact) => contact.id === selectedId) ?? null;
   const setSelected = (contact: Contact | null) => setSelectedId(contact?.id ?? null);
 
@@ -142,8 +143,8 @@ export function ContactsModule() {
     window.open(`https://maps.google.com?q=${encodeURIComponent(address)}`, '_blank', 'noopener,noreferrer');
   }
 
+  if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
-  if (loading || stale) return <SkeletonList />;
 
   return (
     <div className="module-page">
