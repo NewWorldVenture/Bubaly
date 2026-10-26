@@ -682,6 +682,7 @@
   "actions.adminConsoleNeedsYourCode": "Saisissez votre code de connexion en deux étapes avant d'utiliser la console d'administration.",
   "actions.teamActionNeedsYourCode": "Saisissez votre code de connexion en deux étapes avant de changer le statut d’une idée.",
   "actions.revokeSuperAdminBeforeBanning": "Ce compte a un accès super-administrateur. Retirez cet accès avant de le bannir.",
+  "actions.removeSuperAdminBeforeChangingRole": "Cette personne a un accès super-administrateur. Désactivez-la ou révoquez son accès avant de lui attribuer un autre rôle.",
   "actions.youCanTReportYour": "Vous ne pouvez pas signaler l’annonce de votre propre famille.",
   "actions.youDoNotHavePermission": "Vous n’avez pas l’autorisation de publier.",
   "actions.youReNotAbleTo": "Vous ne pouvez pas agir sur cette offre.",

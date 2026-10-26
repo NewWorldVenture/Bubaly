@@ -682,6 +682,7 @@
   "actions.adminConsoleNeedsYourCode": "Gib deinen Code für die zweistufige Anmeldung ein, bevor du die Admin-Konsole verwendest.",
   "actions.teamActionNeedsYourCode": "Gib deinen Code für die zweistufige Anmeldung ein, bevor du den Status einer Idee änderst.",
   "actions.revokeSuperAdminBeforeBanning": "Dieses Konto hat Super-Admin-Zugang. Entfernen Sie diesen Zugang, bevor Sie es sperren.",
+  "actions.removeSuperAdminBeforeChangingRole": "Diese Person hat Super-Admin-Zugang. Deaktivieren oder entziehen Sie den Zugang, bevor Sie ihr eine andere Rolle geben.",
   "actions.youCanTReportYour": "Sie können die Anzeige Ihrer eigenen Familie nicht melden.",
   "actions.youDoNotHavePermission": "Sie haben keine Berechtigung, Beiträge zu veröffentlichen.",
   "actions.youReNotAbleTo": "Sie können zu diesem Angebot nichts unternehmen.",

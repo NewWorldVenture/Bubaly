@@ -682,6 +682,7 @@
   "actions.adminConsoleNeedsYourCode": "Voer je code voor inloggen in twee stappen in voordat je de beheerconsole gebruikt.",
   "actions.teamActionNeedsYourCode": "Voer je code voor inloggen in twee stappen in voordat je de status van een idee wijzigt.",
   "actions.revokeSuperAdminBeforeBanning": "Dit account heeft superbeheerderstoegang. Verwijder die toegang voordat je het blokkeert.",
+  "actions.removeSuperAdminBeforeChangingRole": "Deze persoon heeft superbeheerderstoegang. Deactiveer of trek die toegang in voordat je een andere rol toekent.",
   "actions.youCanTReportYour": "Je kunt de advertentie van je eigen gezin niet melden.",
   "actions.youDoNotHavePermission": "Je hebt geen toestemming om posts te publiceren.",
   "actions.youReNotAbleTo": "Je kunt niets doen met dit bod.",

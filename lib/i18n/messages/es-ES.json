@@ -682,6 +682,7 @@
   "actions.adminConsoleNeedsYourCode": "Introduce tu código de inicio de sesión en dos pasos antes de usar la consola de administración.",
   "actions.teamActionNeedsYourCode": "Introduce tu código de inicio de sesión en dos pasos antes de cambiar el estado de una idea.",
   "actions.revokeSuperAdminBeforeBanning": "Esta cuenta tiene acceso de superadministrador. Quita ese acceso antes de bloquearla.",
+  "actions.removeSuperAdminBeforeChangingRole": "Esta persona tiene acceso de superadministrador. Desactívala o revoca su acceso antes de darle otro rol.",
   "actions.youCanTReportYour": "No puedes denunciar el anuncio de tu propia familia.",
   "actions.youDoNotHavePermission": "No tienes permiso para publicar entradas.",
   "actions.youReNotAbleTo": "No puedes actuar sobre esta oferta.",
