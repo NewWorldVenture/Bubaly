@@ -9,7 +9,8 @@
 //        was still recorded as completed; and once the one queued run was
 //        dismissed under an expired (not yet swept) approval the trust engine
 //        still reuses, a re-accept answered "Waiting for approval" with
-//        nothing queued;
+//        nothing queued, and then "Decide it in Approvals" for a request that
+//        had expired and could no longer be decided;
 //   N11  a concierge run closed with an answer, or retired because the cron
 //        had already claimed the planner's run, has no plan and was counted;
 //   N10  the completions were written through the manager's own session,
@@ -150,7 +151,37 @@ describe('one plan, accepted more than once, is one completed plan (N12)', () =>
     expect(await dismissQueuedRunAction(String(queued.id))).toMatchObject({ ok: true });
     expect(runs()).toEqual([expect.objectContaining({ id: queued.id, status: 'dismissed' })]);
 
+    // And it says so, rather than "Decide it in Approvals": an expired request
+    // cannot be decided (openForDecision refuses it, its card is disabled), and
+    // only the daily sweep clears it.
+    expect(await planAcceptedAction(PLAN, 'draft', 'confirmed')).toEqual({ ok: false, error: 'actions.earlierPlanApprovalExpired' });
+    expect(runs().filter((run) => run.status === 'pending')).toHaveLength(0);
+  });
+
+  it('an approval still open whose run left the queue another way is the one to decide', async () => {
+    h.trust = { effect: 'require_approval', approvalId: APPROVAL };
+    expect(await planAcceptedAction(PLAN, 'draft', 'confirmed')).toMatchObject({ ok: true, mode: 'ask' });
+    seedApproval();
+    // A manager's own UPDATE (0251 pins no column) moves the run off pending
+    // while its approval is open and in date: that request can still be decided.
+    const [queued] = runs();
+    const { data: moved } = await store.from('family_automation_runs')
+      .update({ status: 'dismissed', state: 'cancelled' }).eq('family_id', FAMILY).eq('id', String(queued.id)).select('id');
+    expect(moved).toHaveLength(1);
+
     expect(await planAcceptedAction(PLAN, 'draft', 'confirmed')).toEqual({ ok: false, error: 'actions.earlierPlanApprovalStillOpen' });
+    expect(runs().filter((run) => run.status === 'pending')).toHaveLength(0);
+  });
+
+  it('an earlier approval that could not be read is not described either way', async () => {
+    h.trust = { effect: 'require_approval', approvalId: APPROVAL };
+    expect(await planAcceptedAction(PLAN, 'draft', 'confirmed')).toMatchObject({ ok: true, mode: 'ask' });
+    seedApproval({ expires_at: '2026-01-01T00:00:00Z' });
+    const [queued] = runs();
+    expect(await dismissQueuedRunAction(String(queued.id))).toMatchObject({ ok: true });
+
+    h.service = withFaults(store, (table) => (table === 'approval_requests' ? { code: 'XX000', message: 'approval read failed' } : null));
+    expect(await planAcceptedAction(PLAN, 'draft', 'confirmed')).toEqual({ ok: false, error: 'actions.couldNotQueuePlanForApproval' });
     expect(runs().filter((run) => run.status === 'pending')).toHaveLength(0);
   });
 

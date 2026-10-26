@@ -246,7 +246,7 @@ export async function planAcceptedAction(
       idempotency_key: runKey,
       created_by: ctx.user.id,
     });
-    if (queueErr?.code === '23505' && runKey) {
+    if (queueErr?.code === '23505' && runKey && approvalId) {
       // The key is taken, but "already queued" is only true while the row that
       // holds it is still pending. The trust engine reuses a pending approval
       // past its expiry until the sweep runs, and the panel's Dismiss closes
@@ -259,7 +259,21 @@ export async function planAcceptedAction(
         console.error('[concierge] could not read the run holding a plan approval key', { planId, familyId, approvalId, error: holderErr });
         return { ok: false, error: describeActionError(holderErr, t('actions.couldNotQueuePlanForApproval')) };
       }
-      if (holder?.status !== 'pending') return { ok: false, error: t('actions.earlierPlanApprovalStillOpen') };
+      if (holder?.status !== 'pending') {
+        // Which way out there is depends on the approval. Still open, it can be
+        // decided in Approvals. Past its expiry it cannot (openForDecision
+        // refuses it and its card is disabled), and only the sweep clears it
+        // (expireStale, in the once-a-day notifications cron); until then the
+        // trust engine keeps handing it back, so a re-accept cannot queue.
+        const { data: earlier, error: earlierErr } = await createServiceClient().from('approval_requests')
+          .select('expires_at').eq('family_id', familyId).eq('id', approvalId).maybeSingle();
+        if (earlierErr) {
+          console.error('[concierge] could not read the earlier plan approval', { planId, familyId, approvalId, error: earlierErr });
+          return { ok: false, error: describeActionError(earlierErr, t('actions.couldNotQueuePlanForApproval')) };
+        }
+        const expired = !!earlier?.expires_at && Date.parse(earlier.expires_at) < Date.now();
+        return { ok: false, error: expired ? t('actions.earlierPlanApprovalExpired') : t('actions.earlierPlanApprovalStillOpen') };
+      }
       // Already queued on this approval: the panel already shows it.
       revalidatePath(PATH);
       return { ok: true, mode, applied: [], summary };
@@ -499,8 +513,13 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
   // (0255/0329). So until the owner's N10 SQL lands (the member INSERT refused
   // a plan_id, the trigger pinning metadata), rows a manager plants naming a
   // never-gated plan can each take this path and complete once per kind they
-  // list — up to three completed runs for one plan, each for a record really
-  // written. Nothing here is new capability: a manager can make plans anyway.
+  // list, each for a record really written. That is up to three completed runs
+  // for one plan only while the write-back ledger is untouched: the bound is
+  // materializePlan's (family_id, plan_id, action_kind) reservation, and 0158's
+  // member UPDATE on concierge_plan_actions pins no column, so moving a row's
+  // plan_id or action_kind re-arms that kind (the owner's N10 trigger refusing
+  // those changes closes it). Nothing here is new capability: a manager can
+  // make plans anyway.
   const kinds = (meta.kinds?.length ? meta.kinds : VALID).filter((k) => VALID.includes(k));
 
   // Claim the run before applying anything, so an approval and a dismissal (two

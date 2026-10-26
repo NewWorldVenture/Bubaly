@@ -373,6 +373,7 @@
   "actions.documentWasNotDeleted": "Il documento non è stato eliminato.",
   "actions.nothingWasChangedRefresh": "Non è stato modificato nulla: l’elemento potrebbe essere stato rimosso o potresti non avere l’autorizzazione. Aggiorna e riprova.",
   "actions.eachBucketMustBe0": "Ogni comparto deve essere tra 0 e 100%.",
+  "actions.earlierPlanApprovalExpired": "La richiesta di approvazione precedente per questo piano è scaduta e non è ancora stata rimossa, quindi non è stato messo in coda nulla di nuovo. Puoi comunque applicarlo dal piano oppure accettare di nuovo il piano quando la richiesta sarà rimossa (entro un giorno).",
   "actions.earlierPlanApprovalStillOpen": "Una richiesta di approvazione precedente per questo piano è ancora aperta, quindi non è stato messo in coda nulla di nuovo. Decidila in Approvazioni oppure accetta di nuovo il piano quando sarà scaduta e rimossa.",
   "actions.enterAName": "Inserisci un nome.",
   "actions.enterANumberOfShares": "Inserisci un numero di quote maggiore di 0.",

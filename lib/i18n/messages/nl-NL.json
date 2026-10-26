@@ -373,6 +373,7 @@
   "actions.documentWasNotDeleted": "Het document is niet verwijderd.",
   "actions.nothingWasChangedRefresh": "Er is niets gewijzigd: het item is mogelijk verwijderd of je hebt geen toestemming. Vernieuw en probeer het opnieuw.",
   "actions.eachBucketMustBe0": "Elk potje moet tussen 0 en 100% zijn.",
+  "actions.earlierPlanApprovalExpired": "Het eerdere goedkeuringsverzoek voor dit plan is verlopen en nog niet opgeruimd, dus er is niets nieuws in de wachtrij gezet. Je kunt het nog steeds vanuit het plan toepassen, of het plan opnieuw accepteren zodra het verzoek is opgeruimd (binnen een dag).",
   "actions.earlierPlanApprovalStillOpen": "Er staat nog een eerder goedkeuringsverzoek voor dit plan open, dus er is niets nieuws in de wachtrij gezet. Beslis erover bij Goedkeuringen, of accepteer het plan opnieuw zodra het verlopen en opgeruimd is.",
   "actions.enterAName": "Voer een naam in.",
   "actions.enterANumberOfShares": "Voer een aantal aandelen groter dan 0 in.",

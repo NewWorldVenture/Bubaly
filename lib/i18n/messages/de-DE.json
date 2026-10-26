@@ -373,6 +373,7 @@
   "actions.documentWasNotDeleted": "Das Dokument wurde nicht gelöscht.",
   "actions.nothingWasChangedRefresh": "Es wurde nichts geändert – der Eintrag wurde möglicherweise entfernt, oder Ihnen fehlt die Berechtigung. Aktualisieren Sie die Seite und versuchen Sie es erneut.",
   "actions.eachBucketMustBe0": "Jeder Topf muss zwischen 0 und 100 % liegen.",
+  "actions.earlierPlanApprovalExpired": "Die frühere Freigabeanfrage für diesen Plan ist abgelaufen und wurde noch nicht entfernt, daher wurde nichts Neues eingereiht. Sie können ihn weiterhin direkt im Plan anwenden oder den Plan erneut annehmen, sobald die Anfrage entfernt ist (innerhalb eines Tages).",
   "actions.earlierPlanApprovalStillOpen": "Eine frühere Freigabeanfrage für diesen Plan ist noch offen, daher wurde nichts Neues eingereiht. Entscheiden Sie sie unter Freigaben oder nehmen Sie den Plan erneut an, sobald sie abgelaufen und entfernt ist.",
   "actions.enterAName": "Geben Sie einen Namen ein.",
   "actions.enterANumberOfShares": "Geben Sie eine Anzahl Anteile über 0 ein.",

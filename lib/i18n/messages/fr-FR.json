@@ -373,6 +373,7 @@
   "actions.documentWasNotDeleted": "Le document n’a pas été supprimé.",
   "actions.nothingWasChangedRefresh": "Rien n’a été modifié : l’élément a peut-être été supprimé, ou vous n’avez pas l’autorisation. Actualisez et réessayez.",
   "actions.eachBucketMustBe0": "Chaque enveloppe doit être comprise entre 0 et 100 %.",
+  "actions.earlierPlanApprovalExpired": "La demande d’approbation antérieure pour ce plan a expiré et n’a pas encore été retirée, rien de nouveau n’a donc été mis en file. Vous pouvez toujours l’appliquer depuis le plan, ou accepter à nouveau le plan une fois la demande retirée (sous 24 heures).",
   "actions.earlierPlanApprovalStillOpen": "Une demande d’approbation antérieure pour ce plan est toujours ouverte, rien de nouveau n’a donc été mis en file. Décidez-la dans Approbations, ou acceptez à nouveau le plan une fois qu’elle aura expiré et été retirée.",
   "actions.enterAName": "Saisissez un nom.",
   "actions.enterANumberOfShares": "Saisissez un nombre de parts supérieur à 0.",

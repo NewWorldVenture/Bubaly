@@ -364,6 +364,7 @@
   "actions.documentWasNotDeleted": "Document was not deleted.",
   "actions.nothingWasChangedRefresh": "Nothing was changed — it may have been removed, or you may not have permission. Refresh and try again.",
   "actions.eachBucketMustBe0": "Each bucket must be 0–100%.",
+  "actions.earlierPlanApprovalExpired": "The earlier approval request for this plan has expired and has not been cleared yet, so nothing new was queued. You can still apply it from the plan, or accept the plan again once the request is cleared (within a day).",
   "actions.earlierPlanApprovalStillOpen": "An earlier approval request for this plan is still open, so nothing new was queued. Decide it in Approvals, or accept the plan again once it has expired and been cleared.",
   "actions.enterAName": "Enter a name.",
   "actions.enterANumberOfShares": "Enter a number of shares greater than 0.",

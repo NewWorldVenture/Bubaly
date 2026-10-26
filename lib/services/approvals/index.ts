@@ -739,10 +739,13 @@ type RunWriter = ServiceScope['db'];
  * carry a key (0255), and the (family_id, idempotency_key) unique index (0250)
  * lets one row hold it). Failing that, the earliest pending row naming the
  * approval that is not member-shaped (0255 pins a member's INSERT to state
- * 'queued'). The key has been written since before this approval could have
- * been filed, and approvals expire after 48 hours (0251), so in practice that
- * fallback serves a run whose key was edited, not an old approval. Either way
- * one yes completes at most one run. `id: null` is an approval with no such run.
+ * 'queued'). planAcceptedAction writes the key only from the release that
+ * added this lookup on, so a run queued before that release is deployed has
+ * none. Approvals expire 48 hours after they are filed (0251's default) and an
+ * expired one cannot be decided, so for up to 48 hours after that deploy the
+ * fallback also serves runs queued before the key was written; after that, it
+ * serves only a run whose key was edited. Either way one yes completes at most
+ * one run. `id: null` is an approval with no such run.
  *
  * Which row that is can be steered, for any approval, keyed or not: 0251's
  * member UPDATE pins no column and 0390 pins only metadata's approval_id and

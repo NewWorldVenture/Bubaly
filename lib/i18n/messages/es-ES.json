@@ -373,6 +373,7 @@
   "actions.documentWasNotDeleted": "El documento no se ha eliminado.",
   "actions.nothingWasChangedRefresh": "No se ha cambiado nada: puede que se haya eliminado o que no tengas permiso. Actualiza e inténtalo de nuevo.",
   "actions.eachBucketMustBe0": "Cada apartado debe estar entre el 0 y el 100 %.",
+  "actions.earlierPlanApprovalExpired": "La solicitud de aprobación anterior para este plan ha caducado y aún no se ha retirado, así que no se ha añadido nada nuevo a la cola. Aún puedes aplicarlo desde el plan o volver a aceptar el plan cuando se haya retirado la solicitud (en un día como máximo).",
   "actions.earlierPlanApprovalStillOpen": "Todavía hay abierta una solicitud de aprobación anterior para este plan, así que no se ha añadido nada nuevo a la cola. Decídela en Aprobaciones o vuelve a aceptar el plan cuando haya caducado y se haya retirado.",
   "actions.enterAName": "Introduce un nombre.",
   "actions.enterANumberOfShares": "Introduce un número de participaciones mayor que 0.",

@@ -374,6 +374,7 @@
   "actions.documentWasNotDeleted": "O documento não foi eliminado.",
   "actions.nothingWasChangedRefresh": "Nada foi alterado: o item pode ter sido removido ou pode não ter permissão. Atualize e tente novamente.",
   "actions.eachBucketMustBe0": "Cada secção tem de estar entre 0 e 100%.",
+  "actions.earlierPlanApprovalExpired": "O pedido de aprovação anterior para este plano expirou e ainda não foi removido, por isso nada de novo foi colocado na fila. Ainda pode aplicá-lo a partir do plano ou aceitar o plano novamente quando o pedido tiver sido removido (no prazo de um dia).",
   "actions.earlierPlanApprovalStillOpen": "Ainda está aberto um pedido de aprovação anterior para este plano, por isso nada de novo foi colocado na fila. Decida-o em Aprovações ou aceite o plano novamente quando tiver expirado e sido removido.",
   "actions.enterAName": "Introduza um nome.",
   "actions.enterANumberOfShares": "Introduza um número de participações superior a 0.",
