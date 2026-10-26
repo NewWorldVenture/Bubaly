@@ -458,7 +458,7 @@ export function AddBookForm({ allowMedia = true }: { allowMedia?: boolean }) {
   );
 }
 
-export function FeedControls({ id, canRemove = true }: { id: string; canRemove?: boolean }) {
+export function FeedControls({ id, canRemove = true, canRefresh = true }: { id: string; canRemove?: boolean; canRefresh?: boolean }) {
   const { success, error } = useToast();
   const [pending, start] = useTransition();
   const run = (work: () => Promise<{ ok: true; message: string } | { ok: false; error: string }>) =>
@@ -468,9 +468,11 @@ export function FeedControls({ id, canRemove = true }: { id: string; canRemove?:
     });
   return (
     <div className="flex gap-1">
-      <Button size="sm" variant="ghost" loading={pending} onClick={() => run(() => refreshFeedAction(id))}>
-        <RefreshCw className="h-4 w-4" /> Refresh
-      </Button>
+      {canRefresh && (
+        <Button size="sm" variant="ghost" loading={pending} onClick={() => run(() => refreshFeedAction(id))}>
+          <RefreshCw className="h-4 w-4" /> Refresh
+        </Button>
+      )}
       {canRemove && (
         <Button size="sm" variant="ghost" loading={pending} onClick={() => run(() => unsubscribeFeedAction(id))}>
           <Trash2 className="h-4 w-4" /> Remove

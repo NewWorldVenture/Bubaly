@@ -14,6 +14,7 @@ import { ingestFeed } from '@/lib/library/ingest';
 import { addedByAnAdult, readCurators } from '@/lib/library/curator';
 import { rateLimit } from '@/lib/server/rate-limit';
 import { wroteNoRows } from '@/lib/supabase/errors';
+import { serverWriter } from '@/lib/supabase/service-writer';
 import { isManager } from '@/lib/constants/roles';
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -110,6 +111,10 @@ const REFRESH_TOO_OFTEN = 'That feed was just refreshed. Give it a few minutes.'
 
 export async function refreshFeedAction(feedId: string): Promise<LibraryResult> {
   const ctx = await requireUserContext();
+  // A guest views the library and does not change it (ROLE-M03). The ingest
+  // below is the server's own write, which no RLS stands behind, so the
+  // refusal is here, before anything is read or fetched.
+  if (ctx.active.role === 'guest') return { ok: false, error: (await getTranslations())('actionRefusal.notAllowed') };
   if (!rateLimit(`library-refresh-feed:${feedId}`, { limit: 5, windowMs: 10 * 60_000 }).ok
     || !rateLimit(`library-refresh-family:${ctx.active.familyId}`, { limit: 30, windowMs: 10 * 60_000 }).ok) {
     return { ok: false, error: REFRESH_TOO_OFTEN };
@@ -131,7 +136,13 @@ export async function refreshFeedAction(feedId: string): Promise<LibraryResult> 
     return { ok: false, error: (await getTranslations())('library.feedNotAddedByAnAdult') };
   }
 
-  const result = await ingestFeed(supabase, ctx.active.familyId, ctx.user.id, feed.id, feed.feed_url);
+  // The episodes are the publisher's, written by the server for whoever pressed
+  // Refresh, as the nightly cron writes them: a child or teen does not write an
+  // audio address into the library (held 0526 refuses it in the database too).
+  // Only after the read above, which is the presser's own and pinned to their
+  // family, and the curator check; serverWriter falls back to the presser's
+  // client where there are no service credentials.
+  const result = await ingestFeed(await serverWriter(supabase), ctx.active.familyId, ctx.user.id, feed.id, feed.feed_url);
   revalidatePath(PAGE);
   if ('error' in result) {
     // Best-effort by design — the comment above says why the row stays — but the
