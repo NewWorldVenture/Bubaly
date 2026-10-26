@@ -38,6 +38,8 @@
 // It remains a list, and a list is still the thing that let this through. What
 // changed is that the list now matches the language people write in.
 
+import { SENSITIVE_TRANSLATED_PHRASES, SENSITIVE_TRANSLATIONS } from './sensitive-translations';
+
 /** Words that make a document adults-only when they appear in its category. */
 export const SENSITIVE_CATEGORIES: ReadonlySet<string> = new Set([
   // the original seventeen
@@ -64,17 +66,56 @@ export function normalizeCategory(category: string | null | undefined): string {
   return (category ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
-/** True when a category alone makes a document adults-only. */
-export function isSensitiveCategory(category: string | null | undefined): boolean {
-  const normalized = normalizeCategory(category);
+/**
+ * Lowercase, drop accents (Financiën → financien, Santé → sante), then reduce
+ * every run of non-alphanumerics to one space. What a folder name is matched
+ * against in the app's other languages.
+ */
+export function foldCategory(category: string | null | undefined): string {
+  return normalizeCategory((category ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, ''));
+}
+
+function matches(normalized: string, words: ReadonlySet<string>, phrases: readonly string[]): boolean {
   if (!normalized) return false;
-  if (SENSITIVE_PHRASES.some((phrase) => normalized.includes(phrase))) return true;
+  if (phrases.some((phrase) => normalized.includes(phrase))) return true;
   return normalized.split(' ').some((token) => {
-    if (SENSITIVE_CATEGORIES.has(token)) return true;
+    if (words.has(token)) return true;
     // One trailing "s", so "Wills" reaches "will" — but "Kids" only ever
     // reaches "kid", never the bare "id" that a substring match would hit.
-    return token.length > 1 && token.endsWith('s') && SENSITIVE_CATEGORIES.has(token.slice(0, -1));
+    return token.length > 1 && token.endsWith('s') && words.has(token.slice(0, -1));
   });
+}
+
+/**
+ * The DATABASE's category rule, exactly: `public.is_sensitive_document` (0312)
+ * reads the ASCII English vocabulary, so "Médical" and "Financiën" are ordinary
+ * folders to it.
+ */
+export function isSensitiveCategoryToTheDatabase(category: string | null | undefined): boolean {
+  return matches(normalizeCategory(category), SENSITIVE_CATEGORIES, SENSITIVE_PHRASES);
+}
+
+/**
+ * True when a category alone makes a document adults-only — in any of the
+ * app's seven languages. The English words with their accents dropped, and the
+ * catalogues' own translations of them (lib/documents/sensitive-translations.ts):
+ * the Dutch Documents form suggests "Financiën" where the English one suggests
+ * "Finances", and the two are the same folder.
+ */
+export function isSensitiveCategory(category: string | null | undefined): boolean {
+  if (isSensitiveCategoryToTheDatabase(category)) return true;
+  const folded = foldCategory(category);
+  return matches(folded, SENSITIVE_CATEGORIES, SENSITIVE_PHRASES)
+    || matches(folded, SENSITIVE_TRANSLATIONS, SENSITIVE_TRANSLATED_PHRASES);
+}
+
+/**
+ * Sensitive here, ordinary to the database's category rule: the row has to
+ * carry `is_secure`, the half of `is_sensitive_document` the database does
+ * read, or the database hands a child what this module withholds.
+ */
+export function needsSecureFlag(category: string | null | undefined): boolean {
+  return isSensitiveCategory(category) && !isSensitiveCategoryToTheDatabase(category);
 }
 
 export function isSensitiveDocument(doc: { is_secure: boolean | null; category: string | null }): boolean {

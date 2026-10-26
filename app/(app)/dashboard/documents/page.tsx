@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { requireAal2 } from '@/lib/auth/require-aal2';
 import { DocumentsModule } from '@/components/modules/documents-module';
 
@@ -10,7 +10,9 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function DocumentsPage() {
-  const ctx = await requireUserContext();
+  // The Documents feature's own page, gated as /dashboard/files/* are: Off,
+  // a tier above the plan, or a locked family is refused here too.
+  const ctx = await requireFeature('/dashboard/documents');
   await requireAal2(ctx, 'documents', '/dashboard/documents');
   return <DocumentsModule />;
 }

@@ -17,12 +17,14 @@ const h = vi.hoisted(() => ({ db: null as unknown, role: 'parent', userId: 'pare
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db }));
 vi.mock('@/lib/auth/require-aal2', () => ({ requireAal2: async () => undefined }));
-vi.mock('@/lib/supabase/auth', () => ({
-  requireUserContext: async () => ({
+vi.mock('@/lib/supabase/auth', () => {
+  const context = async () => ({
     user: { id: h.userId },
     active: { familyId: 'family-1', role: h.role, member: { id: 'member-1' }, family: { timezone: 'UTC' } },
-  }),
-}));
+  });
+  // The page opens through the Documents feature's gate (requireFeature).
+  return { requireUserContext: context, requireFeature: context };
+});
 // What the page hands the inbox is the question; the module's own rendering is pinned elsewhere.
 vi.mock('@/components/modules/paperwork-module', () => ({ PaperworkModule: () => null }));
 

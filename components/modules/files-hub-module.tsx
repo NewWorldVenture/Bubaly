@@ -11,6 +11,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { isManager } from '@/lib/constants/roles';
 import { performUpload } from '@/lib/documents/upload';
+import { needsSecureFlag } from '@/lib/documents/sensitivity';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
@@ -147,6 +148,13 @@ export function FilesHubModule({ view }: { view: FileView }) {
   async function toggleSecure(id: string) {
     const d = byId.get(id); if (!d) return;
     if (!manager) return toastError(t('filesHubModule.onlyAParentOrAnother2'));
+    // A folder private only in translation ("Financiën", "Versicherung") is an
+    // ordinary folder to the database's category rule (0312), so `is_secure` is
+    // all that keeps the row and its file from a child (0266, 0303). Out of the
+    // Vault it goes nowhere; into it is always allowed.
+    if (d.is_secure && needsSecureFlag(d.category)) {
+      return toastError(t('filesHubModule.sensitiveStaysInVault', { category: d.category?.trim() ?? '' }));
+    }
     setBusy(id);
     // `is_secure` moves a file between the shared area and the vault — a toggle
     // that silently did nothing leaves it where it was, reported as moved.
