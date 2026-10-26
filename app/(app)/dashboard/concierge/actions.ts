@@ -185,6 +185,13 @@ export async function planAcceptedAction(
 
   if (mode === 'auto') {
     const { applied, failed } = await materializePlan(sb, familyId, ctx.user.id, plan, pendingKinds);
+    // Nothing applied and nothing failed: a concurrent acceptance reserved every
+    // kind first (the ledger's 23505), and that call records the run. Filing a
+    // second `completed` row here counted one plan twice in the family's value.
+    if (applied.length === 0 && failed.length === 0) {
+      revalidatePath(PATH);
+      return { ok: true, mode, applied, summary: null };
+    }
     // A failure used to be recorded as `executed` / `completed` under
     // "everything was already in place". It is recorded as what it was, and
     // the plan's own buttons stay the retry. Audit C1-S9-72.
@@ -221,6 +228,11 @@ export async function planAcceptedAction(
     // The caller answers "check the Autopilot panel", and this row is the only
     // thing that panel reads — so a refused insert is not a queued plan.
     // Audit C1-S9-72.
+    // One queued run per plan and approval: evaluateTrust hands a re-accepted
+    // plan (planning → booked → planning → booked, or two parents on stale
+    // screens) the SAME pending approval, and one yes closed every run naming
+    // it as completed — one plan counted once per acceptance. The 0250 unique
+    // index on (family_id, idempotency_key) makes the repeat a 23505.
     const { error: queueErr } = await createServiceClient().from('family_automation_runs').insert({
       family_id: familyId, trigger_type: 'plan_accepted', status: 'pending', state: 'awaiting_approval',
       requested_by_member_id: ctx.active.member.id,
@@ -230,8 +242,14 @@ export async function planAcceptedAction(
         plan_id: planId, kinds: pendingKinds, approval_id: approvalId ?? null,
         basis: decision.basis, reason: decision.reason, plan: filedPlan,
       } as never,
+      idempotency_key: approvalId ? `concierge_plan:${planId}:${approvalId}` : null,
       created_by: ctx.user.id,
     });
+    if (queueErr?.code === '23505') {
+      // Already queued on this approval: the panel already shows it.
+      revalidatePath(PATH);
+      return { ok: true, mode, applied: [], summary };
+    }
     if (queueErr) {
       console.error('[concierge] autopilot queue insert failed', { planId, familyId, approvalId: approvalId ?? null, error: queueErr });
       return { ok: false, error: describeActionError(queueErr, t('actions.couldNotQueuePlanForApproval')) };
@@ -315,7 +333,7 @@ async function governingApprovalFor(
  * One clock read: the yes and the finish are the same moment on this path.
  */
 async function markRunExecuted(
-  sb: DB, runId: string, familyId: string, userId: string, summary: string, applied: WriteBackKind[],
+  runId: string, familyId: string, userId: string, summary: string, applied: WriteBackKind[],
 ): Promise<{ data: { id: string }[] | null; error: PostgrestError | null }> {
   // `state` and `completed_at` alongside the legacy `status`: the Display's
   // "Handled today" tile filters `state = 'completed'` and the billing value
@@ -326,10 +344,27 @@ async function markRunExecuted(
   // The rows it stamped come back so a caller can tell "stamped" from "no
   // longer pending". After decide() the second is expected (decide closes the
   // runs naming its approval); on the direct path it is the caller's to report.
-  return sb.from('family_automation_runs').update({
-    status: 'executed', state: 'completed', summary, result: { steps: applied } as never,
-    approved_by: userId, approved_at: now, completed_at: now,
-  }).eq('id', runId).eq('family_id', familyId).eq('status', 'pending').select('id');
+  //
+  // Through the server's writer: a completion is Bubaly's record of work it
+  // did, and the member UPDATE policy (0251) pins no column, so any manager's
+  // own session could PATCH a run to completed. Closing the policy (owner SQL)
+  // needs every legitimate completion to be the server's first.
+  return createServiceClient().from('family_automation_runs').update(closedRun(summary, applied, now, userId))
+    .eq('id', runId).eq('family_id', familyId).eq('status', 'pending').select('id');
+}
+
+/**
+ * The columns that end a concierge run. `completed` only when this close
+ * applied something: a run whose every kind was already in place (another
+ * acceptance, or Make it happen, did the work and recorded its own run) is
+ * superseded, not a second plan Bubaly ran.
+ */
+function closedRun(summary: string, applied: WriteBackKind[], now: string, approvedBy?: string) {
+  const state = applied.length > 0 ? 'completed' as const : 'cancelled' as const;
+  return {
+    status: legacyStatusFor(state), state, summary, result: { steps: applied } as never,
+    ...(approvedBy ? { approved_by: approvedBy, approved_at: now } : {}), completed_at: now,
+  };
 }
 
 /**
@@ -403,7 +438,7 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
     // run whose metadata was scrubbed does not sit on the panel as pending
     // after its plan has been done. Idempotent on `status = 'pending'`.
     const applied = decided.data.applied ?? [];
-    const { error: closeErr } = await markRunExecuted(sb, runId, familyId, ctx.user.id, decided.data.summary, applied);
+    const { error: closeErr } = await markRunExecuted(runId, familyId, ctx.user.id, decided.data.summary, applied);
     if (closeErr) {
       console.error('[concierge] executed-run status update failed after decide', { runId, familyId, error: closeErr });
       return { ok: false, error: describeActionError(closeErr, t('actions.appliedThePlanButCould')) };
@@ -498,10 +533,10 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
   // `completed_at` is when the plan finished. The claim is matched the same way
   // `release` matches it, so a run paused during the apply, or claimed again
   // by a newer approval, is not stamped over by this one.
-  const { data: stamped, error: runErr } = await sb.from('family_automation_runs').update({
-    status: 'executed', state: 'completed', summary, result: { steps: applied } as never,
-    completed_at: new Date().toISOString(),
-  }).eq('id', runId).eq('family_id', familyId).eq('status', 'approved').eq('state', 'executing')
+  // The server's writer, as markRunExecuted: the completion is Bubaly's record.
+  const { data: stamped, error: runErr } = await createServiceClient().from('family_automation_runs')
+    .update(closedRun(summary, applied, new Date().toISOString()))
+    .eq('id', runId).eq('family_id', familyId).eq('status', 'approved').eq('state', 'executing')
     .eq('approved_at', approvedAt).select('id');
   if (runErr) {
     console.error('[concierge] executed-run status update failed', { runId, familyId, error: runErr });

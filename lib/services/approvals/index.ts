@@ -675,13 +675,21 @@ async function runConciergePlan(
   // is when the parent said yes and is never a stand-in for completion — on
   // this path the two are one moment, so they are one clock read.
   //
+  // `completed` only when this yes applied something. A plan whose every kind
+  // was already in place was done — and recorded — by another path; closing
+  // its queued run(s) `completed` too counted the one plan again.
+  //
   // Rows deliberately not checked: not every approval has such a row, and zero
   // is the ordinary case for those. Audit C1-S9-65.
+  // Through the server's writer: a completion is Bubaly's record, and the
+  // member UPDATE policy (0251) pins no column, so it cannot stay the caller's.
   const now = scopeNow(scope).toISOString();
-  const { error: runError } = await scope.db
+  const closed = applied.length > 0 ? 'completed' as const : 'cancelled' as const;
+  const runWriter = await ledgerWriter(scope.db);
+  const { error: runError } = await runWriter
     .from('family_automation_runs')
     .update({
-      status: 'executed', state: 'completed', summary, result: { steps: applied } as unknown as Json,
+      status: legacyStatusFor(closed), state: closed, summary, result: { steps: applied } as unknown as Json,
       approved_by: scope.userId, approved_at: now, completed_at: now,
     })
     .eq('family_id', scope.familyId)

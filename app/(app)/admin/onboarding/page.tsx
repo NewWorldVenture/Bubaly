@@ -3,7 +3,7 @@ import { Timer, CheckCircle2, Sparkles, Target } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import {
-  analyzeOnboarding, formatDuration, TTV_GOAL_SEC, type OnboardingRow,
+  analyzeOnboarding, attachWizardStarts, formatDuration, TTV_GOAL_SEC, type OnboardingRow,
 } from '@/lib/onboarding/ttv-audit';
 import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
@@ -11,7 +11,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { isSuperAdmin } from '@/lib/supabase/auth';
 import { redirect } from 'next/navigation';
 import { superAdminAssurance, SUPER_ADMIN_STEP_UP_PATH } from '@/lib/auth/super-admin-assurance';
-import { loadOnboardingProgress } from '@/lib/analytics/onboarding-server';
+import { loadOnboardingEvents, loadOnboardingProgress } from '@/lib/analytics/onboarding-server';
 import { ThirtyMinuteSummary } from '@/components/analytics/thirty-minute-summary';
 import { AppNotFound } from '@/components/app/app-not-found';
 
@@ -40,9 +40,17 @@ export default async function OnboardingAuditPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
 
-  const progressResult = await loadOnboardingProgress(supabase);
+  // One cutoff for both reads, so a run's start and its completion come from the same moment.
+  const cutoff = new Date();
+  const [progressResult, wizardResult] = await Promise.all([
+    loadOnboardingProgress(supabase, cutoff), loadOnboardingEvents(supabase, cutoff),
+  ]);
   if (progressResult.error) return <ReadFailure />;
-  const rows = (progressResult.data ?? []) as OnboardingRow[];
+  // Without the wizard starts no setup can be timed; a guess would be the bug back.
+  if (wizardResult.error) return <ReadFailure />;
+  // Setup time runs from the wizard's own start, not from the progress row's
+  // birth inside the finalize request (attachWizardStarts).
+  const rows = attachWizardStarts((progressResult.data ?? []) as OnboardingRow[], wizardResult.data ?? []);
 
   const a = analyzeOnboarding(rows);
   const maxFunnel = Math.max(1, ...a.stepFunnel.map((s) => s.count));

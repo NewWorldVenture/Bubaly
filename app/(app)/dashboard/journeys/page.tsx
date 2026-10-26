@@ -21,6 +21,9 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 export const dynamic = 'force-dynamic';
 
+/** The journeys the page summarizes: the last 30 days, stated under its header. */
+const JOURNEY_WINDOW_DAYS = 30;
+
 export default async function JourneysPage() {
   const t = await getTranslations();
   const ctx = await requireUserContext();
@@ -33,10 +36,16 @@ export default async function JourneysPage() {
   // `.limit(5000)` was never 5,000 — PostgREST caps at db-max-rows — and this
   // page aggregates funnel timings, so a capped read is a wrong number rather
   // than a short list. `id` breaks `created_at` ties between pages.
+  //
+  // A fixed window, not the family's lifetime: past 5,000 lifetime rows the
+  // ceiling below refused the whole page for good, through ordinary use or
+  // through any member (any role may insert, 0124) filing rows in a loop.
+  const since = new Date(Date.now() - JOURNEY_WINDOW_DAYS * 86_400_000).toISOString();
   const { rows: data, error } = await readAll((from, to) => supabase
     .from('journey_events')
     .select('journey, phase, step, duration_ms, session_id, created_at')
     .eq('family_id', ctx.active.familyId)
+    .gte('created_at', since)
     .order('created_at', { ascending: false })
     .order('id')
     .range(from, to), { max: 5000 });
@@ -79,6 +88,7 @@ export default async function JourneysPage() {
         title={t('dashboardJourneys.journeyAnalytics')}
         description={t('journeys.realCompletionRatesAndTimes')}
       />
+      <p className="text-xs text-muted">{t('journeys.lastDaysWindow', { days: JOURNEY_WINDOW_DAYS })}</p>
 
       <div className="grid grid-cols-3 gap-3">
         <StatTile label={t('dashboardJourneys.journeysStarted')} value={totalStarts} icon={Activity} accent="bg-blue-600" />

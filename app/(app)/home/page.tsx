@@ -209,16 +209,16 @@ export default async function HomePage() {
     { data: members, count: memberCount, error: membersError },
     { data: todayEvents, count: todayEventsCount, error: todayEventsError },
     { data: upcomingEvents, error: upcomingEventsError },
-    { data: tasks },
-    { data: choreRows },
+    { data: tasks, error: tasksError },
+    { data: choreRows, error: choreRowsError },
     { data: dinnerPlans },
     { data: txns, error: txnsError },
     { data: photos },
     { data: messages },
-    { count: choresToday },
-    { count: choresDone },
+    { count: choresToday, error: choresTodayError },
+    { count: choresDone, error: choresDoneError },
     { count: tasksOverdue, error: tasksOverdueError },
-    { count: overdueReminders },
+    { count: overdueReminders, error: overdueRemindersError },
     { count: openGrocery, error: groceryError },
   ] = await settleAll([
     supabase.from('family_members').select('id, display_name, color, role, birthday, user_id', { count: 'exact' })
@@ -302,6 +302,13 @@ export default async function HomePage() {
   // word for "there", which an English literal here overrode in every language.
   const myFirstName = (me.display_name?.trim() || ctx.user.email?.split('@')[0] || '').split(' ')[0];
 
+  // A score built on a count that never came back is a guess: a failed read
+  // answered 0, and 0 overdue is exactly what scores 100 / A, "Great job!".
+  const overdueRemindersCount = countFromResult({ count: overdueReminders, error: overdueRemindersError });
+  const scoreUnavailable = overdueRemindersCount === null || outcomeSnapshot.overdueTasks === null
+    || countFromResult({ count: choresToday, error: choresTodayError }) === null
+    || countFromResult({ count: choresDone, error: choresDoneError }) === null;
+  if (scoreUnavailable) console.error('[home] family score inputs failed', { choresTodayError, choresDoneError, tasksOverdueError, overdueRemindersError });
   const score = familyScore({
     choresToday: choresToday ?? 0,
     choresDone: choresDone ?? 0,
@@ -454,6 +461,11 @@ export default async function HomePage() {
   });
   const needs = topNeeds(homeNeeds, 5);
   const needsHeader = needsHeadline(summarizeNeeds(homeNeeds));
+  // "Nothing needs you" is a claim about every source above; one that did not
+  // answer makes it unknowable, and a pending purchase request or AI approval
+  // would be reported as not existing.
+  const needsUnavailable = !aiApprovalsRes.ok || overdueRemindersCount === null
+    || [activeRunsRes, recsRes, moneyApprovalsRes, choreSignoffRes].some((res) => res.error);
 
   const scheduleRes = await schedulePromise;
   let todayCalendarUnavailable=!!todayEventsError;
@@ -464,6 +476,8 @@ export default async function HomePage() {
   catch { todayCalendarUnavailable=true; }
   try { visibleUpcoming=projectCalendarWindow(upcomingEvents??[],dayKeyInTz(todayEnd,tz),dayKeyInTz(new Date(Date.now()+31*86400000),tz),tz); }
   catch { upcomingCalendarUnavailable=true; }
+  // "A clear day" says nothing is due as well as nothing scheduled.
+  const todayDueUnavailable = !!(todosDueRes.error || choresDueRes.error || remindersDueRes.error);
   const today = buildToday({
     events: (visibleToday.slice(0,8) as TodayEventRow[]),
     todos: (todosDueRes.data ?? []) as TodayTodoRow[],
@@ -625,6 +639,8 @@ export default async function HomePage() {
         recommendationBodies={manager ? Object.fromEntries(recommendations.map((r) => [r.id, r.body])) : {}}
         canDecide={manager}
         seeAllHref="/dashboard/needs-you"
+        unavailable={needsUnavailable}
+        retryHref="/home"
       />
 
       <WidgetBoundary label="working-on"><WorkingOn familyId={familyId} initial={workingRuns} historyHref="/dashboard/concierge/runs" /></WidgetBoundary>
@@ -632,7 +648,8 @@ export default async function HomePage() {
       <Card>
         <CardHead icon={Clock} title={tr('home.today')} href="/dashboard/calendar" action="View calendar" />
         {todayCalendarUnavailable && <p role="alert">{tr('home.couldNotCheckTodaysSchedule')} <Link href="/home">{tr('home.tryAgain')}</Link></p>}
-        {!todayCalendarUnavailable && today.schedule.length === 0 && today.tasks.length === 0 && <EmptyRow>{tr('home.aClearDayNothingScheduledAnd')}</EmptyRow>}
+        {todayDueUnavailable && <p role="alert">{tr('home.couldNotCheckWhatIsDueToday')} <Link href="/home">{tr('home.tryAgain')}</Link></p>}
+        {!todayCalendarUnavailable && !todayDueUnavailable && today.schedule.length === 0 && today.tasks.length === 0 && <EmptyRow>{tr('home.aClearDayNothingScheduledAnd')}</EmptyRow>}
         {today.schedule.length > 0 && (
           <ul className="space-y-3" aria-label={i18nT('home.todaysSchedule')}>
             {today.schedule.map((item) => {
@@ -750,6 +767,9 @@ export default async function HomePage() {
         {/* Family Score */}
         <Card>
           <CardHead icon={Sparkles} title={tr('home.familyScore')} href="/dashboard/readiness" action="View insights" />
+          {scoreUnavailable ? (
+            <p role="alert" className="text-sm text-muted">{tr('home.familyScoreUnavailable')} <Link href="/home" className="font-semibold underline underline-offset-2">{tr('home.tryAgain')}</Link></p>
+          ) : (
           <div className="flex flex-1 items-center gap-4">
             <Ring value={score.score}>
               <div>
@@ -759,13 +779,15 @@ export default async function HomePage() {
             </Ring>
             <p className="text-sm text-muted">{score.message}</p>
           </div>
+          )}
         </Card>
 
         {/* Tasks */}
         <Card>
           <CardHead icon={ListChecks} title={tr('home.tasks')} href="/dashboard/todos" />
           <div className="space-y-2.5">
-            {(tasks ?? []).length === 0 && <EmptyRow>{tr('home.noOpenTasksNicelyDone')}</EmptyRow>}
+            {tasksError && <p role="alert" className="text-sm text-muted">{tr('home.couldNotLoadOpenTasks')} <Link href="/home" className="font-semibold underline underline-offset-2">{tr('home.tryAgain')}</Link></p>}
+            {!tasksError && (tasks ?? []).length === 0 && <EmptyRow>{tr('home.noOpenTasksNicelyDone')}</EmptyRow>}
             {((tasks ?? []) as { id: string; title: string; due_date: string | null; assigned_to_id: string | null }[]).map((t) => {
               const owner = t.assigned_to_id ? memberById.get(t.assigned_to_id) : undefined;
               // The amber "due today" treatment reads the date, not the word.
@@ -819,7 +841,8 @@ export default async function HomePage() {
         <Card>
           <CardHead icon={ClipboardCheck} title={tr('home.chores')} href="/dashboard/chores" />
           <div className="space-y-2.5">
-            {(choreRows ?? []).length === 0 && <EmptyRow>{tr('home.noChoresAssigned')}</EmptyRow>}
+            {choreRowsError && <p role="alert" className="text-sm text-muted">{tr('home.couldNotLoadChores')} <Link href="/home" className="font-semibold underline underline-offset-2">{tr('home.tryAgain')}</Link></p>}
+            {!choreRowsError && (choreRows ?? []).length === 0 && <EmptyRow>{tr('home.noChoresAssigned')}</EmptyRow>}
             {choreList.map((c) => {
               const owner = memberById.get(c.member_id);
               const done = c.status === 'approved';
