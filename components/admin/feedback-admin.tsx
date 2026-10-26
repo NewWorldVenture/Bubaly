@@ -178,7 +178,7 @@ export function FeedbackAdmin({ ideas, counts, comments, notifications = [], unr
             </FilterChip>
           ))}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
           <select
             aria-label={t('feedbackAdmin.category')}
             value={filter.category}
@@ -188,10 +188,10 @@ export function FeedbackAdmin({ ideas, counts, comments, notifications = [], unr
             <option value="all">{t('feedbackAdmin.allCategories')}</option>
             {Object.entries(CATEGORY_META).map(([k, v]) => <option key={k} value={k}>{v.emoji} {v.label}</option>)}
           </select>
-          <div className="relative">
+          <div className="relative min-w-[10rem] flex-1 sm:flex-none">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search…"
-              className="h-9 w-40 rounded-lg border border-border bg-bg pl-8 pr-2 text-sm outline-none focus:border-brand" />
+              className="h-9 w-full rounded-lg border border-border bg-bg pl-8 pr-2 text-sm outline-none focus:border-brand sm:w-40" />
           </div>
         </div>
       </div>
