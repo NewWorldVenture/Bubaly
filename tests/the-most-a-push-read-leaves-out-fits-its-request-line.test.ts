@@ -24,6 +24,12 @@
 // and 7,854 in a family-scoped one (both in a read behind the cursor), of which
 // the names round 12 added are 2,340; the flood's longest read, 5,563. One
 // more pool of twenty listing names in the bound comes to 8,457, and fails.
+//
+// Round 14 (OWNER-R14-EXHAUSTED-NAMES-LIFT-SELLER-SHARE) lets a read ask for
+// up to FAIR_READ_MAX_ROWS (1,000) rows to reach past the price drops it holds
+// back with no name left, one digit more than a batch of 200, so the first
+// case builds its read at that size: 7,805 and 7,855 bytes. The flood's reads
+// now reach that far, so it takes fewer of them, and its longest is 4,785.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
@@ -32,7 +38,8 @@ import { createInMemorySupabase, withFaults, type FaultCall, type InMemorySupaba
 import { notificationId } from './helpers/push-dispatch-db';
 
 // The real readFairBatch, each read it makes recorded; and, when a case asks,
-// one read first that leaves out `inject`, so push's real page() builds it.
+// one read first that leaves out `inject`, at the most rows a read asks for,
+// so push's real page() builds it.
 const probe = vi.hoisted(() => ({ inject: null as FairExclusion | null, exclusions: [] as FairExclusion[] }));
 vi.mock('@/lib/notifications/fair-batch', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/lib/notifications/fair-batch')>();
@@ -40,7 +47,7 @@ vi.mock('@/lib/notifications/fair-batch', async (importOriginal) => {
     ...real,
     readFairBatch: async <T extends FairRow>(read: FairRead<T>, size: number, shares: FairShares) => {
       const recorded: FairRead<T> = (wanted, excluded) => { probe.exclusions.push(excluded); return read(wanted, excluded); };
-      if (probe.inject) await recorded(size, probe.inject);
+      if (probe.inject) await recorded(real.FAIR_READ_MAX_ROWS, probe.inject);
       return real.readFairBatch(recorded, size, shares);
     },
   };
@@ -49,6 +56,7 @@ vi.mock('web-push', () => ({ default: { setVapidDetails: () => {}, sendNotificat
 vi.mock('@/lib/server/push-endpoint', () => ({ isDeliverablePushEndpoint: async () => true, __resetPushEndpointCache: () => {} }));
 
 const { dispatchPendingPushes, PUSH_ROWS_PER_FAMILY, PUSH_ROWS_PER_RECIPIENT } = await import('@/lib/server/push');
+const { FAIR_READ_MAX_ROWS } = await import('@/lib/notifications/fair-batch');
 
 type DB = SupabaseClient<Database>;
 /** nginx's default `large_client_header_buffers 4 8k`: the request line must fit 8 KB. */
@@ -145,6 +153,10 @@ describe('the most the header says a push read leaves out, built by push and sup
     const built = lines.filter((line) => all.every((id) => line.includes(id)));
     expect(built).toHaveLength(3);
     expect(built.filter((line) => line.split('created_at.').length > 4)).toHaveLength(2);
+    // Both reads behind the cursor ask for the most rows a read asks for (the
+    // one ahead, three quarters of it), so the limit's digits are the longest
+    // a read carries too (round 14).
+    expect(built.filter((line) => line.includes(`limit=${FAIR_READ_MAX_ROWS}`))).toHaveLength(2);
     for (const line of built) {
       expect(line.length, `request line of ${line.length} bytes`).toBeLessThanOrEqual(REQUEST_LINE_LIMIT);
     }

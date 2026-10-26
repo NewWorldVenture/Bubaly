@@ -279,4 +279,25 @@ describe('the seller share, read by read', () => {
     expect(Math.max(...calls.map((c) => c.landing.length))).toBeLessThanOrEqual(20 + 20);
     expect(calls.length).toBeLessThan(100);
   });
+
+  // household-roles round 14 (OWNER-R14-EXHAUSTED-NAMES-LIFT-SELLER-SHARE): the
+  // owner's reproduction on PR #1131. The case above, with its last row
+  // another seller's price drop in place of an ordinary notification, and
+  // every assertion kept. Once the seller's twenty listing and twenty landing
+  // names were spent, its further drops were taken against their own
+  // listing's share alone, and the batch filled from its flood, 'other'
+  // missing. Now a full seller's drops wait however many names are spent, and
+  // the read reaches past those it cannot leave out.
+  it('another seller\'s price drop behind the same flood, once the names are spent, is still in the batch', async () => {
+    const { read, calls } = range([
+      ...Array.from({ length: 1000 }, (_, i) => drop(`d-${i}`, `w-${i % 500}`, `L${i % 500}`, 's')),
+      drop('other', 'z', 'honest-listing', 'honest-seller'),
+    ]);
+    const batch = await readFairBatch(read, 200, { perFamily: 40, perRecipient: 10 });
+    expect(batch).toHaveLength(200);
+    expect(batch.map((r) => r.id)).toContain('other');
+    expect(Math.max(...calls.map((c) => c.listings.length))).toBeLessThanOrEqual(20 + 20);
+    expect(Math.max(...calls.map((c) => c.landing.length))).toBeLessThanOrEqual(20 + 20);
+    expect(calls.length).toBeLessThan(100);
+  });
 });
