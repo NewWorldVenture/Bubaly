@@ -8,9 +8,9 @@
 // or held, the marketplace is left out, so every family's own rows behind them
 // are still reached (lib/notifications/fair-batch.ts, the seller paragraph).
 // That was decided once, on the family pass's window, and carried into the
-// recipient pass. But the family pass leaves out every row of a family at its
+// recipient pass. But the family pass left out every row of a family at its
 // share, the price drops that land in it included, and the recipient pass,
-// which reads those rows again, is the only place such a drop can be taken.
+// which reads those rows again, was the only place such a drop could be taken.
 // So a drop of another seller landing in a busy family, behind 150 of the
 // flood's held-back drops (fewer than the 800 the header states) and outside
 // the first read, was not in the batch: the recipient pass read with the
@@ -19,7 +19,11 @@
 // ahead of it.
 //
 // Now each shared pass makes its own read that far before it leaves the
-// marketplace out. Driven through the real dispatchPendingPushes on the
+// marketplace out. And since round 15
+// (R14-RV2-DROP-INTO-FULL-FAMILY-WAITS-FOR-SURPLUS) the family pass no longer
+// leaves such a drop out with the family it lands in, so it reaches the drop
+// itself, past as many held-back drops as any other drop: the bound below is
+// the family pass's. Driven through the real dispatchPendingPushes on the
 // in-memory database with PostgREST's row cap and the web-push mock live, one
 // call per two-hourly tick; then read by read through readFairBatch, at push's
 // shares and the email digest's, with the bound pinned to the row.
@@ -175,14 +179,14 @@ describe('push: another seller\'s drop into a family whose own rows fill its fam
 
 describe('read by read: a drop into a family at its family share, behind held-back drops', () => {
   type R = { id: string; family_id: string; user_id: string | null; related_type: string | null; related_id: string | null; seller_family_id?: string | null };
-  /** What an exclusion leaves out, written out here rather than imported. */
+  /** What an exclusion leaves out, written out here rather than imported: a family at its share keeps the price drops that land in it (round 15). */
   const leftOut = (excluded: FairExclusion, r: R) => {
-    if (excluded.families.includes(r.family_id)) return true;
-    if (r.user_id) return excluded.recipients.includes(r.user_id);
-    if (r.related_type === 'marketplace_listings') {
+    if (!r.user_id && r.related_type === 'marketplace_listings') {
       return excluded.marketplace || excluded.landing.includes(r.family_id)
         || (r.related_id ? excluded.listings.includes(r.related_id) : excluded.unlisted);
     }
+    if (excluded.families.includes(r.family_id)) return true;
+    if (r.user_id) return excluded.recipients.includes(r.user_id);
     return excluded.familyWide.includes(r.family_id);
   };
   /** A range that answers each read as PostgREST does, at most db-max-rows (1,000) rows. */
@@ -205,13 +209,16 @@ describe('read by read: a drop into a family at its family share, behind held-ba
   type Shares = (typeof SHARES)[keyof typeof SHARES];
   /**
    * Per share: a number of held-back drops that puts the drop outside the
-   * first read, and the most held-back drops the recipient pass still reaches
-   * the drop past, to the row: its one read of 1,000 holds the busy family's
-   * rows (a family's share and one recipient's more), the seller's share, the
-   * held-back drops and the drop. Written out, not derived from fair-batch.ts,
-   * so a read that asks for more or fewer rows fails here.
+   * first read, and the most held-back drops the family pass still reaches
+   * the drop past, to the row: its read of 1,000 leaves the busy family's own
+   * rows out but not the drop (round 15), and holds the seller's share, the
+   * held-back drops and the drop. (Until round 15 the family pass left the
+   * drop out with the family, and only the recipient pass, whose read of 1,000
+   * also holds the busy family's rows, reached it: 939 and 849.) Written out,
+   * not derived from fair-batch.ts, so a read that asks for more or fewer rows
+   * fails here.
    */
-  const CASES = { push: { outside: 150, atTheBound: 939 }, email: { outside: 400, atTheBound: 849 } } as const;
+  const CASES = { push: { outside: 150, atTheBound: 989 }, email: { outside: 400, atTheBound: 974 } } as const;
 
   /**
    * In order: family F's members (a family's share and one recipient's more),
@@ -250,7 +257,7 @@ describe('read by read: a drop into a family at its family share, behind held-ba
     expect(Math.max(...calls.map((c) => c.excluded.landing.length))).toBeLessThanOrEqual(named);
   });
 
-  it.each(Object.entries(SHARES))('%s\'s shares: the bound, to the row: behind one more held-back drop than the recipient pass reaches past, the drop waits for the surplus', async (name, shares) => {
+  it.each(Object.entries(SHARES))('%s\'s shares: the bound, to the row: behind one more held-back drop than the family pass reaches past, the drop waits for the surplus', async (name, shares) => {
     const { atTheBound } = CASES[name as keyof typeof CASES];
     expect((await batchOf(shares, atTheBound, 'F')).ids).toContain('other');
     expect((await batchOf(shares, atTheBound + 1, 'F')).ids).not.toContain('other');
