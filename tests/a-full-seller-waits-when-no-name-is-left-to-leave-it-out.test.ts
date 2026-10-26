@@ -177,8 +177,8 @@ describe('push: one seller\'s flood across more listings and families than the n
     expect(providers.pushed).toContain('phone-neighbour');
   });
 
-  // The marketplace is left out of the recipient pass too, once a read that
-  // far was filled: a parent's row in a family whose children filled its
+  // The recipient pass leaves the marketplace out too, once its own read that
+  // far is filled: a parent's row in a family whose children filled its
   // family share is reached only there.
   it('a parent\'s row in a family its children\'s rows filled, behind a flood longer than a read reaches past, goes out on the first tick', async () => {
     const BUSY = 'fam-busy';
