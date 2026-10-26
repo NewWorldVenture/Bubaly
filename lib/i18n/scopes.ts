@@ -63,6 +63,7 @@ export const ROOT_CHROME_SCOPE = ['a11y', 'dbError', 'error', 'globalError', 'ro
 /** The public marketing site, /blog and the hosted form and landing routes. */
 export const MARKETING_SCOPE = [
   ...ROOT_CHROME_SCOPE,
+  'states.loadingEllipsis',
   'blogBlogSearch', 'blogHeartButton', 'blogTableOfContents', 'fFormRenderer', 'faqExplorer',
   'formRenderer', 'handledProof', 'pricingValue', 'subscribe', 'tableOfContents',
   // The shared chrome this surface mounts, which tests/i18n-client-scope.test.ts
