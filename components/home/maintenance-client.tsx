@@ -20,11 +20,13 @@ export type AssetView = {
 };
 
 export function MaintenanceClient({
-  assets, season, seasonTasks,
+  assets, season, seasonTasks, canSchedule,
 }: {
   assets: AssetView[];
   season: string;
   seasonTasks: string[];
+  /** A parent or adult: the schedule action refuses everyone else. */
+  canSchedule: boolean;
 }) {
   const tr = useTranslations();
   const [forecast, setForecast] = useState('');
@@ -88,7 +90,7 @@ export function MaintenanceClient({
           <p className="text-sm text-muted">{tr('maintenanceClient.noAssetsYetAddHvacWater')}</p>
         ) : (
           <div className="space-y-2">
-            {assets.map((a) => <AssetRow key={a.id} asset={a} />)}
+            {assets.map((a) => <AssetRow key={a.id} asset={a} canSchedule={canSchedule} />)}
           </div>
         )}
       </Card>
@@ -96,7 +98,7 @@ export function MaintenanceClient({
   );
 }
 
-function AssetRow({ asset }: { asset: AssetView }) {
+function AssetRow({ asset, canSchedule }: { asset: AssetView; canSchedule: boolean }) {
   const tr = useTranslations();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState('');
@@ -125,11 +127,11 @@ function AssetRow({ asset }: { asset: AssetView }) {
         </div>
       )}
       <div className="mt-2 flex items-center gap-3">
-        {asset.hasCadence ? (
+        {asset.hasCadence ? (canSchedule && (
           <button onClick={schedule} disabled={pending} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium hover:bg-elevated disabled:opacity-60">
             {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />} {tr('maintenanceClient.scheduleRecommendedMaintenance')}
           </button>
-        ) : (
+        )) : (
           <span className="text-xs text-muted">{tr('maintenanceClient.noPresetScheduleForThisType')}</span>
         )}
         {msg && <span className="text-xs text-success">{msg}</span>}
