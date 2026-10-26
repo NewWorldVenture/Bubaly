@@ -14,7 +14,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
-import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument, DOCUMENT_MAX_BYTES, DOCUMENT_MAX_MB } from '@/lib/storage/documents';
+import { buildFamilyPath, isReservedDocumentPath, uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument, DOCUMENT_MAX_BYTES, DOCUMENT_MAX_MB } from '@/lib/storage/documents';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
@@ -31,6 +31,10 @@ import { useFormat } from '@/components/i18n/use-format';
 import { openOnKey } from '@/lib/ui/a11y';
 
 type Document = Tables<'documents'>;
+type UploadAttempt = {
+  id: string; path: string; familyId: string; userId: string; file: File;
+  title: string; category: string; memberId: string; expiresAt: string; pending: boolean;
+};
 
 // ── Formatting helpers ──────────────────────────────────────────────────────
 const GB = 1024 ** 3;
@@ -126,6 +130,9 @@ export function DocumentsModule() {
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scanInputRef = useRef<HTMLInputElement>(null);
+  const uploadAttempt = useRef<UploadAttempt | null>(null);
+  const uploadDraft = useRef({ familyId, userId, file, title: form.title, category: form.category.trim() || 'general', memberId: form.member_id, expiresAt: form.expires_at });
+  uploadDraft.current = { familyId, userId, file, title: form.title, category: form.category.trim() || 'general', memberId: form.member_id, expiresAt: form.expires_at };
 
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | StorageGroup>('all');
@@ -298,41 +305,70 @@ export function DocumentsModule() {
 
   async function save() {
     if (!form.title || !file) { toastError(tr('documentsModule.chooseAFileAndName')); return; }
+    if (file.size > DOCUMENT_MAX_BYTES) { toastError(tr('modules.fileTooLargeNamed', { name: file.name, max: DOCUMENT_MAX_MB })); return; }
+    const draft = uploadDraft.current;
+    let attempt = uploadAttempt.current;
+    if (!attempt || Object.entries(draft).some(([key, value]) => attempt![key as keyof typeof draft] !== value)) {
+      attempt = { ...draft, file, id: crypto.randomUUID(), path: '', pending: false };
+      uploadAttempt.current = attempt;
+    }
+    if (attempt.pending) return;
+    const currentAttempt = attempt;
+    const sameDraft = () => Object.entries(uploadDraft.current).every(([key, value]) => currentAttempt[key as keyof typeof draft] === value);
+    currentAttempt.pending = true;
     setSaving(true);
-    const sb = createClient();
-    const folder = form.category.trim() || 'general';
-    // Decided BEFORE the bytes move, as the Files hub decides it
-    // (lib/documents/upload.ts): 0266 refuses a teen's, a child's or a
-    // caregiver's row in an adults-only folder ("School IDs", "Medical"), and
-    // uploading first stored their file and then said only "Failed to save
-    // file", on every retry. A row refused for any other reason still takes
-    // its file back out of the bucket.
-    const outcome = await performUpload(
-      { view: 'shared', category: folder, manager: isManager(role), folderFallback: 'general' },
-      {
-        store: (storeFolder) => uploadFamilyDocument(sb, { familyId, folder: storeFolder, file }),
-        record: async ({ storagePath, isSecure }) => {
-          const { error: err } = await sb.from('documents').insert({
-            family_id: familyId, title: form.title, category: folder,
-            member_id: form.member_id || null, created_by: userId,
-            storage_path: storagePath, size_bytes: file.size, mime_type: file.type || null,
-            expires_at: form.expires_at || null,
-            // Set for a folder sensitive only in translation, so the database withholds it too.
-            is_secure: isSecure,
-          });
-          return { error: err ? tr('documentsModule.failedToSaveFile') : null };
+    try {
+      const sb = createClient();
+      const outcome = await performUpload(
+        { view: 'shared', category: currentAttempt.category, manager: isManager(role), folderFallback: 'general' },
+        {
+          prepare: folder => {
+            currentAttempt.path ||= buildFamilyPath(familyId, `${folder}/${currentAttempt.id}`, file.name);
+            if (!isReservedDocumentPath(familyId, folder, currentAttempt.path)) throw new Error('Invalid upload destination');
+            return currentAttempt.path;
+          },
+          record: async ({ storagePath, isSecure }) => {
+            if (!sameDraft()) return { error: tr('quickCapture.saveUncertain') };
+            const fields = {
+              id: currentAttempt.id, family_id: familyId, title: currentAttempt.title, category: currentAttempt.category,
+              member_id: currentAttempt.memberId || null, created_by: userId,
+              storage_path: storagePath, size_bytes: file.size, mime_type: file.type || null,
+              expires_at: currentAttempt.expiresAt || null, is_secure: isSecure,
+            };
+            const columns = 'id,family_id,title,category,member_id,created_by,storage_path,size_bytes,mime_type,expires_at,is_secure';
+            const matches = (row: unknown) => !!row && typeof row === 'object' && Object.entries(fields).every(([key, value]) => (row as Record<string, unknown>)[key] === value);
+            const read = () => sb.from('documents').select(columns).eq('id', currentAttempt.id).eq('family_id', familyId).maybeSingle();
+            const existing = await read();
+            if (!sameDraft() || existing.error) return { error: tr('quickCapture.saveUncertain') };
+            if (existing.data) return { error: matches(existing.data) ? null : tr('quickCapture.saveUncertain') };
+            const inserted = await sb.from('documents').insert(fields).select(columns).single();
+            if (!sameDraft()) return { error: tr('quickCapture.saveUncertain') };
+            if (inserted.error?.code === '23505') {
+              const raced = await read();
+              return { error: !raced.error && matches(raced.data) ? null : tr('quickCapture.saveUncertain') };
+            }
+            if (inserted.error) return { error: /^(?:(?:22|23|28|42)[0-9A-Z]{3}|P0001)$/.test(inserted.error.code ?? '') ? tr('documentsModule.failedToSaveFile') : tr('quickCapture.saveUncertain') };
+            return { error: matches(inserted.data) ? null : tr('quickCapture.saveUncertain') };
+          },
+          store: async reservedPath => {
+            if (!sameDraft()) return { error: tr('quickCapture.saveUncertain') };
+            const { error } = await uploadFamilyDocument(sb, { familyId, folder: currentAttempt.category, file, reservedPath });
+            return { error: error ? tr('quickCapture.saveUncertain') : null };
+          },
         },
-        discard: async (path) => {
-          const { error: rollbackError } = await removeFamilyDocument(sb, path);
-          if (rollbackError) console.error('[documents] upload rollback left an object behind', { path }, rollbackError);
-        },
-      },
-      tr,
-    );
-    setSaving(false);
-    if (!outcome.ok) { toastError(outcome.reason); return; }
-    success(tr('documentsModule.fileUploaded'));
-    setOpen(false); setForm({ title: '', category: 'general', member_id: '', expires_at: '' }); setFile(null); refresh();
+        tr,
+      );
+      if (uploadAttempt.current !== currentAttempt || !sameDraft()) return;
+      if (!outcome.ok) { toastError(outcome.reason); return; }
+      success(tr('documentsModule.fileUploaded'));
+      uploadAttempt.current = null;
+      setOpen(false); setForm({ title: '', category: 'general', member_id: '', expires_at: '' }); setFile(null); refresh();
+    } catch {
+      if (uploadAttempt.current === currentAttempt && sameDraft()) toastError(tr('quickCapture.saveUncertain'));
+    } finally {
+      currentAttempt.pending = false;
+      if (uploadAttempt.current === currentAttempt || uploadAttempt.current === null) setSaving(false);
+    }
   }
 
   if (loading) return <SkeletonList />;
