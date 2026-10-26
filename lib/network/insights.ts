@@ -30,17 +30,63 @@ export type InsightCandidate = {
   scope: ConsentScope;
   title: string;
   detail: string;
-  /** Distinct families whose (already anonymized) data support this pattern. */
+  /**
+   * DP-noised count of families — the only family count a person may read, and
+   * so the only one that grades or ranks an insight.
+   */
+  count: number;
+  /**
+   * TRUE distinct families behind the band. SERVER-ONLY: the k-floor reads it
+   * and `publishableInsights` drops it, because beside the noised count it is
+   * the exact number the noise exists to hide.
+   */
   cohortSize: number;
 };
 
-export type NetworkInsight = InsightCandidate & { confidence: 'high' | 'medium' };
+/**
+ * An insight as it may reach a browser: past the floor, graded and ranked on
+ * the noised count, and without the true size. Built field by field in
+ * `publishableInsights`, so a field added to the candidate later does not ride
+ * along to the client by default.
+ */
+export type NetworkInsight = Omit<InsightCandidate, 'cohortSize'> & { confidence: 'high' | 'medium' };
 
 export type ConsentState = { enabled: boolean; scopes: Partial<Record<ConsentScope, boolean>> };
 
 /** True when a cohort is too small to share without risking re-identification. */
 export function isSuppressed(cohortSize: number, minCohort: number = K_ANONYMITY_FLOOR): boolean {
   return cohortSize < minCohort;
+}
+
+/**
+ * The server half of the gate: past the k-anonymity floor on the TRUE size,
+ * then that size dropped. This is what may be handed to a client component.
+ *
+ * Confidence and order come from the noised count. Graded on the true size,
+ * "high" was a public signal of the exact moment a band crossed 3 × K, and the
+ * order of two close bands told which was really larger.
+ */
+export function publishableInsights(
+  candidates: InsightCandidate[],
+  minCohort: number = K_ANONYMITY_FLOOR,
+): NetworkInsight[] {
+  return candidates
+    .filter((c) => !isSuppressed(c.cohortSize, minCohort))
+    .map((c): NetworkInsight => ({
+      id: c.id, scope: c.scope, title: c.title, detail: c.detail, count: c.count,
+      confidence: c.count >= minCohort * 3 ? 'high' : 'medium',
+    }))
+    .sort((a, b) => b.count - a.count);
+}
+
+/**
+ * The consent half, over insights already published: opted in, and the scope on.
+ * The client re-applies it against the consent row on screen, so a scope
+ * switched off hides its insights at once.
+ */
+export function consentedInsights(insights: NetworkInsight[], consent: ConsentState): NetworkInsight[] {
+  if (!consent.enabled) return [];
+  return insights.filter((i) => consent.scopes[i.scope] === true);
 }
 
 /**
@@ -52,12 +98,7 @@ export function visibleInsights(
   consent: ConsentState,
   minCohort: number = K_ANONYMITY_FLOOR,
 ): NetworkInsight[] {
-  if (!consent.enabled) return [];
-  return candidates
-    .filter((c) => consent.scopes[c.scope] === true)
-    .filter((c) => !isSuppressed(c.cohortSize, minCohort))
-    .map((c): NetworkInsight => ({ ...c, confidence: c.cohortSize >= minCohort * 3 ? 'high' : 'medium' }))
-    .sort((a, b) => b.cohortSize - a.cohortSize);
+  return consentedInsights(publishableInsights(candidates, minCohort), consent);
 }
 
 /** Whether the family is actively contributing (opted in with at least one scope). */

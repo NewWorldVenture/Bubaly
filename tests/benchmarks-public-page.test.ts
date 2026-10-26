@@ -65,12 +65,19 @@ describe('benchmark rows are k-anonymized whatever the table says', () => {
     expect(groups[0].rows[0].count).toBe(123);
   });
 
-  it('exports the noised count and n — never a family, never a raw value — and escapes commas', () => {
+  // The export exists to be quoted, so it carries the noised count and the
+  // floor, and NOT the true band size: beside the noised count that is the
+  // exact number the noise hides (N3/N6 — two exports a night apart differed
+  // by exactly who joined or left).
+  it('exports the noised count and the floor — never the true n, never a family, never a raw value — and escapes commas', () => {
     const csv = benchmarksCsv(rows, '2026-09-07T03:00:00.000Z');
     const lines = csv.trimEnd().split('\r\n');
     expect(lines[0]).toBe(BENCHMARK_CSV_COLUMNS.join(','));
+    expect(BENCHMARK_CSV_COLUMNS).not.toContain('cohort_n');
     expect(lines).toHaveLength(3);
-    expect(lines[1]).toBe('dinner_habit,dinner planning,kids:6–9|size:3–4,6–9,3–4,often (4–5),123,120,20,2026-09-07T03:00:00.000Z');
+    expect(lines[1]).toBe('dinner_habit,dinner planning,kids:6–9|size:3–4,6–9,3–4,often (4–5),123,20,2026-09-07T03:00:00.000Z');
+    expect(lines[1].split(',')).not.toContain('120'); // the true size behind the 123
+    expect(lines[2].split(',')).not.toContain('40');  // nor behind the 41
     expect(lines[2]).toContain('"1,000+"'); // the value carries a comma and is quoted
     expect(csv).not.toContain('rarely');
     expect(csv).not.toContain('family_id');
@@ -103,15 +110,19 @@ describe('/resources/benchmarks — the public page', () => {
     expectSays(publicPage, 'benchmarksPage.retry', 'Retry');
   });
 
-  it('carries the cohort size and the anonymity sentence with every number', () => {
+  // The row used to print "cohort of {n} families" with n = the TRUE number of
+  // families behind that band, beside the noised count — which cancelled the
+  // noise and mislabelled a band count as the cohort's size (N1/N4). The
+  // rendered page is driven in tests/network-benchmarks-publish-only-noised-counts.test.ts.
+  it('carries the noised count and the anonymity sentence with every number, and never the true band size', () => {
     expectSays(publicPage, 'benchmarksPage.aggregatedNotice', 'Aggregated from consenting families; no family is identifiable.');
-    expectSays(publicPage, 'benchmarksPage.cohortOf', 'cohort of {n} families');
     expectSays(publicPage, 'benchmarksPage.aboutFamiliesReport', 'About {count} families report “{value}”');
-    // the per-row block renders count, cohort n and the sentence together
+    // the per-row block renders the noised count and the sentence together
     const row = publicPage.slice(publicPage.indexOf('{g.rows.map((r) =>'), publicPage.indexOf('</li>'));
     // the band inside the sentence is a catalogue key, not the stored English band
     expect(row).toContain("t('benchmarksPage.aboutFamiliesReport', { count: r.count, value: r.valueKey ? t(r.valueKey) : r.value })");
-    expect(row).toContain("t('benchmarksPage.cohortOf', { n: r.cohortSize })");
+    expect(row).not.toContain("t('benchmarksPage.cohortOf'");
+    expect(row).not.toMatch(/\br\.cohortSize\b/);
     expect(row).toContain("t('benchmarksPage.aggregatedNotice')");
   });
 
@@ -141,7 +152,8 @@ describe('/resources/benchmarks — the public page', () => {
   // unpublished. An unconditional card is therefore an inert control and a claim
   // with nothing persisted behind it. The flag has to be read, server-side.
   it('the public-benchmarks card is gated on the publication flag, read server-side', () => {
-    expect(intelligencePage).toContain("import { benchmarksPageIsPublished } from '@/lib/network/benchmarks-server'");
+    // The same import also brings the k-floor re-check (readTrueCohortSizes).
+    expect(intelligencePage).toMatch(/import \{[^}]*\bbenchmarksPageIsPublished\b[^}]*\} from '@\/lib\/network\/benchmarks-server'/);
     expect(intelligencePage).toContain('const benchmarksPublished = await benchmarksPageIsPublished();');
     expect(intelligencePage).toContain('benchmarksPublished={benchmarksPublished}');
     expect(intelligenceModule).toContain('benchmarksPublished = false');
@@ -162,11 +174,16 @@ describe('/resources/benchmarks — the public page', () => {
 });
 
 describe('/admin/benchmarks — the report behind the admin gate', () => {
-  it('reads with the service role, shows n and the floor, and fails closed', () => {
+  it('reads with the service role, shows the noised count and the floor (never the true n), and fails closed', () => {
     expect(adminPage).toContain('createServiceClient()');
     expect(adminPage).toContain('readBenchmarkAggregates(supabase)');
     expect(adminPage).toContain('K_ANONYMITY_FLOOR');
-    expectSays(adminPage, 'adminBenchmarks.cohortN', 'n (distinct families)');
+    // N6 (admin table): the true band size beside the noised count is the
+    // number the noise hides, and this page is quoted like the CSV is; the
+    // rendered page is driven in tests/network-benchmarks-publish-only-noised-counts.test.ts.
+    expectSays(adminPage, 'adminBenchmarks.familiesReported', 'Families (noised)');
+    expect(adminPage).not.toContain('adminBenchmarks.cohortN');
+    expect(adminPage).not.toContain('r.cohortSize');
     expectSays(adminPage, 'adminBenchmarks.kAnonymityFloor', 'k-anonymity floor');
     expect(adminPage).toContain("console.error('[admin-benchmarks] contributor count read failed'");
     expect(adminPage).toContain('return <AdminBenchmarksReadError />;');
