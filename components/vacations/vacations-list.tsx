@@ -16,7 +16,7 @@ import { ButtonLink } from '@/components/ui/button-link';
 import { LoadingBlock, EmptyState, ErrorState } from '@/components/ui/states';
 import { useFormat, useFamilyCalendarToday, useFamilyClock } from '@/components/i18n/use-format';
 import { VACATION_KINDS, VACATION_STATUSES, lookup } from '@/lib/vacations/meta';
-import { countdownLabel, daysUntil, isActive } from '@/lib/vacations/dates';
+import { countdownLabel, daysUntil, isActive, isOver } from '@/lib/vacations/dates';
 import { canonicalDefaultTimezone, canonicalTimezone } from '@/lib/time/zoned';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -24,6 +24,14 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 type Vacation = Tables<'vacations'>;
 type Member = Tables<'vacation_members'>;
 type Score = Tables<'vacation_travel_scores'>;
+
+/**
+ * Completed, cancelled, or past its last day. Nothing in the app moves a trip
+ * past 'planning', so by status alone last July's trip sorted first and was
+ * the "Next trip" at the top of the page, "113 days ago".
+ */
+const isFinished = (v: Vacation, today: Date) =>
+  v.status === 'cancelled' || v.status === 'completed' || isOver(v.start_date, v.end_date, today);
 
 const blank = () => ({ title: '', kind: 'domestic', destination: '', start_date: '', end_date: '', budget: '', description: '', is_international: false, timezone: '' });
 
@@ -69,7 +77,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
   }, [scores]);
 
   const sorted = useMemo(() => {
-    const rank = (v: Vacation) => (v.status === 'cancelled' || v.status === 'completed' ? 1 : 0);
+    const rank = (v: Vacation) => (isFinished(v, familyToday) ? 1 : 0);
     return [...trips].sort((a, b) => {
       if (rank(a) !== rank(b)) return rank(a) - rank(b);
       const da = daysUntil(a.start_date, familyToday) ?? 99999, db = daysUntil(b.start_date, familyToday) ?? 99999;
@@ -77,7 +85,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
     });
   }, [trips, familyToday]);
 
-  const upcoming = sorted.filter((t) => t.status !== 'completed' && t.status !== 'cancelled');
+  const upcoming = sorted.filter((t) => !isFinished(t, familyToday));
   const current = upcoming.find((t) => isActive(t.start_date, t.end_date, familyToday)) ?? upcoming[0];
 
   const [saving, setSaving] = useState(false);

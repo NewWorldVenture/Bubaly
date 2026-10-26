@@ -76,6 +76,19 @@ export function countdownLabel(
   return tr('tripCountdown.daysAgo', { count: -d });
 }
 
+/**
+ * True once the trip's last day (its end date, else its start date) is before
+ * `today`. Status is not this: nothing in the app moves a trip past
+ * 'planning', so "not completed" alone kept last July's trip as the next one.
+ * An undated trip is still being planned, so it is not over.
+ */
+export function isOver(start: string | null | undefined, end: string | null | undefined, today: Date | string = new Date()): boolean {
+  const last = end || start;
+  if (!last) return false;
+  const d = daysUntil(last, today);
+  return d !== null && d < 0;
+}
+
 /** True when today falls within [start, end] inclusive. */
 export function isActive(start: string | null | undefined, end: string | null | undefined, today: Date = new Date()): boolean {
   if (!start) return false;
