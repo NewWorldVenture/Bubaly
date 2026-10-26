@@ -98,13 +98,13 @@ describe('buildConciergeDigest — pantry & warranties', () => {
       now: NOW,
       warranties: [
         { name: 'LG Fridge', expiresOn: '2026-07-10' }, // soon (17d)
-        { name: 'Old TV', expiresOn: '2025-01-01' },    // long expired → still overdue surfaced? offset<0 → overdue
+        { name: 'Old TV', expiresOn: '2025-01-01' },    // run out: nothing to do, not "overdue"
         { name: 'Roof', expiresOn: '2030-01-01' },      // out of window
       ],
     });
     const w = d.items.filter(i => i.domain === 'warranty');
-    expect(w.map(x => x.title)).toEqual(['Old TV warranty', 'LG Fridge warranty']);
-    expect(w[1].detail).toBe('Expires in 17 days');
+    expect(w.map(x => x.title)).toEqual(['LG Fridge warranty']);
+    expect(w[0].detail).toBe('Expires in 17 days');
   });
 });
 

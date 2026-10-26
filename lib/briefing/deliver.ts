@@ -147,8 +147,9 @@ export async function readMorningBrief(scope: ServiceScope, target: MorningTarge
       .eq('family_id', familyId).in('status', ['todo', 'in_progress'])
       .not('due_at', 'is', null).lte('due_at', `${horizon}T23:59:59.999Z`).order('due_at').limit(20),
     // A deleted warranty is soft-deleted (`deleted_at`), like on every other reader of this table.
+    // From today: lapsed ones are not in the brief, and oldest-first they filled the limit.
     db.from('home_warranties').select('name, expires_on')
-      .eq('family_id', familyId).is('deleted_at', null).not('expires_on', 'is', null).lte('expires_on', horizon).order('expires_on').limit(20),
+      .eq('family_id', familyId).is('deleted_at', null).not('expires_on', 'is', null).gte('expires_on', dayKey).lte('expires_on', horizon).order('expires_on').limit(20),
     db.from('vacations').select('title, destination, start_date, end_date, status')
       .eq('family_id', familyId).not('status', 'in', '("completed","cancelled")').not('start_date', 'is', null).limit(20),
     db.from('pantry_items').select('name, expires_at')
