@@ -53,7 +53,6 @@ const DECLARED: Record<string, string> = {
   // ── reachable, but the local-reading function is only called from the browser ──
   'lib/inventory/finder.ts': 'lentOut/warrantyAlerts(items, today) take the inventory module\'s (client) today; the server imports only search/location helpers.',
   'lib/marketplace/handoff.ts': 'suggestedMeetTimes(now) is called only by components/marketplace/handoff-panel.tsx (client); the server imports the code helpers.',
-  'lib/trips/departure.ts': 'trafficFactorForTime\'s dow/hour defaults are used only by components/modules/trip-intel-module.tsx (client).',
 };
 
 function walk(dir: string, out: string[] = []): string[] {

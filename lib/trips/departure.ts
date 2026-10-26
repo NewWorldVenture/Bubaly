@@ -10,6 +10,8 @@
 // weather (Open-Meteo), this module turns those numbers into a plan. No clock
 // access beyond the `now` you pass, so it is fully deterministic and testable.
 
+import { localPartsAt } from '@/lib/time/zoned';
+
 export type DepartureStatus = 'plenty' | 'soon' | 'now' | 'overdue' | 'arrived';
 
 export interface DepartureInput {
@@ -55,17 +57,27 @@ function clampTraffic(f: number | undefined): number {
 }
 
 /**
- * Live-traffic multiplier for a departure time. Models typical metro rush-hour
- * congestion: weekday morning (7–9am) and evening (4–7pm) peaks slow you down,
- * late nights are free-flowing. Weekends are lighter. Hour is taken in the
- * given IANA timezone offset minutes (pass the destination's tz offset), else
- * local. Returns a multiplier in [1, ~1.5].
+ * Live-traffic multiplier for a departure time, read on `timeZone`'s clock (the
+ * family's). It used to read getDay()/getHours(), the clock of whatever device
+ * asked: a Tokyo family's 08:30 Tuesday school run, refreshed from a phone on
+ * New York time, was priced as Monday evening. Returns a multiplier in
+ * [1, ~1.5]; a time it cannot read is free-flowing.
  */
-export function trafficFactorForTime(when: string | Date, dayOfWeek?: number, hour?: number): number {
+export function trafficFactorForTime(when: string | Date, timeZone: string): number {
   const d = typeof when === 'string' ? new Date(when) : when;
   if (Number.isNaN(d.getTime())) return 1;
-  const dow = dayOfWeek ?? d.getDay(); // 0=Sun..6=Sat
-  const h = hour ?? d.getHours();
+  let p: ReturnType<typeof localPartsAt>;
+  try { p = localPartsAt(d, timeZone); } catch { p = localPartsAt(d, 'UTC'); }
+  return trafficFactorAt(new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay(), p.hour);
+}
+
+/**
+ * The multiplier for a weekday (0=Sun..6=Sat) and an hour on the clock the
+ * trip is driven by. Models typical metro rush-hour congestion: weekday
+ * morning (7–9am) and evening (4–7pm) peaks slow you down, late nights are
+ * free-flowing. Weekends are lighter.
+ */
+export function trafficFactorAt(dow: number, h: number): number {
   const isWeekend = dow === 0 || dow === 6;
 
   // Peak windows (free-flow = 1.0).

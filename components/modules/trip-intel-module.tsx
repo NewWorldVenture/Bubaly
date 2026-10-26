@@ -496,7 +496,8 @@ function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onC
     }
 
     // Live traffic factor for the departure window + weather penalty at the dest.
-    const trafficFactor = trafficFactorForTime(event.startsAt);
+    // Rush hour on the FAMILY's clock, not this device's.
+    const trafficFactor = trafficFactorForTime(event.startsAt, timeZone);
     const fc = await fetchForecast(destLL.lat, destLL.lng, 7);
     const { delay: weatherDelay, summary: weatherSummary } = weatherForDate(fc, eventDay(event.startsAt, event.allDay, timeZone));
 
@@ -643,7 +644,7 @@ function DepartureCard({ plan }: { plan: SavedDeparturePlan }) {
         );
         if (est) driveSeconds = est.seconds;
       }
-      const trafficFactor = trafficFactorForTime(plan.eventStart);
+      const trafficFactor = trafficFactorForTime(plan.eventStart, timeZone);
       let weatherDelay = plan.weatherDelayMinutes, weatherSummary = plan.weatherSummary;
       if (plan.destLat != null && plan.destLng != null) {
         const fc = await fetchForecast(plan.destLat, plan.destLng, 7);

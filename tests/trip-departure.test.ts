@@ -1,28 +1,28 @@
 import { describe, it, expect } from 'vitest';
 import {
-  computeDeparture, trafficFactorForTime, weatherDelayMinutes,
+  computeDeparture, trafficFactorAt, trafficFactorForTime, weatherDelayMinutes,
   leaveByLabel, departureStatusCopy,
 } from '@/lib/trips/departure';
 
 describe('trafficFactorForTime', () => {
   it('flags weekday evening rush as the heaviest', () => {
     // Friday 5pm (2026-06-26 is a Friday)
-    const f = trafficFactorForTime('2026-06-26T17:00:00', 5, 17);
+    const f = trafficFactorAt(5, 17);
     expect(f).toBeGreaterThan(1.4);
   });
   it('flags weekday morning rush', () => {
-    expect(trafficFactorForTime('2026-06-26T08:00:00', 5, 8)).toBeCloseTo(1.45);
+    expect(trafficFactorAt(5, 8)).toBeCloseTo(1.45);
   });
   it('is free-flow overnight', () => {
-    expect(trafficFactorForTime('2026-06-26T02:00:00', 5, 2)).toBe(1);
+    expect(trafficFactorAt(5, 2)).toBe(1);
   });
   it('is lighter on weekends', () => {
-    const sat = trafficFactorForTime('2026-06-27T17:00:00', 6, 17);
-    const weekday = trafficFactorForTime('2026-06-26T17:00:00', 5, 17);
+    const sat = trafficFactorAt(6, 17);
+    const weekday = trafficFactorAt(5, 17);
     expect(sat).toBeLessThan(weekday);
   });
   it('returns 1 for invalid input', () => {
-    expect(trafficFactorForTime('not-a-date')).toBe(1);
+    expect(trafficFactorForTime('not-a-date', 'UTC')).toBe(1);
   });
 });
 
