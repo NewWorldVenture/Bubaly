@@ -6,6 +6,7 @@
 import { createServiceClient } from '@/lib/supabase/server';
 import { settle } from '@/lib/supabase/settle';
 import type { Tables } from '@/lib/database.types';
+import { configuredSecret } from '@/lib/server/configured-secret';
 
 export type StripeSettings = Tables<'stripe_settings'>;
 
@@ -50,7 +51,7 @@ export function effectiveSecretKey(s: StripeSettings | null): string | null {
 
 /** Effective webhook signing secret: configured value first, then env. */
 export function effectiveWebhookSecret(s: StripeSettings | null): string | null {
-  return s?.webhook_secret?.trim() || process.env.STRIPE_WEBHOOK_SECRET || null;
+  return configuredSecret(s?.webhook_secret?.trim()) ?? configuredSecret(process.env.STRIPE_WEBHOOK_SECRET);
 }
 
 /** Effective publishable key: configured value first, then env. */
