@@ -87,6 +87,11 @@ test('quoted, escaped and dotted assignment keys refuse before any reservation w
     const f = fixture({ config: source }); assert.throws(() => f.run(), /UNSUPPORTED_CONFIG_KEY/); assert.equal(f.writes, 0);
   }
 });
+test('inline service tables cannot bypass explicit fixed-port validation', () => {
+  for (const source of ['db = { port = 55555 }', 'api = { port = 55555 }']) {
+    const f = fixture({ config: source }); assert.throws(() => f.run(), /UNSUPPORTED_CONFIG_INLINE_TABLE/); assert.equal(f.writes, 0);
+  }
+});
 test('guard remains before npm and full startup, with the reviewed CLI version pinned', () => {
   const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   const e2e = workflow.slice(workflow.indexOf('\n  e2e:\n'));

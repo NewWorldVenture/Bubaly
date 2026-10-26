@@ -82,6 +82,7 @@ export function assertFixedConfig(source) {
       // refusing those forms avoids pretending this scanner is a TOML parser.
       const assignment = /^([a-z_][a-z0-9_]*)\s*=/.exec(line);
       requireThat(assignment, 'UNSUPPORTED_CONFIG_KEY');
+      requireThat(!/^\s*\{/.test(line.slice(line.indexOf('=') + 1)), 'UNSUPPORTED_CONFIG_INLINE_TABLE');
       if (/^(?:port|[a-z_]+_port)$/.test(assignment[1])) {
         const match = /^([a-z_]*port)\s*=\s*(\d+)$/.exec(line);
         requireThat(match && expected[`${section}.${match[1]}`] === Number(match[2]), 'UNRESERVED_CONFIG_PORT');
