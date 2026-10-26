@@ -24,6 +24,7 @@ import { forgetMemberLocation } from '@/lib/location/retention';
 import { releaseRemovedMembersGiftClaims } from '@/lib/wishlists/release-claims';
 import { closePendingInvitesFor, revokeInvitesIssuedBy } from '@/lib/server/member-invites';
 import { recordTrustChange } from '@/lib/trust/ledger';
+import { isFamilyDocumentPath } from '@/lib/storage/documents';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -595,14 +596,26 @@ export async function adminRevokeInviteAction(inviteId: string): Promise<Result>
  * Signed URL for any family's document, via the service role. The browser's
  * anon-key client can't do this for the super admin — Storage RLS only grants
  * access to actual family members, and the admin isn't a member of every family.
+ *
+ * The service role signs any object it is handed, so the path is the ROW's,
+ * read by id as adminDeleteDocumentAction reads it — never one the browser
+ * sends. `listedPath` is what the screen showed: a row whose path is no longer
+ * that one is refused rather than opened as something else. And nothing ties a
+ * row's path to the row's family (the held 0499's recorded lead), so a path
+ * outside the row's own family folder is refused too.
  */
-export async function adminGetDocumentUrlAction(storagePath: string): Promise<Result<{ url: string }>> {
+export async function adminGetDocumentUrlAction(documentId: string, listedPath: string): Promise<Result<{ url: string }>> {
   const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
 
   const supabase = createServiceClient();
-  const { data, error } = await supabase.storage.from('documents').createSignedUrl(storagePath, 120);
+  const { data: doc, error: docError } = await supabase
+    .from('documents').select('family_id, storage_path').eq('id', documentId).maybeSingle();
+  if (docError) return actionFailure(docError, t('actions.couldNotLoadThatDocument'));
+  if (!doc || doc.storage_path !== listedPath) return { ok: false, error: t('actions.documentNotFound') };
+  if (!isFamilyDocumentPath(doc.family_id, doc.storage_path)) return { ok: false, error: t('actions.couldNotCreateADocument') };
+  const { data, error } = await supabase.storage.from('documents').createSignedUrl(doc.storage_path, 120);
   if (error || !data) return error ? actionFailure(error, t('actions.couldNotCreateADocument')) : { ok: false, error: t('actions.couldNotCreateADocument') };
   return { ok: true, data: { url: data.signedUrl } };
 }
@@ -621,6 +634,11 @@ export async function adminDeleteDocumentAction(documentId: string, _storagePath
     .from('documents').select('family_id, title, storage_path').eq('id', documentId).maybeSingle();
   if (docError) return actionFailure(docError, t('actions.couldNotLoadThatDocument'));
   if (!doc) return { ok: false, error: t('actions.documentNotFound') };
+  // Nothing ties a row's path to the row's family (the held 0499's recorded
+  // lead), and the service role removes whatever object it is named: a row
+  // naming another family's file would delete that family's file. Refused, as
+  // View refuses it, before anything is removed; the row stays to be looked at.
+  if (!isFamilyDocumentPath(doc.family_id, doc.storage_path)) return { ok: false, error: t('actions.couldNotRemoveTheDocument') };
 
   // SEC-015: a refused delete and an absent object are both `error: null,
   // data: []`, so the returned list is what says the object is gone.
@@ -628,7 +646,17 @@ export async function adminDeleteDocumentAction(documentId: string, _storagePath
   if (storageError) return actionFailure(storageError, t('actions.couldNotRemoveTheDocument'));
   if (!removed?.some((object) => object.name === doc.storage_path)) {
     const listed = await supabase.storage.from('documents').list(doc.storage_path.slice(0, doc.storage_path.lastIndexOf('/')), { search: doc.storage_path.slice(doc.storage_path.lastIndexOf('/') + 1), limit: 100 });
-    if (listed.data?.some((object) => object.name === doc.storage_path.slice(doc.storage_path.lastIndexOf('/') + 1))) {
+    // Only a listing that ANSWERED can say the file is gone. One that failed
+    // (a 503) or came back with no list is not evidence, and the row it would
+    // drop is what hides a Vault file from a child: refuse and keep it, as
+    // lib/storage/confirm-removal.ts does for the family's own deletes. A
+    // listing that answers without the file lets a retry after a
+    // half-finished delete complete.
+    if (listed.error || !Array.isArray(listed.data)) {
+      console.error('[admin-action] document file removal could not be confirmed; its row stays', { documentId, error: listed.error });
+      return { ok: false, error: t('actions.couldNotRemoveTheDocument') };
+    }
+    if (listed.data.some((object) => object.name === doc.storage_path.slice(doc.storage_path.lastIndexOf('/') + 1))) {
       return { ok: false, error: t('actions.couldNotRemoveTheDocument') };
     }
   }

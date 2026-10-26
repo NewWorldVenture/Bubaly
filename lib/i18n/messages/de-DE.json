@@ -17190,6 +17190,7 @@
   "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Fragen zwischen zwei Haushalten sind noch nicht möglich.",
   "assistantActions.couldNotReadTheBoard": "Der Marktplatz konnte gerade nicht gelesen werden. Versuchen Sie es gleich noch einmal.",
   "negotiations.theOtherSideActedAtTheSameMoment": "Die andere Seite hat im selben Moment auf dieses Angebot reagiert. Aktualisieren Sie die Seite und versuchen Sie es erneut.",
+  "filesHubModule.sensitiveStaysInVault": "Dateien im Ordner {category} bleiben im geschützten Tresor, wo nur ein Elternteil oder eine andere erwachsene Person sie öffnen kann.",
   "medicationsModule.otherMembersDosesAreKeptByManagers": "Die Einnahmen der anderen Mitglieder erfassen und verfolgen die Eltern und Erwachsenen Ihrer Familie.",
   "nutrition.aGuestSeesSavedEstimatesOnly": "Gäste sehen eine gespeicherte Nährwertschätzung, können aber keine neue anfordern. Bitten Sie ein Familienmitglied, sie zu analysieren.",
   "mealsModule.guestsSeeTheVoteOnly": "Gäste sehen die Familienabstimmung, können aber nicht mit abstimmen."

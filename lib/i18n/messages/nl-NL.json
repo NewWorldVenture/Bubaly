@@ -17190,6 +17190,7 @@
   "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Vragen tussen twee huishoudens zijn nog niet mogelijk.",
   "assistantActions.couldNotReadTheBoard": "De marktplaats kon nu niet worden gelezen. Probeer het zo meteen opnieuw.",
   "negotiations.theOtherSideActedAtTheSameMoment": "De andere partij reageerde op hetzelfde moment op dit aanbod. Vernieuw de pagina en probeer het opnieuw.",
+  "filesHubModule.sensitiveStaysInVault": "Bestanden in de map {category} blijven in de beveiligde kluis, waar alleen een ouder of een andere volwassene ze kan openen.",
   "medicationsModule.otherMembersDosesAreKeptByManagers": "De innames van andere leden worden vastgelegd en bijgehouden door de ouders en volwassenen van je gezin.",
   "nutrition.aGuestSeesSavedEstimatesOnly": "Gasten kunnen een opgeslagen voedingsschatting zien, maar geen nieuwe aanvragen. Vraag een gezinslid om deze te analyseren.",
   "mealsModule.guestsSeeTheVoteOnly": "Gasten kunnen de gezinsstemming zien, maar niet meestemmen."
