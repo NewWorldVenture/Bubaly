@@ -110,14 +110,14 @@ export function FinancesModule() {
   useDismissOnEscape(moreOpen, () => setMoreOpen(false));
   const [calMonth, setCalMonth] = useState(() => { const d = clock.calendarToday(); return new Date(d.getFullYear(), d.getMonth(), 1); });
 
-  const { data: accounts, loading: la, error: accountsError, refresh: refreshAccounts } = useRealtimeQuery<Account>({
+  const { data: accounts, loading: la, stale: accountsStale, error: accountsError, refresh: refreshAccounts } = useRealtimeQuery<Account>({
     table: 'financial_accounts', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('financial_accounts').select('*').eq('family_id', familyId).order('created_at'),
   });
   // The FAMILY's month (TIME-003), both ends.
   const thisMonth = periodWindow('monthly', clock.todayKey());
   // The LIST: the newest transactions, as Recent shows them. Nothing is summed from it.
-  const { data: txns, loading: lt, error: txnsError, refresh: refreshTxns } = useRealtimeQuery<Txn>({
+  const { data: txns, loading: lt, stale: txnsStale, error: txnsError, refresh: refreshTxns } = useRealtimeQuery<Txn>({
     table: 'transactions', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('transactions').select('*').eq('family_id', familyId).order('date', { ascending: false }).limit(500),
   });
@@ -129,7 +129,7 @@ export function FinancesModule() {
   // month's rent recorded today is not this month's, and paged on the id, so a
   // row written between pages is not counted twice. Past the ceiling the read
   // fails and the screen shows its error, not a smaller total.
-  const { data: monthTxns, loading: lm, error: monthTxnsError, refresh: refreshMonthTxns } = useRealtimeQuery<MonthTxn>({
+  const { data: monthTxns, loading: lm, stale: monthTxnsStale, error: monthTxnsError, refresh: refreshMonthTxns } = useRealtimeQuery<MonthTxn>({
     table: 'transactions', familyId, deps: [familyId, thisMonth.from, thisMonth.to],
     fetcher: (sb) => readAllByIdAsQuery<MonthTxn>((after, limit) => {
       let query = sb.from('transactions').select('id, type, amount, category, member_id, date')
@@ -140,7 +140,7 @@ export function FinancesModule() {
   });
   // A saved transaction changes both: the list and the figures.
   const refreshTransactions = () => { void refreshTxns(); void refreshMonthTxns(); };
-  const { data: budgets, loading: lb, error: budgetsError, refresh: refreshBudgets } = useRealtimeQuery<Budget>({
+  const { data: budgets, loading: lb, stale: budgetsStale, error: budgetsError, refresh: refreshBudgets } = useRealtimeQuery<Budget>({
     table: 'budgets', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('budgets').select('*').eq('family_id', familyId),
   });
@@ -148,7 +148,7 @@ export function FinancesModule() {
     table: 'bills', familyId, deps: [familyId, userId, BILL_READ_CONTRACT],
     fetcher: (sb) => readCompleteBills(sb, familyId),
   });
-  const { data: goals, loading: lg, error: goalsError, refresh: refreshGoals } = useRealtimeQuery<Goal>({
+  const { data: goals, loading: lg, stale: goalsStale, error: goalsError, refresh: refreshGoals } = useRealtimeQuery<Goal>({
     table: 'savings_goals', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('savings_goals').select('*').eq('family_id', familyId).order('created_at'),
   });
@@ -226,9 +226,13 @@ export function FinancesModule() {
   }, [spendByCat, usd, tr]);
 
   const readError = accountsError || txnsError || monthTxnsError || budgetsError || billsError || goalsError;
-  const loading = la || lt || lm || lb || lbi || lg || (billsStale && !readError);
-  if (loading) return <SkeletonList count={6} />;
+  // Cached rows have loading=false while their fresh read is still pending.
+  // Every required read must be current before balances look verified. A
+  // failed read stays actionable even when another query has not finished.
+  const loading = la || lt || lm || lb || lbi || lg
+    || accountsStale || txnsStale || monthTxnsStale || budgetsStale || billsStale || goalsStale;
   if (readError) return <ErrorState message={tr('financesModule.couldNotLoadFinancialData')} onRetry={() => { void refreshMonthTxns(); void refreshAccounts(); void refreshTxns(); void refreshBudgets(); void refreshBills(); void refreshGoals(); }} />;
+  if (loading) return <SkeletonList count={6} />;
 
   const STATS = [
     { label: tr('financesModule.stat.totalBalance'), value: usd(totalBalance), sub: tr('financesModule.amountThisMonth', { amount: usd(Math.abs(netThisMonth)) }), up: netThisMonth >= 0, icon: Wallet, tint: 'bg-brand text-brand-fg' },
