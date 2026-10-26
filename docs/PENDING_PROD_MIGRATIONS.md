@@ -4959,12 +4959,20 @@ service role is exempt; deletes are unchanged (a non-manager's direct
 unsubscribe is left as its own item).
 
 **Application (same PR).** Refresh is anyone's, and it ingested on the
-presser's own session, so a child's Refresh wrote the episodes as the child:
-under 0526 that would fail. It now ingests through `serverWriter()` (the
-service role, as the nightly cron does) after the action's family-pinned read
-of the feed and its curator check. A guest, whom 0481 refuses in the database,
-is refused by the action before any read, and the page offers a guest no
-Refresh. No held object is called.
+presser's own session. Human Refresh keeps that caller client through the
+episode writes, after the family-pinned feed and curator checks, so released
+membership and guest guards still apply if permission changes during the
+external fetch. It does not escalate to the service role. A guest is also
+refused before any read, and the page offers a guest no Refresh. Trusted
+background ingest retains its existing service client. No held object is called.
+
+**Refresh rollout dependency:** applying 0526 will refuse a child's episode
+publication through their own client. The action must report that refusal
+honestly; do not bypass the caller's policy to force success. Child Refresh
+under that future schema needs a separately approved atomic trusted refresh
+operation that checks current caller, family, feed and curator authorization
+at publication. The earlier service-writer design and its passing fixed-role
+tests do not establish this revocation boundary.
 
 **Proof:** `.github/workflows/library-curation-runtime.yml` requires the held
 probe
