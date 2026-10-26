@@ -17189,5 +17189,6 @@
   "marketplace.anAuctionTakesBidsNotInterest": "Esto es una subasta: haz una puja en su lugar.",
   "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Las preguntas entre dos hogares aún no están disponibles.",
   "assistantActions.couldNotReadTheBoard": "No se ha podido leer el mercado ahora mismo. Inténtalo de nuevo en un momento.",
-  "negotiations.theOtherSideActedAtTheSameMoment": "La otra parte ha actuado sobre esta oferta en el mismo momento. Actualiza la página e inténtalo de nuevo."
+  "negotiations.theOtherSideActedAtTheSameMoment": "La otra parte ha actuado sobre esta oferta en el mismo momento. Actualiza la página e inténtalo de nuevo.",
+  "filesHubModule.sensitiveStaysInVault": "Los archivos de la carpeta {category} se quedan en la caja fuerte segura, donde solo un progenitor u otro adulto puede abrirlos."
 }

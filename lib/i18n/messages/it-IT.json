@@ -17189,5 +17189,6 @@
   "marketplace.anAuctionTakesBidsNotInterest": "Questa è un’asta: fai invece un’offerta.",
   "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Le domande tra due famiglie non sono ancora disponibili.",
   "assistantActions.couldNotReadTheBoard": "Impossibile leggere il mercato in questo momento. Riprova tra poco.",
-  "negotiations.theOtherSideActedAtTheSameMoment": "L’altra parte ha agito su questa offerta nello stesso momento. Aggiorna la pagina e riprova."
+  "negotiations.theOtherSideActedAtTheSameMoment": "L’altra parte ha agito su questa offerta nello stesso momento. Aggiorna la pagina e riprova.",
+  "filesHubModule.sensitiveStaysInVault": "I file nella cartella {category} restano nell’archivio protetto, dove solo un genitore o un altro adulto può aprirli."
 }

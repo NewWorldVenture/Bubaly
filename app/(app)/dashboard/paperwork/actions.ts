@@ -109,6 +109,9 @@ export async function materializePaperworkActionAction(input: {
   const gate = await paperworkScope();
   if (!gate.ok) return gate;
   const { ctx, supabase } = gate;
+  // Guests are view-only (roles.ts, 0464), as addPaperworkAction, the capture
+  // and the link routes already refuse them: settling a slip is a write too.
+  if (ctx.active.role === 'guest') return { ok: false, error: tr('actionRefusal.notAllowed') };
 
   // A refused read returned here as silently as a missing item, so "Add to
   // calendar" did nothing and said nothing; every other failure in this
@@ -250,6 +253,9 @@ export async function draftPaperworkReplyAction(itemId: string): Promise<DraftRe
   const gate = await paperworkScope();
   if (!gate.ok) return gate;
   const { ctx, supabase } = gate;
+  // Guests are view-only (roles.ts, 0464), as addPaperworkAction, the capture
+  // and the link routes already refuse them: settling a slip is a write too.
+  if (ctx.active.role === 'guest') return { ok: false, error: tr('actionRefusal.notAllowed') };
 
   // Reaches a paid provider, so it carries the same budget as every API route
   // that does and as the inbox intake. Audit C3-S4-01.
@@ -338,6 +344,9 @@ export async function setPaperworkStatusAction(input: {
   const gate = await paperworkScope();
   if (!gate.ok) return gate;
   const { ctx, supabase } = gate;
+  // Guests are view-only (roles.ts, 0464), as addPaperworkAction, the capture
+  // and the link routes already refuse them: settling a slip is a write too.
+  if (ctx.active.role === 'guest') return { ok: false, error: tr('actionRefusal.notAllowed') };
   // Marking a permission slip done is the one action that takes it out of the
   // deadline inbox C1-S9-30 had to stop lying about. A silent no-op leaves the
   // parent believing it is handled while the item keeps its deadline.
