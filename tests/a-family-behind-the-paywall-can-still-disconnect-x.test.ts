@@ -26,16 +26,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { allByName, byName, click, has, nodes, render, settle } from './helpers/module-harness';
 import { resetHookSlots } from './helpers/hook-slots';
-import { buildAppLockConfig, unlockKey } from '@/lib/security/app-lock';
+import { rateLimitHit } from './helpers/rate-limit-rpc';
+import { buildAppLockConfig } from '@/lib/security/app-lock';
+import { APP_UNLOCK_COOKIE } from '@/lib/security/app-lock-server';
 
 const h = await vi.hoisted(async () => (await import('./helpers/module-state')).createModuleState());
 const server = vi.hoisted(() => ({
   db: null as unknown,
   ctx: null as unknown as { user: { id: string; email: string | null }; memberships: unknown[]; active: Record<string, unknown> & { familyId: string } },
+  /** This browser's cookies, where the server sets an App Lock unlock. */
+  jar: new Map<string, string>(),
 }));
 
 vi.mock('react', async (original) => (await import('./helpers/hook-slots')).withHookSlots(await original<object>(), h.hooks));
-vi.mock('@/components/ui/toast', async () => (await import('./helpers/module-harness')).toastModule(h));
+vi.mock('@/components/ui/toast', async () => ({ ...(await import('./helpers/module-harness')).toastModule(h), ToastProvider: ({ children }: { children: ReactNode }) => children }));
 vi.mock('@/components/i18n/locale-provider', async () => ({
   ...(await import('./helpers/module-harness')).localeProviderModule(h),
   FamilyTimeZoneProvider: ({ children }: { children: ReactNode }) => children,
@@ -48,7 +52,8 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push() {}, replace() {}, refresh() {} }),
 }));
 vi.mock('@/components/auth/sign-out-form', () => ({
-  SignOutForm: ({ children }: { children: (s: { signingOut: boolean }) => unknown }) => children({ signingOut: false }),
+  SignOutForm: ({ children }: { children: ReactNode | ((s: { signingOut: boolean }) => ReactNode) }) =>
+    typeof children === 'function' ? children({ signingOut: false }) : children,
 }));
 // The gates' own actions are not what this is about.
 vi.mock('@/app/(app)/account/actions', () => ({
@@ -59,7 +64,13 @@ vi.mock('@/app/(app)/actions', () => ({ setActiveFamilyAction: async () => ({ ok
 
 // The server side: the layout's surroundings, and what the disconnect action needs.
 vi.mock('next/cache', () => ({ revalidatePath() {} }));
-vi.mock('next/headers', () => ({ cookies: async () => ({ set() {} }) }));
+vi.mock('next/headers', () => ({
+  cookies: async () => ({
+    get: (name: string) => (server.jar.has(name) ? { name, value: server.jar.get(name)! } : undefined),
+    set: (name: string, value: string) => { server.jar.set(name, value); },
+    delete: (arg: string | { name: string }) => { server.jar.delete(typeof arg === 'string' ? arg : arg.name); },
+  }),
+}));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => server.db, createServiceClient: () => server.db }));
 vi.mock('@/lib/supabase/auth', () => ({
   isSuperAdmin: async () => false,
@@ -74,8 +85,19 @@ vi.mock('@/lib/server/family-time-zone', () => ({ activeFamilyTimeZone: async ()
 vi.mock('@/components/i18n/scoped-locale-provider', () => ({ ScopedLocaleProvider: ({ children }: { children: ReactNode }) => children }));
 vi.mock('@/components/ui/confirm', () => ({ ConfirmProvider: ({ children }: { children: ReactNode }) => children }));
 vi.mock('@/components/auth/session-keeper', () => ({ SessionKeeper: () => null }));
-// AppLockGate is the REAL lock screen: the card inside the gate waits for the
-// PIN (N2-R1-APPLOCK, below).
+// App Lock is decided on the server (the layout, against the REAL private
+// store, lib/security/app-lock-store.ts, over the in-memory database), and
+// AppLockGate is the REAL lock screen, posting the PIN to the REAL
+// unlockAppAction: the card inside the gate waits for the PIN
+// (N2-R1-APPLOCK, below). AppLockBoundary's own lifecycle (retiring a page
+// already delivered, cross-tab locks) has its browser suite
+// (tests/e2e/app-lock-browser-boundary.spec.ts); here it is what it draws on
+// the server's word: the lock screen while locked, the children otherwise.
+vi.mock('@/components/app/app-lock-boundary', async () => {
+  const { createElement } = await import('react');
+  const { AppLockGate } = await import('@/components/app/app-lock-gate');
+  return { AppLockBoundary: ({ locked, children }: { locked: boolean; children?: ReactNode }) => (locked ? createElement(AppLockGate) : children) };
+});
 
 const { default: AppGroupLayout } = await import('@/app/(app)/layout');
 
@@ -92,7 +114,10 @@ const stamps = { created_at: '2026-06-01T00:00:00.000Z', updated_at: '2026-06-01
  * 1 September, and the Basic plan it bought was cancelled, so it is locked.
  */
 function household(who: Who, family: Record<string, unknown> = {}): InMemorySupabase {
-  const db = createInMemorySupabase({ userId: USERS[who], maxRows: 1000 });
+  const db = createInMemorySupabase({ userId: USERS[who], maxRows: 1000, rpc: { rate_limit_hit: rateLimitHit } });
+  // The browser's auth session, whose id an App Lock unlock is bound to.
+  const token = `header.${Buffer.from(JSON.stringify({ sub: USERS[who], session_id: crypto.randomUUID() })).toString('base64url')}.signature`;
+  Object.assign(db.auth, { getSession: async () => ({ data: { session: { access_token: token } }, error: null }) });
   db.seed('families', [{ id: FAMILY, name: 'Rivera household', timezone: 'UTC', trial_ends_at: '2026-09-01T00:00:00.000Z', closed_at: null, ...family }]);
   db.seed('subscriptions', [{ id: 's-1', family_id: FAMILY, plan: 'basic', status: 'canceled', current_period_end: '2026-10-01T00:00:00.000Z' }]);
   db.seed('family_members', [
@@ -121,27 +146,30 @@ function withConnectedX(db: InMemorySupabase): InMemorySupabase {
   }]);
   return db;
 }
-/** This tab's sessionStorage, where the lock screen records an unlock. */
-const session = new Map<string, string>();
 const PIN = '4821';
-/** The parent set an App Lock PIN (Settings, Security), kept in notification_prefs.appLock. */
+/** The parent set an App Lock PIN (Settings, Security), kept in the server's private store. */
 async function withAppLock(db: InMemorySupabase, enabled = true): Promise<InMemorySupabase> {
-  db.seed('user_preferences', [{ user_id: USERS.parent, notification_prefs: { appLock: { ...(await buildAppLockConfig(PIN)), enabled } } }]);
+  const { salt, hash } = await buildAppLockConfig(PIN);
+  db.seed('app_lock_credentials', [{ user_id: USERS.parent, enabled, salt, hash, revision: crypto.randomUUID() }]);
   return db;
 }
 const LOCK_SCREEN = 'Enter your PIN';
-/** Type the PIN on the real lock screen's keypad and wait for it to be checked. */
+const reload = vi.fn();
+/**
+ * Type the PIN on the real lock screen's keypad, wait for the server to check
+ * it, and open the fresh document a right PIN opens: the server renders the
+ * layout again, now with this browser's unlock.
+ */
 async function enterPin(element: ReactElement, pin: string): Promise<ReactNode> {
   let tree = render(h.hooks, element);
   for (const digit of pin) {
     await click(byName(tree, digit, 'button'));
     tree = render(h.hooks, element);
   }
-  for (let tick = 0; tick < 50 && has(tree, LOCK_SCREEN); tick++) {
-    await settle();
-    tree = render(h.hooks, element);
-  }
-  return tree;
+  for (let tick = 0; tick < 50 && reload.mock.calls.length === 0; tick++) await settle();
+  expect(reload, 'a right PIN opens a fresh document').toHaveBeenCalledTimes(1);
+  resetHookSlots(h.hooks);
+  return (await screen()).tree;
 }
 const token = (db: InMemorySupabase) => db.table('social_account_tokens').find((row) => row.id === X_ACCOUNT)!;
 const account = (db: InMemorySupabase) => db.table('social_accounts').find((row) => row.id === X_ACCOUNT)!;
@@ -163,9 +191,12 @@ async function resolveServer(node: ReactNode): Promise<ReactNode> {
 /** The (app) layout over every route, as the signed-in member sees it. */
 async function screen() {
   const element = (await resolveServer(await AppGroupLayout({ children: THE_APP }))) as ReactElement;
+  // What the server hands the browser: every prop of every client component
+  // is serialised into the payload, drawn or not.
+  const payload = JSON.stringify(element);
   const tree = render(h.hooks, element);
   const gates = nodes(tree).filter((node) => node.props.role === 'dialog');
-  return { tree, element, gated: gates.length > 0, showsApp: has(tree, THE_APP) };
+  return { tree, element, gated: gates.length > 0, showsApp: has(tree, THE_APP), sent: (value: string) => payload.includes(value) };
 }
 
 beforeEach(() => {
@@ -174,9 +205,9 @@ beforeEach(() => {
   resetHookSlots(h.hooks);
   h.toasts = { success: [], error: [] };
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  vi.stubGlobal('window', { confirm: () => true, location: { assign() {}, reload() {}, pathname: '/home', search: '' }, addEventListener() {}, removeEventListener() {} });
-  session.clear();
-  vi.stubGlobal('sessionStorage', { getItem: (key: string) => session.get(key) ?? null, setItem: (key: string, value: string) => { session.set(key, value); } });
+  reload.mockReset();
+  vi.stubGlobal('window', { confirm: () => true, location: { assign() {}, reload, replace() {}, pathname: '/home', search: '' }, addEventListener() {}, removeEventListener() {} });
+  server.jar.clear();
 });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
@@ -267,11 +298,11 @@ describe('a closed family with X still connected', () => {
 });
 
 // household-roles N2-R1-APPLOCK, round 3. The card is drawn inside either gate,
-// and either gate returned before the user_preferences read that decides App
-// Lock, so a parent who set a PIN had the accounts' names, statuses and last
-// errors, and a working Disconnect that deletes the family's X tokens, shown to
-// anyone holding the signed-in device. The card now waits behind the PIN like
-// the rest of the app.
+// and either gate returned before the read that decided App Lock, so a parent
+// who set a PIN had the accounts' names, statuses and last errors, and a
+// working Disconnect that deletes the family's X tokens, shown to anyone
+// holding the signed-in device. The card waits behind the PIN like the rest of
+// the app.
 //
 // N3-R1-APPLOCK-FOCUS, round 4: round 3 drew the lock INSIDE the gate, a modal
 // dialog in a modal dialog, and the gate's focus trap won: focus began on
@@ -279,11 +310,23 @@ describe('a closed family with X still connected', () => {
 // (tests/e2e/the-lock-screen-is-the-one-dialog-over-the-gate.spec.ts drives it
 // in Chromium). One dialog at a time: while locked, the lock is drawn in place
 // of the gate, and the gate, with the accounts, once the PIN is in.
+//
+// Both now hold through main's server-side App Lock (4569189e0, 81ca007b4):
+// the layout reads the private lock record before billing, and a locked
+// browser is sent the lock screen alone, the gate and its card included; the
+// PIN is checked by unlockAppAction, which sets this browser's unlock cookie,
+// and the fresh document after it is the gate with its accounts. A lock record
+// that cannot be read withholds the whole app, the gate and its card with it.
 const dialogs = (tree: ReactNode) => nodes(tree).filter((node) => node.props.role === 'dialog').map((node) => node.props['aria-labelledby']);
+const LOCK_UNAVAILABLE = 'We could not confirm your lock settings';
+/** The paywall's trialEndsAt prop: on the payload whenever the paywall is. */
+const TRIAL_ENDED = '2026-09-01T00:00:00.000Z';
 describe('a parent who set an App Lock PIN, behind the gate, with X still connected', () => {
   it('meets the lock in place of the paywall: no plan, no account and no Disconnect until the PIN is entered', async () => {
     const db = await withAppLock(withConnectedX(household('parent')));
-    const { tree, element } = await screen();
+    const { tree, element, sent } = await screen();
+    expect(sent('Rivera fair on X'), 'nothing of the card is sent to a locked browser').toBe(false);
+    expect(sent(TRIAL_ENDED), 'nor of the paywall').toBe(false);
     expect(dialogs(tree), 'one dialog: the lock').toEqual(['app-lock-title']);
     expect(has(tree, LOCK_SCREEN)).toBe(true);
     expect(has(tree, 'Your free trial has ended'), 'nothing of the paywall is behind the lock').toBe(false);
@@ -293,7 +336,7 @@ describe('a parent who set an App Lock PIN, behind the gate, with X still connec
     expect(allByName(tree, 'Disconnect', 'button')).toHaveLength(0);
 
     const unlocked = await enterPin(element, PIN);
-    expect(session.get(unlockKey(USERS.parent))).toBe('1');
+    expect(server.jar.get(APP_UNLOCK_COOKIE), 'the server set this browser an unlock for this member').toMatch(new RegExp(`^v2\\.${USERS.parent}\\.`));
     expect(has(unlocked, LOCK_SCREEN)).toBe(false);
     expect(dialogs(unlocked)).toEqual(['paywall-title']);
     expect(has(unlocked, 'Your free trial has ended')).toBe(true);
@@ -305,7 +348,9 @@ describe('a parent who set an App Lock PIN, behind the gate, with X still connec
 
   it('meets the lock in place of the closed-account gate the same way, and the gate with its accounts after the PIN', async () => {
     const db = await withAppLock(withConnectedX(household('parent', { closed_at: '2026-10-01T09:00:00.000Z' })));
-    const { tree, element } = await screen();
+    const { tree, element, sent } = await screen();
+    expect(sent('Rivera fair on X'), 'nothing of the card is sent to a locked browser').toBe(false);
+    expect(sent('canReopen'), 'nor of the closed-account gate').toBe(false);
     expect(dialogs(tree), 'one dialog: the lock').toEqual(['app-lock-title']);
     expect(has(tree, LOCK_SCREEN)).toBe(true);
     expect(has(tree, 'Your account is closed'), 'nothing of the gate is behind the lock').toBe(false);
@@ -322,33 +367,48 @@ describe('a parent who set an App Lock PIN, behind the gate, with X still connec
     expect(token(db)).toMatchObject({ access_token_enc: null, refresh_token_enc: null });
   });
 
-  it('is shown the accounts at once in a session already unlocked with the PIN', async () => {
+  it('a wrong PIN leaves the lock alone on the page, and nothing of the gate (control)', async () => {
     await withAppLock(withConnectedX(household('parent')));
-    session.set(unlockKey(USERS.parent), '1');
+    const { element } = await screen();
+    let tree = render(h.hooks, element);
+    for (const digit of '0000') {
+      await click(byName(tree, digit, 'button'));
+      tree = render(h.hooks, element);
+    }
+    for (let tick = 0; tick < 5; tick++) await settle();
+    tree = render(h.hooks, element);
+    expect(reload).not.toHaveBeenCalled();
+    expect(server.jar.has(APP_UNLOCK_COOKIE)).toBe(false);
+    expect(dialogs(tree)).toEqual(['app-lock-title']);
+    expect(has(tree, 'Rivera fair on X')).toBe(false);
+  });
+
+  it('is shown the accounts at once in a browser already unlocked with the PIN', async () => {
+    await withAppLock(withConnectedX(household('parent')));
+    const { unlockAppAction } = await import('@/app/(app)/settings/app-lock-actions');
+    expect(await unlockAppAction(PIN)).toEqual({ ok: true });
     const { tree } = await screen();
     expect(has(tree, LOCK_SCREEN)).toBe(false);
     expect(has(tree, 'Rivera fair on X')).toBe(true);
     expect(allByName(tree, 'Disconnect', 'button')).toHaveLength(1);
   });
 
-  it('when the lock setting cannot be read, is shown the gate and leaves the accounts out (closed, as the app is)', async () => {
+  it('when the lock setting cannot be read, is shown neither the gate nor the accounts: the app is withheld (closed)', async () => {
     const db = await withAppLock(withConnectedX(household('parent')));
-    // The read is refused at its terminal. (withFaults answers at `then`, and
-    // `.maybeSingle()` hands back its own promise, so a fault set through it
-    // never fired here, and with the lock drawn over the card this case passed
-    // without the read failing at all.)
+    // The private store's read is refused at its terminal.
     const from = db.from.bind(db);
     db.from = ((table: string) => {
-      if (table !== 'user_preferences') return from(table);
-      const refused = { select: () => refused, eq: () => refused,
-        maybeSingle: async () => ({ data: null, error: { message: 'permission denied for table user_preferences', code: '42501' } }) };
+      if (table !== 'app_lock_credentials') return from(table);
+      const refused = { select: () => refused, eq: () => refused, abortSignal: () => refused,
+        maybeSingle: async () => ({ data: null, error: { message: 'permission denied for table app_lock_credentials', code: '42501' } }) };
       return refused;
     }) as typeof db.from;
-    const { tree, gated } = await screen();
-    expect(gated).toBe(true);
-    expect(dialogs(tree), 'the gate, with no lock: there is no PIN to check').toEqual(['paywall-title']);
+    const { tree, gated, showsApp } = await screen();
+    expect(gated, 'no dialog: there is no PIN to check, and no gate to show').toBe(false);
+    expect(showsApp).toBe(false);
+    expect(has(tree, LOCK_UNAVAILABLE)).toBe(true);
     expect(has(tree, LOCK_SCREEN)).toBe(false);
-    expect(has(tree, 'Your free trial has ended')).toBe(true);
+    expect(has(tree, 'Your free trial has ended')).toBe(false);
     expect(has(tree, 'Rivera fair on X')).toBe(false);
     expect(has(tree, LEFT_CONNECTED)).toBe(false);
     expect(allByName(tree, 'Disconnect', 'button')).toHaveLength(0);
@@ -362,11 +422,20 @@ describe('a parent who set an App Lock PIN, behind the gate, with X still connec
     expect(allByName(tree, 'Disconnect', 'button')).toHaveLength(1);
   });
 
+  it('with nothing left connected still meets the lock first: the gate itself is behind the PIN', async () => {
+    await withAppLock(household('parent'));
+    const { tree, sent } = await screen();
+    expect(sent(TRIAL_ENDED), 'nothing of the paywall is sent to a locked browser').toBe(false);
+    expect(dialogs(tree)).toEqual(['app-lock-title']);
+    expect(has(tree, 'Your free trial has ended')).toBe(false);
+  });
+
   it('with an active plan gets the app behind its lock, as before (control)', async () => {
     const db = await withAppLock(withConnectedX(household('parent')));
     db.table('subscriptions')[0].status = 'active';
-    const { tree, showsApp } = await screen();
+    const { tree, showsApp, sent } = await screen();
     expect(has(tree, LOCK_SCREEN)).toBe(true);
     expect(showsApp).toBe(false);
+    expect(sent(THE_APP), 'the app does not ride along under the lock').toBe(false);
   });
 });
