@@ -19,6 +19,8 @@ interface PhoneInputProps {
   defaultLocalNumber?: string;
   /** Called whenever the E.164 value or dial code changes */
   onChange?: (e164: string, dialCode: string, countryCode: string) => void;
+  /** Focus the number field on mount, for a form the person just asked for. */
+  autoFocus?: boolean;
   className?: string;
 }
 
@@ -27,6 +29,7 @@ export function PhoneInput({
   defaultDialCode,
   defaultLocalNumber = '',
   onChange,
+  autoFocus,
   className,
 }: PhoneInputProps) {
   const tr = useTranslations();
@@ -145,6 +148,7 @@ export function PhoneInput({
           placeholder={country.format}
           className="flex-1 bg-transparent px-3 text-sm text-fg placeholder:text-muted outline-none"
           aria-label={tr('phoneInput.phoneNumber')}
+          autoFocus={autoFocus}
         />
       </div>
 

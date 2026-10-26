@@ -192,7 +192,9 @@ export function PhoneAuth({ next = '/onboarding', onBack }: { next?: string; onB
           <h2 className="text-lg font-semibold">{t('phoneAuth.whatRsquoSYourPhoneNumber')}</h2>
           <p className="mt-0.5 text-sm text-muted">{t('phoneAuth.weRsquoLlTextYouA')}</p>
         </div>
-        <PhoneInput defaultCountryCode="US" onChange={changePhone} />
+        {/* Shown only after "Continue with phone" or "use a different number":
+            focus follows the person into it instead of falling to the page. */}
+        <PhoneInput defaultCountryCode="US" onChange={changePhone} autoFocus />
         <Button className="w-full" loading={sending} disabled={!isLikelyE164(phone)} onClick={() => send(false)}>
           {t('phoneAuth.continue')}
         </Button>

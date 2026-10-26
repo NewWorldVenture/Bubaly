@@ -115,6 +115,40 @@ test.describe('the country picker', () => {
   });
 });
 
+// The phone sign-in form replaces the button that opens it. With a screen
+// reader (Orca on Chromium) "Continue with phone" left focus on the page
+// itself ("Log in · Bubaly document web"), and Back did the same. Focus now
+// goes to the number field, and Back returns it to the button that opened the
+// form (on sign-up, to "Continue without email" when that opened it).
+test.describe('the phone sign-in form', () => {
+  test('on log-in, opening it focuses the number field and Back returns focus to its button', async ({ page }) => {
+    await page.goto('/login', { waitUntil: 'networkidle' });
+    const open = page.getByRole('button', { name: 'Continue with phone' });
+    await expect(open).toBeEnabled();
+    await open.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('textbox', { name: 'Phone number' })).toBeFocused();
+    await page.getByRole('button', { name: 'Back', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('textbox', { name: 'Phone number' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Continue with phone' })).toBeFocused();
+  });
+
+  test('on sign-up, Back returns focus to whichever button opened it', async ({ page }) => {
+    await page.goto('/signup', { waitUntil: 'networkidle' });
+    for (const name of ['Continue with phone', 'Continue without email']) {
+      const open = page.getByRole('button', { name, exact: true });
+      await expect(open).toBeEnabled();
+      await open.focus();
+      await page.keyboard.press('Enter');
+      await expect(page.getByRole('textbox', { name: 'Phone number' }), name).toBeFocused();
+      await page.getByRole('button', { name: 'Back', exact: true }).focus();
+      await page.keyboard.press('Enter');
+      await expect(page.getByRole('button', { name, exact: true }), name).toBeFocused();
+    }
+  });
+});
+
 function sourceString(file: string, pattern: RegExp, what: string): string {
   const m = readFileSync(file, 'utf8').match(pattern);
   if (!m) throw new Error(`${what} not found in ${file}`);
