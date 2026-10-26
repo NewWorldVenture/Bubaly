@@ -206,6 +206,78 @@ describe('the console builds only workflows a runner runs', () => {
   });
 });
 
+// The app fires three event triggers the builder does not offer:
+// onboarding_completed (app/onboarding/actions.ts), onboarding_abandoned and
+// demo_abandoned (app/api/cron/journey-recovery). An active workflow on one of
+// them sends (docs/onboarding-supabase.md tells operators to switch the
+// onboarding welcome on). Their runnability was decided on the builder's list,
+// so such a workflow, once paused, could not be switched back on, and its card
+// said nothing in it runs while it emailed every family. demo_started has no
+// caller: nothing fires it, so nothing in a workflow on it runs.
+describe('an event trigger the app fires, though the builder does not offer it', () => {
+  const welcome = (trigger: 'onboarding_completed' | 'onboarding_abandoned' | 'demo_abandoned', who: string) =>
+    fireAutomationEvent(db as unknown as DB, { trigger, email: `${who}@example.com`, subjectKey: `${trigger}:${who}` });
+
+  it.each(['onboarding_completed', 'onboarding_abandoned', 'demo_abandoned'] as const)(
+    'a paused %s email workflow can be switched back on, and the next event sends again',
+    async (trigger) => {
+      workflow(trigger, [{ action: 'send_email', subject: 'Welcome' }]);
+      expect(await welcome(trigger, 'first')).toMatchObject({ workflows: 1, emails: 1 });
+
+      await actions.setAutomationStatus(form({ id: 'wf-1', status: 'paused' }));
+      expect(flow().status).toBe('paused');
+      expect(await welcome(trigger, 'while-paused'), 'a paused workflow sent').toMatchObject({ workflows: 0, emails: 0 });
+
+      await expect(actions.setAutomationStatus(form({ id: 'wf-1', status: 'active' })), 'resuming it was refused').resolves.toBeUndefined();
+      expect(flow().status, 'the workflow stayed paused for good').toBe('active');
+      expect(await welcome(trigger, 'after-resume')).toMatchObject({ workflows: 1, emails: 1, failures: 0, unrunnable: 0 });
+      expect(h.sent).toEqual([
+        { to: 'first@example.com', subject: 'Welcome' },
+        { to: 'after-resume@example.com', subject: 'Welcome' },
+      ]);
+    },
+  );
+
+  it('control: a draft on demo_started, which nothing fires, is still not switched on', async () => {
+    workflow('demo_started', [{ action: 'send_email' }], 'draft');
+    await expect(actions.setAutomationStatus(form({ id: 'wf-1', status: 'active' }))).rejects.toThrow();
+    expect(flow().status).toBe('draft');
+  });
+
+  it('the cards say what the runners do: a fired trigger runs, demo_started does not', async () => {
+    db.seed('marketing_automation_workflows', [
+      { id: 'wf-welcome', name: 'Welcome', trigger: 'onboarding_completed', status: 'active', deleted_at: null, run_count: 0, created_at: iso(1), steps: [{ action: 'send_email' }] },
+      { id: 'wf-recover', name: 'Recover', trigger: 'onboarding_abandoned', status: 'active', deleted_at: null, run_count: 0, created_at: iso(2), steps: [{ action: 'send_email' }, { action: 'apply_tag' }] },
+      { id: 'wf-paused', name: 'Resting', trigger: 'demo_abandoned', status: 'paused', deleted_at: null, run_count: 0, created_at: iso(3), steps: [{ action: 'send_email' }] },
+      { id: 'wf-demo', name: 'Demo', trigger: 'demo_started', status: 'active', deleted_at: null, run_count: 0, created_at: iso(4), steps: [{ action: 'send_email' }] },
+    ]);
+    const { default: AutomationPage } = await import('@/app/(app)/admin/marketing/automation/page');
+    // Newest first: Welcome, Recover, Resting, Demo.
+    const text = textOf(await renderServerPage(await AutomationPage()));
+    const start = (name: string, status: string) => {
+      const index = text.indexOf(`${name} ${status}`);
+      if (index < 0) throw new Error(`no card for ${name}`);
+      return index;
+    };
+    const welcomeCard = text.slice(start('Welcome', 'active'), start('Recover', 'active'));
+    const recoverCard = text.slice(start('Recover', 'active'), start('Resting', 'paused'));
+    const restingCard = text.slice(start('Resting', 'paused'), start('Demo', 'active'));
+    const demoCard = text.slice(start('Demo', 'active'));
+    // It emails every family that finishes onboarding: no warning at all.
+    for (const key of ['activeNothingRuns', 'notRunnable']) {
+      expect(welcomeCard, `the welcome card says ${key}`).not.toContain(m(`adminMarketingAutomation.${key}`));
+    }
+    expect(welcomeCard).not.toContain(m('adminMarketingAutomation.activeOnlyEmailRuns', { steps: '' }).split(':')[0]);
+    // Its email runs; only the tag is skipped.
+    expect(recoverCard).toContain(m('adminMarketingAutomation.activeOnlyEmailRuns', { steps: 'apply tag' }));
+    expect(recoverCard).not.toContain(m('adminMarketingAutomation.activeNothingRuns'));
+    // Paused, it can be switched back on: not "cannot be turned on".
+    expect(restingCard).not.toContain(m('adminMarketingAutomation.notRunnable'));
+    // Control: nothing fires demo_started, so nothing in it runs.
+    expect(demoCard).toContain(m('adminMarketingAutomation.activeNothingRuns'));
+  });
+});
+
 describe('a workflow with a step no runner executes', () => {
   it('mails the family once, records the step honestly, and is not re-failed every day', async () => {
     family('fam-new', { subscribedDaysAgo: 5 });

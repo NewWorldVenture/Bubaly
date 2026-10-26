@@ -34,6 +34,8 @@ export const RUNNABLE_ACTIONS = ['send_email'] as const;
  * app event (EVENT_TRIGGERS above). Not `joins_segment`, which nothing fires,
  * and not `customer_inactive`, whose rule needs an activity signal the
  * customer view does not have (lib/marketing/customers.ts `activityKnown`).
+ * This is what the builder offers; whether a workflow can run is decided on
+ * FIRED_TRIGGERS below, which also holds the app events the builder does not.
  */
 export const CONSOLE_TRIGGERS = [
   'customer_created', 'form_submitted', 'payment_completed', 'payment_failed',
@@ -41,12 +43,31 @@ export const CONSOLE_TRIGGERS = [
 ] as const;
 
 /**
+ * Every trigger something fires: the console's, and the app events the builder
+ * does not offer — onboarding_completed (app/onboarding/actions.ts),
+ * onboarding_abandoned and demo_abandoned (app/api/cron/journey-recovery).
+ * fireAutomationEvent runs any active workflow on them, and the onboarding
+ * welcome is one operators are told to switch on (docs/onboarding-supabase.md).
+ * Deciding runnability on CONSOLE_TRIGGERS refused to resume such a workflow
+ * once paused, and its card said nothing in it runs while it emailed every
+ * family. Not `demo_started`, which nothing fires.
+ */
+export const FIRED_TRIGGERS = [
+  ...CONSOLE_TRIGGERS, 'onboarding_completed', 'onboarding_abandoned', 'demo_abandoned',
+] as const;
+
+/** Whether something fires this trigger (FIRED_TRIGGERS), so a workflow on it can run at all. */
+export function triggerFires(trigger: string): boolean {
+  return (FIRED_TRIGGERS as readonly string[]).includes(trigger);
+}
+
+/**
  * Whether a workflow does everything it says: a trigger something fires and
  * only steps a runner executes. One that does not is refused activation — it
  * read `active` in the console while it sent nothing, or never ran at all.
  */
 export function workflowIsRunnable(trigger: string, steps: unknown): boolean {
-  if (!(CONSOLE_TRIGGERS as readonly string[]).includes(trigger)) return false;
+  if (!triggerFires(trigger)) return false;
   return stepsAreRunnable(steps);
 }
 

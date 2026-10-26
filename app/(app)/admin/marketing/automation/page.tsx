@@ -7,7 +7,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { createAutomation, setAutomationStatus } from '../actions';
 import { getTranslations } from '@/lib/i18n/server';
 import { SubmitButton } from '@/components/ui/submit-button';
-import { CONSOLE_TRIGGERS, RUNNABLE_ACTIONS, hasRunnableStep, isRunnableStep, workflowIsRunnable } from '@/lib/marketing/automation-triggers';
+import { CONSOLE_TRIGGERS, RUNNABLE_ACTIONS, hasRunnableStep, isRunnableStep, triggerFires, workflowIsRunnable } from '@/lib/marketing/automation-triggers';
 
 export const metadata: Metadata = { title: 'Marketing · Automation', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -96,15 +96,17 @@ export default async function AutomationPage() {
  * it. One that is not active cannot be switched on (setAutomationStatus). One
  * switched on before that rule is still active, and the runners neither stop
  * it nor fail it: its email steps send and the rest are recorded unsupported,
- * or, when nothing in it would run (or its trigger is not one the console
- * offers, so nothing fires it), it is skipped whole (automation-runner.ts).
+ * or, when nothing in it would run (or nothing fires its trigger), it is
+ * skipped whole (automation-runner.ts). Whether a trigger fires is
+ * FIRED_TRIGGERS, not the builder's list: the app fires onboarding_completed,
+ * onboarding_abandoned and demo_abandoned too, and a workflow on one of them
+ * sends.
  * Telling the admin such a workflow "cannot be turned on" beside its Active
  * badge described neither.
  */
 function notRunnableNote(tr: Awaited<ReturnType<typeof getTranslations>>, status: string, trigger: string, steps: unknown): string {
   if (status !== 'active') return tr('adminMarketingAutomation.notRunnable');
-  const fires = (CONSOLE_TRIGGERS as readonly string[]).includes(trigger);
-  if (!fires || !hasRunnableStep(steps)) return tr('adminMarketingAutomation.activeNothingRuns');
+  if (!triggerFires(trigger) || !hasRunnableStep(steps)) return tr('adminMarketingAutomation.activeNothingRuns');
   const skipped = (steps as unknown[]).filter((step) => !isRunnableStep(step))
     .map((step) => String((step as { action?: unknown } | null)?.action ?? 'step').replace(/_/g, ' '));
   return tr('adminMarketingAutomation.activeOnlyEmailRuns', { steps: skipped.join(', ') });
