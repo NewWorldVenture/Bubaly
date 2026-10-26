@@ -26,8 +26,9 @@ export const SENSITIVE_MEMORY_CATEGORIES: FactCategory[] = ['medical', 'account'
 // Stems carry `\w*` and nouns their plural: the closing `\b` used to sit
 // straight after `diagnos`, `therap` and `pregnan`, so none of them ever
 // matched a real word ("diagnosis", "therapist", "pregnant"), and "passwords"
-// or "medications" slipped past as non-sensitive.
-const SENSITIVE_TERMS = /\b(ssn|social security|passport (?:no|numbers?)|passwords?|passcodes?|pin|bank\w*|routing|account numbers?|card numbers?|credit cards?|iban|allerg(?:y|ies|ic)|diagnos\w*|prescriptions?|medications?|therap\w*|hiv|pregnan\w*|salary|salaries)\b/i;
+// or "medications" slipped past as non-sensitive. The verb forms count too:
+// "Prescribed antibiotics on Monday" is a prescription (AI-001).
+const SENSITIVE_TERMS = /\b(ssn|social security|passports? (?:no|numbers?)|passwords?|passcodes?|pins?|bank\w*|routing|account numbers?|card numbers?|credit cards?|iban|allerg(?:y|ies|ic)|diagnos\w*|prescriptions?|prescrib\w*|medications?|therap\w*|hiv|pregnan\w*|salary|salaries)\b/i;
 
 /**
  * True when a memory should not be written by the assistant: the category is

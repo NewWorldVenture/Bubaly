@@ -25,7 +25,7 @@ import { localeContextValue } from './helpers/render-translated';
 // not fire.
 
 type Slot = unknown;
-const mocks = vi.hoisted(() => ({ slots: [] as Slot[], cursor: 0 }));
+const mocks = vi.hoisted(() => ({ slots: [] as Slot[], cursor: 0, effects: [] as (() => void)[] }));
 
 // The component is invoked as a plain function — there is no React dispatcher —
 // so the four hooks it uses are supplied here. Only useState and useRef consume
@@ -51,14 +51,15 @@ vi.mock('react', async (original) => ({
   },
   useCallback: (fn: unknown) => fn,
   useMemo: (factory: () => unknown) => factory(),
-  // Effects do not run in this harness. The two that exist only matter below
-  // lg — useMediaQuery's (it stays false, so this is the desktop stack this
-  // file has always tested) and the queue-mode clock reconcile; the queue is
-  // exercised by tests/toast-mobile-queue.test.ts.
-  useEffect: () => {},
+  // Flush effects after the rendered tree commits: a dismissal clock belongs
+  // to the visible notice, rather than to an uncommitted enqueue.
+  useEffect: (effect: () => void) => { mocks.effects.push(effect); },
   // `useTranslations()` reads a context; hand it the real English catalogue.
   useContext: () => localeContextValue(),
 }));
+// This fixture covers the desktop stack. The mobile media-query lifecycle is
+// exercised with its own explicit mode in toast-mobile-queue.test.ts.
+vi.mock('@/lib/hooks/use-media-query', () => ({ useMediaQuery: () => false }));
 
 const { ToastProvider, LIFETIME } = await import('@/components/ui/toast');
 
@@ -109,6 +110,7 @@ type Api = {
 function render() {
   mocks.cursor = 0;
   const root = (ToastProvider as unknown as (p: { children: ReactNode }) => ReactElement)({ children: null });
+  for (const effect of mocks.effects.splice(0)) effect();
   const api = propsOf(root).value as Api;
   const stack = find(root, (el) => typeof propsOf(el).onMouseEnter === 'function');
   expect(stack, 'the toast stack has no hover handler — nothing can pause it').not.toBeNull();
@@ -135,6 +137,7 @@ function render() {
 beforeEach(() => {
   mocks.slots.length = 0;
   mocks.cursor = 0;
+  mocks.effects.length = 0;
   vi.useFakeTimers();
 });
 afterEach(() => {
@@ -149,6 +152,7 @@ describe('a toast keeps its own clock', () => {
     // being true — if the timer never fired at all — "it survived" would prove
     // nothing.
     render().api.success('Saved');
+    render();
     vi.advanceTimersByTime(LIFETIME.plain - 1);
     expect(render().toasts).toHaveLength(1);
     vi.advanceTimersByTime(1);
@@ -164,6 +168,7 @@ describe('a time limit you can pause', () => {
   it('holds every toast open while the stack is hovered', () => {
     const first = render();
     first.api.success('Note added', { label: 'Undo', onClick: () => {} });
+    render();
     // Nearly out of time, which is exactly when someone reaches for it.
     vi.advanceTimersByTime(LIFETIME.action - 500);
     render().hover();
@@ -176,6 +181,7 @@ describe('a time limit you can pause', () => {
     // after {children}, so they tab the whole page to get here, and the
     // countdown has to stop the moment focus lands — not when a pointer moves.
     render().api.success('Note added', { label: 'Undo', onClick: () => {} });
+    render();
     vi.advanceTimersByTime(LIFETIME.action - 500);
     render().focus();
     vi.advanceTimersByTime(AN_AGE);
@@ -184,6 +190,7 @@ describe('a time limit you can pause', () => {
 
   it('hands back a whole window on release, not the sliver that was left', () => {
     render().api.success('Saved');
+    render();
     vi.advanceTimersByTime(LIFETIME.plain - 100);
     const paused = render();
     paused.hover();

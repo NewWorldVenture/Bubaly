@@ -152,7 +152,7 @@ function GoalCard({ goal, canManage, onFund }: { goal: GoalView; canManage: bool
         </div>
         {canManage && goal.isChildGoal && !reached && (
           <button onClick={onFund}
-            className="flex-shrink-0 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 transition">
+            className="flex-shrink-0 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:brightness-95 transition">
             {t('goals.fund')}
           </button>
         )}

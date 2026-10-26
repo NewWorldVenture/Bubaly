@@ -70,7 +70,7 @@ export function GiftView({ links, pending, childOptions, canManage }: {
                 </div>
                 {canManage && (
                   <div className="flex items-center gap-1">
-                    <button onClick={() => approve(g)} className="flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90"><Check className="h-3.5 w-3.5" />{' '}{t('giftView.approve')}</button>
+                    <button onClick={() => approve(g)} className="flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:brightness-95"><Check className="h-3.5 w-3.5" />{' '}{t('giftView.approve')}</button>
                     <button onClick={() => dismiss(g)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger" aria-label={t('giftView.decline')}><X className="h-3.5 w-3.5" /></button>
                   </div>
                 )}
@@ -138,7 +138,7 @@ function GiftLinkCard({ link }: { link: GiftLinkRow }) {
               <QrCode value={url} size={220} />
             </div>
             <p className="break-all text-center text-[11px] text-muted">{url}</p>
-            <button onClick={copy} className="flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90 transition">
+            <button onClick={copy} className="flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:brightness-95 transition">
               {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} {copied ? 'Copied!' : 'Copy link'}
             </button>
           </div>

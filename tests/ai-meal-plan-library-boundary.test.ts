@@ -16,11 +16,14 @@ vi.mock('@/lib/ai/provider', () => ({ isAIConfigured: async () => true,
 }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
 // The Free plan's AI allowance (N18) has its own cases in
-// tests/the-free-plans-ai-allowance-holds-on-every-helper.test.ts; it admits here.
+// tests/the-free-plans-ai-allowance-holds-on-every-helper.test.ts, and F19's in
+// every-ai-route-counts-against-the-allowance; it admits here.
 vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
   assertAIAccess: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
   assertAIAllowance: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+  refuseOverAIAllowance: async () => null,
+  withinAIAllowance: async () => true,
 }));
 // The route's plan gate (refuseUnlessEntitled, H18) is covered by
 // tests/the-meal-and-recipe-model-endpoints-refuse-like-their-pages.test.ts;

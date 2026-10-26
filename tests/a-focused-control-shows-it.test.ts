@@ -34,7 +34,11 @@ const TEXT_ENTRY = /^(input|textarea)$/;
 // draws nothing; a border has none unless a class gives it one) and a colour
 // that is not transparent or zero alpha; when the focus classes set no colour,
 // the element's own applies. A zero width, none, transparent or a zero alpha
-// anywhere in a property's focus classes cancels that property.
+// anywhere in a property's focus classes cancels that property. A background
+// that changes on focus is not a mark on its own: between neighbouring grounds
+// (surface to elevated) it is close to 1:1, under the 3:1 a focus indicator
+// needs (WCAG 1.4.11). The only focus background in the source, the skip
+// link's, rings as well.
 const NOTHING = /(^|-)(0|none|transparent|inherit|hidden)$|-\[0(px)?\]$|\/0$/;
 const PROPERTY = /^(ring|border|outline|shadow|bg|underline)(?=$|-)/;
 const PLACEMENT = /^(ring|outline|underline)-offset-|^ring-inset$/;
@@ -48,7 +52,7 @@ const colour = (prop: string, c: string) => !WIDTH[prop].test(c) && !STYLE.test(
 
 function paints(focus: string[], own: string[]): boolean {
   const of = (cs: string[], prop: string) => cs.filter((c) => !PLACEMENT.test(c) && c.match(PROPERTY)?.[1] === prop);
-  return ['ring', 'border', 'outline', 'shadow', 'bg', 'underline'].some((prop) => {
+  return ['ring', 'border', 'outline', 'shadow', 'underline'].some((prop) => {
     // outline-none is `outline: 2px solid transparent`: the outline being
     // replaced, and a transparent colour under any outline that sets no other.
     const removed = prop === 'outline' && focus.includes('outline-none') ? ['outline-none'] : [];
@@ -124,23 +128,11 @@ function bareFocus(file: string, src: string): Bare[] {
   return found;
 }
 
-// Text fields that still show only their caret, by file and count: composers,
-// command palettes and admin filters, outside this change. Pinned so the list
-// can only shrink.
-const CARET_ONLY: Record<string, number> = {
-  'components/admin/admin-shell.tsx': 1,
-  'components/admin/filter-bar.tsx': 1,
-  'components/app/command-bar.tsx': 1,
-  'components/dashboard/quick-actions.tsx': 1,
-  'components/modules/assistant-module.tsx': 2,
-  'components/modules/closet-module.tsx': 1,
-  'components/modules/contact-center-module.tsx': 1,
-  'components/modules/meals-module.tsx': 1,
-  'components/modules/messages-module.tsx': 2,
-  'components/modules/weather-module.tsx': 1,
-  'components/ui/phone-input.tsx': 1,
-  'components/wallet/pay-handle-manager.tsx': 1,
-};
+// Text fields that show only their caret, by file and count. There were 14
+// (composers, command palettes, admin and module filters); each now rings
+// while it has focus (see the pins below), so the list is empty and a new
+// caret-only field fails here.
+const CARET_ONLY: Record<string, number> = {};
 
 const files = [...sourceFiles('components'), ...sourceFiles('app')];
 const all = files.flatMap((f) => {
@@ -181,6 +173,25 @@ describe('a focused control shows it', () => {
     expect(fill).not.toMatch(/\bbg-/); // the full-size child paints no background
     // The recipe card is overflow-hidden under a positioned photo: an offset ring was covered on every side.
     expect(src('components/modules/recipes-module.tsx')).toContain(`className="flex flex-1 flex-col p-4 text-left ${INSET}">`);
+    // The text fields that showed only their caret: a bordered box rings outside
+    // itself; a row flush with a clipped panel rings inside; the assistant's
+    // composer turns its own border full brand under its existing glow.
+    const RING_INSET = 'focus-within:ring-2 focus-within:ring-inset focus-within:ring-brand';
+    for (const [f, box] of [
+      ['components/admin/admin-shell.tsx', 'rounded-xl border border-border bg-surface/40 px-3 text-muted'],
+      ['components/admin/filter-bar.tsx', 'rounded-lg border border-border bg-surface/60 px-2.5 text-muted'],
+      ['components/dashboard/quick-actions.tsx', 'rounded-xl border border-border bg-surface/60 px-3 py-2'],
+      ['components/modules/closet-module.tsx', 'rounded-xl border border-border bg-surface/60 px-2 py-1'],
+      ['components/modules/contact-center-module.tsx', 'rounded-lg border border-border bg-bg px-2'],
+      ['components/modules/meals-module.tsx', 'rounded-xl border border-border bg-surface/60 px-3 py-2'],
+      ['components/modules/messages-module.tsx', 'rounded-xl border border-border bg-surface/40 p-2'],
+      ['components/modules/weather-module.tsx', 'rounded-xl border border-border bg-surface/60 px-3'],
+      ['components/wallet/pay-handle-manager.tsx', 'rounded-lg border border-border bg-bg px-2'],
+    ]) expect(src(f), f).toContain(`${box} ${PILL}">`);
+    expect(src('components/app/command-bar.tsx')).toContain(`border-b border-border px-4 ${RING_INSET}">`);
+    expect(src('components/modules/messages-module.tsx')).toContain(`border-b border-border px-4 py-2 ${RING_INSET}">`);
+    expect(src('components/ui/phone-input.tsx')).toContain(`border-b border-border px-3 py-2.5 ${RING_INSET}">`);
+    expect(src('components/modules/assistant-module.tsx').match(/"ai-composer flex items-(end|center) gap-2 border p[xy]?-3 [^"]*focus-within:border-brand /g)).toHaveLength(2);
     // A preset avatar's selection is already a ring, so its focus is an outline outside it.
     expect(src('components/ui/avatar-picker.tsx')).toContain('focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand');
   });
@@ -202,11 +213,14 @@ describe('a focused control shows it', () => {
     expect(scan(`<a className="outline-none ring-transparent focus-visible:ring-2 focus-visible:ring-brand">x</a>`)).toEqual([]);
     expect(scan(`<div className="focus-within:ring-2 focus-within:ring-brand"><input className="outline-none" /></div>`)).toEqual([]);
     expect(scan(`<input className="border border-border outline-none focus:border-brand" />`)).toEqual([]);
+    expect(scan(`<a className="sr-only focus:not-sr-only focus:bg-brand focus:outline-none focus:ring-2 focus:ring-brand">x</a>`)).toEqual([]); // the skip link
   });
 
   it('the scanner: a replacement that paints nothing, or a dialog that is not one, does not count', () => {
     const scan = (jsx: string) => bareFocus('p.tsx', `export const P = ({ open }: any) => (${jsx});`).map((b) => b.tag);
     expect(scan(`<a className="outline-none focus-visible:ring-0">x</a>`)).toEqual(['a']);
+    expect(scan(`<button className="outline-none focus-visible:bg-elevated">x</button>`)).toEqual(['button']); // a background alone
+    expect(scan(`<div className="focus-within:bg-surface"><input className="outline-none" /></div>`)).toEqual(['input']);
     expect(scan(`<a className="outline-none focus-visible:ring-brand">x</a>`)).toEqual(['a']); // a colour, no width
     expect(scan(`<button className="outline-none focus:shadow-none">x</button>`)).toEqual(['button']);
     expect(scan(`<button className="outline-none focus:border-transparent">x</button>`)).toEqual(['button']);

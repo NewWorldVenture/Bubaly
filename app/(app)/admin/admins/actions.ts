@@ -193,6 +193,23 @@ export async function inviteAdminAction(formData: FormData): Promise<ActionResul
   const admin_role = Object.prototype.hasOwnProperty.call(permMap, requestedRole) ? requestedRole : 'administrator';
   const permissions = permMap[admin_role] ?? [];
 
+  // The upsert below is keyed by email, so "inviting" someone already on the
+  // roster rewrites their row — and the invite form is the only place a roster
+  // role is chosen. Invited as Viewer, a current super-admin became a pending
+  // Viewer on the roster and in the audit log, the operator was told it worked,
+  // and their super_admins grant (what actually opens the console) stood
+  // untouched. That is the roster-only demotion the top of this file describes,
+  // reached by the one path that still wrote it. A role without console access
+  // is refused while the person holds console access; deactivate or revoke
+  // removes it first, under its own rules.
+  if (admin_role !== 'super_administrator') {
+    if (isSuperAdminEmail(email)) return { ok: false, error: t('actions.thisAdminIsSetVia') };
+    const { data: grant, error: grantError } = await guarded.supabase.from('super_admins')
+      .select('email').eq('email', email).maybeSingle();
+    if (grantError) return actionFailure('check that admin\'s console access', t('admins.couldNotInviteThatAdmin'), grantError);
+    if (grant) return { ok: false, error: t('actions.removeSuperAdminBeforeChangingRole') };
+  }
+
   const { data: invited, error } = await guarded.supabase.from('admin_users').upsert(
     { email, full_name, admin_role, permissions, status: 'pending' },
     { onConflict: 'email' },

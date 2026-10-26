@@ -11,6 +11,10 @@
 // closed on the same digest reads; the routes now do what they already did for
 // the calendar and the groceries.
 //
+// The daily brief's appointments read was the same: a failed read was briefed
+// as "MEDICAL APPOINTMENTS THIS WEEK: - None" at 200, while the weekly brief
+// already refused on it. It now refuses too.
+//
 // Driven through the REAL routes against an in-memory household, with one
 // table's reads failing each way a read fails.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -103,6 +107,13 @@ const routes = {
 
 const cases = [
   ...(['chore_assignments', 'bills', 'medication_schedules', 'maintenance_tasks', 'home_warranties', 'vacations', 'pantry_items'] as const).map((table) => ['daily', table] as const),
+  // The daily brief bound only `data` from its appointments read too, so a
+  // failed read reached the prompt as "MEDICAL APPOINTMENTS THIS WEEK: - None"
+  // and the brief told the family there was nothing to take a child to.
+  ['daily', 'appointments'] as const,
+  // And its members, school, sports, reminders and meals reads, which the
+  // weekly brief already refuses on (N5): a failed one was "- None".
+  ...(['family_members', 'school_events', 'sports_events', 'reminders', 'meal_plans'] as const).map((table) => ['daily', table] as const),
   // N5: the weekly brief bound only `data` from these, so a failed read was
   // briefed as an empty week ("nothing scheduled", "- none") at 200.
   ...(['chore_assignments', 'calendar_events', 'school_events', 'sports_events', 'appointments', 'meal_plans', 'reminders', 'family_members'] as const)

@@ -28,7 +28,7 @@ export default async function WelcomePage() {
       <div className="mt-8 space-y-3">
         <Link
           href="/signup"
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-4 py-3.5 text-sm font-semibold text-brand-fg shadow-glow transition hover:brightness-110"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 px-4 py-3.5 text-sm font-semibold text-brand-fg shadow-glow transition hover:brightness-95"
         >{t('welcome.getStarted')}{' '}<ArrowRight className="h-4 w-4" />
         </Link>
         <Link

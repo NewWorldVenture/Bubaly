@@ -46,6 +46,8 @@ import { buildHomeBrief } from '@/lib/home/home-brief';
 import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
 import { readDisplayCalendarOccurrences, type CalendarDisplayOccurrence } from '@/lib/calendar/display-occurrences';
 import { projectCalendarDay, projectCalendarWindow } from '@/lib/calendar/consumer-spans';
+import { onMembersDay } from '@/lib/calendar/members-day';
+import { OPEN_HOMEWORK_STATUSES } from '@/lib/homework/board';
 import type { DinnerIdea, DinnerEffort } from '@/lib/onboarding/dinner-ideas';
 import { HomeOutcomeCard } from '@/components/dashboard/home-outcome-card';
 import { buildInsightCandidates, rankInsights, type InsightKind, type InsightSources } from '@/lib/home/insight-of-day';
@@ -55,6 +57,7 @@ import { translate } from '@/lib/i18n/messages';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { dayPhase, phaseGreeting } from '@/lib/home/time-of-day';
 import { readOnOpenGroceryLists } from '@/lib/services/groceries';
+import { inAppHref } from '@/lib/auth/redirect';
 
 function todayLabel(locale: LocaleCode) {
   return new Date().toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' });
@@ -209,9 +212,10 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     supabase.from('documents').select('id, title, expires_at')
       .eq('family_id', familyId).not('expires_at', 'is', null)
       .lte('expires_at', addDaysToDayKey(todayKey, 30)).limit(50),
-    // T4 sources: assignments due TOMORROW that haven't been acknowledged.
+    // T4 sources: assignments due TOMORROW that are not finished — started
+    // work included, as the Homework board counts it.
     supabase.from('homework_assignments').select('title, member_id')
-      .eq('family_id', familyId).eq('status', 'assigned')
+      .eq('family_id', familyId).in('status', OPEN_HOMEWORK_STATUSES)
       .gte('due_at', todayEnd.toISOString())
       .lt('due_at', new Date(todayEnd.getTime() + 86400000).toISOString()).limit(20),
     // T4 sources: dinners planned in the next 7 days (→ how many nights are unplanned).
@@ -234,7 +238,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   let todayEvents: ReturnType<typeof projectCalendarDay<CalendarDisplayOccurrence>> = [];
   let upcomingEvents: ReturnType<typeof projectCalendarWindow<CalendarDisplayOccurrence>> = [];
   let conflictEventRows: ConflictEvent[] = [];
-  const visibleToMember = (event: CalendarDisplayOccurrence) => event.assignee_id === null || event.assignee_id === myMemberId;
+  const visibleToMember = onMembersDay(myMemberId);
   const ownedCalendar = (events: CalendarDisplayOccurrence[]) => {
     if (events.some(event => event.kind === 'native' && event.event.family_id !== familyId)) throw new Error('Calendar family changed');
     return events;
@@ -534,7 +538,9 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
           // source unread now, an old conflict or an old grocery count is not
           // shown as today's insight (a fresh candidate from it is already withheld).
           .filter((r) => (!conflictsUnavailable || r.kind !== 'conflict') && (!groceryUnavailable || r.kind !== 'grocery'))
-          .map((r) => ({ id: r.id, kind: r.kind as InsightKind, title: r.title, detail: r.detail ?? '', href: r.href ?? '/dashboard', impact: r.impact }))
+          // `daily_insights.href` is writable by any family member (0141): a
+          // link that would leave the app is not shown as Bubaly's insight.
+          .map((r) => ({ id: r.id, kind: r.kind as InsightKind, title: r.title, detail: r.detail ?? '', href: inAppHref(r.href) ?? '/dashboard', impact: r.impact }))
         // Anyone else is shown their own reading, never a row's words, under
         // the day's active row of the same kind: its id is what a dismissal
         // marks, and a kind with no active row was dismissed today.

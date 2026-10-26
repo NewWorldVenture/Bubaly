@@ -31,7 +31,7 @@ export const TABLE_HEADING = '### Every page';
  */
 export const LANES = [
   { id: 'PUBLIC', unit: 'A-17', title: 'Public marketing, legal and share pages', test: (f) => f.startsWith('app/(marketing)/') || /^app\/(s|gift|pay|join|reviews|offline)\//.test(f) || f === 'app/page.tsx' },
-  { id: 'AUTH', unit: 'A-03/A-04', title: 'Sign-in, sign-up, kid login, onboarding', test: (f) => f.startsWith('app/(auth)/') || f.startsWith('app/auth/') || f.startsWith('app/(app)/auth/') || f.startsWith('app/onboarding/') },
+  { id: 'AUTH', unit: 'A-03/A-04', title: 'Sign-in, sign-up, kid login, onboarding', test: (f) => f.startsWith('app/(auth)/') || f.startsWith('app/auth/') || f.startsWith('app/(app)/auth/') || f.startsWith('app/onboarding/') || f.startsWith('app/app-lock/') },
   { id: 'ADMIN', unit: 'A-17', title: 'Super-admin console', test: (f) => f.startsWith('app/(app)/admin/') },
   { id: 'MARKETPLACE', unit: 'A-14', title: 'Marketplace', test: (f) => f.startsWith('app/(app)/marketplace/') },
   { id: 'MONEY', unit: 'A-07/A-08/A-09', title: 'Wallet, economy, missions, kids and parent views, billing', test: (f) => /^app\/\(app\)\/(wallet|economy|missions|kids|parent)\//.test(f) || /^app\/\(app\)\/dashboard\/(billing|budget|finances|money[^/]*|subscriptions|bills|savings[^/]*|tax[^/]*|invest[^/]*|allowance[^/]*)(\/|$)/.test(f) },

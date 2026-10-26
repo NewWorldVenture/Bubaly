@@ -27,6 +27,7 @@ import { scopeNow } from '../scope';
 import { getTranslations } from '@/lib/i18n/server';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { REMINDER_NOT_FOUND, requireShownReminder, shownReminders } from './shown';
+import { releaseReminderImage } from '@/lib/reminders/image';
 
 export type FamilyReminder = Tables<'family_reminders'>;
 
@@ -303,13 +304,21 @@ export async function deleteReminder(scope: ServiceScope, reminderId: string): P
     .delete()
     .eq('id', reminderId)
     .eq('family_id', scope.familyId)
-    .select('id, title')
+    .select('id, title, image_url')
     .maybeSingle();
   if (error) {
     console.error('[service:reminders] delete failed', error);
     return fail(describeDbError(error, 'Could not remove that reminder.'), { code: SERVICE_CODES.db });
   }
   if (!data) return fail('That reminder could not be found.', { code: SERVICE_CODES.notFound });
+
+  // Its photo goes with it, after the confirmed delete, unless another
+  // reminder (a recurring one's next occurrence) still shows it: the
+  // family-media bucket serves an object to anyone holding its URL, and this
+  // one's URL was in every member's reads (lib/reminders/image.ts). Logged,
+  // not raised: the reminder is gone either way.
+  const removal = await releaseReminderImage(scope.db, scope.familyId, data.image_url);
+  if (removal.error) console.error('[service:reminders] a deleted reminder\'s photo was kept', { reminderId: data.id }, removal.error);
 
   await recordActivitySafely(scope, { action: 'delete', agent: 'reminders', title: `Removed the reminder "${data.title}"`, href: '/dashboard/reminders' });
   return ok({ id: data.id, title: data.title });

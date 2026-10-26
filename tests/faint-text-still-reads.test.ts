@@ -10,10 +10,9 @@ import { describe, expect, it } from 'vitest';
 // what the class colours — does not fade text-muted below full strength.
 //
 // Icons (capitalised components such as <ChevronRight>) are not text and keep
-// their dimming. The global sidebar (app-shell's nav and free-tier-sidebar) is
-// left exactly as it is: it is not shown at phone width, and it is changed only
-// on the owner's word.
-const LEFT_ALONE = new Set([join('components', 'app', 'app-shell.tsx'), join('components', 'app', 'free-tier-sidebar.tsx')]);
+// their dimming. The global sidebar (app-shell's nav and free-tier-sidebar) was
+// left out of this scan; its headings, counts and locked items are full
+// strength now, so it is scanned like everything else.
 const TEXT_ELEMENT = /<(p|span|li|h[1-6]|code|label|div|time|dd|dt|small|em)\b[^<>]*?className="([^"]*?)"/g;
 const FADED = /(?<![:\w-])text-muted\/(\d+)\b/g;
 
@@ -25,7 +24,7 @@ function files(dir: string): string[] {
 }
 
 describe('faint text still reads', () => {
-  const sources = [...files('app'), ...files('components')].filter((f) => !LEFT_ALONE.has(f));
+  const sources = [...files('app'), ...files('components')];
 
   it('no text element draws text-muted below full strength', () => {
     const faded = sources.flatMap((file) => readFileSync(file, 'utf8').split('\n').flatMap((line, i) =>

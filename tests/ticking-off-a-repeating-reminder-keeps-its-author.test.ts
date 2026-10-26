@@ -12,9 +12,9 @@
 // stays none: an unauthored reminder is a manager's to remove).
 //
 // On the page, a next occurrence that failed to insert still said "Reminder
-// completed": the series ended there and nobody was told. The toolbox already
-// restores the completion in that case (C1-S9-69); the page now does too, and
-// reports the failure.
+// completed": the series ended there and nobody was told. A confirmed
+// completion stays completed; a definite refusal of the next insert is
+// reported as a partial outcome, with no restore or automatic retry.
 import { createElement, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getMessages, translate } from '@/lib/i18n/messages';
@@ -119,22 +119,28 @@ describe('the Reminders page', () => {
     expect(state.inserts[0].created_by).toBeNull();
   });
 
-  it('a next occurrence that failed to save puts the reminder back and says so, instead of "completed"', async () => {
+  it('a definite rejection of the next occurrence keeps completion and reports the partial result', async () => {
     state.insertError = { code: '42501', message: 'new row violates row-level security policy' };
     await tickOff();
-    expect(state.updates).toHaveLength(2);
-    const [, restore] = state.updates;
-    expect(restore.patch).toEqual({ status: 'active', completed_at: null });
-    expect(restore.filters).toEqual(expect.arrayContaining([['eq', 'id', 'r1'], ['eq', 'family_id', 'family-1']]));
+    expect(state.updates).toHaveLength(1);
+    expect(state.updates[0].patch.status).toBe('completed');
+    expect(state.updates[0].filters).toEqual(expect.arrayContaining([['eq', 'id', 'r1'], ['eq', 'family_id', 'family-1']]));
+    expect(state.inserts).toHaveLength(1);
     expect(state.success).not.toHaveBeenCalled();
-    expect(state.error).toHaveBeenCalledTimes(1);
+    expect(state.error).toHaveBeenCalledExactlyOnceWith(en('remindersModule.completedNextUnconfirmed'));
+    expect(state.refresh).toHaveBeenCalledTimes(1);
   });
 
-  it('a snoozed reminder that could not roll on goes back to snoozed, not to active', async () => {
+  it('a snoozed reminder whose next insert is explicitly rejected stays completed', async () => {
     state.reminder = { ...parentsDailyReminder, status: 'snoozed' };
-    state.insertError = { code: '08006', message: 'connection failure' };
+    state.insertError = { code: '23514', message: 'new row violates check constraint' };
     await tickOff();
-    expect(state.updates[1]?.patch).toEqual({ status: 'snoozed', completed_at: null });
+    expect(state.updates).toHaveLength(1);
+    expect(state.updates[0].patch.status).toBe('completed');
+    expect(state.inserts).toHaveLength(1);
+    expect(state.error).toHaveBeenCalledExactlyOnceWith(en('remindersModule.completedNextUnconfirmed'));
+    expect(state.success).not.toHaveBeenCalled();
+    expect(state.refresh).toHaveBeenCalledTimes(1);
   });
 });
 

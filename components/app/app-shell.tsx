@@ -313,7 +313,7 @@ function SidebarNav({ onLocked }: { onLocked: (item: NavItem) => void }) {
         if (resolved.length === 0 && !isSuggested) return null;
         return (
           <div key={group.title} className="space-y-1">
-            <p className="px-2 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted/70">
+            <p className="px-2 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
               {navLabel(t, group.title)}
             </p>
             {isSuggested && <SidebarDashboardLinks />}
@@ -486,7 +486,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
             const tabClass = cn(
               'relative flex flex-1 flex-col items-center gap-0.5 pb-1 pt-2 text-[11px] font-medium transition',
-              locked ? 'text-muted/45' : active ? 'text-brand-text' : 'text-muted',
+              locked ? 'text-muted' : active ? 'text-brand-text' : 'text-muted',
             );
             const inner = (
               <>

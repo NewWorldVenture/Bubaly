@@ -73,7 +73,7 @@ export default async function AuctionsPage() {
           </h1>
           <p className="mt-1 text-sm text-muted">{t('marketplaceAuctions.bidOnWhatYourCommunityIs')}</p>
         </div>
-        <Link href="/marketplace/browse?post=1" className="inline-flex items-center gap-1.5 self-start rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:opacity-90 sm:self-auto">
+        <Link href="/marketplace/browse?post=1" className="inline-flex items-center gap-1.5 self-start rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:brightness-95 sm:self-auto">
           <TrendingUp className="h-4 w-4" /> {t('marketplaceAuctions.sellAtAuction')}
         </Link>
       </div>

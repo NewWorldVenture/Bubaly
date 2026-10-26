@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables, MetricType } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat, type FamilyClock } from '@/components/i18n/use-format';
+import { datetimeLocalToInstant } from '@/lib/time/datetime-local';
 import type { Format } from '@/lib/utils/format';
 import { useConfirm } from '@/components/ui/confirm';
 
@@ -379,14 +380,27 @@ export function HealthModule() {
   }, [metrics, todayMetrics, members, appointments, memberById, stepGoalFor, locale, tr, formatSleepHours, clock]);
 
   // ── CRUD handlers ──────────────────────────────────────────
+  // Every time box below is a <input type="datetime-local">: a wall reading
+  // with no zone. `new Date(value)` resolved it on the DEVICE's clock, while
+  // every reader of these rows is on the FAMILY's (TIME-003) — the Family
+  // Health page, the briefings, and the Autopilot "Dentist is today" card
+  // whose reminder is set at the stored instant. A parent away from home who
+  // booked "Dentist 15:00" stored another hour. Blank is now; a reading that
+  // is not on the family's calendar is refused, never rolled into another day.
+  const typedInstant = (value: string): string | null =>
+    (value ? datetimeLocalToInstant(value, clock.timeZone) : new Date().toISOString());
+  const refuseTime = () => toastError(tr('errors.thatTimeIsNotOnTheFamilysClock'));
+
   async function saveAppointment() {
     if (!apptForm.title || !apptForm.starts_at) return;
+    const startsAt = typedInstant(apptForm.starts_at);
+    if (!startsAt) { refuseTime(); return; }
     setSaving(true);
     const sb = createClient();
     const { error: err } = await sb.from('appointments').insert({
       family_id: familyId,
       title: apptForm.title,
-      starts_at: new Date(apptForm.starts_at).toISOString(),
+      starts_at: startsAt,
       member_id: apptForm.member_id || null,
       provider: apptForm.provider.trim() || null,
       location: apptForm.location.trim() || null,
@@ -402,6 +416,8 @@ export function HealthModule() {
 
   async function saveMetric() {
     if (!metricForm.member_id || !metricForm.value) return;
+    const recordedAt = typedInstant(metricForm.recorded_at);
+    if (!recordedAt) { refuseTime(); return; }
     setSaving(true);
     const sb = createClient();
     const typeInfo = METRIC_TYPES.find((t) => t.value === metricForm.type);
@@ -411,7 +427,7 @@ export function HealthModule() {
       type: metricForm.type,
       value: parseFloat(metricForm.value),
       unit: typeInfo?.unit || null,
-      recorded_at: metricForm.recorded_at ? new Date(metricForm.recorded_at).toISOString() : new Date().toISOString(),
+      recorded_at: recordedAt,
       // 0430: health_metrics was the one table of the nine with no author at
       // all, so it gained a `created_by`. Its eight siblings here already set
       // one; without it every metric would arrive unattributed and only the
@@ -427,6 +443,8 @@ export function HealthModule() {
 
   async function saveWorkout() {
     if (!workoutForm.member_id || !workoutForm.activity) return;
+    const recordedAt = typedInstant(workoutForm.recorded_at);
+    if (!recordedAt) { refuseTime(); return; }
     setSaving(true);
     const sb = createClient();
     const { error: err } = await sb.from('workout_logs').insert({
@@ -437,7 +455,7 @@ export function HealthModule() {
       calories: workoutForm.calories ? parseInt(workoutForm.calories) : null,
       distance: workoutForm.distance ? parseFloat(workoutForm.distance) : null,
       notes: workoutForm.notes || null,
-      recorded_at: workoutForm.recorded_at ? new Date(workoutForm.recorded_at).toISOString() : new Date().toISOString(),
+      recorded_at: recordedAt,
       created_by: userId,
     });
     setSaving(false);
@@ -449,6 +467,8 @@ export function HealthModule() {
 
   async function saveSymptom() {
     if (!symptomForm.member_id || !symptomForm.symptom.trim()) return;
+    const startedAt = typedInstant(symptomForm.started_at);
+    if (!startedAt) { refuseTime(); return; }
     setSaving(true);
     const sb = createClient();
     const { error: err } = await sb.from('symptom_logs').insert({
@@ -458,7 +478,7 @@ export function HealthModule() {
       severity: parseInt(symptomForm.severity) || 3,
       body_area: symptomForm.body_area.trim() || null,
       notes: symptomForm.notes.trim() || null,
-      started_at: symptomForm.started_at ? new Date(symptomForm.started_at).toISOString() : new Date().toISOString(),
+      started_at: startedAt,
       created_by: userId,
     });
     setSaving(false);

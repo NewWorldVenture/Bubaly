@@ -183,7 +183,7 @@ export default async function NegotiationsInboxPage() {
           <Handshake className="mx-auto h-8 w-8 text-muted/40" />
           <p className="mt-3 text-sm font-semibold">{tr('marketplaceNegotiations.noOffersGoingYet')}</p>
           <p className="mt-1 text-sm text-muted">{tr('marketplaceNegotiations.makeAnOfferOnAListing')}</p>
-          <Link href="/marketplace/browse?kind=sell" className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:opacity-90">
+          <Link href="/marketplace/browse?kind=sell" className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:brightness-95">
             {tr('marketplaceNegotiations.browseThingsForSale')}
           </Link>
         </div>

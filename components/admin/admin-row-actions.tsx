@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useId, useRef, useState, useTransition } from 'react';
 import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import { MoreHorizontal, UserX, UserCheck, ShieldOff } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
@@ -12,7 +12,11 @@ export function AdminRowActions({ adminId, status, email }: { adminId: string; s
   const t = useTranslations();
   const askConfirm = useConfirm();
   const [open, setOpen] = useState(false);
-  useDismissOnEscape(open, () => setOpen(false));
+  const panelId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  // A disclosure, not a menu: Tab reaches its actions. Escape closes it and
+  // hands focus back to the button, wherever in the panel it was.
+  useDismissOnEscape(open, () => { setOpen(false); triggerRef.current?.focus(); });
   const [isPending, startTransition] = useTransition();
   const { success, error: toastError } = useToast();
 
@@ -34,7 +38,7 @@ export function AdminRowActions({ adminId, status, email }: { adminId: string; s
 
   return (
     <div className="relative">
-      <button aria-label={t('a11y.moreActions')} aria-haspopup="menu"
+      <button ref={triggerRef} aria-label={t('a11y.moreActions')} aria-expanded={open} aria-controls={open ? panelId : undefined}
         onClick={() => setOpen((v) => !v)}
         disabled={isPending}
         className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-elevated focus-ring disabled:opacity-50"
@@ -44,10 +48,10 @@ export function AdminRowActions({ adminId, status, email }: { adminId: string; s
       {open && (
         <>
           {/* Presentational: no content, no name, nothing to focus. A click anywhere
-              dismisses the menu; the keyboard path is Escape, bound above. */}
+              dismisses the panel; the keyboard path is Escape, bound above. */}
           {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
           <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-xl popover-surface p-1 shadow-glass animate-fade-in">
+          <div id={panelId} role="group" aria-label={t('a11y.moreActions')} className="absolute right-0 top-full z-20 mt-1 w-44 rounded-xl popover-surface p-1 shadow-glass animate-fade-in">
             {status === 'active' ? (
               <button
                 onClick={() => act(deactivateAdminAction)}

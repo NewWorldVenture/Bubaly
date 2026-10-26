@@ -26,7 +26,7 @@ type Entry = { kind: 'request' } | { kind: 'error'; error?: string } | { kind: '
   | { kind: 'handoff'; handoff: string } | { kind: 'stored'; grant: string };
 type Scope = { key: string; active: boolean; phase: Phase; entry: Entry; job?: Promise<void>; db?: ReturnType<typeof createClient>;
   unsubscribe?: () => void; timer?: ReturnType<typeof setTimeout>; revision: number; authKey?: string; installingKey?: string;
-  identity?: RecoveryIdentity; grant?: string; persistedGrant: string | null };
+  identity?: RecoveryIdentity; grant?: string; persistedGrant: string | null; saveDispatched: boolean };
 function errorKey(value: unknown): string { return typeof value === 'string' && ERROR_KEYS.has(value) ? value : 'authRecovery.temporarilyUnavailable'; }
 function storedGrant(value?: string) { try { if (value) sessionStorage.setItem(STORAGE_KEY, value); else sessionStorage.removeItem(STORAGE_KEY); } catch { /* Reload storage is optional; authority remains on the server. */ } }
 function readStoredGrant(): string | null { try { return sessionStorage.getItem(STORAGE_KEY); } catch { return null; } }
@@ -121,7 +121,7 @@ export function RecoveryForm({ request = false, initialGrant }: { request?: bool
     let scope = scopeRef.current;
     if (!scope || scope.key !== key) {
       scope = { key, active: true, phase: 'checking', entry: initialGrant && validGrant(initialGrant)
-        ? { kind: 'stored', grant: initialGrant } : captureEntry(request), revision: 0, persistedGrant: readStoredGrant() };
+        ? { kind: 'stored', grant: initialGrant } : captureEntry(request), revision: 0, persistedGrant: readStoredGrant(), saveDispatched: false };
       scopeRef.current = scope;
     }
     const opening = scope;
@@ -227,7 +227,12 @@ export function RecoveryForm({ request = false, initialGrant }: { request?: bool
           }
         }
         opening.authKey = expected; opening.identity = result.identity; opening.grant = grant;
-        opening.timer = setTimeout(() => fail('authRecovery.expiredLink'), Math.max(0, result.identity.expiresAt - Date.now()));
+        opening.timer = setTimeout(() => {
+          // Expiry prevents new writes. An admitted write still owns its
+          // acknowledgement (or the existing bounded uncertainty deadline).
+          if (opening.phase === 'saving' && opening.saveDispatched) return;
+          fail('authRecovery.expiredLink');
+        }, Math.max(0, result.identity.expiresAt - Date.now()));
         show({ phase: 'ready', email: result.identity.email });
       } catch { fail('authRecovery.temporarilyUnavailable'); }
     }
@@ -272,13 +277,16 @@ export function RecoveryForm({ request = false, initialGrant }: { request?: bool
       publish(scope, { phase: 'ready', email: scope.identity.email, error: password !== confirmation ? 'authRecovery.passwordMismatch' : 'authRecovery.invalidPassword' }); return;
     }
     publish(scope, { phase: 'saving', email: scope.identity.email });
+    scope.saveDispatched = false;
     const revision = scope.revision;
     let dispatched = false;
     try {
       const session = await bounded(scope.db.auth.getSession());
       if (!activePhase(scope, 'saving')) return;
       if (session.error || scope.revision !== revision || sessionKey(session.data.session) !== identityKey(scope.identity)) { retire(scope, 'authRecovery.sessionChanged'); return; }
+      if (scope.identity.expiresAt <= Date.now()) { retire(scope, 'authRecovery.expiredLink'); return; }
       dispatched = true;
+      scope.saveDispatched = true;
       const result = await bounded(saveRecoveryAction(scope.grant, password));
       if (!activePhase(scope, 'saving') || scope.revision !== revision) return;
       if (result.outcome === 'updated' || result.outcome === 'uncertain') {
@@ -287,11 +295,15 @@ export function RecoveryForm({ request = false, initialGrant }: { request?: bool
       }
       const key = errorKey(result.errorKey);
       if (['authRecovery.invalidLink', 'authRecovery.expiredLink', 'authRecovery.sessionChanged'].includes(key)) { retire(scope, key); return; }
+      if (scope.identity.expiresAt <= Date.now()) { retire(scope, 'authRecovery.expiredLink'); return; }
       publish(scope, { phase: 'ready', email: scope.identity.email, error: key });
     } catch {
       if (!activePhase(scope, 'saving')) return;
+      if (!dispatched && scope.identity.expiresAt <= Date.now()) { retire(scope, 'authRecovery.expiredLink'); return; }
       if (dispatched) { scope.grant = undefined; persistGrant(scope); if (scope.timer) clearTimeout(scope.timer); }
       publish(scope, { phase: dispatched ? 'uncertain' : 'ready', email: scope.identity.email, error: dispatched ? 'authRecovery.saveUncertain' : 'authRecovery.temporarilyUnavailable' });
+    } finally {
+      scope.saveDispatched = false;
     }
   }
 

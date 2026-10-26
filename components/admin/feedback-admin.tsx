@@ -124,7 +124,7 @@ export function FeedbackAdmin({ ideas, counts, comments, notifications = [], unr
             )}
             <button type="button" onClick={runSync} disabled={syncing}
               title={githubConfigured ? 'Backfill + reconcile with GitHub now' : 'Set GITHUB_TOKEN + GITHUB_FEEDBACK_REPO to enable'}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg transition hover:opacity-90 disabled:opacity-50">
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg transition hover:brightness-95 disabled:opacity-50">
               {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} {t('feedbackAdmin.syncGithubNow')}
             </button>
           </div>
@@ -178,7 +178,7 @@ export function FeedbackAdmin({ ideas, counts, comments, notifications = [], unr
             </FilterChip>
           ))}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
           <select
             aria-label={t('feedbackAdmin.category')}
             value={filter.category}
@@ -188,10 +188,10 @@ export function FeedbackAdmin({ ideas, counts, comments, notifications = [], unr
             <option value="all">{t('feedbackAdmin.allCategories')}</option>
             {Object.entries(CATEGORY_META).map(([k, v]) => <option key={k} value={k}>{v.emoji} {v.label}</option>)}
           </select>
-          <div className="relative">
+          <div className="relative min-w-[10rem] flex-1 sm:flex-none">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search…"
-              className="h-9 w-40 rounded-lg border border-border bg-bg pl-8 pr-2 text-sm outline-none focus:border-brand" />
+              className="h-9 w-full rounded-lg border border-border bg-bg pl-8 pr-2 text-sm outline-none focus:border-brand sm:w-40" />
           </div>
         </div>
       </div>
@@ -362,7 +362,7 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
             <button
               type="button" disabled={!dirty || busy !== null}
               onClick={() => run('update', () => updateIdeaAction({ ideaId: idea.id, status, note }), 'Idea updated.')}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:opacity-90 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:brightness-95 disabled:opacity-50"
             >
               {busy === 'update' ? <Loader2 className="h-4 w-4 animate-spin" /> : null} {t('feedbackAdmin.saveStatusAmpNote')}
             </button>
@@ -391,7 +391,7 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
             <button
               type="button" disabled={!reply.trim() || busy !== null}
               onClick={async () => { const ok = await run('reply', () => postTeamReplyAction({ ideaId: idea.id, body: reply }), 'Reply posted.'); if (ok) setReply(''); }}
-              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-brand px-3 text-sm font-semibold text-brand-fg transition hover:opacity-90 disabled:opacity-50"
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-brand px-3 text-sm font-semibold text-brand-fg transition hover:brightness-95 disabled:opacity-50"
             >
               {busy === 'reply' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {t('feedbackAdmin.reply')}
             </button>

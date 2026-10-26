@@ -14,9 +14,9 @@ export const revalidate = 0;
 
 const MAX_BODY_BYTES = 512 * 1024;
 const identity = {
-  familyId: z.string().uuid(),
-  memberId: z.string().uuid(),
-  vacationId: z.string().uuid(),
+  familyId: z.string().guid(),
+  memberId: z.string().guid(),
+  vacationId: z.string().guid(),
   source: confirmationSourceSchema,
   fields: confirmationFieldsSchema,
 };
@@ -24,7 +24,7 @@ const bodySchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('preview'), ...identity }).strict(),
   z.object({
     action: z.literal('apply'), ...identity,
-    expected: confirmationPreviewSchema, requestId: z.string().uuid(),
+    expected: confirmationPreviewSchema, requestId: z.string().guid(),
   }).strict(),
 ]);
 const headers = { 'Cache-Control': 'private, no-store, max-age=0', Vary: 'Cookie' };

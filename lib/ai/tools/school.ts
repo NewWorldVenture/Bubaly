@@ -4,6 +4,7 @@
 // the same rows.
 import 'server-only';
 import { z } from 'zod';
+import { isOverdue } from '@/lib/homework/board';
 import { listClasses, listEventsBetween, listHomeworkDue } from '@/lib/services/school';
 import { scopeNow } from '@/lib/services/scope';
 import { ok } from '@/lib/services/types';
@@ -52,7 +53,7 @@ export const schoolTools: ToolDefinition[] = [
   defineTool({
     name: 'school.listHomeworkDue',
     aliases: ['list_homework', 'homework_due'],
-    description: 'Homework still to do that is due in a window, soonest first. Defaults to the coming week.',
+    description: 'Homework still to do that is due in a window, soonest first. Defaults to the coming week, plus any open homework that is already overdue (marked overdue).',
     domain: 'education',
     capability: 'view',
     risk: 'low',
@@ -66,20 +67,30 @@ export const schoolTools: ToolDefinition[] = [
     output: z.object({
       homework: z.array(z.object({
         id: z.string(), title: z.string(), subject: z.string().nullable(), due_at: z.string().nullable(), when: z.string(), status: z.string(), member_id: z.string().nullable(),
+        overdue: z.boolean(),
       })),
     }),
-    summarize: (_input, output) => (output.homework.length === 0
-      ? 'No homework due in that window'
-      : `${plural(output.homework.length, 'homework assignment')} due; first is ${output.homework[0].title} ${output.homework[0].when}`),
+    summarize: (_input, output) => {
+      if (output.homework.length === 0) return 'No homework due in that window';
+      const overdue = output.homework.filter((h) => h.overdue).length;
+      return `${plural(output.homework.length, 'homework assignment')} due${overdue ? `, ${overdue} overdue` : ''}; first is ${output.homework[0].title} ${output.homework[0].when}`;
+    },
     execute: async (scope, input) => {
       const member = await resolveAssigneeId(scope, { assignee: input.member, assignee_id: input.member_id });
       if (!member.ok) return member;
-      const res = await listHomeworkDue(scope, { from: input.from ?? null, to: input.to ?? null, memberId: member.data, includeDone: input.include_done ?? false });
+      // With no start, the question is "what still needs doing", and work that
+      // is already late is the first answer. It used to fall before the default
+      // window, and a child two assignments behind was told there was none.
+      const res = await listHomeworkDue(scope, {
+        from: input.from ?? null, to: input.to ?? null, memberId: member.data, includeDone: input.include_done ?? false,
+        includeOverdue: !input.from,
+      });
       if (!res.ok) return res;
       const now = scopeNow(scope);
       return ok({
         homework: res.data.map((h) => ({
           id: h.id, title: h.title, subject: h.subject, due_at: h.due_at, when: describeWhen(h.due_at, scope.tz, now), status: h.status, member_id: h.member_id,
+          overdue: isOverdue(h, now),
         })),
       });
     },

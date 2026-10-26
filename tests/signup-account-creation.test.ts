@@ -59,11 +59,21 @@ describe('signUpSchema — the gate every new account passes', () => {
     expect(signUpSchema.safeParse({ ...valid, password: 'x'.repeat(7) }).success).toBe(false);
   });
 
-  it('caps the password at 72 bytes, which is bcrypt’s limit', () => {
-    // Past 72 bytes bcrypt silently ignores the remainder, so two different
-    // long passwords would authenticate the same account. Rejecting is right.
+  it('caps ASCII passwords at 72 characters', () => {
+    // These ASCII cases establish the existing length limit; the surrogate
+    // cases below distinguish UTF-16 units from Unicode code points.
     expect(signUpSchema.safeParse({ ...valid, password: 'x'.repeat(72) }).success).toBe(true);
     expect(signUpSchema.safeParse({ ...valid, password: 'x'.repeat(73) }).success).toBe(false);
+  });
+
+  it.each([
+    ['four astral characters at eight UTF-16 units', '😀'.repeat(4), true],
+    ['three astral characters below eight UTF-16 units', '😀'.repeat(3), false],
+    ['36 astral characters at 72 UTF-16 units', '😀'.repeat(36), true],
+    ['37 astral characters above 72 UTF-16 units', '😀'.repeat(37), false],
+    ['a trailing newline above 72 UTF-16 units', 'x'.repeat(72) + '\n', false],
+  ])('keeps recovery-compatible password bounds for %s', (_label, password, accepted) => {
+    expect(signUpSchema.safeParse({ ...valid, password }).success).toBe(accepted);
   });
 
   it('reports errors per field, so the form can mark the right input', () => {

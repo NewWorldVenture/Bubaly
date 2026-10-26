@@ -18,6 +18,15 @@ const fetchWithDeadline = vi.fn();
 const cookieClient = { from: () => cookieClient, auth: { getUser: async () => ({ data: { user: { id: 'user-1' } } }) } } as Record<string, unknown>;
 const bearerClient = { from: () => bearerClient } as Record<string, unknown>;
 
+// F19 meters every AI route against the monthly allowance. These tests are
+// about other behaviour, so the family is on Basic, whose allowance is
+// unlimited: the real check runs and passes without a usage count.
+vi.mock('@/lib/server/plan', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/plan')>()),
+  resolveFamilyPlanLevel: async () => 1,
+  // The same, unlocked family as the whole entitlement the AI gates read.
+  resolveFamilyEntitlement: async () => ({ effectiveLevel: 1, locked: false, closed: false, inTrial: false, trialEndsAt: null }),
+}));
 // The account-standing gate (a closed or trial-ended family is refused) has its
 // own test, tests/the-free-ai-helpers-refuse-a-closed-or-trial-ended-family.test.ts.
 // The family here is open, so the gate is answered rather than seeded.
@@ -51,6 +60,25 @@ vi.mock('@/lib/ai/observability', () => ({
 vi.mock('@/lib/ai/settings', () => ({ getOpenAIKey: (...a: unknown[]) => getOpenAIKey(...a) }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: (...a: unknown[]) => enforceAIRateLimit(...a) }));
 vi.mock('@/lib/server/fetch-with-deadline', () => ({ fetchWithDeadline: (...a: unknown[]) => fetchWithDeadline(...a) }));
+// F19: each voice call is recorded as its own request. The real
+// `withAiRequest` runs; only its store is faked, so the rows it opens and
+// closes, and the model-usage outcome, are what these tests read.
+const requestRows: Array<{ id: string; feature?: string | null; patches: Array<Record<string, unknown>> }> = [];
+const modelCalls: Array<{ ok: boolean; task: string }> = [];
+vi.mock('@/lib/ai/runs/store', () => ({
+  createRequest: async (_scope: unknown, input: { feature?: string | null }) => {
+    const id = `req-${requestRows.length + 1}`;
+    requestRows.push({ id, feature: input.feature ?? null, patches: [] });
+    return { ok: true, data: { id } };
+  },
+  updateRequest: async (_scope: unknown, id: string, patch: Record<string, unknown>) => {
+    requestRows.find((r) => r.id === id)?.patches.push(patch);
+    return { ok: true, data: null };
+  },
+}));
+vi.mock('@/lib/ai/usage', () => ({
+  recordModelCall: async (input: { ok: boolean; task: string }) => { modelCalls.push({ ok: input.ok, task: input.task }); },
+}));
 
 const ctx = {
   user: { id: 'user-1', email: 'parent@example.com' },
@@ -85,7 +113,7 @@ beforeEach(() => {
   fetchWithDeadline.mockResolvedValue(new Response(JSON.stringify({ text: 'Plan dinners for the week' }), { status: 200, headers: { 'content-type': 'application/json' } }));
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
-afterEach(() => { vi.clearAllMocks(); vi.restoreAllMocks(); });
+afterEach(() => { vi.clearAllMocks(); vi.restoreAllMocks(); requestRows.length = 0; modelCalls.length = 0; });
 
 describe('POST /api/ai/voice/transcribe', () => {
   it('401s an anonymous caller with JSON, not a redirect', async () => {
@@ -237,5 +265,25 @@ describe.each([
     expect((await response.json()).code).toBe('unavailable');
     expect(getOpenAIKey).not.toHaveBeenCalled();
     expect(fetchWithDeadline).not.toHaveBeenCalled();
+  });
+});
+
+describe('a spoken exchange counts once: voice files no request of its own (F19)', () => {
+  // The owner's decision of 2026-10-02: one spoken exchange is ONE request, the
+  // assistant turn it carries. Speech and transcription file nothing, so a
+  // voice exchange is not charged three times.
+  it('a transcription files no request row', async () => {
+    getUserContext.mockResolvedValue(ctx);
+    const { POST } = await import('@/app/api/ai/voice/transcribe/route');
+    expect((await POST(transcribeRequest())).status).toBe(200);
+    expect(requestRows).toHaveLength(0);
+  });
+
+  it('a speech call files no request row', async () => {
+    getUserContext.mockResolvedValue(ctx);
+    fetchWithDeadline.mockResolvedValue(new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { 'content-type': 'audio/mpeg' } }));
+    const { POST } = await import('@/app/api/ai/voice/speak/route');
+    expect((await POST(speakRequest())).status).toBe(200);
+    expect(requestRows).toHaveLength(0);
   });
 });

@@ -11,6 +11,8 @@ describe('isValidPin', () => {
     expect(isValidPin('12345')).toBe(false);
     expect(isValidPin('12a4')).toBe(false);
     expect(isValidPin('')).toBe(false);
+    expect(isValidPin('1234\n')).toBe(false);
+    expect(isValidPin('１２３４')).toBe(false);
   });
 });
 

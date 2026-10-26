@@ -18,7 +18,7 @@ function num(fd: FormData, k: string): number | null {
 export async function moderateReviewAction(id: string, status: string) {
   if (!isReviewStatus(status)) return;
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  const { data, error } = await supabase.from('reviews').update({ status }).eq('id', id).select('id').maybeSingle();
+  const { data, error } = await supabase.from('reviews').update({ status }).eq('id', id).is('deleted_at', null).select('id').maybeSingle();
   if (error || !data) marketingActionFailure('moderate the review', error ?? new Error('Review not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'review', resourceId: id, metadata: { status } });
   revalidatePath('/admin/marketing/reviews');
@@ -32,7 +32,7 @@ export async function replyToReviewAction(formData: FormData) {
     reply: s(formData, 'reply'),
     replied_at: new Date().toISOString(),
     replied_by: actorId,
-  }).eq('id', id).select('id').maybeSingle();
+  }).eq('id', id).is('deleted_at', null).select('id').maybeSingle();
   if (error || !data) marketingActionFailure('reply to the review', error ?? new Error('Review not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'reply', resource: 'review', resourceId: id });
   revalidatePath('/admin/marketing/reviews');

@@ -85,7 +85,7 @@ export default async function FormsPage() {
         <form action={createForm} className="space-y-3 text-sm">
           <input name="name" required placeholder={t('adminMarketingForms.formName')} className={inputCls} />
           <input name="fields" placeholder={t('adminMarketingForms.fieldsCommaSeparatedEGName')} className={inputCls} />
-          <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingForms.createForm')}</SubmitButton>
+          <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:brightness-95">{t('adminMarketingForms.createForm')}</SubmitButton>
         </form>
       </Card>
     </div>

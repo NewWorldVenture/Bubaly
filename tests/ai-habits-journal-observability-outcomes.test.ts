@@ -10,6 +10,15 @@ const mocks = vi.hoisted(() => ({
   used: vi.fn(), failed: vi.fn(), settled: vi.fn(),
 }));
 
+// F19 meters every AI route against the monthly allowance. These tests are
+// about other behaviour, so the family is on Basic, whose allowance is
+// unlimited: the real check runs and passes without a usage count.
+vi.mock('@/lib/server/plan', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/plan')>()),
+  resolveFamilyPlanLevel: async () => 1,
+  // The same, unlocked family as the whole entitlement the AI gates read.
+  resolveFamilyEntitlement: async () => ({ effectiveLevel: 1, locked: false, closed: false, inTrial: false, trialEndsAt: null }),
+}));
 // The account-standing gate (a closed or trial-ended family is refused) has its
 // own test, tests/the-free-ai-helpers-refuse-a-closed-or-trial-ended-family.test.ts.
 // The family here is open, so the gate is answered rather than seeded.
