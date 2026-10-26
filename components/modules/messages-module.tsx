@@ -1301,7 +1301,7 @@ function MessagesWorkspace() {
             </div>
 
             {connection !== 'SUBSCRIBED' && <div role="status" className="flex items-center justify-between gap-2 bg-elevated px-4 py-2 text-xs text-muted"><span>{connection === 'CONNECTING' ? tr('messagesChat.connecting') : tr('messagesChat.interrupted')}</span><button type="button" onClick={() => void loadMessages(activeConv.id, false, true)} className="rounded p-2 hover:text-fg" aria-label={tr('messagesChat.refresh')}><RefreshCw className="h-4 w-4" /></button></div>}
-            <div className="flex items-center gap-2 border-b border-border px-4 py-2">
+            <div className="flex items-center gap-2 border-b border-border px-4 py-2 focus-within:ring-2 focus-within:ring-inset focus-within:ring-brand">
               <Search className="h-4 w-4 shrink-0 text-muted" />
               <input ref={threadSearchRef} value={threadSearch} onChange={(event) => setThreadSearch(event.target.value)} aria-label={tr('messagesChat.searchThread')} placeholder={tr('messagesChat.searchThread')} className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
               {threadSearch && <button type="button" onClick={() => setThreadSearch('')} aria-label={tr('messagesChat.clearSearch')}><X className="h-4 w-4" /></button>}
@@ -1571,7 +1571,7 @@ function MessagesWorkspace() {
               {/* Send when typing · recording controls while recording · mic when empty */}
               {text.trim() && !recording ? (
                 <button type="submit" disabled={sending} aria-label={tr('messages.sendMessage')}
-                  className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-brand-fg transition hover:opacity-90 disabled:opacity-50">
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-brand-fg transition hover:brightness-95 disabled:opacity-50">
                   {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                 </button>
               ) : recording ? (
@@ -1585,13 +1585,13 @@ function MessagesWorkspace() {
                     {Math.floor(recSeconds / 60)}:{String(recSeconds % 60).padStart(2, '0')}
                   </span>
                   <button type="button" onClick={() => stopRecording(false)} aria-label={tr('messages.stopAndSendVoiceMessage')}
-                    className="grid h-11 w-11 place-items-center rounded-full bg-brand text-brand-fg transition hover:opacity-90">
+                    className="grid h-11 w-11 place-items-center rounded-full bg-brand text-brand-fg transition hover:brightness-95">
                     <Send className="h-5 w-5" />
                   </button>
                 </div>
               ) : (
                 <button type="button" onClick={startRecording} disabled={uploadingFile || micPending || sending || Boolean(failedAttachment)} aria-label={tr('messages.recordVoiceMessage')}
-                  className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-brand-fg transition hover:opacity-90 disabled:opacity-50">
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-brand-fg transition hover:brightness-95 disabled:opacity-50">
                   {uploadingFile || micPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Mic className="h-5 w-5" />}
                 </button>
               )}
@@ -1705,11 +1705,12 @@ function MessagesWorkspace() {
           userId={userId}
           members={members}
           myName={myName}
+          isCurrent={() => alive.current && owner.current.current(messageOrigin)}
+          onCommitted={() => { if (alive.current) void loadConversations(); }}
           onClose={() => setNewConvOpen(false)}
           onCreated={(conv) => {
             selectConversation(conv);
             setNewConvOpen(false);
-            void loadConversations();
           }}
         />
       )}
@@ -1807,10 +1808,12 @@ const SMART_GROUPS: { key: string; labelKey: string; emoji: string; roles: Membe
 type Step = 'people' | 'details';
 type Tab = 'suggested' | 'contacts' | 'groups';
 
-function NewConversation({ familyId, userId, members, myName, onClose, onCreated }: {
+function NewConversation({ familyId, userId, members, myName, isCurrent, onCommitted, onClose, onCreated }: {
   familyId: string; userId: string;
   members: Member[];
   myName: string;
+  isCurrent: () => boolean;
+  onCommitted: () => void;
   onClose: () => void;
   onCreated: (conv: Conversation) => void;
 }) {
@@ -1823,6 +1826,10 @@ function NewConversation({ familyId, userId, members, myName, onClose, onCreated
   const [name, setName] = useState('');
   const [emoji, setEmoji] = useState('💬');
   const [loading, setLoading] = useState(false);
+  const episode = useRef(true);
+  useEffect(() => { episode.current = true; return () => { episode.current = false; }; }, []);
+  const current = () => episode.current && isCurrent();
+  const close = () => { episode.current = false; onClose(); };
 
   const others = members.filter((m) => m.is_active && m.user_id !== userId);
   const byId = new Map(members.map((m) => [m.id, m]));
@@ -1859,7 +1866,7 @@ function NewConversation({ familyId, userId, members, myName, onClose, onCreated
   ).filter((m) => !q || m.display_name.toLowerCase().includes(q));
 
   async function create() {
-    if (selected.size === 0 || loading) return;
+    if (!current() || selected.size === 0 || loading) return;
     setLoading(true);
 
     const selfMemberId = members.find((m) => m.user_id === userId)?.id;
@@ -1893,17 +1900,21 @@ function NewConversation({ familyId, userId, members, myName, onClose, onCreated
       participant_ids: participantIds,
     });
 
-    setLoading(false);
-    if (error || !data) { toastError(describeDbError(error, tr('messagesModule.couldNotCreateConversation'))); return; }
+    if (error || !data) { if (current()) toastError(describeDbError(error, tr('messagesModule.couldNotCreateConversation'))); return; }
+    // The conversation already committed. Refresh the current inbox without
+    // letting a retired dialog navigate or dismiss a newer conversation draft.
+    onCommitted();
+    if (!current()) return;
+    episode.current = false;
     onCreated(data);
-    } catch (error) { toastError(describeDbError(error)); }
-    finally { setLoading(false); }
+    } catch (error) { if (current()) toastError(describeDbError(error)); }
+    finally { if (current()) setLoading(false); }
   }
 
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={close}
       title={tr('messages.newConversation')}
       description={step === 'people' ? 'Start a conversation with the people who matter most.' : 'Name it and pick an icon (optional).'}
       className="max-w-2xl"
@@ -1911,7 +1922,7 @@ function NewConversation({ familyId, userId, members, myName, onClose, onCreated
       {step === 'people' ? (
         <div className="space-y-4">
           {/* To: chips + search */}
-          <div className="rounded-xl border border-border bg-surface/40 p-2">
+          <div className="rounded-xl border border-border bg-surface/40 p-2 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="pl-1 text-xs font-semibold text-muted">To:</span>
               {selectedMembers.map((m) => (

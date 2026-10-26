@@ -248,7 +248,7 @@ function PlanCard({
         className={cn(
           'mt-5 inline-flex h-12 items-center justify-center rounded-xl text-sm font-bold transition',
           featured
-            ? 'bg-gradient-to-r from-blue-500 to-violet-600 text-brand-fg shadow-glow hover:opacity-90'
+            ? 'bg-gradient-to-r from-blue-600 to-violet-600 text-brand-fg shadow-glow hover:brightness-95'
             : 'border border-white/20 text-white hover:bg-white/10',
         )}
       >

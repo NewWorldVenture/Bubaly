@@ -21,7 +21,7 @@ type Testimonial = Tables<'testimonials'>;
 type CaseStudy = Tables<'case_studies'>;
 
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
-const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
+const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:brightness-95';
 
 export default async function ReputationPage() {
   const tr = await getTranslations();

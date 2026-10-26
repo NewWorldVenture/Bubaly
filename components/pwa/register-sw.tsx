@@ -114,7 +114,7 @@ export function RegisterSW() {
         <button
           type="button"
           onClick={() => window.location.reload()}
-          className="shrink-0 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg transition hover:opacity-90"
+          className="shrink-0 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg transition hover:brightness-95"
         >
           {t('registerSw.reload')}
         </button>

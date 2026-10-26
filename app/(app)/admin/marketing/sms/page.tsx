@@ -64,7 +64,7 @@ export default async function SmsPage() {
             </select>
             <textarea name="message" required maxLength={320} rows={4} placeholder={t('adminMarketingSms.messageKeepUnder160CharsInclude')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
             <p className="text-xs text-muted">{t('adminMarketingSms.alwaysIncludeReplyStopToOpt')}</p>
-            <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingSms.saveDraft')}</SubmitButton>
+            <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:brightness-95">{t('adminMarketingSms.saveDraft')}</SubmitButton>
           </form>
         </Card>
       </div>

@@ -116,7 +116,7 @@ export default async function AdsPage() {
             <select name="platform" aria-label={t('adminMarketingAds.platform')} className={inputCls}>{PLATFORMS.map((p) => <option key={p} value={p} className="capitalize">{p}</option>)}</select>
             <input name="objective" placeholder={t('adminMarketingAds.objectiveEGSignups')} className={inputCls} />
             <input name="budgetDollars" type="number" min="0" placeholder={t('adminMarketingAds.budget')} className={inputCls} />
-            <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingAds.create')}</SubmitButton>
+            <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:brightness-95">{t('adminMarketingAds.create')}</SubmitButton>
           </form>
         </Card>
       </div>

@@ -957,7 +957,7 @@ function Composer({
 
       {isHero ? (
         /* Hero: tall textarea with gradient send button */
-        <div className="ai-composer flex items-end gap-2 p-3 sm:gap-3 sm:p-4">
+        <div className="ai-composer flex items-end gap-2 border p-3 focus-within:border-brand sm:gap-3 sm:p-4">
           <textarea
             rows={2}
             className="min-h-[3.5rem] w-full flex-1 resize-none bg-transparent text-base leading-7 outline-none placeholder:text-muted"
@@ -982,7 +982,7 @@ function Composer({
         </div>
       ) : (
         /* Bar: compact single-line input */
-        <div className="ai-composer flex items-center gap-2 px-3 py-3 sm:gap-3 sm:px-4">
+        <div className="ai-composer flex items-center gap-2 border px-3 py-3 focus-within:border-brand sm:gap-3 sm:px-4">
           <input
             className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted"
             placeholder={micStatus === 'transcribing' ? t('micButton.transcribing') : t('assistant.askAnythingOrGiveA')}
