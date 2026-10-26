@@ -5046,7 +5046,8 @@ still shows on the signals page.
 **Severity: medium (a signed-in user of any household could post, to every
 family's board, a reply rendered as the team's, or a roadmap entry already
 "shipped", pinned and voted up, signed "Bubaly Team"). Deploy order: any.**
-CALHUB-O1, the database half of CALHUB-01. The board is shown to every family
+CALHUB-O1, the database half of CALHUB-01, and CALHUB-O5's per-author insert
+throttle. The board is shown to every family
 and 0197's insert policies check only `author_id = auth.uid()`. Measured on a
 replay of main, as an ordinary signed-in parent, `OK 1` each: an idea filed as
 "Bubaly Team" with status `shipped`, pinned, an `admin_note`, `vote_count`
@@ -5061,8 +5062,11 @@ four `github_*` columns null; and `author_name` is one of the caller's own
 names by `authorNameFor()`'s rule (a `family_members.display_name` of theirs,
 trimmed; their email's local part; or the default `A Bubaly family`), checked
 by `feedback_name_is_the_callers_own(text)`, which no client may call, and
-never the team's name. The service role is exempt, so the admin console, the
-step-up team reply, the GitHub sync and the seeds write as before. INSERT only:
+never the team's name; and an author posts no more ideas than the board's own
+limits, five a minute and twenty a day (CALHUB-O5: each idea opens a GitHub
+issue with the bot token, so a scripted loop of direct inserts spent its
+allowance). The service role is exempt, so the admin console, the step-up team
+reply, the GitHub sync and the seeds write as before. INSERT only:
 there is no client UPDATE or DELETE policy, and the counters move through
 0197's SECURITY DEFINER triggers. No application change.
 
@@ -5074,14 +5078,16 @@ applies 0527 twice and requires it to pass, then re-runs six released probes
 family-erasure-leaves-nothing, plpgsql-bodies-resolve, privileged-rpc-grants,
 rls-sweep). The passing run shows each forged column, a team reply, and posts
 signed as the team or as another person refused, the team's name refused even
-where the caller named herself that in another household; the caller still
+where the caller named herself that in another household; a sixth idea within a
+minute and a twenty-first within a day refused, one under each limit and one
+after thirty the day before landing; the caller still
 posting as her trimmed display name, her email's local part and the default; a
 user in no household commenting as himself; a vote moving the count; the
 server posting a team reply and shipping an idea; the wiring; **N1** (guards
 disabled): the team reply and the shipped idea land; **M1** (the name check
-answering yes): a comment signed as another person lands. Four hand mutants
+answering yes): a comment signed as another person lands. Six hand mutants
 (no team-name clause, untrimmed display name, no email branch, one `github_*`
-column dropped) are each caught.
+column dropped, each limit one higher) are each caught.
 
 All 189 released probes pass with 0527 applied, and with every held file
 applied twice.

@@ -19,7 +19,10 @@
 --      carrying, one at a time, a roadmap status, an admin_note, a pin, a
 --      vote_count, a comment_count and each of the four github_* columns; an
 --      idea or a comment signed "Bubaly Team" or with another person's name;
---      a comment with is_team = true;
+--      a comment with is_team = true; and, past the board's own limits, a sixth
+--      idea within a minute and a twenty-first within a day (CALHUB-O5), while
+--      a fifth within a minute, a twentieth within a day and one after thirty
+--      the day before still land;
 --   2. control: Ada posts an idea and a comment as "Ada" (her display name,
 --      trimmed), as "ada" (her email's local part) and as "A Bubaly family";
 --      Ben, in no household, comments as "ben"; Ada's vote moves the idea's
@@ -129,6 +132,8 @@ declare
   idea_refusal constant text := '42501: A new idea starts under review, unpinned, with no votes, note or tracker link';
   team_refusal constant text := '42501: Only the Bubaly Team posts a team reply';
   name_refusal constant text := '42501: A post on the Idea Board is signed with your own name';
+  burst_refusal constant text := '42501: Five ideas a minute is the board''s limit; try again in a moment';
+  day_refusal constant text := '42501: Twenty ideas a day is the board''s limit; try again tomorrow';
   ada constant text := '00000000-0000-4000-8527-0000000000a1';
   failures text[] := '{}';
   bad text[];
@@ -150,6 +155,34 @@ begin
       failures := array_append(failures, format('Ada %s (%s)', r.what, got));
     elsif got is distinct from expected then
       failures := array_append(failures, format('Ada was refused when she %s, but not by 0527''s guard (%s)', r.what, got));
+    end if;
+  end loop;
+
+  -- 1b. The board's limits: five ideas a minute and twenty a day per author.
+  -- Each case seeds Ada's earlier ideas as the owner, then asks for one more as
+  -- her, and is rolled back.
+  for r in select * from (values
+      ('posted a sixth idea within a minute', 5, interval '30 seconds', 'minute'),
+      ('posted a twenty-first idea within a day', 20, interval '2 hours', 'day'),
+      ('(control) posted a fifth idea within a minute', 4, interval '30 seconds', 'ok'),
+      ('(control) posted a twentieth idea within a day', 19, interval '2 hours', 'ok'),
+      ('(control) posted an idea after thirty the day before', 30, interval '2 days', 'ok')) v(what, earlier, ago, want) loop
+    begin
+      insert into public.feedback_ideas (author_id, author_name, title, created_at)
+      select ada::uuid, 'Ada', 'Earlier idea ' || g, now() - r.ago from generate_series(1, r.earlier) g;
+      got := pg_temp.c0527_as('authenticated', ada,
+        'insert into public.feedback_ideas (author_id, author_name, title) values (''00000000-0000-4000-8527-0000000000a1'', ''Ada'', ''One more'')');
+      raise exception using errcode = 'P0R01';
+    exception when sqlstate 'P0R01' then null;
+    end;
+    if r.want = 'ok' and got <> 'OK 1' then
+      failures := array_append(failures, format('CONTROL: Ada could not post when she %s (%s)', r.what, got));
+    elsif r.want <> 'ok' and got like 'OK%' then
+      failures := array_append(failures, format('Ada %s (%s)', r.what, got));
+    elsif r.want = 'minute' and got is distinct from burst_refusal then
+      failures := array_append(failures, format('Ada was refused when she %s, but not by 0527''s minute limit (%s)', r.what, got));
+    elsif r.want = 'day' and got is distinct from day_refusal then
+      failures := array_append(failures, format('Ada was refused when she %s, but not by 0527''s day limit (%s)', r.what, got));
     end if;
   end loop;
 
@@ -244,7 +277,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception E'a post on the Idea Board is not the caller''s own:\n  - %', array_to_string(failures, E'\n  - ');
   end if;
-  raise notice 'a-post-on-the-idea-board-is-the-callers-own: OK (as Ada, an idea with a roadmap status, note, pin, counts or any tracker column, an idea or comment signed as the Bubaly Team or as Ben, and a team reply were each refused by 0527''s guard; she still posts and comments as her trimmed display name, her email''s local part and the default, Ben in no household comments as himself, her vote moves the count, and the server posts a team reply and ships an idea; both guards and the name check are in place, the check not a client''s to call; negative control: with the guards disabled her team reply and shipped idea landed; mutation control: with the name check answering yes her comment as Ben landed)';
+  raise notice 'a-post-on-the-idea-board-is-the-callers-own: OK (as Ada, an idea with a roadmap status, note, pin, counts or any tracker column, an idea or comment signed as the Bubaly Team or as Ben, a team reply, and a sixth idea in a minute or a twenty-first in a day were each refused by 0527''s guard, while she still posts under both limits and after the day; she still posts and comments as her trimmed display name, her email''s local part and the default, Ben in no household comments as himself, her vote moves the count, and the server posts a team reply and ships an idea; both guards and the name check are in place, the check not a client''s to call; negative control: with the guards disabled her team reply and shipped idea landed; mutation control: with the name check answering yes her comment as Ben landed)';
 end $$;
 
 rollback;

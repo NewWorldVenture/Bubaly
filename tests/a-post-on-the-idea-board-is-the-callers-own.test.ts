@@ -51,6 +51,14 @@ describe('a post on the Idea Board is the caller\'s own (0527)', () => {
     }
   });
 
+  it('the board\'s own limits hold in the database too (CALHUB-O5)', () => {
+    const actions = read('app/(app)/feedback/actions.ts');
+    expect(actions).toContain('const IDEA_BURST = { limit: 5, windowMs: 60_000 } as const;');
+    expect(actions).toContain('const IDEAS_PER_DAY = 20;');
+    expect(idea).toContain("where i.author_id = auth.uid() and i.created_at > now() - interval '1 minute') >= 5 then");
+    expect(idea).toContain("where i.author_id = auth.uid() and i.created_at > now() - interval '1 day') >= 20 then");
+  });
+
   it('INSERT only: the counters and the admin console\'s updates are untouched', () => {
     expect(sql).toContain('create trigger trg_feedback_comments_callers_own before insert on public.feedback_comments');
     expect(sql).toContain('create trigger trg_feedback_ideas_callers_own before insert on public.feedback_ideas');
@@ -72,6 +80,8 @@ describe('the probe and its workflow', () => {
     expect(probe).toContain("('(the server) post a team reply', 'service_role', '',");
     expect(probe).toContain('-- N1. Both guards disabled.');
     expect(probe).toContain('-- M1. The name check answers yes to any name.');
+    expect(probe).toContain("('posted a sixth idea within a minute', 5, interval '30 seconds', 'minute'),");
+    expect(probe).toContain("('posted a twenty-first idea within a day', 20, interval '2 hours', 'day'),");
   });
 
   it('the workflow shows the failure, applies 0527 twice, and re-runs the released probes', () => {

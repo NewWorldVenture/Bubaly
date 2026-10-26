@@ -3,8 +3,9 @@ name: Idea Board authorship SQL runtime
 # The held 0527 (supabase/reserved/) makes a post on the Idea Board the
 # caller's own: a BEFORE INSERT guard on feedback_comments and feedback_ideas
 # refuses a signed-in caller's team reply, an idea that arrives with a roadmap
-# status, note, pin, counts or tracker link, and a post signed with anyone's
-# name but theirs. 0197's insert policies checked only author_id, and the board
+# status, note, pin, counts or tracker link, a post signed with anyone's name
+# but theirs, and ideas past the board's limits of five a minute and twenty a
+# day. 0197's insert policies checked only author_id, and the board
 # is shown to every family. Neither the Database job's replay nor
 # `supabase db push` reads supabase/reserved/, and the Database job's probe
 # glob does not read docs/audit/reserved/, so nothing else in CI exercises it.
@@ -134,6 +135,8 @@ jobs:
             "Ada filed an idea as the Bubaly Team (OK 1)" \
             "Ada posted a team reply (OK 1)" \
             "Ada commented under another person's name (OK 1)" \
+            "Ada posted a sixth idea within a minute (OK 1)" \
+            "Ada posted a twenty-first idea within a day (OK 1)" \
             "0527's guard is not in place on feedback_comments, feedback_ideas"; do
             if ! grep -qF "$expected" <<<"$out"; then
               echo "::error::the held probe failed, but not on: $expected"

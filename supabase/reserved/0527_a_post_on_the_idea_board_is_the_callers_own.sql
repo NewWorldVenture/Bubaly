@@ -1,7 +1,7 @@
 -- 0527 — A post on the Idea Board is the caller's own.
 -- Requested on #771 in comment 6421813855, before any SQL: CALHUB-O1, the
 -- database half of CALHUB-01 ("any signed-in user could post as the Bubaly Team
--- and forge roadmap status").
+-- and forge roadmap status"), and CALHUB-O5's per-author insert throttle.
 --
 -- The Idea Board is shown to every family (feedback_ideas_select and
 -- feedback_comments_select are `auth.uid() is not null`). 0197's insert
@@ -24,7 +24,11 @@
 --   both                author_name is one of the caller's own names, the ones
 --                       authorNameFor() picks: a family_members.display_name of
 --                       theirs (trimmed), their email's local part, or the
---                       column default 'A Bubaly family'; and never the team's.
+--                       column default 'A Bubaly family'; and never the team's;
+--   feedback_ideas      and no more than the board's own limits, five ideas a
+--                       minute and twenty a day per author (CALHUB-O5, the
+--                       per-author insert throttle "alongside N3's migration":
+--                       each idea opens a GitHub issue with the bot token).
 --
 -- The service role and session-less writers are exempt (no auth.uid()), so the
 -- admin console, the step-up team reply, the GitHub sync and the seeds write as
@@ -100,6 +104,17 @@ begin
   if not public.feedback_name_is_the_callers_own(new.author_name) then
     raise exception 'A post on the Idea Board is signed with your own name' using errcode = '42501';
   end if;
+  -- The board's own limits (app/(app)/feedback/actions.ts IDEA_BURST and
+  -- IDEAS_PER_DAY): each idea opens a GitHub issue with the bot token, so a
+  -- scripted loop of direct inserts spent its allowance (CALHUB-O5).
+  if (select count(*) from public.feedback_ideas i
+       where i.author_id = auth.uid() and i.created_at > now() - interval '1 minute') >= 5 then
+    raise exception 'Five ideas a minute is the board''s limit; try again in a moment' using errcode = '42501';
+  end if;
+  if (select count(*) from public.feedback_ideas i
+       where i.author_id = auth.uid() and i.created_at > now() - interval '1 day') >= 20 then
+    raise exception 'Twenty ideas a day is the board''s limit; try again tomorrow' using errcode = '42501';
+  end if;
   return new;
 end
 $$;
@@ -109,7 +124,7 @@ comment on function public.feedback_name_is_the_callers_own(text) is
 comment on function public.a_feedback_comment_is_the_callers_own() is
   'Refuses (42501) a signed-in caller''s feedback comment that claims a team reply or another name (0527). The service role is exempt.';
 comment on function public.a_feedback_idea_starts_as_the_callers_own() is
-  'Refuses (42501) a signed-in caller''s new idea that carries a roadmap status, note, pin, counts or tracker link, or another name (0527). The service role is exempt.';
+  'Refuses (42501) a signed-in caller''s new idea that carries a roadmap status, note, pin, counts or tracker link, or another name, or that passes the board''s limits of five a minute and twenty a day (0527). The service role is exempt.';
 
 revoke all on function public.feedback_name_is_the_callers_own(text) from public, anon, authenticated;
 revoke all on function public.a_feedback_comment_is_the_callers_own() from public, anon;
