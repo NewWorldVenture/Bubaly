@@ -1,3 +1,5 @@
+// This suite isolates auth refresh; the private App Lock store confirms no lock.
+vi.mock('@/lib/security/app-lock-store', () => ({ readAppLockRecord: async () => ({ ok: true, record: null }) }));
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBrowserClient, createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
@@ -195,8 +197,8 @@ describe('actual middleware refresh', () => {
     const pending = middleware(req);
     await vi.advanceTimersByTimeAsync(35_000);
     const response = await pending;
-    expect(response.status).toBe(200);
-    expect(response.headers.get('location')).toBeNull();
+    expect(response.status).toBe(307);
+    expect(new URL(response.headers.get('location')!).pathname).toBe('/app-lock');
     expect(req.cookies.get(key)?.value).toBe(cookie);
     expect(response.cookies.getAll().filter(item => item.maxAge === 0)).toEqual([]);
   });

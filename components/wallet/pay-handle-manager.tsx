@@ -95,7 +95,7 @@ export function PayHandleManager({ handles, childOptions, canManage, baseUrl }: 
               <option value="">{t('payHandleManager.wholeFamily')}</option>
               {childOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <div className="flex min-w-[160px] flex-1 items-center rounded-lg border border-border bg-bg px-2">
+            <div className="flex min-w-[160px] flex-1 items-center rounded-lg border border-border bg-bg px-2 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
               <span className="text-muted">@</span>
               <input
                 value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="mia"

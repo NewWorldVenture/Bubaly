@@ -1,3 +1,5 @@
+// This suite isolates auth refresh; the private App Lock store confirms no lock.
+vi.mock('@/lib/security/app-lock-store', () => ({ readAppLockRecord: async () => ({ ok: true, record: null }) }));
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { combineChunks, createChunks, type CookieOptions } from '@supabase/ssr';
 import { NextRequest } from 'next/server';

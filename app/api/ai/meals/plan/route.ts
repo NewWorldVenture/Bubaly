@@ -94,7 +94,7 @@ export async function POST(req: Request) {
   // alone: whether the planner is available is the Meals gate above, not the
   // assistant's tier or its Off switch.
   const access = await assertAIAllowance(ctx, { db: supabase });
-  if (!access.ok) return accessDeniedResponse(access);
+  if (!access.ok) return accessDeniedResponse(access, t);
 
   // Candidate dishes ------------------------------------------------------
   const candidateResults = await settleAll([

@@ -53,8 +53,19 @@ export function readMigrationInventory(directory = DEFAULT_MIGRATIONS_DIR) {
       const match = /^(\d+)_/.exec(name);
       return match ? { name, version: match[1] } : null;
     })
-    .filter(Boolean)
+    .filter((entry) => entry !== null)
     .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+// `supabase migration new` generates UTC timestamps. They are a separate
+// version family, not generation 2026 in the historical four-digit sequence.
+// Round-trip the calendar date so malformed 14-digit names cannot escape the
+// legacy ordering checks by merely looking like timestamps.
+export function isTimestampMigrationVersion(version) {
+  if (!/^\d{14}$/.test(version)) return false;
+  const iso = `${version.slice(0, 4)}-${version.slice(4, 6)}-${version.slice(6, 8)}T${version.slice(8, 10)}:${version.slice(10, 12)}:${version.slice(12, 14)}.000Z`;
+  const time = new Date(iso);
+  return Number.isFinite(time.getTime()) && time.toISOString() === iso;
 }
 
 export function auditMigrationVersions(
@@ -80,11 +91,15 @@ export function auditMigrationVersions(
     return !known || known.join('|') !== names.join('|');
   });
 
+  const timestampEntries = entries.filter(({ version }) => isTimestampMigrationVersion(version));
+  const legacyEntries = entries.filter(({ version }) => /^\d{4,5}$/.test(version));
+  const invalidVersions = entries.filter(({ version }) => !/^\d{4,5}$/.test(version) && !isTimestampMigrationVersion(version));
+
   // Versions are 4-digit generations. The de-duplicated ones carry a 5th digit
   // that orders them WITHIN a generation (00100/00101 both sit in 0010), so the
   // next free number comes from the first four digits — Number('01421') is 1421
   // and would otherwise push the next migration to 1422.
-  const versions = entries
+  const versions = legacyEntries
     .map(({ version }) => Number(version.slice(0, 4)))
     .filter(Number.isFinite);
   const nextVersion = String(Math.max(0, ...versions) + 1).padStart(4, '0');
@@ -93,7 +108,7 @@ export function auditMigrationVersions(
   // one before it empty. Both are compared on the first four digits, the
   // generation the ledger orders by.
   const retiredSet = new Set(retired);
-  const filledHoles = entries
+  const filledHoles = legacyEntries
     .filter(({ version }) => retiredSet.has(version.slice(0, 4)))
     .map(({ name }) => name);
   const generations = new Set(versions);
@@ -102,12 +117,19 @@ export function auditMigrationVersions(
     if (!generations.has(generation)) skippedVersions.push(String(generation).padStart(4, '0'));
   }
 
-  return { entries, duplicates, unexpectedDuplicates, nextVersion, filledHoles, skippedVersions };
+  return { entries, duplicates, unexpectedDuplicates, nextVersion, filledHoles, skippedVersions, timestampEntries, invalidVersions };
 }
 
 function runCli() {
   const audit = auditMigrationVersions();
   console.log(`Migration filename audit: ${audit.entries.length} numbered SQL files.`);
+
+  if (audit.invalidVersions.length > 0) {
+    console.error('\nMigration audit failed: a version is neither a legacy generation nor a valid UTC timestamp.');
+    for (const { name } of audit.invalidVersions) console.error(`  ${name}`);
+    process.exitCode = 1;
+    return;
+  }
 
   for (const duplicate of audit.duplicates) {
     console.warn(`KNOWN legacy duplicate ${duplicate.version}: ${duplicate.names.join(', ')}`);
@@ -136,7 +158,7 @@ function runCli() {
     return;
   }
 
-  console.log(`Migration filename audit passed. Next available version: ${audit.nextVersion}.`);
+  console.log(`Migration filename audit passed. Next legacy version: ${audit.nextVersion}; ${audit.timestampEntries.length} UTC timestamp migration(s).`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

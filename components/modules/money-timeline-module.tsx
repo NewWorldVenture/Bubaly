@@ -324,10 +324,12 @@ function TimelineView({ timeline }: { timeline: CashflowTimeline }) {
           const negative = w.projectedBalance < 0;
           return (
             <div key={w.weekStart} className={cn('border-b border-border/60 last:border-b-0', idx === 0 && 'bg-white/[0.02]')}>
+              {/* A week with nothing in it has nothing to open: it is not offered as a disclosure. */}
               <button
                 onClick={() => active && setExpanded(isOpen ? null : w.weekStart)}
+                disabled={!active}
                 className={cn('flex w-full items-center gap-3 px-4 py-3 text-left', active && 'hover:bg-elevated')}
-                aria-expanded={isOpen}
+                aria-expanded={active ? isOpen : undefined}
               >
                 <div className="w-14 shrink-0">
                   <p className="text-xs font-bold text-fg">{pretty(w.weekStart)}</p>

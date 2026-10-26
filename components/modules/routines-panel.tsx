@@ -219,7 +219,7 @@ export function RoutinesPanel({ events, weekStartMonday, timeZone, onApplied }: 
               <button
                 onClick={() => saveSuggestion(s.signature)}
                 disabled={isPending(`save:${s.signature}`)}
-                className="mt-1.5 flex w-full items-center justify-center gap-1 rounded-lg bg-brand py-1.5 text-[11px] font-semibold text-brand-fg transition hover:opacity-90 disabled:opacity-60"
+                className="mt-1.5 flex w-full items-center justify-center gap-1 rounded-lg bg-brand py-1.5 text-[11px] font-semibold text-brand-fg transition hover:brightness-95 disabled:opacity-60"
               >
                 {isPending(`save:${s.signature}`) ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />} {tr('routines.saveAsRoutine')}
               </button>

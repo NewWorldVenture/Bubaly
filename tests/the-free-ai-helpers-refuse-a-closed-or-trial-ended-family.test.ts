@@ -29,7 +29,7 @@ const state: { family: Family; familyReadFails: boolean; superAdmin: boolean } =
 
 function chain(result: () => unknown) {
   const c: Record<string, unknown> = {};
-  for (const m of ['select', 'eq', 'neq', 'in', 'gte', 'lte', 'lt', 'gt', 'is', 'not', 'or', 'order', 'limit', 'range', 'maybeSingle', 'single', 'abortSignal']) c[m] = () => c;
+  for (const m of ['select', 'insert', 'update', 'eq', 'neq', 'in', 'gte', 'lte', 'lt', 'gt', 'is', 'not', 'or', 'order', 'limit', 'range', 'maybeSingle', 'single', 'abortSignal']) c[m] = () => c;
   c.then = (resolve: (value: unknown) => unknown) => Promise.resolve(result()).then(resolve);
   return c;
 }
@@ -40,6 +40,8 @@ const serviceClient = {
       ? (state.familyReadFails ? { data: null, error: { message: 'down' } } : { data: state.family, error: null })
       : table === 'subscriptions' ? { data: [], error: null }
         : table === 'gift_links' ? { data: { id: 'link-1', is_active: true, occasion: 'birthday', child_wallet_id: null, family_id: 'fam-1' }, error: null }
+          // The gift page records its request against the family's allowance (F19) before the model.
+          : table === 'ai_requests' ? { data: { id: 'req-gift' }, error: null }
           : { data: [], error: null })),
   rpc: async () => ({ data: null, error: null }),
 };
@@ -72,6 +74,8 @@ vi.mock('@/lib/supabase/auth', () => ({
 vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
   authenticateAI: async () => ({ supabase: callerClient, ctx, via: 'bearer' }),
+  // The gift page's monthly allowance (F19) has its own suite (a-gift-request-counts-against-the-allowance).
+  assertFamilyAIAllowance: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
 }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: (...a: unknown[]) => enforceAIRateLimit(...a) }));
 vi.mock('@/lib/server/rate-limit', () => ({ rateLimit: () => ({ ok: true }), clientIp: () => '203.0.113.7' }));

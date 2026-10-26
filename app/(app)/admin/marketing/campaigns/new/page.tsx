@@ -74,7 +74,7 @@ export default async function NewCampaignPage() {
           <label className="block">{tr('adminMarketingCampaignsNew.notes')}
             <textarea name="notes" rows={3} className="mt-1 w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
           </label>
-          <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{tr('adminMarketingCampaignsNew.createCampaign')}</SubmitButton>
+          <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:brightness-95">{tr('adminMarketingCampaignsNew.createCampaign')}</SubmitButton>
         </form>
       </Card>
     </div>

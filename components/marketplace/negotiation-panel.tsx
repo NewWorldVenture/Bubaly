@@ -127,7 +127,7 @@ function OfferOpener({ listingId, askCents, onDone, onError }: {
   if (!open) {
     return (
       <button onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:opacity-90">
+        className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:brightness-95">
         <CircleDollarSign className="h-4 w-4" /> {tr('negotiation.makeAnOffer')}
       </button>
     );
@@ -154,7 +154,7 @@ function OfferOpener({ listingId, askCents, onDone, onError }: {
             className={cn('h-11 w-full rounded-xl border border-border bg-bg text-sm outline-none focus:border-brand', unit.padClass)} />
         </div>
         <button onClick={submit} disabled={pending}
-          className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-50">
+          className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:brightness-95 disabled:opacity-50">
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />} {tr('negotiation.send')}
         </button>
       </div>
@@ -264,7 +264,7 @@ function ThreadView({ thread, viewer, askCents, listingId, onDone, onError }: {
                   className={cn('h-9 w-full rounded-lg border border-border bg-bg text-sm outline-none focus:border-brand', unit.padClass)} />
               </div>
               <button onClick={sendCounter} disabled={pending}
-                className="inline-flex h-9 items-center gap-1 rounded-lg bg-brand px-3 text-xs font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-50">
+                className="inline-flex h-9 items-center gap-1 rounded-lg bg-brand px-3 text-xs font-bold text-brand-fg transition hover:brightness-95 disabled:opacity-50">
                 {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowRight className="h-3 w-3" />} {tr('negotiation.send')}
               </button>
               <button onClick={() => setCountering(false)} className="text-xs text-muted hover:text-fg">{tr('negotiation.cancel')}</button>

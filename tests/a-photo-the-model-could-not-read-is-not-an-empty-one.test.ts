@@ -31,7 +31,8 @@ vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db, create
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
 // The plan gates and the AI allowance are covered by the features' own tests.
 vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: async () => null }));
-vi.mock('@/lib/server/ai-access', () => ({ assertAIAccess: async () => ({ ok: true }), accessDeniedResponse: () => null }));
+// The monthly allowance (F19) is its own suite (every-ai-route-counts-against-the-allowance); this one is about reading the reply.
+vi.mock('@/lib/server/ai-access', () => ({ assertAIAccess: async () => ({ ok: true }), accessDeniedResponse: () => null, refuseOverAIAllowance: async () => null, withinAIAllowance: async () => true }));
 vi.mock('@/lib/ai/settings', () => ({ getAIConfig: async () => ({ openaiKey: 'sk-fixture', model: 'gpt-4o' }) }));
 vi.mock('@/lib/ai/observability', () => ({
   withAiRequest: (_s: unknown, _f: unknown, run: (o: { used: typeof h.used; failed: typeof h.failed }) => unknown) => run({ used: h.used, failed: h.failed }),

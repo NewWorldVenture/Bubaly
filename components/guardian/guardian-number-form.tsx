@@ -84,7 +84,7 @@ export function GuardianNumberForm({
             <button
               onClick={save}
               disabled={saving}
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand text-white hover:bg-brand/90 disabled:opacity-50 transition"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand text-white hover:brightness-95 disabled:opacity-50 transition"
               aria-label={t('guardianNumber.saveGuardianNumber')}
             >
               <Check className="h-4 w-4" />

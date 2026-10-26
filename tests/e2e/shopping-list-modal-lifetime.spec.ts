@@ -10,11 +10,16 @@ const sdk=fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supa
 const files=['components/modules/shopping-module.tsx','components/ui/modal.tsx','components/ui/input.tsx','components/ui/button.tsx','components/ui/states.tsx','components/ui/states-client.tsx','components/app/page-header.tsx','components/ui/badge.tsx','lib/a11y/use-dialog-behavior.ts','lib/supabase/errors.ts','lib/ui/a11y.ts','lib/groceries/add-summary.ts','lib/grocery/retailers.ts','lib/i18n/grocery-category.ts'];
 const definitions=Object.fromEntries(files.map(file=>['@/'+file.replace(/\.tsx?$/,''),ts.transpileModule(fs.readFileSync(path.join(root,file),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText]));
 const messages=JSON.parse(fs.readFileSync(path.join(root,'lib/i18n/messages/en-US.json'),'utf8'));
-async function fixture(page:Page,initialMode='healthy',seedNames:string[]=[],strict=false){
+async function fixture(page:Page,initialMode='healthy',seedNames:string[]=[],strict=false,bought?:'healthy'|'held'|'partial'){
  let mode=initialMode;
  const familyId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
  const userId='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
  const rows:any[]=seedNames.map((name,index)=>({id:'aaaaaaaa-aaaa-4aaa-8aaa-'+String(index+1).padStart(12,'0'),name,family_id:familyId,created_by:userId,list_icon:'🛒',sort_order:index,is_archived:false,archived_at:null,created_at:'2026-10-02T12:00:00Z'}));const requests:any[]=[];const pending:(()=>void)[]=[];
+ // Bought is an opt-in synthetic normal-success boundary; all original list-name cases still deny every action.
+ const tripCalls:any[]=[];const tripPending:(()=>void)[]=[];
+ if(bought&&seedNames.length!==1)throw Error('Bought fixture requires exactly one synthetic list');
+ const groceryItems:any[]=bought?[{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',list_id:rows[0].id,name:'Synthetic milk',quantity:'1',category:'Dairy & Eggs',is_checked:true,created_at:'2026-10-02T12:00:00Z'}]:[];
+ if(bought==='partial')groceryItems.push({...groceryItems[0],id:'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',name:'Synthetic bread',category:'Pantry'});
  const runtimeErrors:string[]=[];const consoleMessages:string[]=[];
  page.on('pageerror',error=>runtimeErrors.push(error.message));
  page.on('requestfailed',request=>runtimeErrors.push('requestfailed '+request.url()));
@@ -28,7 +33,7 @@ async function fixture(page:Page,initialMode='healthy',seedNames:string[]=[],str
   requests.push({url,method,body});
   const table=parsed.pathname.split('/').pop();
   if(method==='GET'&&table==='grocery_lists')return{status:200,body:rows};
-  if(method==='GET'&&table==='grocery_items')return{status:200,body:[]};
+  if(method==='GET'&&table==='grocery_items')return{status:200,body:groceryItems.filter(item=>parsed.searchParams.get('list_id')==='eq.'+item.list_id)};
   if(['POST','PATCH'].includes(method)&&table==='grocery_lists'){
    const outcome=mode;if(outcome.startsWith('held'))await new Promise<void>(resolve=>pending.push(resolve));
    if(outcome==='refusal'||outcome==='held-refusal')return{status:400,body:{code:'SYNTHETIC_REFUSAL',message:'Synthetic list save refused'}};
@@ -44,6 +49,19 @@ async function fixture(page:Page,initialMode='healthy',seedNames:string[]=[],str
    return{status:201,body:{id}};
   }
   throw Error('Unexpected SDK operation '+method+' '+table);
+ });
+ if(bought)await page.exposeFunction('__shoppingTrip',async(input:any)=>{
+  if(input.listId!==rows[0].id||input.amount!==null)throw Error('Only the synthetic list and blank amount are permitted');
+  tripCalls.push({...input});
+  if(bought==='held')await new Promise<void>(resolve=>tripPending.push(resolve));
+  if(bought==='partial'&&tripCalls.length===1){
+   const milk=groceryItems.findIndex(item=>item.name==='Synthetic milk');
+   if(milk<0)throw Error('Synthetic milk must remain before partial receipt');
+   groceryItems.splice(milk,1);
+   return{ok:true,pantryUpdated:['Synthetic milk'],pantryFailed:[{name:'Synthetic bread',error:'synthetic line refusal'}],clearFailed:[],unitMismatch:[],cleared:1,purchaseRecorded:false};
+  }
+  const names=groceryItems.map(item=>item.name);groceryItems.splice(0,groceryItems.length);
+  return{ok:true,pantryUpdated:names,pantryFailed:[],clearFailed:[],unitMismatch:[],cleared:names.length,purchaseRecorded:false};
  });
  await page.goto(origin);
  await page.addScriptTag({content:react});await page.addScriptTag({content:reactDom});await page.addScriptTag({content:sdk});
@@ -65,17 +83,17 @@ async function fixture(page:Page,initialMode='healthy',seedNames:string[]=[],str
    '@/lib/supabase/client':{createClient:()=>sb},
    '@/lib/hooks/use-realtime-query':{useRealtimeQuery:opts=>{const [state,set]=React.useState({data:[],loading:true,error:null});const refresh=async()=>{const result=await opts.fetcher(sb);set({data:result.data||[],loading:false,error:result.error})};React.useEffect(()=>{void refresh()},opts.deps||[opts.table,opts.familyId]);return {...state,refresh}}},
    '@/lib/hooks/use-action':{useAction:()=>({run:async(key,fn)=>fn(),isPending:()=>false})},
-   '@/app/(app)/dashboard/grocery/actions':{addGroceryItemsAction:denied,clearCheckedGroceriesAction:denied,recordShoppingTripAction:denied,removeGroceryItemAction:denied,setGroceryItemCheckedAction:denied},
+   '@/app/(app)/dashboard/grocery/actions':{addGroceryItemsAction:denied,clearCheckedGroceriesAction:denied,recordShoppingTripAction:${bought ? 'async input=>{try{return await window.__shoppingTrip(input)}finally{window.__tripSettled++}}' : 'denied'},removeGroceryItemAction:denied,setGroceryItemCheckedAction:denied},
    '@/components/ai/ai-insight':{AiInsight:Empty},
   };
   function load(name){if(externals[name])return externals[name];if(cache[name])return cache[name].exports;if(!defs[name])throw Error('Undeclared dependency '+name);const module={exports:{}};cache[name]=module;const localRequire=child=>load(child.startsWith('.')?name.slice(0,name.lastIndexOf('/')+1)+child.slice(2):child);new Function('module','exports','require','React',defs[name])(module,module.exports,localRequire,React);return module.exports;}
-  window.__toasts=[];window.__sdkSettled=0;
+  window.__toasts=[];window.__sdkSettled=0;window.__tripSettled=0;
   const Module=load('@/components/modules/shopping-module').ShoppingModule;
   window.__shoppingRoot=window.ReactDOM.createRoot(document.getElementById('root'));
   window.__shoppingRoot.render(${strict ? 'React.createElement(React.StrictMode,null,React.createElement(Module))' : 'React.createElement(Module)'});
  })();`});
  try{await expect(page.getByRole('button',{name:'New list',exact:true})).toBeVisible()}catch(error){console.log(JSON.stringify({runtimeErrors,consoleMessages}));throw error}
- return{rows,requests,runtimeErrors,consoleMessages,writes:()=>requests.filter(r=>r.method==='POST'),release:()=>pending.shift()?.(),succeed:()=>{mode='healthy'},setMode:(next:string)=>{mode=next},mutations:()=>requests.filter(r=>['POST','PATCH'].includes(r.method))};
+ return{rows,requests,runtimeErrors,consoleMessages,tripCalls,groceryItems,releaseTrip:()=>tripPending.shift()?.(),writes:()=>requests.filter(r=>r.method==='POST'),release:()=>pending.shift()?.(),succeed:()=>{mode='healthy'},setMode:(next:string)=>{mode=next},mutations:()=>requests.filter(r=>['POST','PATCH'].includes(r.method))};
 }
 async function open(page:Page,name:string){
  await page.getByRole('button',{name:'New list',exact:true}).click();
@@ -221,4 +239,89 @@ for(const kind of ['create','edit'])for(const outcome of ['refusal','throw']){
 test('unmounted edit commits its already requested name/icon without feedback',async({page})=>{
  const proof=await fixture(page,'held',['Initial unmount list']);await edit(page,'Initial unmount list');await page.getByRole('button',{name:'🏠',exact:true}).click();await saveEdit(page,'Committed unmounted edit');
  await expect.poll(()=>proof.mutations().length).toBe(1);await page.evaluate(()=>(window as any).__shoppingRoot.unmount());proof.release();await settled(page);expect(proof.rows[0]).toMatchObject({name:'Committed unmounted edit',list_icon:'🏠'});expect(proof.mutations()).toHaveLength(1);expect(await page.evaluate(()=>(window as any).__toasts)).toEqual([]);diagnostics(proof);
+});
+
+// Ordinary successful ACK ownership only. No backend action, money, provider, SQL or transport-fault reproduction.
+async function openBought(page:Page){
+ await page.getByRole('button',{name:'Bought',exact:true}).click();
+ await expect(page.getByRole('dialog')).toBeVisible();
+}
+async function tripSettled(page:Page,count=1){
+ await expect.poll(()=>page.evaluate(()=>(window as any).__tripSettled)).toBe(count);
+ await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+}
+test('healthy Bought success closes its own visit and refreshes the checked list once',async({page})=>{
+ const proof=await fixture(page,'healthy',['Synthetic shop'],false,'healthy');await openBought(page);
+ const readsBefore=proof.requests.filter(r=>r.method==='GET'&&new URL(r.url).pathname.endsWith('/grocery_items')).length;
+ await page.getByRole('dialog').getByRole('button',{name:'Put it in the pantry',exact:true}).click();await tripSettled(page);
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ expect(proof.tripCalls).toEqual([{listId:'aaaaaaaa-aaaa-4aaa-8aaa-000000000001',amount:null,merchant:null}]);
+ expect(proof.groceryItems).toEqual([]);expect(proof.mutations()).toEqual([]);
+ await expect.poll(()=>proof.requests.filter(r=>r.method==='GET'&&new URL(r.url).pathname.endsWith('/grocery_items')).length).toBe(readsBefore+1);
+ await expect(page.getByRole('button',{name:'Bought',exact:true})).toHaveCount(0);
+ expect(await page.evaluate(()=>(window as any).__toasts)).toEqual([['success','Added to your pantry: 1.']]);diagnostics(proof);
+});
+test('cancel and reopen an unsent Bought visit preserves the new merchant without actions',async({page})=>{
+ const proof=await fixture(page,'healthy',['Synthetic shop'],false,'healthy');await openBought(page);
+ await page.getByRole('textbox',{name:'Store',exact:true}).fill('Unsent earlier merchant');
+ await page.getByRole('dialog').getByRole('button',{name:'Cancel',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+ await openBought(page);await page.getByRole('textbox',{name:'Store',exact:true}).fill('Unsent successor merchant');
+ await expect(page.getByRole('textbox',{name:'Store',exact:true})).toHaveValue('Unsent successor merchant');
+ expect(proof.tripCalls).toEqual([]);expect(proof.groceryItems).toHaveLength(1);expect(proof.mutations()).toEqual([]);
+ expect(await page.evaluate(()=>(window as any).__toasts)).toEqual([]);diagnostics(proof);
+});
+test('retired successful Bought ACK preserves the reopened successor merchant draft',async({page})=>{
+ const proof=await fixture(page,'healthy',['Synthetic shop'],false,'held');await openBought(page);
+ const readsBefore=proof.requests.filter(r=>r.method==='GET'&&new URL(r.url).pathname.endsWith('/grocery_items')).length;
+ await page.getByRole('dialog').getByRole('button',{name:'Put it in the pantry',exact:true}).click();
+ await expect.poll(()=>proof.tripCalls.length).toBe(1);
+ await page.getByRole('dialog').getByRole('button',{name:'Cancel',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+ await openBought(page);await page.getByRole('textbox',{name:'Store',exact:true}).fill('Owned successor merchant');
+ proof.releaseTrip();await tripSettled(page);
+ expect(proof.tripCalls).toEqual([{listId:'aaaaaaaa-aaaa-4aaa-8aaa-000000000001',amount:null,merchant:null}]);
+ expect(proof.groceryItems).toEqual([]);expect(proof.mutations()).toEqual([]);
+ await expect.poll(()=>proof.requests.filter(r=>r.method==='GET'&&new URL(r.url).pathname.endsWith('/grocery_items')).length).toBe(readsBefore+1);
+ await expect(page.getByRole('dialog')).toBeVisible();
+ await expect(page.getByRole('textbox',{name:'Store',exact:true})).toHaveValue('Owned successor merchant');
+ await expect(page.getByRole('dialog').getByRole('button',{name:'Put it in the pantry',exact:true})).toBeEnabled();
+ expect(await page.evaluate(()=>(window as any).__toasts)).toEqual([]);diagnostics(proof);
+});
+
+test('StrictMode healthy Bought success owns its visit and reads back once',async({page})=>{
+ const proof=await fixture(page,'healthy',['Strict synthetic shop'],true,'healthy');await openBought(page);
+ const readsBefore=proof.requests.filter(r=>r.method==='GET'&&new URL(r.url).pathname.endsWith('/grocery_items')).length;
+ await page.getByRole('dialog').getByRole('button',{name:'Put it in the pantry',exact:true}).click();await tripSettled(page);
+ await expect(page.getByRole('dialog')).toHaveCount(0);expect(proof.tripCalls).toEqual([{listId:'aaaaaaaa-aaaa-4aaa-8aaa-000000000001',amount:null,merchant:null}]);
+ expect(proof.groceryItems).toEqual([]);expect(proof.mutations()).toEqual([]);
+ await expect.poll(()=>proof.requests.filter(r=>r.method==='GET'&&new URL(r.url).pathname.endsWith('/grocery_items')).length).toBe(readsBefore+1);
+ expect(await page.evaluate(()=>(window as any).__toasts)).toEqual([['success','Added to your pantry: 1.']]);diagnostics(proof);
+});
+test('Escape retires pending Bought success without closing the reopened successor merchant',async({page})=>{
+ const proof=await fixture(page,'healthy',['Escape synthetic shop'],false,'held');await openBought(page);
+ const readsBefore=proof.requests.filter(r=>r.method==='GET'&&new URL(r.url).pathname.endsWith('/grocery_items')).length;
+ await page.getByRole('dialog').getByRole('button',{name:'Put it in the pantry',exact:true}).click();await expect.poll(()=>proof.tripCalls.length).toBe(1);
+ await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).toHaveCount(0);
+ await openBought(page);await page.getByRole('textbox',{name:'Store',exact:true}).fill('Escape successor merchant');proof.releaseTrip();await tripSettled(page);
+ expect(proof.tripCalls).toEqual([{listId:'aaaaaaaa-aaaa-4aaa-8aaa-000000000001',amount:null,merchant:null}]);expect(proof.groceryItems).toEqual([]);expect(proof.mutations()).toEqual([]);
+ await expect.poll(()=>proof.requests.filter(r=>r.method==='GET'&&new URL(r.url).pathname.endsWith('/grocery_items')).length).toBe(readsBefore+1);
+ await expect(page.getByRole('dialog')).toBeVisible();await expect(page.getByRole('textbox',{name:'Store',exact:true})).toHaveValue('Escape successor merchant');
+ await expect(page.getByRole('dialog').getByRole('button',{name:'Put it in the pantry',exact:true})).toBeEnabled();
+ expect(await page.evaluate(()=>(window as any).__toasts)).toEqual([]);diagnostics(proof);
+});
+test('active partial Bought receipt retains merchant and retries only the remaining checked line',async({page})=>{
+ const proof=await fixture(page,'healthy',['Partial synthetic shop'],false,'partial');await openBought(page);
+ await expect(page.getByRole('dialog').getByText('Synthetic milk',{exact:true})).toBeVisible();await expect(page.getByRole('dialog').getByText('Synthetic bread',{exact:true})).toBeVisible();
+ await page.getByRole('textbox',{name:'Store',exact:true}).fill('Partial synthetic market');
+ const readsBefore=proof.requests.filter(r=>r.method==='GET'&&new URL(r.url).pathname.endsWith('/grocery_items')).length;
+ await page.getByRole('dialog').getByRole('button',{name:'Put it in the pantry',exact:true}).click();await tripSettled(page);
+ await expect.poll(()=>proof.requests.filter(r=>r.method==='GET'&&new URL(r.url).pathname.endsWith('/grocery_items')).length).toBe(readsBefore+1);
+ await expect(page.getByRole('dialog')).toBeVisible();await expect(page.getByRole('textbox',{name:'Store',exact:true})).toHaveValue('Partial synthetic market');
+ await expect(page.getByRole('dialog').getByText('Synthetic milk',{exact:true})).toHaveCount(0);await expect(page.getByRole('dialog').getByText('Synthetic bread',{exact:true})).toBeVisible();
+ await expect(page.getByRole('dialog').getByRole('button',{name:'Put it in the pantry',exact:true})).toBeEnabled();
+ expect(proof.groceryItems.map(item=>item.name)).toEqual(['Synthetic bread']);expect(proof.tripCalls).toEqual([{listId:'aaaaaaaa-aaaa-4aaa-8aaa-000000000001',amount:null,merchant:'Partial synthetic market'}]);
+ expect(await page.evaluate(()=>(window as any).__toasts)).toEqual([['error','Could not put these in the pantry: Synthetic bread. Tap again to retry just those — the rest is already put away.'],['success','Added to your pantry: 1.']]);
+ await page.getByRole('dialog').getByRole('button',{name:'Put it in the pantry',exact:true}).click();await tripSettled(page,2);await expect(page.getByRole('dialog')).toHaveCount(0);
+ await expect.poll(()=>proof.requests.filter(r=>r.method==='GET'&&new URL(r.url).pathname.endsWith('/grocery_items')).length).toBe(readsBefore+2);
+ expect(proof.groceryItems).toEqual([]);expect(proof.tripCalls).toEqual([{listId:'aaaaaaaa-aaaa-4aaa-8aaa-000000000001',amount:null,merchant:'Partial synthetic market'},{listId:'aaaaaaaa-aaaa-4aaa-8aaa-000000000001',amount:null,merchant:'Partial synthetic market'}]);
+ expect(proof.mutations()).toEqual([]);expect(await page.evaluate(()=>(window as any).__toasts)).toHaveLength(3);diagnostics(proof);
 });

@@ -30,6 +30,16 @@ describe('the app shell on a phone', () => {
     expect(bare).toEqual([]);
   });
 
+  // The admin console's axe sweep at 1,280 px found the sidebar's two links
+  // back to the family app 16 px tall and 20 px apart on all 79 /admin pages
+  // (target-size, WCAG 2.5.8). Each is 24 px tall now.
+  it("makes the admin sidebar's links back to the family app 24 px targets", () => {
+    const shell = readFileSync('components/admin/admin-shell.tsx', 'utf8');
+    for (const href of ['/dashboard/briefing', '/dashboard']) {
+      expect(shell).toContain(`<Link href="${href}" className="flex min-h-6 items-center gap-1.5 px-1 text-xs text-muted hover:text-fg">`);
+    }
+  });
+
   it("draws the marketing section's group labels at full muted strength", () => {
     const subnav = readFileSync('app/(app)/admin/marketing/marketing-subnav.tsx', 'utf8');
     expect(subnav).toContain('uppercase tracking-wider text-muted sm:w-32');

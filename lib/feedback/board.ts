@@ -54,8 +54,8 @@ type Meta = { label: string; tone: string; dot: string; badge: string };
 
 export const STATUS_META: Record<FeedbackStatus, Meta> = {
   under_review: { label: 'Under review', tone: 'amber',  dot: 'bg-amber-400',   badge: 'bg-amber-500/15 text-amber-500 border-amber-500/25' },
-  planned:      { label: 'Planned',      tone: 'blue',   dot: 'bg-blue-400',    badge: 'bg-blue-500/15 text-blue-500 border-blue-500/25' },
-  in_progress:  { label: 'In progress',  tone: 'purple', dot: 'bg-purple-400',  badge: 'bg-purple-500/15 text-purple-500 border-purple-500/25' },
+  planned:      { label: 'Planned',      tone: 'blue',   dot: 'bg-blue-400',    badge: 'bg-blue-500/15 text-blue-400 border-blue-500/25' },
+  in_progress:  { label: 'In progress',  tone: 'purple', dot: 'bg-purple-400',  badge: 'bg-purple-500/15 text-purple-400 border-purple-500/25' },
   shipped:      { label: 'Shipped',      tone: 'green',  dot: 'bg-emerald-400', badge: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/25' },
   declined:     { label: 'Not planned',  tone: 'gray',   dot: 'bg-zinc-400',    badge: 'bg-zinc-500/15 text-zinc-400 border-zinc-500/25' },
 };
