@@ -220,7 +220,7 @@ export default async function LibraryPage() {
                           {feed.last_fetched_at ? ` · refreshed ${fmtDate(feed.last_fetched_at)}` : ' · never refreshed'}
                         </p>
                       </div>
-                      <FeedControls id={feed.id} canRemove={canCurate} />
+                      <FeedControls id={feed.id} canRemove={canCurate} canRefresh={ctx.active.role !== 'guest'} />
                     </div>
                     {feed.last_error && (
                       <p className="mt-1.5 flex items-start gap-1.5 text-xs text-warning">

@@ -147,6 +147,7 @@ source allocations are not evidence that production applied any migration.
 | 0523 proposed, held | `0523_a_member_changes_only_the_rows_they_can_read.sql` | `a_row_you_cannot_read_is_not_yours_to_change()` (SECURITY INVOKER) BEFORE UPDATE OR DELETE and AFTER UPDATE on `home_warranties`, `vehicle_registrations`, `vacation_documents`, `voice_commands`, `wallet_cards`, `wallet_passes`, `wallet_rewards`, `auto_insurance_policies`, `home_locations`, `utility_bills`, `vacation_medical_information` and `family_communications`: a signed-in caller changes only rows they read. Follows the held read rules; requested on #771 (comment 6402627160), not yet confirmed. |
 | 0524 proposed, held | `0524_a_guest_adds_nothing_to_the_areas_withheld_from_them.sql` | 0464's guest guard on `auto_insurance_policies`, `driving_trips`, `family_communications`, `home_locations`, `utility_bills`, `vacation_medical_information`, `wallet_cards`, `wallet_passes` and `wallet_rewards`. Follows ROLE-M03 and ROLE-SCOPE-001; requested on #771 (comment 6402627160), not yet confirmed. |
 | 0525 proposed, held | `0525_a_closed_vote_takes_no_more_ballots.sql` | `a_meal_ballot_is_cast_while_its_vote_is_open()` and `a_poll_vote_is_cast_while_its_poll_is_open()`, BEFORE INSERT OR UPDATE on `meal_vote_ballots` and `family_poll_votes`: a ballot is cast or changed only while its vote is open, read in the row's family FOR SHARE. Support's database half of 6137789822; requested on #771 (comment 6402862474), not yet confirmed. |
+| 0526 proposed, held | `0526_what_the_library_streams_is_added_by_a_parent_or_adult.sql` | `a_library_feed_is_added_by_a_parent_or_adult()` and `a_library_items_audio_is_added_by_a_parent_or_adult()`, BEFORE INSERT OR UPDATE on `library_feeds` and `library_items`: only a parent or adult adds or changes a subscription's `feed_url` or family, or an item's `media_url`, `feed_id` or family; `created_by` names the writer. KIDS-O02; requested on #771 (comment 6420549131), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4919,6 +4920,77 @@ applied twice.
 
 **After approved release:** as a test guest, try to insert a `utility_bills`
 row and confirm 42501.
+
+## `0526` (proposed, held) — a child could add what every child's library streams
+
+`supabase/reserved/0526_what_the_library_streams_is_added_by_a_parent_or_adult.sql`
+— **held**: requested on #771 in comment 6420549131. Not yet confirmed.
+
+**Severity: medium (a child could put any audio address, or any podcast feed,
+in the whole family's library, where the media route streams it from Bubaly's
+own origin past a parent's host filter, and could make a parent's audiobook
+play another address). Deploy order: with or after the Refresh change below
+(it is in the same PR).** KIDS-O02. The library actions let only a parent or
+adult subscribe or attach an audio address, and the places that fetch ask who
+added the row (`lib/library/curator.ts`), but 0284's policies are `for all
+using is_family_member(family_id)` and `created_by` is whatever the writer
+says. Measured on a replay of main, one PostgREST statement each, `OK 1` every
+time, as the teen, the child and the caregiver: adding a subscription,
+retargeting the parent's, adding a book with an audio address, filing an
+episode under the parent's subscription, rewriting the audio address of the
+parent's audiobook, filing it under another subscription, emptying
+`created_by` on a subscription the child planted (the curator check lets an
+empty one through) and filing a book under the parent's name; the teen, a
+parent of another household, moving the parent's audiobook there. A guest is
+already refused, by 0481.
+
+**Database.** `a_library_feed_is_added_by_a_parent_or_adult()` and
+`a_library_items_audio_is_added_by_a_parent_or_adult()` (one per table, so
+each body resolves against its table), SECURITY DEFINER with a pinned
+search_path, BEFORE INSERT OR UPDATE, named to fire after 0481's guest guard:
+for a signed-in caller, a subscription's insert and any change to its
+`feed_url` or family, and an item with a `media_url` or `feed_id` or any
+change to those or its family, need `can_manage_family` (of both families for
+a move), 42501. `created_by` is the writer or null on insert, and later
+changes only to the caller (a parent or adult) or to null once that account is
+gone (0284's `on delete set null`). A title and a page link stay anyone's, as
+do a subscription's description, `last_fetched_at` and `last_error`. The
+service role is exempt; deletes are unchanged (a non-manager's direct
+unsubscribe is left as its own item).
+
+**Application (same PR).** Refresh is anyone's, and it ingested on the
+presser's own session, so a child's Refresh wrote the episodes as the child:
+under 0526 that would fail. It now ingests through `serverWriter()` (the
+service role, as the nightly cron does) after the action's family-pinned read
+of the feed and its curator check. A guest, whom 0481 refuses in the database,
+is refused by the action before any read, and the page offers a guest no
+Refresh. No held object is called.
+
+**Proof:** `.github/workflows/library-curation-runtime.yml` requires the held
+probe
+`docs/audit/reserved/what-the-library-streams-is-added-by-a-parent-or-adult-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0526 twice and requires it to pass, then re-runs six released probes
+over these tables, their triggers and the deletes that cascade into them
+(an-erasure-actually-erases, definer-functions-check-their-caller,
+family-delete-cascade, gated-write-tables, plpgsql-bodies-resolve, rls-sweep).
+The passing run shows every write above refused by 0526's guard; the parent
+filing a subscription under another adult's name, and emptying `created_by` on
+a live account, refused; the parent and the adult still adding and changing
+subscriptions, audiobooks and episodes; everyone else still adding a title and
+a link, describing a subscription and renaming a book; the server still filing
+and describing; a guest still answered by 0464's guard; a parent of both
+households moving a book; an adult's account deleted in a signed-in session
+emptying `created_by`; the guards wired after the guest guard; **N1** (guards
+disabled): the child's writes land; **M1** (the items guard off UPDATE): the
+audio rewrite lands.
+
+All 189 released probes pass with 0526 applied, and with every held file
+applied twice.
+
+**After approved release:** as a test child, try to insert a `library_items`
+row with a `media_url` and confirm 42501; then press Refresh on a parent's
+subscription as that child and confirm new episodes arrive.
 
 ## `0522` (proposed, held) — a guest changed the household's tasks and reminders
 
