@@ -277,7 +277,10 @@ export async function scheduleRecommendedTasksAction(assetId: string): Promise<{
   }
   const have = new Set((existing ?? []).map((t) => t.title.toLowerCase()));
 
-  const base = asset.last_serviced_on ? new Date(asset.last_serviced_on) : new Date();
+  // Noon UTC on the day last serviced, as the assistant's `scheduleRecommendedTasks`
+  // does, so both write the same rows. `new Date(<DATE>)` is UTC midnight: the
+  // evening before west of Greenwich, so every task there fell due a day early.
+  const base = asset.last_serviced_on ? Date.parse(`${asset.last_serviced_on}T12:00:00Z`) : Date.now();
   const rows = cadences
     .filter((c) => !have.has(c.task.toLowerCase()))
     .map((c) => ({
@@ -286,7 +289,7 @@ export async function scheduleRecommendedTasksAction(assetId: string): Promise<{
       title: c.task,
       description: `Recommended every ${c.intervalDays} days for ${asset.name}.`,
       interval_days: c.intervalDays,
-      due_at: new Date(base.getTime() + c.intervalDays * 86_400_000).toISOString(),
+      due_at: new Date(base + c.intervalDays * 86_400_000).toISOString(),
       created_by: userId,
     }));
 
