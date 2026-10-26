@@ -20,14 +20,7 @@ import { expect, test, type Page } from '@playwright/test';
 // overlapped 4.5 px apart, so a tap could land on the neighbouring emoji (axe:
 // target-size, WCAG 2.5.8). It is `w-max` now. It is checked here from its own
 // class strings, placed on the sign-in page (no account needed).
-//
-// Reduced motion: the phone form fades in, and a click while it moves is
-// retried with Playwright scrolling the button into view. The page scrolls
-// smoothly (`scroll-behavior: smooth`), so the press could land before the
-// scroll and the release 34 px further on, off the button. Under reduced
-// motion the app neither animates nor scrolls smoothly; nothing here is about
-// motion.
-test.use({ locale: 'en-US', trace: 'off', screenshot: 'off', video: 'off', serviceWorkers: 'block', contextOptions: { reducedMotion: 'reduce' } });
+test.use({ locale: 'en-US', trace: 'off', screenshot: 'off', video: 'off', serviceWorkers: 'block' });
 
 const browserFailures = new WeakMap<Page, string[]>();
 test.beforeEach(({ page }) => {
@@ -162,6 +155,29 @@ test.describe('the phone sign-in form', () => {
       await page.keyboard.press('Enter');
       await expect(page.getByRole('button', { name, exact: true }), name).toBeFocused();
     }
+  });
+
+  // It faded in over 0.4 s while its number field already had focus: 100 ms
+  // in, its heading, hint, dial code, number field and Back read 2.0 to
+  // 3.25:1. It is drawn at full strength from the first frame now. The hold
+  // is on the animations of the elements holding the field, not on the card's
+  // own page-load fade, which has finished by now.
+  test('reads at full contrast while it appears', async ({ page }) => {
+    await page.goto('/login', { waitUntil: 'networkidle' });
+    await page.getByRole('button', { name: 'Continue with phone' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('textbox', { name: 'Phone number' })).toBeFocused();
+    await page.evaluate(() => {
+      const field = document.querySelector('input[type="tel"]')!;
+      for (const a of document.getAnimations()) {
+        const target = (a.effect as KeyframeEffect | null)?.target;
+        if (!target?.contains(field) || target.classList.contains('glass-card')) continue;
+        a.pause();
+        a.currentTime = 100;
+      }
+    });
+    const axe = await new AxeBuilder({ page }).include('main').withRules(['color-contrast']).analyze();
+    expect(axe.violations.flatMap((v) => v.nodes.map((n) => n.target.join(' ')))).toEqual([]);
   });
 });
 

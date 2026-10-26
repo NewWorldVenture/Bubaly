@@ -187,7 +187,10 @@ export function PhoneAuth({ next = '/onboarding', onBack }: { next?: string; onB
 
   if (phase === 'phone') {
     return (
-      <div className="space-y-4 animate-fade-in">
+      // No fade-in: the person just asked for this form and its number field takes focus at
+      // once, so it is drawn at full contrast from the first frame (100 ms into the old fade,
+      // its text read 2.0 to 3.25:1).
+      <div className="space-y-4">
         <div>
           <h2 className="text-lg font-semibold">{t('phoneAuth.whatRsquoSYourPhoneNumber')}</h2>
           <p className="mt-0.5 text-sm text-muted">{t('phoneAuth.weRsquoLlTextYouA')}</p>
