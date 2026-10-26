@@ -148,6 +148,9 @@ source allocations are not evidence that production applied any migration.
 | 0524 proposed, held | `0524_a_guest_adds_nothing_to_the_areas_withheld_from_them.sql` | 0464's guest guard on `auto_insurance_policies`, `driving_trips`, `family_communications`, `home_locations`, `utility_bills`, `vacation_medical_information`, `wallet_cards`, `wallet_passes` and `wallet_rewards`. Follows ROLE-M03 and ROLE-SCOPE-001; requested on #771 (comment 6402627160), not yet confirmed. |
 | 0525 proposed, held | `0525_a_closed_vote_takes_no_more_ballots.sql` | `a_meal_ballot_is_cast_while_its_vote_is_open()` and `a_poll_vote_is_cast_while_its_poll_is_open()`, BEFORE INSERT OR UPDATE on `meal_vote_ballots` and `family_poll_votes`: a ballot is cast or changed only while its vote is open, read in the row's family FOR SHARE. Support's database half of 6137789822; requested on #771 (comment 6402862474), not yet confirmed. |
 | 0526 proposed, held | `0526_what_the_library_streams_is_added_by_a_parent_or_adult.sql` | `a_library_feed_is_added_by_a_parent_or_adult()` and `a_library_items_audio_is_added_by_a_parent_or_adult()`, BEFORE INSERT OR UPDATE on `library_feeds` and `library_items`: only a parent or adult adds or changes a subscription's `feed_url` or family, or an item's `media_url`, `feed_id` or family; `created_by` names the writer. KIDS-O02; requested on #771 (comment 6420549131), not yet confirmed. |
+| 0527 proposed, held | `0527_a_post_on_the_idea_board_is_the_callers_own.sql` | `a_feedback_comment_is_the_callers_own()` and `a_feedback_idea_starts_as_the_callers_own()`, BEFORE INSERT on `feedback_comments` and `feedback_ideas`: a signed-in caller posts no team reply, a new idea starts under review with no note, pin, counts or tracker link, and `author_name` is the caller's own. CALHUB-O1; requested on #771 (comment 6421813855), not yet confirmed. |
+| 0528 proposed, held | `0528_a_budget_drift_signal_is_a_parents_or_adults.sql` | A RESTRICTIVE SELECT and `a_budget_drift_signal_is_written_by_a_parent_or_adult()` (BEFORE INSERT, UPDATE and DELETE) on `family_signals`: a budget-drift signal is read and written only by a parent or adult. OPSD-O05; requested on #771 (comment 6422105432), not yet confirmed. |
+| 0529 proposed, held | `0529_the_households_day_is_written_by_a_parent_or_adult.sql` | `a_household_day_is_written_by_a_parent_or_adult()`, BEFORE INSERT, UPDATE and DELETE on `family_operating_index`, `reasoning_snapshots` and `workload_snapshots`: only a parent or adult writes the household's day. OPSD-O06 and COORD-O01; requested on #771 (comment 6422372306), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4920,6 +4923,178 @@ applied twice.
 
 **After approved release:** as a test guest, try to insert a `utility_bills`
 row and confirm 42501.
+
+## `0529` (proposed, held) — a child rewrote the household's day
+
+`supabase/reserved/0529_the_households_day_is_written_by_a_parent_or_adult.sql`
+— **held**: requested on #771 in comment 6422372306. Not yet confirmed.
+
+**Severity: low to medium (a non-manager could rewrite the trend the parents
+read: the Operating Index, the reasoning report's "since yesterday" and who
+carried the household's work, or delete the workload history). Deploy order:
+any.** OPSD-O06 (0125's `family_operating_index` and 0149's
+`reasoning_snapshots`) and COORD-O01 (`workload_snapshots`). Their policies are
+`is_family_member(family_id)`. The app writes them only from a household-reach
+load, a parent's or adult's (`readsHouseholdMoney`, which is `isManager`), or
+from the service role: `loadOperatingIndex` upserts only when `reach` is
+`household`, `loadAndSnapshotReasoning` returns early for `member`, and
+`saveWorkloadSnapshotAction` returns unless `isManager`. Measured on a replay of
+main, as the teen, the child and the caregiver, `OK 1` each: rewriting today's
+index to 100 "thriving" and filing tomorrow's, rewriting the reasoning snapshot
+to all clear and filing another, rewriting the workload share to 90%, filing a
+workload row and deleting the history.
+
+**Database.** `a_household_day_is_written_by_a_parent_or_adult()`, SECURITY
+DEFINER with a pinned search_path, BEFORE INSERT, UPDATE and DELETE on all
+three: for a signed-in caller, a write needs `can_manage_family` of the row's
+family, old and new (42501). The service role is exempt, and so are two
+cascades that may run in a signed-in session: the household's deletion once its
+family row is gone (Postgres runs the cascades from `families` in
+constraint-trigger-name order, which is not fixed, so its members may be gone
+first), and a member's removal cascading into their `workload_snapshots` rows
+(`on delete cascade`). The body reads `member_id` through
+`to_jsonb(old)`, so it resolves on every table. Reads are unchanged. No
+application change.
+
+**Proof:** `.github/workflows/household-day-runtime.yml` requires the held
+probe `docs/audit/reserved/the-households-day-is-written-by-a-parent-or-adult-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0529 twice and requires it to pass, then re-runs six released probes
+(an-erasure-actually-erases, family-delete-cascade,
+family-erasure-leaves-nothing, gated-write-tables, plpgsql-bodies-resolve,
+rls-sweep). The passing run shows every write above refused by 0529's guard
+(the two tables with no member delete policy answer OK 0); parents and adults
+rewriting, filing and deleting on all three; everyone still reading them; the
+server filing them; a child's member row removed in their session, the
+household deleted in the parent's session, and in a session that is not its
+parent's (which forces the cascade order that leaves no parent); the wiring;
+**N1** (guards disabled): the child's rewrites land; **M1** (the guard checking
+the new row only): the child's workload delete lands. Three hand mutants (no
+household exemption, no member-removal exemption, no new-row clause) are each
+caught.
+
+All 189 released probes pass with 0529 applied, and with every held file
+applied twice.
+
+**After approved release:** as a test child, try to update
+`family_operating_index` for the family and confirm 42501; then open the
+Operating Index as a parent and confirm today's snapshot is written.
+
+## `0528` (proposed, held) — a child read and rewrote the household's budget drift
+
+`supabase/reserved/0528_a_budget_drift_signal_is_a_parents_or_adults.sql`
+— **held**: requested on #771 in comment 6422105432. Not yet confirmed.
+
+**Severity: low to medium (a non-manager read the household's spend against
+each budget, and could dismiss, delete or forge the drift the parents rely
+on). Deploy order: any.** OPSD-O05, and DB-TBL-138's per-role check for
+`family_signals`. 01420 gives select, insert, update and delete to
+`is_family_member(family_id)`; a budget drift (0157) carries a budget's spend
+and limit. The app keeps it a parent's or adult's (`readsHouseholdMoney`, which
+is `isManager`): the signals page, the reasoning report and the AI context drop
+it for anyone else, and a non-manager's Refresh detects and deletes none.
+Measured on a replay of main, as the teen, the child and the caregiver, `OK n`
+each: reading both drifts, dismissing one by id, an unfiltered dismiss and
+delete, planting a drift and turning a reminder signal into one.
+
+**Database.** A RESTRICTIVE SELECT policy, "A budget drift signal is read by
+a parent or adult": `kind <> 'budget_drift' or can_manage_family(family_id)`.
+And `a_budget_drift_signal_is_written_by_a_parent_or_adult()`, SECURITY
+DEFINER with a pinned search_path, BEFORE INSERT, UPDATE and DELETE: for a
+signed-in caller, a write whose old or new row is a budget drift needs a parent
+or adult of that row's family (42501), which also covers the unfiltered write
+a restrictive read cannot filter. Every other kind stays any member's (the
+member-reach detection, Restore and Dismiss). The service role is exempt, and
+so are two cascades that may run in a signed-in session: the household's
+deletion once its family row is gone (Postgres runs the cascades from
+`families` in constraint-trigger-name order, which is not fixed, so its members
+may be gone first and its parent no longer its parent), and a member's removal
+emptying `member_id` once their row is gone and changing nothing else. No
+application change.
+
+**Proof:** `.github/workflows/budget-drift-signal-runtime.yml` requires the
+held probe `docs/audit/reserved/a-budget-drift-signal-is-a-parents-or-adults-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0528 twice and requires it to pass, then re-runs six released probes
+(an-erasure-actually-erases, family-delete-cascade,
+family-erasure-leaves-nothing, gated-write-tables, plpgsql-bodies-resolve,
+rls-sweep). The passing run shows the drifts reading no row for the teen, the
+child and the caregiver and every write above refused (a dismiss by id matching
+none); parents and adults reading, dismissing, planting and deleting drifts;
+everyone else still reading, dismissing, adding and refreshing other signals;
+the server filing and deleting; a child's member row removed in their session,
+the household deleted in the parent's session, and in a session that is not
+its parent's (which forces the cascade order that leaves no parent); the
+wiring; **N1** (read rule dropped, guard disabled): the child reads, dismisses
+and plants; **M1** (guard off DELETE): the child's unfiltered delete lands.
+Four hand mutants (no household exemption, no old-row clause, no
+member-removal exemption, the read rule without its kind test) are each
+caught.
+
+All 189 released probes pass with 0528 applied, and with every held file
+applied twice.
+
+**After approved release:** as a test child, read `family_signals` where
+`kind = 'budget_drift'` and confirm no row; as a parent, confirm the drift
+still shows on the signals page.
+
+## `0527` (proposed, held) — anyone could post on the Idea Board as the Bubaly Team
+
+`supabase/reserved/0527_a_post_on_the_idea_board_is_the_callers_own.sql`
+— **held**: requested on #771 in comment 6421813855. Not yet confirmed.
+
+**Severity: medium (a signed-in user of any household could post, to every
+family's board, a reply rendered as the team's, or a roadmap entry already
+"shipped", pinned and voted up, signed "Bubaly Team"). Deploy order: any.**
+CALHUB-O1, the database half of CALHUB-01, and CALHUB-O5's per-author insert
+throttle. The board is shown to every family
+and 0197's insert policies check only `author_id = auth.uid()`. Measured on a
+replay of main, as an ordinary signed-in parent, `OK 1` each: an idea filed as
+"Bubaly Team" with status `shipped`, pinned, an `admin_note`, `vote_count`
+9999, `comment_count` 42 and a GitHub issue; a comment with `is_team = true`.
+
+**Database.** `a_feedback_comment_is_the_callers_own()` and
+`a_feedback_idea_starts_as_the_callers_own()`, SECURITY DEFINER with a pinned
+search_path, BEFORE INSERT, 42501 with their own sentences: for a signed-in
+caller, `is_team` is false; a new idea's `status` is `under_review`, its
+`admin_note` null, `pinned` false, `vote_count` and `comment_count` 0 and its
+four `github_*` columns null; and `author_name` is one of the caller's own
+names by `authorNameFor()`'s rule (a `family_members.display_name` of theirs,
+trimmed; their email's local part; or the default `A Bubaly family`), checked
+by `feedback_name_is_the_callers_own(text)`, which no client may call, and
+never the team's name; and an author posts no more ideas than the board's own
+limits, five a minute and twenty a day (CALHUB-O5: each idea opens a GitHub
+issue with the bot token, so a scripted loop of direct inserts spent its
+allowance). The service role is exempt, so the admin console, the step-up team
+reply, the GitHub sync and the seeds write as before. INSERT only:
+there is no client UPDATE or DELETE policy, and the counters move through
+0197's SECURITY DEFINER triggers. No application change.
+
+**Proof:** `.github/workflows/idea-board-authorship-runtime.yml` requires the
+held probe `docs/audit/reserved/a-post-on-the-idea-board-is-the-callers-own-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0527 twice and requires it to pass, then re-runs six released probes
+(an-erasure-actually-erases, definer-functions-check-their-caller,
+family-erasure-leaves-nothing, plpgsql-bodies-resolve, privileged-rpc-grants,
+rls-sweep). The passing run shows each forged column, a team reply, and posts
+signed as the team or as another person refused, the team's name refused even
+where the caller named herself that in another household; a sixth idea within a
+minute and a twenty-first within a day refused, one under each limit and one
+after thirty the day before landing; the caller still
+posting as her trimmed display name, her email's local part and the default; a
+user in no household commenting as himself; a vote moving the count; the
+server posting a team reply and shipping an idea; the wiring; **N1** (guards
+disabled): the team reply and the shipped idea land; **M1** (the name check
+answering yes): a comment signed as another person lands. Six hand mutants
+(no team-name clause, untrimmed display name, no email branch, one `github_*`
+column dropped, each limit one higher) are each caught.
+
+All 189 released probes pass with 0527 applied, and with every held file
+applied twice.
+
+**After approved release:** as a test user, try to insert a
+`feedback_comments` row with `is_team = true` and confirm 42501; then post a
+reply as the team from the admin console and confirm it lands.
 
 ## `0526` (proposed, held) — a child could add what every child's library streams
 
