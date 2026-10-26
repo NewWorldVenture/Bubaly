@@ -24,11 +24,13 @@
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { MARKETING_PUBLIC_PREFIXES } from '@/lib/marketing/page-types';
+import { PROTECTED, matchesPrefix } from '@/lib/auth/route-access';
 
 // Routes outside app/(app) that genuinely require a session. Each needs a
 // reason, because adding a name here is how a public page would get silently
 // excused from the check below.
 const DELIBERATELY_PRIVATE: Record<string, string> = {
+  '/app-lock': 'Checks the signed-in account’s private PIN; deliberately outside the protected content tree so locked requests can reach the PIN action.',
   '/onboarding': 'Runs after sign-up and writes to the new account; there is no signed-out form of it.',
 };
 
@@ -110,9 +112,14 @@ describe('every page meant for signed-out visitors is past the middleware', () =
   it('keeps the signed-in app behind the boundary', () => {
     // Widening PUBLIC is the fix for this defect class and also the way to
     // cause a far worse one, so pin the paths that must never be on it.
-    for (const priv of ['/dashboard', '/admin', '/settings', '/display', '/onboarding']) {
+    for (const priv of ['/dashboard', '/admin', '/settings', '/display', '/onboarding', '/app-lock']) {
       expect(isPublic(priv), `${priv} must require a session`).toBe(false);
     }
+  });
+
+  it.each(Object.keys(DELIBERATELY_PRIVATE))('%s is explicitly session-protected outside the app shell', (route) => {
+    expect(isPublic(route)).toBe(false);
+    expect(matchesPrefix(route, PROTECTED)).toBe(true);
   });
 
   it('states why each exempted route needs a session', () => {
