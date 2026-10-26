@@ -171,7 +171,7 @@ export async function POST(req: NextRequest) {
       // On an open repeating task, completed_at records the last completion.
       supabase.from('maintenance_tasks').select('title, due_at, status, completed_at').eq('family_id', familyId).in('status', ['todo', 'in_progress']).not('due_at', 'is', null).lte('due_at', `${horizon}T23:59:59.999Z`).order('due_at').limit(20),
       // A deleted warranty is soft-deleted (`deleted_at`), like on every other reader of this table.
-      supabase.from('home_warranties').select('name, expires_on').eq('family_id', familyId).is('deleted_at', null).not('expires_on', 'is', null).lte('expires_on', horizon).order('expires_on').limit(20),
+      supabase.from('home_warranties').select('name, expires_on').eq('family_id', familyId).is('deleted_at', null).neq('status', 'cancelled').not('expires_on', 'is', null).gte('expires_on', today).lte('expires_on', horizon).order('expires_on').limit(20),
       // Trips still to come, soonest first (lib/vacations/dates tripNotOverFilter): a trip that ended is not "overdue".
       supabase.from('vacations').select('title, destination, start_date, end_date, status').eq('family_id', familyId).not('status', 'in', '("completed","cancelled")').not('start_date', 'is', null).or(tripNotOverFilter(today)).order('start_date').order('id').limit(20),
       supabase.from('pantry_items').select('name, expires_at').eq('family_id', familyId).not('expires_at', 'is', null).lte('expires_at', horizon).order('expires_at').limit(25),
