@@ -24,7 +24,10 @@ import { SCHEDULED_TRIGGERS } from '@/lib/marketing/automation-runner';
 // the function, to the module that defines it and to a module that exports
 // it under any name is either followed to a call whose trigger `check` reads,
 // or reported: each check below that does not follow a use ends in `report`
-// (in analyse), and none of them returns past it unsaid.
+// (in analyse), and none of them returns past it unsaid. Only what sits in a
+// type is passed over, since a type runs nothing (inTypePosition); a class's
+// `extends` and an instantiation expression (`f<T>`), which TypeScript counts
+// as types, hold values and are read as any other expression.
 //
 // What it still cannot see, exactly. A path written as text that names a
 // module carrying the function is reported wherever it is written, so each
@@ -143,9 +146,27 @@ function outermost(node: ts.Expression): ts.Expression {
   return e;
 }
 
+/**
+ * Whether a node sits in a type, which runs nothing. R7-AW-GUARD-TYPE-POSITION-VALUE:
+ * ts.isTypeNode counts an ExpressionWithTypeArguments as a type, but what it
+ * holds as its expression is a value in a class's `extends` (`class A extends
+ * withFire(fireAutomationEvent) {}`) and in an instantiation expression
+ * (`fireAutomationEvent<never>`), and every reference in either was dropped
+ * before it was followed or reported. Only one in `implements` or in an
+ * interface's `extends` (namesAType), or a type argument, is a type.
+ */
 function inTypePosition(node: ts.Node): boolean {
-  for (let p: ts.Node | undefined = node.parent; p; p = p.parent) if (ts.isTypeNode(p)) return true;
+  for (let child: ts.Node = node, p: ts.Node | undefined = node.parent; p; child = p, p = p.parent) {
+    if (ts.isExpressionWithTypeArguments(p) && p.expression === child && !namesAType(p)) continue;
+    if (ts.isTypeNode(p)) return true;
+  }
   return false;
+}
+
+/** Whether an ExpressionWithTypeArguments names a type: in `implements`, or in an interface's `extends`. */
+function namesAType(node: ts.ExpressionWithTypeArguments): boolean {
+  const clause = node.parent;
+  return ts.isHeritageClause(clause) && (clause.token === ts.SyntaxKind.ImplementsKeyword || ts.isInterfaceDeclaration(clause.parent));
 }
 
 /** Whether an identifier is a name being declared here (an import, a binding, a declaration, a key), not a use. */
@@ -1242,6 +1263,64 @@ describe('every trigger the app fires is one a workflow can be switched on for',
       loaderAt('app/zz-l.ts:14', "import('vm')"),
       unresolvedAt('app/zz-l.ts:15', "'/lib/zz-a'"),
       unresolvedAt('app/zz-l.ts:16', "'data:text/javascript,export default 1'"),
+    ]);
+  });
+
+  // R7-AW-GUARD-TYPE-POSITION-VALUE. The reviewer's probe (zz-h, and zz-a
+  // with zz-n) passed at 4a8facaed with no call and no problem beside the
+  // control (zz-k): ts.isTypeNode counts an ExpressionWithTypeArguments as a
+  // type, so every reference in a class's `extends` and in an instantiation
+  // expression (`f<T>`) was taken for a type and dropped before it reached
+  // `report`. An instantiation expression is not followed but reported, so
+  // zz-a's export is reported where it is made, and zz-n's call of it needs
+  // no following. zz-h's last lines hold the rest of the class: a call in a
+  // class expression's `extends` is followed, and what is a type
+  // (`implements`, an interface's `extends`, a type argument) still says
+  // nothing.
+  it('reads a class `extends` and an instantiation expression as the values they are, and still skips a type', () => {
+    const program = new Map<string, string>([
+      ['lib/zz-a.ts', [
+        "import { fireAutomationEvent } from '@/lib/marketing/automation-events';",
+        '// @ts-expect-error fireAutomationEvent takes no type arguments.',
+        'export const fireIt = fireAutomationEvent<never>;',
+      ].join('\n')],
+      ['app/zz-n.ts', ["import { fireIt } from '@/lib/zz-a';", "await fireIt(admin, { trigger: 'demo_started', email: null, subjectKey: 'n' });"].join('\n')],
+      ['app/zz-k.ts', ["import { fireAutomationEvent } from '@/lib/marketing/automation-events';", 'const K = withFire(fireAutomationEvent);'].join('\n')],
+      ['app/zz-h.ts', [
+        "import { fireAutomationEvent } from '@/lib/marketing/automation-events';",
+        "import * as ev from '@/lib/marketing/automation-events';",
+        'class A extends withFire(fireAutomationEvent) {}',
+        'class B extends register(ev) {}',
+        "class C extends load('@/lib/marketing/automation-events') {}",
+        'class D extends createRequire(import.meta.url)(name) {}',
+        'class E extends eval(code) {}',
+        '// @ts-expect-error',
+        'const go = fireAutomationEvent<never>;',
+        "await go(admin, { trigger: 'demo_started', email: null, subjectKey: 'h1' });",
+        '// @ts-expect-error',
+        'const ns = ev<never>;',
+        "await ns[pick()](admin, { trigger: 'demo_started', email: null, subjectKey: 'h2' });",
+        // A call in a class expression's `extends`: followed to its trigger.
+        "const Fired = class extends withResult(fireAutomationEvent(admin, { trigger: 'demo_started', email: null, subjectKey: 'h3' })) {};",
+        // A type runs nothing: nothing to say.
+        'interface Callable extends Function {}',
+        'class Handler implements Function {}',
+        'class Typed extends Base<typeof fireAutomationEvent, typeof ev> {}',
+        'const typed = list<typeof fireAutomationEvent>;',
+      ].join('\n')],
+    ]);
+    expect(literalsOf(program), 'a call in a class `extends` was not found').toEqual(['app/zz-h.ts:14']);
+    expect(problemsOf(program), 'a value in a class `extends` or an instantiation expression was neither followed nor reported').toEqual([
+      cannotFollow('lib/zz-a.ts:3', 'fireAutomationEvent<never>'),
+      cannotFollow('app/zz-k.ts:2', 'withFire(fireAutomationEvent)'),
+      cannotFollow('app/zz-h.ts:3', 'withFire(fireAutomationEvent)'),
+      cannotFollow('app/zz-h.ts:4', 'register(ev)'),
+      cannotFollow('app/zz-h.ts:5', "load('@/lib/marketing/automation-events')"),
+      loaderAt('app/zz-h.ts:6', 'createRequire(import.meta.url)'),
+      loaderAt('app/zz-h.ts:7', 'eval(code)'),
+      cannotFollow('app/zz-h.ts:9', 'fireAutomationEvent<never>'),
+      cannotFollow('app/zz-h.ts:12', 'ev<never>'),
+      firesDemoStarted('app/zz-h.ts:14'),
     ]);
   });
 });
