@@ -96,17 +96,23 @@ export function PrivacyCenter() {
   }, [manager, familyId, userId, auditKey]);
 
   // ── this device's session ──────────────────────────────────────────────────
-  const [session, setSession] = useState<Loaded<{ lastSignInAt: string | null; assurance: Assurance }>>({ status: 'loading' });
+  type SessionRead = Loaded<{ lastSignInAt: string | null; assurance: Assurance }>;
+  const [sessionState, setSessionState] = useState<{ userId: string; read: SessionRead }>({ userId, read: { status: 'loading' } });
+  // The render before a new effect runs must not label a previous caller's
+  // assurance as the current caller's session.
+  const session: SessionRead = sessionState.userId === userId ? sessionState.read : { status: 'loading' };
   const [sessionKey, setSessionKey] = useState(0);
   useEffect(() => {
+    const setSession = (read: SessionRead) => setSessionState({ userId, read });
+    if (!userId) { setSession({ status: 'error' }); return; }
     let active = true;
     setSession({ status: 'loading' });
     (async () => {
       const supabase = createClient();
-      const [userRes, aalRes] = await Promise.all([supabase.auth.getUser(), supabase.auth.mfa.getAuthenticatorAssuranceLevel()]);
+      const [userRes, aalRes] = await settleAll([supabase.auth.getUser(), supabase.auth.mfa.getAuthenticatorAssuranceLevel()]);
       if (!active) return;
       const error = userRes.error ?? aalRes.error;
-      if (error || !userRes.data.user || !aalRes.data) {
+      if (error || !userRes.data?.user || userRes.data.user.id !== userId || !aalRes.data) {
         console.error('[privacy-center] session read failed', error ?? new Error('empty response'));
         setSession({ status: 'error' });
         return;
@@ -120,7 +126,7 @@ export function PrivacyCenter() {
       });
     })();
     return () => { active = false; };
-  }, [sessionKey]);
+  }, [userId, sessionKey]);
 
   // ── export ─────────────────────────────────────────────────────────────────
   const [exporting, setExporting] = useState(false);
