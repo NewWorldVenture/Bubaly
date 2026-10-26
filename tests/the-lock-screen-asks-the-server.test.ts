@@ -4,7 +4,7 @@
 // browser with verifyPin, and keep its five-try limit in React state. Now the
 // layout renders it only when the server has decided the browser is locked
 // (tests/app-lock-is-enforced-on-the-server.test.ts), and it sends each PIN to
-// unlockAppAction. A right PIN asks the router to re-render, which brings the
+// unlockAppAction. A right PIN replaces the document, which brings the
 // app; a refusal from the durable limiter shows the server's countdown. Driven
 // through the REAL component on the module harness.
 import { createElement } from 'react';
@@ -14,14 +14,11 @@ import { resetHookSlots } from './helpers/hook-slots';
 
 const h = await vi.hoisted(async () => (await import('./helpers/module-state')).createModuleState());
 const state = vi.hoisted(() => {
-  const refresh = vi.fn();
-  // One router for the life of the page, as Next's useRouter gives.
-  return { unlock: vi.fn(), refresh, router: { refresh: (...args: unknown[]) => refresh(...args) } };
+  return { unlock: vi.fn(), reload: vi.fn() };
 });
 
 vi.mock('react', async (original) => (await import('./helpers/hook-slots')).withHookSlots(await original<object>(), h.hooks));
 vi.mock('@/components/i18n/locale-provider', async () => (await import('./helpers/module-harness')).localeProviderModule(h));
-vi.mock('next/navigation', () => ({ useRouter: () => state.router }));
 vi.mock('@/components/auth/sign-out-form', () => ({
   SignOutForm: ({ children }: { children: (s: { signingOut: boolean }) => unknown }) => createElement('form', { action: '/auth/signout' }, children({ signingOut: false }) as never),
 }));
@@ -40,8 +37,8 @@ async function enter(pin: string) {
 beforeEach(() => {
   resetHookSlots(h.hooks);
   state.unlock.mockReset();
-  state.refresh.mockReset();
-  vi.stubGlobal('window', { addEventListener() {}, removeEventListener() {} });
+  state.reload.mockReset();
+  vi.stubGlobal('window', { addEventListener() {}, removeEventListener() {}, location: { reload: state.reload } });
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -54,19 +51,19 @@ describe('the App Lock screen', () => {
     expect(has(tree, 'Forgot PIN? Sign out')).toBe(true);
   });
 
-  it('sends the PIN to the server, and on a right one re-renders into the app', async () => {
+  it('sends the PIN to the server, and on a right one replaces the document', async () => {
     state.unlock.mockResolvedValue({ ok: true });
     await enter('4071');
     expect(state.unlock).toHaveBeenCalledTimes(1);
     expect(state.unlock).toHaveBeenCalledWith('4071');
-    expect(state.refresh).toHaveBeenCalledTimes(1);
+    expect(state.reload).toHaveBeenCalledTimes(1);
   });
 
   it('a wrong PIN is said, and nothing re-renders', async () => {
     state.unlock.mockResolvedValue({ ok: false, reason: 'wrong_pin' });
     await enter('0000');
     expect(has(screen(), 'Wrong PIN — try again')).toBe(true);
-    expect(state.refresh).not.toHaveBeenCalled();
+    expect(state.reload).not.toHaveBeenCalled();
   });
 
   it("the server's refusal holds the keypad for the time it names", async () => {
@@ -75,7 +72,7 @@ describe('the App Lock screen', () => {
     const tree = screen();
     expect(has(tree, 'Too many attempts — try again in')).toBe(true);
     expect(byName(tree, '1').props.disabled).toBe(true);
-    expect(state.refresh).not.toHaveBeenCalled();
+    expect(state.reload).not.toHaveBeenCalled();
   });
 
   it('a check that could not run is not called a wrong PIN', async () => {

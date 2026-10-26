@@ -6,12 +6,11 @@
 // and neither does the PIN's salt or hash. The PIN is checked by
 // `unlockAppAction` on the server, which also keeps the attempt count (durably:
 // a reload does not reset it). A right PIN sets a session-scoped unlock cookie
-// and this screen asks the router to re-render, which brings the app.
+// and opens a fresh document so retired router children cannot return.
 //
 // It can NEVER trap anyone: a "Sign out" escape is always present. No
 // redirects, no loop risk.
-import { useEffect, useState, useCallback, useRef, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react';
 import { Lock, Delete, LogOut } from 'lucide-react';
 import { unlockAppAction, type UnlockResult } from '@/app/(app)/settings/app-lock-actions';
 import { cn } from '@/lib/utils/cn';
@@ -20,10 +19,10 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 import { SignOutForm } from '@/components/auth/sign-out-form';
 import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 
-export function AppLockGate() {
+export function AppLockGate({ blocked = false, unavailable = false, onRetry, onUnlocked }: {
+  blocked?: boolean; unavailable?: boolean; onRetry?: () => void; onUnlocked?: () => void;
+} = {}) {
   const tr = useTranslations();
-  const router = useRouter();
-  const [refreshing, startRefresh] = useTransition();
   const [digits, setDigits] = useState('');
   // 'wrong' shakes and clears itself; 'unavailable' (the check could not run)
   // stays until the next key, so it can be read.
@@ -31,10 +30,21 @@ export function AppLockGate() {
   const [checking, setChecking] = useState(false);
   const [cooldownUntil, setCooldownUntil] = useState(0); // epoch ms, from the server's retryAfter
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const mounted = useRef(false);
+  const submitting = useRef(false);
+  const input = useRef('');
+  const wrongTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (wrongTimer.current) clearTimeout(wrongTimer.current);
+    };
+  }, []);
 
   const cooldownLeft = Math.max(0, Math.ceil((cooldownUntil - nowMs) / 1000));
   const inCooldown = cooldownLeft > 0;
-  const busy = checking || refreshing;
+  const busy = checking || blocked;
 
   // Tick the cooldown countdown. The server holds the count; this only shows it.
   useEffect(() => {
@@ -42,12 +52,14 @@ export function AppLockGate() {
     const id = setInterval(() => {
       const t = Date.now();
       setNowMs(t);
-      if (t >= cooldownUntil) { setCooldownUntil(0); setDigits(''); }
+      if (t >= cooldownUntil) { setCooldownUntil(0); input.current = ''; setDigits(''); }
     }, 250);
     return () => clearInterval(id);
   }, [cooldownUntil]);
 
   const submit = useCallback(async (pin: string) => {
+    if (!mounted.current || submitting.current || blocked) return;
+    submitting.current = true;
     setChecking(true);
     let res: UnlockResult;
     try {
@@ -58,12 +70,19 @@ export function AppLockGate() {
       console.error('[app-lock] unlock did not complete', e);
       res = { ok: false, reason: 'unavailable' };
     }
-    setChecking(false);
+    if (!mounted.current) return;
     if (res.ok) {
-      // The unlock cookie is set; the layout renders the app on the re-render.
-      startRefresh(() => router.refresh());
+      // A fresh document discards the router's cached private subtrees. Never
+      // reveal children retained by an older layout after an unlock.
+      input.current = '';
+      setDigits('');
+      if (onUnlocked) onUnlocked();
+      else window.location.reload();
       return;
     }
+    submitting.current = false;
+    setChecking(false);
+    input.current = '';
     setDigits('');
     if (res.reason === 'rate_limited') {
       setNowMs(Date.now());
@@ -72,26 +91,32 @@ export function AppLockGate() {
     }
     if (res.reason === 'unavailable') { setError('unavailable'); return; }
     setError('wrong');
-    setTimeout(() => setError(null), 600);
-  }, [router]);
+    wrongTimer.current = setTimeout(() => { if (mounted.current) setError(null); }, 600);
+  }, [blocked, onUnlocked]);
 
   const press = useCallback((d: string) => {
-    if (busy || error === 'wrong' || inCooldown || digits.length >= 4) return;
+    if (!mounted.current || submitting.current || busy || error === 'wrong' || inCooldown || input.current.length >= 4) return;
     if (error) setError(null);
-    const next = digits + d;
+    const next = input.current + d;
+    input.current = next;
     setDigits(next);
     // Submitted here, not inside a state updater: React may run an updater
     // twice, and every submit now spends one of the server's attempts.
     if (next.length === 4) void submit(next);
-  }, [busy, error, inCooldown, digits, submit]);
+  }, [busy, error, inCooldown, submit]);
 
-  const back = useCallback(() => setDigits((p) => p.slice(0, -1)), []);
+  const back = useCallback(() => {
+    if (!mounted.current || submitting.current || busy || inCooldown) return;
+    input.current = input.current.slice(0, -1);
+    setDigits(input.current);
+  }, [busy, inCooldown]);
 
   // Hardware keyboard support on the lock screen.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (/^\d$/.test(e.key)) press(e.key);
-      else if (e.key === 'Backspace') back();
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (/^\d$/.test(e.key)) { e.preventDefault(); press(e.key); }
+      else if (e.key === 'Backspace') { e.preventDefault(); back(); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -132,7 +157,9 @@ export function AppLockGate() {
                 i < digits.length ? 'border-brand bg-brand' : 'border-border bg-transparent')} />
           ))}
         </div>
-        {inCooldown ? (
+        {blocked ? (
+          <p role={unavailable ? 'alert' : 'status'} className="mt-3 max-w-[16rem] text-center text-xs font-medium text-muted">{tr('appLock.stayingLockedUntilWeCanCheck')}</p>
+        ) : inCooldown ? (
           <p className="mt-3 text-xs font-medium text-amber-400">{tr('appLockGate.tooManyAttemptsTryAgainIn')} {cooldownLeft}s</p>
         ) : error === 'wrong' ? (
           <p className="mt-3 text-xs font-medium text-rose-400">{tr('appLockGate.wrongPinTryAgain')}</p>
@@ -158,6 +185,8 @@ export function AppLockGate() {
             <Delete className="h-6 w-6" />
           </button>
         </div>
+
+        {blocked && onRetry && <button type="button" onClick={onRetry} className="mt-5 text-sm font-medium text-brand-text underline">{tr('appLockSettings.lockNow')}</button>}
 
         {/* The escape hatch — can never trap a forgotten PIN. */}
         <SignOutForm className="mt-9">

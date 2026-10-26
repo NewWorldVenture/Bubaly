@@ -22,12 +22,14 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 import { rateLimitHit } from './helpers/rate-limit-rpc';
-import { buildAppLockConfig, type AppLockConfig } from '@/lib/security/app-lock';
+import { buildAppLockConfig, verifyPin, type AppLockConfig } from '@/lib/security/app-lock';
 
 type Cookie = { value: string; options: Record<string, unknown> };
 const state = vi.hoisted(() => ({
   db: null as unknown,
   userId: null as string | null,
+  sessionId: null as string | null,
+  records: new Map<string, { userId: string; config: AppLockConfig | null; revision: string }>(),
   jar: new Map<string, { value: string; options: Record<string, unknown> }>(),
   limiterKeys: [] as string[],
 }));
@@ -40,6 +42,15 @@ vi.mock('next/headers', () => ({
   }),
 }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => state.db }));
+vi.mock('@/lib/security/app-lock-store', () => ({
+  readAppLockRecord: async (userId: string) => ({ ok: true, record: structuredClone(state.records.get(userId) ?? null) }),
+  replaceAppLockRecord: async (userId: string, revision: string | null, config: AppLockConfig | null) => {
+    if ((state.records.get(userId)?.revision ?? null) !== revision) return { ok: false, reason: 'conflict' };
+    const record = { userId, config, revision: crypto.randomUUID() };
+    state.records.set(userId, record);
+    return { ok: true, record: structuredClone(record) };
+  },
+}));
 vi.mock('@/lib/supabase/auth', () => ({
   isSuperAdmin: async () => false,
   requireUserContext: async () => {
@@ -51,9 +62,12 @@ vi.mock('@/lib/server/family-time-zone', () => ({ activeFamilyTimeZone: async ()
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/components/i18n/locale-provider', () => ({ FamilyTimeZoneProvider: ({ children }: { children: ReactNode }) => children }));
 vi.mock('@/components/i18n/scoped-locale-provider', () => ({ ScopedLocaleProvider: ({ children }: { children: ReactNode }) => children }));
+vi.mock('@/components/ui/toast', () => ({ ToastProvider: ({ children }: { children: ReactNode }) => children }));
 vi.mock('@/components/ui/confirm', () => ({ ConfirmProvider: ({ children }: { children: ReactNode }) => children }));
+vi.mock('@/components/auth/sign-out-form', () => ({ SignOutForm: ({ children }: { children: ReactNode }) => createElement('sign-out-form', {}, children) }));
 vi.mock('@/components/auth/session-keeper', () => ({ SessionKeeper: (props: object) => createElement('session-keeper', props) }));
 vi.mock('@/components/app/app-lock-gate', () => ({ AppLockGate: (props: object) => createElement('app-lock-gate', props) }));
+vi.mock('@/components/app/app-lock-boundary', () => ({ AppLockBoundary: ({ children, ...props }: { children: ReactNode }) => createElement('app-lock-boundary', props, children) }));
 vi.mock('@/components/app/trial-paywall-gate', () => ({ TrialPaywallGate: (props: object) => createElement('paywall-gate', props) }));
 vi.mock('@/components/app/account-closed-gate', () => ({ AccountClosedGate: (props: object) => createElement('closed-gate', props) }));
 
@@ -85,9 +99,14 @@ function household() {
     { id: 'm-ben', family_id: FAMILY, user_id: BEN, role: 'parent', is_active: true, created_at: '2026-01-02T00:00:00Z' },
   ]);
   db.seed('user_preferences', [
-    { user_id: ANA, notification_prefs: { appLock: locks.ana, email: true }, updated_at: '2026-10-01T00:00:00Z' },
-    { user_id: BEN, notification_prefs: { appLock: locks.ben }, updated_at: '2026-10-01T00:00:00Z' },
+    { user_id: ANA, notification_prefs: { email: true }, updated_at: '2026-10-01T00:00:00Z' },
+    { user_id: BEN, notification_prefs: {}, updated_at: '2026-10-01T00:00:00Z' },
   ]);
+  state.records.set(ANA, { userId: ANA, config: locks.ana, revision: crypto.randomUUID() });
+  state.records.set(BEN, { userId: BEN, config: locks.ben, revision: crypto.randomUUID() });
+  Object.assign(db.auth, {
+    getSession: async () => ({ data: { session: state.userId ? { access_token: `header.${Buffer.from(JSON.stringify({ sub: state.userId, session_id: state.sessionId })).toString('base64url')}.signature` } : null }, error: null }),
+  });
   state.db = db;
   signIn(ANA);
 }
@@ -95,10 +114,13 @@ function household() {
 /** The browser signs in as `userId`: same cookie jar, a different session. */
 function signIn(userId: string | null) {
   state.userId = userId;
+  state.sessionId = userId ? crypto.randomUUID() : null;
   (db as unknown as { options: { userId: string | null } }).options.userId = userId;
 }
 
 const prefsOf = (userId: string) => db.table('user_preferences').find((r) => r.user_id === userId)!.notification_prefs as Record<string, unknown>;
+const lockOf = (userId: string) => state.records.get(userId)!.config;
+const setLock = (userId: string, config: AppLockConfig) => state.records.set(userId, { userId, config, revision: crypto.randomUUID() });
 
 /** Call every function component — the async server ones included — until only host elements remain. */
 async function resolveTree(node: ReactNode): Promise<ReactNode> {
@@ -123,13 +145,15 @@ const payload = (tree: ReactNode) => JSON.stringify(tree);
 
 async function render() {
   const tree = await resolveTree(await AppGroupLayout({ children: 'THE-APP' }));
-  return { tree, gate: find(tree, 'app-lock-gate'), app: payload(tree).includes('THE-APP'), text: payload(tree) };
+  const boundary = find(tree, 'app-lock-boundary');
+  return { tree, gate: boundary?.props.locked ? boundary : null, app: payload(tree).includes('THE-APP'), text: payload(tree) };
 }
 
 beforeEach(async () => {
   locks.ana = await buildAppLockConfig(PIN);
   locks.ben = await buildAppLockConfig(PIN); // the same PIN, on purpose
   state.jar.clear();
+  state.records.clear();
   state.limiterKeys = [];
   // Each case starts with a fresh process-local limiter (lib/server/rate-limit
   // keeps its count in module scope), as the database does with a fresh fake.
@@ -180,14 +204,14 @@ describe('the (app) layout decides App Lock on the server', () => {
   it('a new PIN set elsewhere locks a browser that unlocked with the old one', async () => {
     const { unlockAppAction } = await actions();
     await unlockAppAction(PIN);
-    prefsOf(ANA).appLock = await buildAppLockConfig('9090');
+    setLock(ANA, await buildAppLockConfig('9090'));
     const page = await render();
     expect(page.gate).not.toBeNull();
     expect(page.app).toBe(false);
   });
 
   it('with the lock off the app renders, unlock or no unlock (control)', async () => {
-    prefsOf(ANA).appLock = { ...locks.ana, enabled: false };
+    setLock(ANA, { ...locks.ana, enabled: false });
     const page = await render();
     expect(page.gate).toBeNull();
     expect(page.app).toBe(true);
@@ -211,7 +235,7 @@ describe('unlockAppAction checks the PIN on the server', () => {
     // Session-scoped: the browser drops it when it closes.
     expect(cookie.options).not.toHaveProperty('maxAge');
     expect(cookie.options).not.toHaveProperty('expires');
-    expect(cookie.value.startsWith(`${ANA}.`)).toBe(true);
+    expect(cookie.value.startsWith(`v2.${ANA}.`)).toBe(true);
     expect(cookie.value).not.toContain(locks.ana.hash);
     expect(cookie.value).not.toContain(PIN);
   });
@@ -253,9 +277,9 @@ describe('unlockAppAction checks the PIN on the server', () => {
 
 describe('the settings flows keep the unlock in step', () => {
   it('turning the lock on keeps this browser in the app', async () => {
-    prefsOf(ANA).appLock = { ...locks.ana, enabled: false };
+    setLock(ANA, { ...locks.ana, enabled: false });
     const { saveAppLockConfig } = await actions();
-    expect(await saveAppLockConfig({ ...locks.ana, enabled: true })).toEqual({ ok: true });
+    expect(await saveAppLockConfig({ enabled: true })).toEqual({ ok: true });
     expect((await render()).app).toBe(true);
   });
 
@@ -263,9 +287,9 @@ describe('the settings flows keep the unlock in step', () => {
     const { unlockAppAction, saveAppLockConfig } = await actions();
     await unlockAppAction(PIN);
     const otherBrowser = new Map(state.jar);
-    const next = await buildAppLockConfig('9090');
-    expect(await saveAppLockConfig(next)).toEqual({ ok: true });
-    expect(prefsOf(ANA)).toMatchObject({ appLock: next, email: true });
+    expect(await saveAppLockConfig({ enabled: true, pin: '9090' })).toEqual({ ok: true });
+    expect(await verifyPin('9090', lockOf(ANA)!)).toBe(true);
+    expect(prefsOf(ANA)).toEqual({ email: true });
     expect((await render()).app, 'this browser').toBe(true);
 
     state.jar.clear();
@@ -276,7 +300,7 @@ describe('the settings flows keep the unlock in step', () => {
   it('turning the lock off drops the unlock', async () => {
     const { unlockAppAction, saveAppLockConfig } = await actions();
     await unlockAppAction(PIN);
-    expect(await saveAppLockConfig({ ...locks.ana, enabled: false })).toEqual({ ok: true });
+    expect(await saveAppLockConfig({ enabled: false })).toEqual({ ok: true });
     expect(state.jar.size).toBe(0);
     expect((await render()).app).toBe(true);
   });
@@ -284,8 +308,8 @@ describe('the settings flows keep the unlock in step', () => {
   it('a locked browser cannot turn the lock off or set a PIN of its own', async () => {
     const { saveAppLockConfig } = await actions();
     expect(await saveAppLockConfig(null)).toMatchObject({ ok: false });
-    expect(await saveAppLockConfig(await buildAppLockConfig('1234'))).toMatchObject({ ok: false });
-    expect(prefsOf(ANA).appLock).toEqual(locks.ana);
+    expect(await saveAppLockConfig({ enabled: true, pin: '1234' })).toMatchObject({ ok: false });
+    expect(lockOf(ANA)).toEqual(locks.ana);
     expect(state.jar.size).toBe(0);
     expect((await render()).app).toBe(false);
   });

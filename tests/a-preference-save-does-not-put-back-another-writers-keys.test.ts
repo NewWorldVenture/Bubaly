@@ -16,7 +16,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 
-const h = vi.hoisted(() => ({ db: null as unknown }));
+const h = vi.hoisted(() => ({ db: null as unknown, record: null as import('@/lib/security/app-lock-store').AppLockRecord | null, onRead: () => {} }));
+vi.mock('@/lib/security/app-lock-store', () => ({
+  readAppLockRecord: async () => { h.onRead(); return { ok: true, record: h.record }; },
+  replaceAppLockRecord: async (userId: string, revision: string | null, config: import('@/lib/security/app-lock').AppLockConfig | null) => {
+    if ((h.record?.revision ?? null) !== revision) return { ok: false, reason: 'conflict' };
+    h.record = { userId, config, revision: 'revision-new' };
+    return { ok: true, record: h.record };
+  },
+}));
+vi.mock('@/lib/security/app-lock-server', async (original) => ({
+  ...(await original<object>()), readAppLockSessionId: async () => 'session-1',
+}));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db }));
 vi.mock('@/lib/supabase/auth', () => ({
   requireUserContext: async () => ({ user: { id: 'user-1' }, active: { familyId: 'family-1', role: 'parent', member: { id: 'm1' } } }),
@@ -39,7 +50,7 @@ const { saveCaptureShortcutsAction } = await import('@/app/(app)/capture/shortcu
 
 let db: InMemorySupabase;
 const prefs = () => (db.table('user_preferences')[0] as { notification_prefs: Record<string, unknown> } | undefined)?.notification_prefs;
-const LOCK = { enabled: true, salt: 'c2FsdHNhbHRzYWx0c2FsdA==', hash: 'aGFzaGhhc2hoYXNoaGFzaGhhc2hoYXNoaGFzaGhhc2g=' };
+const DISPLAY = { enabled: true, salt: 'c2FsdHNhbHRzYWx0c2FsdA==', hash: 'aGFzaGhhc2hoYXNoaGFzaGhhc2hoYXNoaGFzaGhhc2g=' };
 
 /** The row as another tab or the Google sync would leave it: a new key, and — as the
  *  table's trigger does on every update — a new updated_at. */
@@ -84,16 +95,18 @@ beforeEach(() => {
     notification_prefs: { googleCalendarToken: 'enc:v1:old', quietHours: { start: '21:00' } },
   }]);
   h.db = db;
+  h.record = null;
+  h.onRead = () => {};
 });
 
 describe('mergeNotificationPrefs', () => {
   it('re-merges onto the newer row when another writer lands between the read and the write', async () => {
     interleaveAfterRead(1, () => anotherWriterSets('captureShortcuts', ['tasks'], '2026-09-27T10:00:01.000Z'));
-    const res = await mergeNotificationPrefs(db as never, 'user-1', (p) => ({ ...p, appLock: LOCK }));
+    const res = await mergeNotificationPrefs(db as never, 'user-1', (p) => ({ ...p, displayOptions: DISPLAY }));
     expect(res.ok).toBe(true);
     expect(prefs()).toEqual({
       googleCalendarToken: 'enc:v1:old', quietHours: { start: '21:00' },
-      captureShortcuts: ['tasks'], appLock: LOCK,
+      captureShortcuts: ['tasks'], displayOptions: DISPLAY,
     });
   });
 
@@ -104,7 +117,7 @@ describe('mergeNotificationPrefs', () => {
       if (table !== 'user_preferences') return q;
       return Object.assign(q, { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: { code: '57014' } }) }) }) });
     }) as typeof db.from);
-    const res = await mergeNotificationPrefs(db as never, 'user-1', (p) => ({ ...p, appLock: LOCK }));
+    const res = await mergeNotificationPrefs(db as never, 'user-1', (p) => ({ ...p, displayOptions: DISPLAY }));
     expect(res).toEqual({ ok: false, reason: 'read_failed', error: { code: '57014' } });
     vi.restoreAllMocks();
     expect(prefs()).toEqual({ googleCalendarToken: 'enc:v1:old', quietHours: { start: '21:00' } });
@@ -122,25 +135,29 @@ describe('mergeNotificationPrefs', () => {
     let tick = 0;
     interleaveAfterRead(Infinity, () => undefined, () =>
       anotherWriterSets('other', ++tick, `2026-09-27T10:01:${String(tick).padStart(2, '0')}.000Z`));
-    const res = await mergeNotificationPrefs(db as never, 'user-1', (p) => ({ ...p, appLock: LOCK }), 3);
+    const res = await mergeNotificationPrefs(db as never, 'user-1', (p) => ({ ...p, displayOptions: DISPLAY }), 3);
     expect(res).toEqual({ ok: false, reason: 'contended' });
     expect(tick).toBeGreaterThanOrEqual(3); // at least one lost race per attempt
-    expect(prefs()?.appLock).toBeUndefined();
+    expect(prefs()?.displayOptions).toBeUndefined();
   });
 });
 
 describe('the writers use it', () => {
   it('App Lock turned on while a shortcut save lands keeps both', async () => {
-    // Read 1 is the action's own check that this browser is not held by the
-    // lock; read 2 is the merge's, and the other writer lands after THAT one.
-    interleaveAfterRead(2, () => anotherWriterSets('captureShortcuts', ['grocery', 'tasks'], '2026-09-27T10:00:02.000Z'));
-    expect(await saveAppLockConfig(LOCK)).toEqual({ ok: true });
-    expect(prefs()).toMatchObject({ appLock: LOCK, captureShortcuts: ['grocery', 'tasks'], googleCalendarToken: 'enc:v1:old' });
+    h.onRead = () => anotherWriterSets('captureShortcuts', ['grocery', 'tasks'], '2026-09-27T10:00:02.000Z');
+    expect(await saveAppLockConfig({ enabled: true, pin: '4071' })).toEqual({ ok: true });
+    expect(h.record?.config?.enabled).toBe(true);
+    expect(prefs()).toMatchObject({ captureShortcuts: ['grocery', 'tasks'], googleCalendarToken: 'enc:v1:old' });
+    expect(prefs()).not.toHaveProperty('appLock');
   });
 
-  it('a shortcut save while App Lock is turned on keeps the lock', async () => {
-    interleaveAfterRead(1, () => anotherWriterSets('appLock', LOCK, '2026-09-27T10:00:03.000Z'));
+  it('a shortcut save cannot replace a private App Lock', async () => {
+    const { buildAppLockConfig } = await import('@/lib/security/app-lock');
+    h.record = { userId: 'user-1', revision: 'revision-private', config: await buildAppLockConfig('4071') };
+    const privateLock = structuredClone(h.record);
     expect(await saveCaptureShortcutsAction({ keys: ['notes'] })).toEqual({ ok: true });
-    expect(prefs()).toMatchObject({ appLock: LOCK, captureShortcuts: ['notes'] });
+    expect(h.record).toEqual(privateLock);
+    expect(prefs()).toMatchObject({ captureShortcuts: ['notes'] });
+    expect(prefs()).not.toHaveProperty('appLock');
   });
 });
