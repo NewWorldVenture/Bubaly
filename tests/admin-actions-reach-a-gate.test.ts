@@ -42,7 +42,14 @@ const ROOT = join('app', '(app)', 'admin');
 // superAdminGate (lib/auth/super-admin-gate.ts) is main's shared wrapper: it
 // calls isSuperAdmin and fails closed, answering 'unavailable' when the check
 // itself cannot complete.
-const KNOWN_GATES = ['isSuperAdmin', 'requireMarketingAdmin', 'isSuperAdminEmail', 'superAdminGate'];
+//
+// isSuperAdminEmail is NOT one. It answers about whatever address it is handed,
+// and in the admin actions that is the TARGET (the account being banned, the
+// grant being revoked), never the caller; counting it let an action that only
+// checks its argument read as gated. tests/every-admin-action-refuses-before-
+// it-touches-data.test.ts calls each action as a non-admin, which this reading
+// of the source cannot do.
+const KNOWN_GATES = ['isSuperAdmin', 'requireMarketingAdmin', 'superAdminGate'];
 
 const USE_SERVER = /^\s*(['"])use server\1\s*;?\s*$/m;
 

@@ -186,7 +186,7 @@ export function WalletHub() {
             <Button onClick={() => setAddOpen((v) => !v)}><Plus className="h-4 w-4" /> {tr('wallet.addToWallet')}</Button>
             {addOpen && (
               <>
-                <button className="fixed inset-0 z-10 cursor-default" aria-hidden onClick={() => setAddOpen(false)} />
+                <button className="fixed inset-0 z-10 cursor-default" aria-hidden tabIndex={-1} onClick={() => setAddOpen(false)} />
                 <div className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-xl border border-border bg-elevated py-1 shadow-glass">
                   {([['account', 'Account'], ['card', 'Card'], ['pass', 'Pass / Membership'], ['reward', 'Reward program'], ['transaction', 'Transaction']] as [AddKind, string][]).map(([k, label]) => (
                     <button key={k} onClick={() => { setAddOpen(false); setAdding(k); }} className="block w-full px-4 py-2 text-left text-sm hover:bg-surface">{label}</button>
@@ -200,7 +200,7 @@ export function WalletHub() {
             <Button variant="secondary" size="icon" aria-label={tr('wallet.more')} onClick={() => setMoreOpen((v) => !v)}><MoreHorizontal className="h-4 w-4" /></Button>
             {moreOpen && (
               <>
-                <button className="fixed inset-0 z-10 cursor-default" aria-hidden onClick={() => setMoreOpen(false)} />
+                <button className="fixed inset-0 z-10 cursor-default" aria-hidden tabIndex={-1} onClick={() => setMoreOpen(false)} />
                 <div className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-xl border border-border bg-elevated py-1 shadow-glass">
                   <Link href="/wallet/settings" className="block px-4 py-2 text-sm hover:bg-surface" onClick={() => setMoreOpen(false)}>{tr('wallet.walletSettings')}</Link>
                   <Link href="/wallet/activity" className="block px-4 py-2 text-sm hover:bg-surface" onClick={() => setMoreOpen(false)}>{tr('wallet.activity')}</Link>

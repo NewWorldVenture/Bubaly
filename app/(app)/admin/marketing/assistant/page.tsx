@@ -85,7 +85,7 @@ export default function MarketingAssistantPage() {
           className="min-h-[80px] w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring"
         />
         <div className="mt-3 flex justify-end">
-          <button onClick={generate} disabled={loading} className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-60">
+          <button onClick={generate} disabled={loading} className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white hover:brightness-95 disabled:opacity-60">
             <Sparkles className="h-4 w-4" /> {loading ? 'Generating…' : `Generate ${current.label.toLowerCase()}`}
           </button>
         </div>

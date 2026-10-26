@@ -101,7 +101,7 @@ export function NavEntry({ item, variant, locked, onLocked, badge }: {
         type="button"
         onClick={() => onLocked(item)}
         title={t('nav.upgradeToUnlock', { label })}
-        className={cn(base, 'text-muted/45 hover:bg-elevated/60 hover:text-muted')}
+        className={cn(base, 'text-muted hover:bg-elevated/60 hover:text-fg')}
       >
         <item.icon className="h-5 w-5 shrink-0" />
         <span className="min-w-0 flex-1 truncate text-left">{label}</span>

@@ -74,7 +74,7 @@ export function AIEngineForm({ view }: { view: AIConfigView }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <button type="submit" disabled={saving} className="rounded-xl bg-brand px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-60">
+        <button type="submit" disabled={saving} className="rounded-xl bg-brand px-5 py-2.5 text-sm font-semibold text-white hover:brightness-95 disabled:opacity-60">
           {saving ? 'Saving…' : 'Save AI engine'}
         </button>
         <button type="button" onClick={onTest} disabled={testing}

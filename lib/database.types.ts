@@ -1275,7 +1275,7 @@ export interface Database {
       school_classes: T<
         { id: string; family_id: string; member_id: string; subject: string; teacher: string | null; room: string | null; time_slot: string | null; day_of_week: number | null; school_name: string | null; week_pattern: WeekPattern; created_by: string | null } & Stamps,
         { id?: string; family_id: string; member_id: string; subject: string; teacher?: string | null; room?: string | null; time_slot?: string | null; day_of_week?: number | null; school_name?: string | null; week_pattern?: WeekPattern; created_by?: string | null },
-        Partial<{ subject: string; teacher: string | null; room: string | null; time_slot: string | null; day_of_week: number | null; school_name: string | null; week_pattern: WeekPattern }>
+        Partial<{ member_id: string; subject: string; teacher: string | null; room: string | null; time_slot: string | null; day_of_week: number | null; school_name: string | null; week_pattern: WeekPattern }>
       >;
       grades: T<
         { id: string; family_id: string; member_id: string; class_id: string | null; subject: string; title: string | null; grade: string | null; grade_type: GradeType; score: number | null; max_score: number | null; date: string; created_by: string | null } & Stamps,
@@ -1292,6 +1292,12 @@ export interface Database {
         { id: string; family_id: string; team_id: string; opponent: string; our_score: number; their_score: number; date: string; result: GameResult; notes: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; team_id: string; opponent: string; our_score?: number; their_score?: number; date?: string; result: GameResult; notes?: string | null; created_by?: string | null },
         Partial<{ opponent: string; our_score: number; their_score: number; date: string; result: GameResult; notes: string | null }>
+      >;
+      // App Lock credentials are service-only; no browser table privileges or RLS policies.
+      app_lock_credentials: T<
+        { user_id: string; enabled: boolean; salt: string | null; hash: string | null; revision: string; updated_at: string },
+        { user_id: string; enabled: boolean; salt: string | null; hash: string | null; revision?: string; updated_at?: string },
+        Partial<{ enabled: boolean; salt: string | null; hash: string | null; revision: string; updated_at: string }>
       >;
       user_preferences: T<
         { user_id: string; theme: ThemePref; push_enabled: boolean; email_enabled: boolean; expo_push_token: string | null; active_family_id: string | null; default_dashboard: DashboardView; notification_prefs: Json } & Stamps,

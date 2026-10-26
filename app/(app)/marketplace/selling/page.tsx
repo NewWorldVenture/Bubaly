@@ -180,7 +180,7 @@ export default async function SellingPage() {
         title={tr('marketplaceSelling.selling')}
         description={t('selling.everythingYouReSellingRanked')}
         action={
-          <Link href="/marketplace/browse?post=1" className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:opacity-90">
+          <Link href="/marketplace/browse?post=1" className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:brightness-95">
             <Plus className="h-4 w-4" /> {tr('marketplaceSelling.postAnItem')}
           </Link>
         }

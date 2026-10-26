@@ -13,9 +13,16 @@ export interface HomeworkLike {
   status: HomeworkStatus;
 }
 
+/**
+ * Homework that still needs doing. Every count of "open", "due" or "still to
+ * do" reads this one set: the board, the AI study plan, the Moments page and
+ * the home insight. Started work is still to do.
+ */
+export const OPEN_HOMEWORK_STATUSES: HomeworkStatus[] = ['assigned', 'in_progress'];
+
 /** A piece of homework is "open" when it still needs doing. */
 export function isOpen(hw: HomeworkLike): boolean {
-  return hw.status === 'assigned' || hw.status === 'in_progress';
+  return OPEN_HOMEWORK_STATUSES.includes(hw.status);
 }
 
 /** Open homework whose due date is in the past relative to `now`. */

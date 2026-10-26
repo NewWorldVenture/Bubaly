@@ -198,7 +198,7 @@ export function WorkloadModule({
                     disabled={pending || done}
                     className={cn('flex-shrink-0 rounded-lg px-3 py-2 text-xs font-bold transition',
                       done ? 'bg-emerald-500/15 text-emerald-400'
-                        : 'bg-brand text-brand-fg hover:opacity-90 disabled:opacity-50')}
+                        : 'bg-brand text-brand-fg hover:brightness-95 disabled:opacity-50')}
                   >
                     {done ? <span className="flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> {tr('workload.moved')}</span>
                       : applying === s.assignmentId ? <Loader2 className="h-4 w-4 animate-spin" />

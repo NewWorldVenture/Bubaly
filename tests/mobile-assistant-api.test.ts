@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../mobile/src/lib/config', () => ({ config: { apiUrl: 'https://www.bubaly.com' } }));
 import { mobileTranslate } from '../mobile/src/lib/mobile-i18n';
+import { parseAssistantResponse } from '../mobile/src/lib/assistant-core';
 
 // Native config is mocked at runtime. Keep this import dynamic so the separate
 // web typecheck does not require Expo packages installed only by the mobile job.
@@ -38,5 +39,19 @@ describe('mobile API fetch integration', () => {
       .mockResolvedValueOnce(Response.json({ code: 'not_configured' }, { status: 503 })));
     await expect(transcribe()).rejects.toMatchObject({ code: 'unavailable', message: mobileTranslate('fr-FR', 'mobileAssistant.familyUnavailable') });
     await expect(transcribe()).rejects.toMatchObject({ code: 'not_configured', message: mobileTranslate('fr-FR', 'mobileAssistant.voiceNotConfigured') });
+  });
+
+  it('shows the monthly AI allowance refusal instead of the rate-limit retry hint', async () => {
+    const error = 'Your family has used its 10 AI requests for this month. Upgrade to Family Basic for unlimited, or try again next month.';
+    const t = (key: string) => mobileTranslate('fr-FR', key);
+    expect(parseAssistantResponse(429, { error, code: 'allowance_exceeded' }, t)).toEqual({ ok: false, status: 429, code: 'allowance_exceeded', error });
+    expect(parseAssistantResponse(429, { code: 'allowance_exceeded' }, t)).toEqual({ ok: false, status: 429, code: 'allowance_exceeded', error: mobileTranslate('fr-FR', 'mobileAssistant.failed') });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ error, code: 'allowance_exceeded' }, { status: 429 })));
+    await expect(ask()).rejects.toMatchObject({ code: 'allowance_exceeded', status: 429, message: error });
+  });
+
+  it.each([[{ error: 'Too many requests', code: 'rate_limited' }], [{ error: 'Slow down' }], [null]])('keeps every other 429 a rate limit (%j)', (body) => {
+    const t = (key: string) => mobileTranslate('fr-FR', key);
+    expect(parseAssistantResponse(429, body, t)).toEqual({ ok: false, status: 429, code: 'rate_limited', error: mobileTranslate('fr-FR', 'mobileAssistant.rateLimited') });
   });
 });

@@ -40,6 +40,11 @@ export async function POST(req: NextRequest) {
     }
     const { resume } = (body.value && typeof body.value === 'object' ? body.value : {}) as { resume?: boolean };
     if (typeof resume !== 'boolean') return NextResponse.json({ error: t('cancel.invalidCancellationRequest') }, { status: 400 });
+    // Resuming undoes the cancel closeAccountAction made, so a closed (locked)
+    // family would go on renewing. Scheduling the cancel stays open to it.
+    if (resume && ctx.active.family.closed_at) {
+      return NextResponse.json({ error: t('accountClosedGate.yourAccountIsClosed'), code: 'account_closed' }, { status: 403 });
+    }
 
     const supabase = await createServer();
     // A family may hold more than one row (0285 could not enforce one);

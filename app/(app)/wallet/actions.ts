@@ -400,10 +400,60 @@ export async function saveAllowanceRuleAction(input: {
           .select('id');
     if (error) return actionFailure(error, t('actions.couldNotSaveThatAllowance'));
     if (input.id && wroteNoRows(saved)) return { ok: false, error: t('actions.couldNotSaveThatAllowance') };
+    if (!input.id) {
+      const settled = await keepFirstNewAllowanceRule(supabase, familyId, input.childWalletId, (saved ?? [])[0]?.id);
+      if (!settled.ok) return { ok: false, error: t(settled.error) };
+    }
   }
 
   revalidatePath('/wallet');
   return { ok: true };
+}
+
+/**
+ * A NEW rule stands only if it is the child's first: read back after the
+ * insert, every rule this wallet holds is ranked by when it was written
+ * (`created_at`, the database's own stamp, then `id`), and a rule that is not
+ * first is taken back.
+ *
+ * The "already has an allowance" read above runs BEFORE the insert, so two
+ * first saves that overlap — the form submitted twice, two tabs, two parents
+ * setting the child's first allowance together — both read none and both
+ * inserted, and the cron and "Run due now" paid the child twice every period.
+ * Read after the write, both see both, and both rank them alike: exactly one
+ * stays. A new rule's first payday is a cadence away (nextRunDate), so the
+ * one taken back was never due. The complete guard is the owner's unique
+ * index on (family_id, child_wallet_id); this closes the overlap a double
+ * submit makes until it lands.
+ */
+async function keepFirstNewAllowanceRule(
+  supabase: Awaited<ReturnType<typeof createServer>>,
+  familyId: string,
+  childWalletId: string,
+  ruleId: string | undefined,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!ruleId) return { ok: false, error: 'actions.couldNotSaveThatAllowance' };
+  const { data: held, error } = await supabase.from('allowance_rules')
+    .select('id').eq('family_id', familyId).eq('child_wallet_id', childWalletId)
+    .order('created_at', { ascending: true }).order('id', { ascending: true }).limit(1);
+  if (error) {
+    // Unread, this save cannot say it is the only one; it is left in place
+    // (and shown as a duplicate on the page if it is one) rather than guessed away.
+    console.error('[wallet allowances] could not confirm a new rule is the child\'s only one', { familyId, childWalletId, error });
+    return { ok: true };
+  }
+  const first = (held ?? [])[0]?.id;
+  if (!first || first === ruleId) return { ok: true };
+
+  const { data: removed, error: removeError } = await supabase.from('allowance_rules')
+    .delete().eq('id', ruleId).eq('family_id', familyId).select('id');
+  if (removeError || wroteNoRows(removed)) {
+    console.error('[wallet allowances] a second rule for one child could not be taken back; both are paid', {
+      familyId, childWalletId, ruleId, error: removeError ?? 'no rows deleted',
+    });
+    return { ok: false, error: 'actions.couldNotSaveThatAllowance' };
+  }
+  return { ok: false, error: 'actions.thisChildAlreadyHasAnAllowance' };
 }
 
 /** Toggle an allowance rule on/off (pause/resume). */

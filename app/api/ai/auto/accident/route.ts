@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -65,6 +66,9 @@ export async function POST(req: Request) {
     // Someone has just had a car accident. A 503 here is the one failure on
     // this list a family is most likely to write in about, and until now it
     // left nothing behind.
+    // F19: the monthly AI allowance the plans sell, checked before the model runs.
+    const overAllowance = await refuseOverAIAllowance(ctx, supabase);
+    if (overAllowance) return overAllowance;
     text = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
       { feature: 'auto.accident', text: 'Accident next steps' },

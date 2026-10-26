@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     // The allowance alone, not the assistant's tier or its Off switch: Notes AI
     // is part of the Notes page, which the assistant's switch does not close.
     const access = await assertAIAllowance(ctx, { db: supabase });
-    if (!access.ok) return accessDeniedResponse(access);
+    if (!access.ok) return accessDeniedResponse(access, t);
 
     const boundedBody = await readBoundedRequestJson(req, MAX_SMALL_JSON_BYTES);
     if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Invalid request body' }, { status: 400 });

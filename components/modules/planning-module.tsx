@@ -19,6 +19,7 @@ import { generatePrepPlansAction } from '@/app/(app)/dashboard/prep-plans/prep-a
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { todayInZone } from '@/lib/schedule/zoned';
+import { inAppHref } from '@/lib/auth/redirect';
 
 type Plan = Tables<'prep_plans'>;
 type Step = Tables<'prep_plan_steps'>;
@@ -162,7 +163,7 @@ export function PlanningModule({ tz }: { tz: string }) {
                         >
                           {s.is_done && <Check className="size-3.5" />}
                         </button>
-                        <a href={s.href ?? '#'} className={cn('flex-1 hover:underline', s.is_done && 'text-muted line-through')}>{s.label}</a>
+                        <a href={inAppHref(s.href) ?? '#'} className={cn('flex-1 hover:underline', s.is_done && 'text-muted line-through')}>{s.label}</a>
                         {s.due_date && <span className="text-[11px] text-muted">by {s.due_date.slice(5)}</span>}
                       </li>
                     ))}

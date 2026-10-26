@@ -317,7 +317,18 @@ import { scanPaths, scannedFileCount } from '../scripts/i18n-scan.mjs';
 // plus the language goal's CEFR note beside one of them. What the ternary
 // rule still sees is the super-admin pages, which stay English by the decision
 // recorded under I18N-006. 1,784, measured with the new scanner. Banked.
-const CEILING = 1784;
+//
+// ── F19: 1,784 -> 1,785, record labels again (the #606 reason) ─────────────────
+//
+// F19 wraps the flyer and pantry-chef model calls in withAiRequest so they count
+// against the monthly AI allowance. That adds two `ai_requests` record labels
+// ("Scan a flyer", "Suggest recipes from a pantry photo"), which
+// tests/an-ai-request-row-never-carries-what-was-typed.test.ts holds to string
+// literals — the same class as the thirteen labels banked at #606: stored on
+// the row, shown only on the English-only super-admin AI Activity page. The
+// savings route's "AI is not configured" sentence was translated in the same
+// change, so the net is +1.
+const CEILING = 1785;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);
