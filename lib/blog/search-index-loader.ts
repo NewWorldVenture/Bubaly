@@ -16,9 +16,11 @@ export type SearchIndexState = 'idle' | 'loading' | 'ready' | 'unavailable';
 
 export const SEARCH_INDEX_RETRY_AFTER_MS = 5_000;
 export const SEARCH_INDEX_MAX_ATTEMPTS = 3;
+// One deadline covers both response headers and the JSON body.
+export const SEARCH_INDEX_TIMEOUT_MS = 10_000;
 
 export function createSearchIndexLoader<T>(options: {
-  fetchIndex: () => Promise<Response>;
+  fetchIndex: (signal: AbortSignal) => Promise<Response>;
   onChange: (state: SearchIndexState, posts: T[]) => void;
   now?: () => number;
 }) {
@@ -26,6 +28,8 @@ export function createSearchIndexLoader<T>(options: {
   let state: SearchIndexState = 'idle';
   let attempts = 0;
   let failedAt = 0;
+  let disposed = false;
+  let cancelCurrent: (() => void) | null = null;
 
   const set = (next: SearchIndexState, posts: T[] = []) => {
     state = next;
@@ -34,26 +38,52 @@ export function createSearchIndexLoader<T>(options: {
 
   return {
     get state() { return state; },
+    dispose() {
+      disposed = true;
+      cancelCurrent?.();
+    },
     load() {
       // Never two requests at once (focus fires before the first keystroke,
       // and both want the index), and never again after a success.
-      if (state === 'loading' || state === 'ready') return;
+      if (disposed || state === 'loading' || state === 'ready') return;
       if (state === 'unavailable' && (attempts >= SEARCH_INDEX_MAX_ATTEMPTS || now() - failedAt < SEARCH_INDEX_RETRY_AFTER_MS)) return;
       attempts += 1;
       set('loading');
-      options.fetchIndex()
+      const controller = new AbortController();
+      let finished = false;
+      const close = () => {
+        finished = true;
+        clearTimeout(timer);
+        if (cancelCurrent === cancel) cancelCurrent = null;
+      };
+      const cancel = () => { close(); controller.abort(); };
+      const fail = () => {
+        if (finished || disposed) return;
+        cancel();
+        failedAt = now();
+        set('unavailable');
+      };
+      const timer = setTimeout(fail, SEARCH_INDEX_TIMEOUT_MS);
+      cancelCurrent = cancel;
+      // Resolve the callback inside the chain so a synchronous transport
+      // failure follows the same unavailable path as a rejected fetch.
+      Promise.resolve().then(() => {
+        if (finished || disposed) throw new Error('search index request cancelled');
+        return options.fetchIndex(controller.signal);
+      })
         .then(async (response) => {
           if (!response.ok) throw new Error(`search index answered ${response.status}`);
           const data: unknown = await response.json();
           if (!Array.isArray(data)) throw new Error('search index was not a list');
+          // Aborting a transport is best effort: a late body from an expired
+          // attempt must not overwrite a newer success or update an unmount.
+          if (finished || disposed) return;
+          close();
           set('ready', data as T[]);
         })
         // A failed index must never break the page around it; it is reported
         // in the dropdown instead.
-        .catch(() => {
-          failedAt = now();
-          set('unavailable');
-        });
+        .catch(fail);
     },
   };
 }
