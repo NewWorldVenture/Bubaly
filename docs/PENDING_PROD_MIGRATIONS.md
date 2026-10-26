@@ -150,6 +150,7 @@ source allocations are not evidence that production applied any migration.
 | 0526 proposed, held | `0526_what_the_library_streams_is_added_by_a_parent_or_adult.sql` | `a_library_feed_is_added_by_a_parent_or_adult()` and `a_library_items_audio_is_added_by_a_parent_or_adult()`, BEFORE INSERT OR UPDATE on `library_feeds` and `library_items`: only a parent or adult adds or changes a subscription's `feed_url` or family, or an item's `media_url`, `feed_id` or family; `created_by` names the writer. KIDS-O02; requested on #771 (comment 6420549131), not yet confirmed. |
 | 0527 proposed, held | `0527_a_post_on_the_idea_board_is_the_callers_own.sql` | `a_feedback_comment_is_the_callers_own()` and `a_feedback_idea_starts_as_the_callers_own()`, BEFORE INSERT on `feedback_comments` and `feedback_ideas`: a signed-in caller posts no team reply, a new idea starts under review with no note, pin, counts or tracker link, and `author_name` is the caller's own. CALHUB-O1; requested on #771 (comment 6421813855), not yet confirmed. |
 | 0528 proposed, held | `0528_a_budget_drift_signal_is_a_parents_or_adults.sql` | A RESTRICTIVE SELECT and `a_budget_drift_signal_is_written_by_a_parent_or_adult()` (BEFORE INSERT, UPDATE and DELETE) on `family_signals`: a budget-drift signal is read and written only by a parent or adult. OPSD-O05; requested on #771 (comment 6422105432), not yet confirmed. |
+| 0529 proposed, held | `0529_the_households_day_is_written_by_a_parent_or_adult.sql` | `a_household_day_is_written_by_a_parent_or_adult()`, BEFORE INSERT, UPDATE and DELETE on `family_operating_index`, `reasoning_snapshots` and `workload_snapshots`: only a parent or adult writes the household's day. OPSD-O06 and COORD-O01; requested on #771 (comment 6422372306), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4922,6 +4923,57 @@ applied twice.
 
 **After approved release:** as a test guest, try to insert a `utility_bills`
 row and confirm 42501.
+
+## `0529` (proposed, held) — a child rewrote the household's day
+
+`supabase/reserved/0529_the_households_day_is_written_by_a_parent_or_adult.sql`
+— **held**: requested on #771 in comment 6422372306. Not yet confirmed.
+
+**Severity: low to medium (a non-manager could rewrite the trend the parents
+read: the Operating Index, the reasoning report's "since yesterday" and who
+carried the household's work, or delete the workload history). Deploy order:
+any.** OPSD-O06 (0125's `family_operating_index` and 0149's
+`reasoning_snapshots`) and COORD-O01 (`workload_snapshots`). Their policies are
+`is_family_member(family_id)`. The app writes them only from a household-reach
+load, a parent's or adult's (`readsHouseholdMoney`, which is `isManager`), or
+from the service role: `loadOperatingIndex` upserts only when `reach` is
+`household`, `loadAndSnapshotReasoning` returns early for `member`, and
+`saveWorkloadSnapshotAction` returns unless `isManager`. Measured on a replay of
+main, as the teen, the child and the caregiver, `OK 1` each: rewriting today's
+index to 100 "thriving" and filing tomorrow's, rewriting the reasoning snapshot
+to all clear and filing another, rewriting the workload share to 90%, filing a
+workload row and deleting the history.
+
+**Database.** `a_household_day_is_written_by_a_parent_or_adult()`, SECURITY
+DEFINER with a pinned search_path, BEFORE INSERT, UPDATE and DELETE on all
+three: for a signed-in caller, a write needs `can_manage_family` of the row's
+family, old and new (42501). The service role is exempt, and so is a member's
+removal cascading into their `workload_snapshots` rows (`on delete cascade`),
+which may run in that member's own session. The body reads `member_id` through
+`to_jsonb(old)`, so it resolves on every table. Reads are unchanged. No
+application change.
+
+**Proof:** `.github/workflows/household-day-runtime.yml` requires the held
+probe `docs/audit/reserved/the-households-day-is-written-by-a-parent-or-adult-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0529 twice and requires it to pass, then re-runs six released probes
+(an-erasure-actually-erases, family-delete-cascade,
+family-erasure-leaves-nothing, gated-write-tables, plpgsql-bodies-resolve,
+rls-sweep). The passing run shows every write above refused by 0529's guard
+(the two tables with no member delete policy answer OK 0); parents and adults
+rewriting, filing and deleting on all three; everyone still reading them; the
+server filing them; a child's member row removed in their session and the
+household deleted in the parent's session; the wiring; **N1** (guards
+disabled): the child's rewrites land; **M1** (the guard checking the new row
+only): the child's workload delete lands. Two hand mutants (no member-removal
+exemption, no new-row clause) are each caught.
+
+All 189 released probes pass with 0529 applied, and with every held file
+applied twice.
+
+**After approved release:** as a test child, try to update
+`family_operating_index` for the family and confirm 42501; then open the
+Operating Index as a parent and confirm today's snapshot is written.
 
 ## `0528` (proposed, held) — a child read and rewrote the household's budget drift
 
