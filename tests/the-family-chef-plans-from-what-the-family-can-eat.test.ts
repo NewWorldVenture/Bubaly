@@ -21,6 +21,12 @@ import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
 const FAMILY = 'family-one';
 const h = vi.hoisted(() => ({ db: null as unknown, configured: true, complete: vi.fn(), zone: 'America/Los_Angeles' }));
+// The monthly allowance (F19) is its own suite (every-ai-route-counts-against-the-allowance); it admits here.
+vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
+  refuseOverAIAllowance: async () => null,
+  withinAIAllowance: async () => true,
+}));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/supabase/auth', () => ({
   requireUserContext: async () => ({ user: { id: 'user-one' }, active: { familyId: 'family-one', role: 'parent', member: { id: 'member-one' }, family: { timezone: h.zone, name: 'Fixture' } } }),

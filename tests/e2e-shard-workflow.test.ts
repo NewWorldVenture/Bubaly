@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { at } from './helpers/source-order';
 
 type Step = {
-  name?: string; uses?: string; run?: string; if?: string;
+  name?: string; uses?: string; run?: string; if?: string; shell?: string;
   env?: Record<string, string>; with?: Record<string, unknown>;
   'continue-on-error'?: boolean;
 };
@@ -23,6 +23,12 @@ const installName = 'Install held bill anchor fixture in the owned PG15 stack';
 const modernName = 'Verify authenticated durable bill anchors after fresh server start';
 const cleanupName = 'Stop isolated Supabase';
 const aggregateName = 'Require every E2E shard and its owned cleanup to succeed';
+const stagedStartup = [
+  'node scripts/ci-stage-app-lock-private-storage.mjs',
+  "trap 'node scripts/ci-stage-app-lock-private-storage.mjs --remove' EXIT",
+  'supabase start',
+  '',
+].join('\n');
 
 function step(job: Job, name: string) {
   const matches = job.steps.filter((entry) => entry.name === name);
@@ -54,7 +60,12 @@ function requireShardGraph(candidate: Workflow) {
   expect(smoke.env?.E2E_PROVIDER_STUB).toBe('1');
 
   expect(step(job, 'Attest empty local stack before owned startup').env?.BUBALY_BILL_STACK_PHASE).toBe('prepare');
-  expect(step(job, 'Start isolated Supabase').run).toBe('supabase start');
+  const startup = step(job, 'Start isolated Supabase');
+  expect(startup.run).toBe(stagedStartup);
+  expect(startup.if).toBeUndefined();
+  expect(startup.shell).toBeUndefined();
+  expect(startup.env?.BUBALY_DISPOSABLE_APP_LOCK_SCHEMA).toBe('1');
+  expect(startup.env?.SUPABASE_DB_MIGRATIONS_ENABLED).toBe('true');
   expect(step(job, 'Capture immutable owned bill stack identities').env?.BUBALY_BILL_STACK_PHASE).toBe('capture');
   const sql = step(job, 'Verify home brief kind uniqueness in disposable PostgreSQL');
   expect(sql.run).toBe('node scripts/ci-home-brief-kind-runtime.mjs');
@@ -157,6 +168,13 @@ describe('eight complete E2E shards preserve each owned qualification and cleanu
     ['skipped smoke', (copy: Workflow) => { step(copy.jobs.e2e, smokeName).if = '${{ false }}'; }],
     ['lost Auth gate', (copy: Workflow) => { copy.jobs.e2e.steps = copy.jobs.e2e.steps.filter((entry) => entry.name !== authName); }],
     ['lost SQL gate', (copy: Workflow) => { copy.jobs.e2e.steps = copy.jobs.e2e.steps.filter((entry) => entry.name !== 'Verify home brief kind uniqueness in disposable PostgreSQL'); }],
+    ['missing App Lock staging', (copy: Workflow) => { step(copy.jobs.e2e, 'Start isolated Supabase').run = 'supabase start'; }],
+    ['missing staged SQL cleanup', (copy: Workflow) => { step(copy.jobs.e2e, 'Start isolated Supabase').run = 'node scripts/ci-stage-app-lock-private-storage.mjs\nsupabase start\n'; }],
+    ['late staged SQL cleanup trap', (copy: Workflow) => { step(copy.jobs.e2e, 'Start isolated Supabase').run = "node scripts/ci-stage-app-lock-private-storage.mjs\nsupabase start\ntrap 'node scripts/ci-stage-app-lock-private-storage.mjs --remove' EXIT\n"; }],
+    ['missing disposable schema authorization', (copy: Workflow) => { delete step(copy.jobs.e2e, 'Start isolated Supabase').env!.BUBALY_DISPOSABLE_APP_LOCK_SCHEMA; }],
+    ['disabled disposable migration replay', (copy: Workflow) => { step(copy.jobs.e2e, 'Start isolated Supabase').env!.SUPABASE_DB_MIGRATIONS_ENABLED = 'false'; }],
+    ['skipped isolated startup', (copy: Workflow) => { step(copy.jobs.e2e, 'Start isolated Supabase').if = '${{ false }}'; }],
+    ['startup shell ignores staging failure', (copy: Workflow) => { step(copy.jobs.e2e, 'Start isolated Supabase').shell = 'bash {0}'; }],
     ['lost modern bill', (copy: Workflow) => { copy.jobs.e2e.steps = copy.jobs.e2e.steps.filter((entry) => entry.name !== modernName); }],
     ['modern bill accidentally sharded', (copy: Workflow) => { step(copy.jobs.e2e, modernName).run += ' --shard=1/8'; }],
     ['cleanup only on success', (copy: Workflow) => { step(copy.jobs.e2e, cleanupName).if = 'success()'; }],

@@ -99,7 +99,7 @@ export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, 
           )}
           {canManage && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <div className="flex min-w-0 flex-1 items-center rounded-lg border border-border bg-bg px-2">
+              <div className="flex min-w-0 flex-1 items-center rounded-lg border border-border bg-bg px-2 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
                 <input
                   value={local}
                   onChange={(e) => setLocal(normalizeEmailLocal(e.target.value))}
@@ -112,7 +112,7 @@ export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, 
               <button
                 type="button" disabled={pending || !isValidEmailLocal(local) || local === channel?.email_local}
                 onClick={() => run(() => assignEmailAction(local))}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand/90 disabled:opacity-50">
+                className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:brightness-95 disabled:opacity-50">
                 {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                 {email ? 'Update' : 'Assign'}
               </button>
@@ -139,7 +139,7 @@ export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, 
               <button
                 type="button" disabled={pending}
                 onClick={() => run(() => provisionNumberAction(areaCode))}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand/90 disabled:opacity-50">
+                className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:brightness-95 disabled:opacity-50">
                 {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Phone className="h-4 w-4" />}
                 {t('contactCenter.getANumber')}
               </button>

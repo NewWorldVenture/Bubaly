@@ -58,7 +58,7 @@ export function PrimaryLink({ href, children }: { href: string; children: React.
   return (
     <Link
       href={href}
-      className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-violet-600 px-7 text-sm font-semibold text-brand-fg shadow-glow transition hover:-translate-y-0.5 hover:brightness-110"
+      className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-violet-600 px-7 text-sm font-semibold text-brand-fg shadow-glow transition hover:-translate-y-0.5 hover:brightness-95"
     >
       {children}
     </Link>
@@ -221,7 +221,7 @@ export async function HeroPhoneMockup({ className }: { className?: string }) {
             <div className="mt-auto flex items-end justify-around border-t border-white/8 pt-3 text-[7px] text-white/55">
               <span className="flex flex-col items-center gap-1 text-violet-400"><Home className="h-4 w-4" />{t('visualMocks.home')}</span>
               <span className="flex flex-col items-center gap-1"><CalendarDays className="h-4 w-4" />{t('visualMocks.calendar')}</span>
-              <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-r from-blue-500 to-violet-600 text-brand-fg">
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-r from-blue-600 to-violet-600 text-brand-fg">
                 <span className="text-lg font-bold leading-none">+</span>
               </span>
               <span className="flex flex-col items-center gap-1"><CheckSquare2 className="h-4 w-4" />{t('visualMocks.tasks')}</span>
@@ -409,7 +409,7 @@ export async function FamilyAiPanel() {
               </li>
             ))}
           </ul>
-          <Link href="/ai" className="mt-7 inline-flex w-fit rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-7 py-3.5 text-sm font-bold text-brand-fg shadow-glow transition hover:-translate-y-0.5 hover:brightness-110">
+          <Link href="/ai" className="mt-7 inline-flex w-fit rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 px-7 py-3.5 text-sm font-bold text-brand-fg shadow-glow transition hover:-translate-y-0.5 hover:brightness-95">
             {t('visualMocks.tryTheAiAssistant')}
           </Link>
         </div>

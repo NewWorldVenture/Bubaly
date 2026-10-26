@@ -33,7 +33,11 @@ const COPY = {
 const PRODUCTION_REDACTED = 'Minified React error #441; visit https://react.dev/errors/441 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.';
 const PAPER = 'Field trip permission slip: please sign and return by Friday.';
 
-test.use({ locale: 'en-US', trace: 'off', screenshot: 'off', video: 'off' });
+// Route-controlled refusals must be installed before the page boots, and must
+// observe browser requests directly rather than a service worker's fetches.
+// This isolates the fixture; the historical interception bypass has no proven
+// product cause, and the form/focus/readback assertions below stay unchanged.
+test.use({ locale: 'en-US', serviceWorkers: 'block', trace: 'off', screenshot: 'off', video: 'off' });
 
 let account: OwnedAccount | null = null;
 
@@ -122,6 +126,7 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
       test('contacts: invalid, refused, then saved — names, alerts, focus and readback', async ({ page, context }) => {
         const cdp = await context.newCDPSession(page);
         await cdp.send('Accessibility.enable');
+        await refuseContactWrites(page);
         const { opener, dialog } = await openNewContact(page);
         const name = dialog.getByRole('textbox', { name: 'Full name' });
         const email = dialog.getByRole('textbox', { name: 'Email' });
@@ -148,7 +153,6 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
 
         // Refused by the database: one alert in the reader's words, the dialog
         // and what was typed both kept.
-        await refuseContactWrites(page);
         await name.press('Enter');
         await expect(alertsReading(page, COPY.duplicate)).toHaveCount(1);
         expect(await axNodes(cdp, COPY.duplicate)).toEqual([{ ignored: false }]);
@@ -173,8 +177,6 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         // focused submit dropped focus to <body>, outside the aria-modal dialog
         // (COMPONENT-2795B661F080). The contact form's submit is now
         // aria-disabled while saving; the shared Button is unchanged.
-        const { dialog } = await openNewContact(page);
-        await dialog.getByRole('textbox', { name: 'Full name' }).fill('Robin Probe');
         let release!: () => void, sent!: () => void;
         const held = new Promise<void>((resolve) => { release = resolve; });
         const seen = new Promise<void>((resolve) => { sent = resolve; });
@@ -184,6 +186,8 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
           await held;
           await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ code: '23505', message: 'duplicate key value violates unique constraint', details: null, hint: null }) });
         });
+        const { dialog } = await openNewContact(page);
+        await dialog.getByRole('textbox', { name: 'Full name' }).fill('Robin Probe');
         const submit = dialog.getByRole('button', { name: 'Add Contact' });
         await submit.focus();
         await page.keyboard.press('Enter');
@@ -199,8 +203,6 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
       });
 
       test('contacts: a second Enter while a save is in flight sends one write', async ({ page }) => {
-        const { dialog, opener } = await openNewContact(page);
-        await dialog.getByRole('textbox', { name: 'Full name' }).fill('Robin Probe');
         // A control: a natively disabled submit also refused this. It guards
         // the contact form's own in-flight refusal now that the submit stays
         // focusable while saving.
@@ -215,6 +217,8 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
           await held;
           await route.continue();
         });
+        const { dialog, opener } = await openNewContact(page);
+        await dialog.getByRole('textbox', { name: 'Full name' }).fill('Robin Probe');
         const submit = dialog.getByRole('button', { name: 'Add Contact' });
         await submit.focus();
         await page.keyboard.press('Enter');

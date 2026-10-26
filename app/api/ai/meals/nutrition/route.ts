@@ -91,7 +91,7 @@ export async function POST(req: Request) {
   // the estimate is available is the Meals gate above, not the assistant's
   // tier or its Off switch.
   const access = await assertAIAllowance(ctx, { db: supabase });
-  if (!access.ok) return accessDeniedResponse(access);
+  if (!access.ok) return accessDeniedResponse(access, t);
 
   // Build the prompt for the subject --------------------------------------
   let userMsg = '';

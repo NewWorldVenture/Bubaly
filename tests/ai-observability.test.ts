@@ -18,6 +18,10 @@ vi.mock('@/lib/ai/runs/store', () => ({
   updateRequest: (...a: unknown[]) => updateRequest(...a),
 }));
 vi.mock('@/lib/ai/usage', () => ({ recordModelCall: (...a: unknown[]) => recordModelCall(...a) }));
+// The plan decides whether a failed filing may proceed (F19): on an unlimited
+// plan the row is bookkeeping, on a capped plan it is the meter.
+const resolveFamilyPlanLevel = vi.fn();
+vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: (...a: unknown[]) => resolveFamilyPlanLevel(...a) }));
 
 const { withAiRequest } = await import('@/lib/ai/observability');
 
@@ -29,6 +33,7 @@ beforeEach(() => {
   createRequest.mockReset().mockResolvedValue({ ok: true, data: { id: 'req-1' } });
   updateRequest.mockReset().mockResolvedValue({ ok: true, data: null });
   recordModelCall.mockReset().mockResolvedValue(undefined);
+  resolveFamilyPlanLevel.mockReset().mockResolvedValue(1);
 });
 
 describe('a surface that succeeds leaves a complete record', () => {
@@ -121,7 +126,7 @@ describe('a surface that fails leaves the diagnosis', () => {
 });
 
 describe('bookkeeping never fails the family’s work', () => {
-  it('runs the body with a null request id when the row cannot be opened', async () => {
+  it('runs the body with a null request id when the row cannot be opened (unlimited plan)', async () => {
     // A family losing their meal plan because an observability insert failed
     // would be the gap making itself worse.
     createRequest.mockResolvedValue({ ok: false, error: 'db down' });
@@ -135,11 +140,12 @@ describe('bookkeeping never fails the family’s work', () => {
     expect(updateRequest).not.toHaveBeenCalled();
   });
 
-  it('survives createRequest throwing outright', async () => {
+  it('survives createRequest throwing outright (unlimited plan)', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     createRequest.mockRejectedValue(new Error('connection reset'));
     await expect(withAiRequest(scope, { feature: 'f', text: 't' }, async () => 'ok')).resolves.toBe('ok');
   });
+
 
   it('still returns the answer when closing the row fails', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -185,3 +191,36 @@ describe('the row cannot be longer than the column\'s own contract', () => {
   });
 });
 
+
+describe('on a capped plan the row is the meter, so an unfiled call is refused (F19)', () => {
+  // Review on #788: the allowance counts these rows, so a model call made after
+  // a failed filing was one the allowance never saw — a Free family at 9 of 10
+  // stayed at 9 however often it called.
+  for (const [label, fail] of [
+    ['the insert is refused', () => createRequest.mockResolvedValue({ ok: false, error: 'db down' })],
+    ['the insert throws', () => createRequest.mockRejectedValue(new Error('connection reset'))],
+  ] as const) {
+    it(`${label}: the body never runs`, async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      resolveFamilyPlanLevel.mockResolvedValue(0);
+      fail();
+      const body = vi.fn(async () => 'model called');
+      await expect(withAiRequest(scope, { feature: 'f', text: 't' }, body)).rejects.toMatchObject({ name: 'AiRequestNotFiled' });
+      expect(body).not.toHaveBeenCalled();
+    });
+  }
+
+  it('a plan that cannot be read is treated as capped', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    resolveFamilyPlanLevel.mockRejectedValue(new Error('plan read failed'));
+    createRequest.mockResolvedValue({ ok: false, error: 'db down' });
+    const body = vi.fn(async () => 'model called');
+    await expect(withAiRequest(scope, { feature: 'f', text: 't' }, body)).rejects.toMatchObject({ name: 'AiRequestNotFiled' });
+    expect(body).not.toHaveBeenCalled();
+  });
+
+  it('a filed request on a capped plan runs as normal', async () => {
+    resolveFamilyPlanLevel.mockResolvedValue(0);
+    await expect(withAiRequest(scope, { feature: 'f', text: 't' }, async () => 'ok')).resolves.toBe('ok');
+  });
+});

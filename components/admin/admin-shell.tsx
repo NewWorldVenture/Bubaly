@@ -96,10 +96,10 @@ export function AdminShell({
         </nav>
         <div className="space-y-3 px-3 pb-4">
           <div className="space-y-1.5">
-            <Link href="/dashboard/briefing" className="flex items-center gap-1.5 px-1 text-xs text-muted hover:text-fg">
+            <Link href="/dashboard/briefing" className="flex min-h-6 items-center gap-1.5 px-1 text-xs text-muted hover:text-fg">
               <LayoutDashboard className="h-3.5 w-3.5" /> {t('adminShell.goToParentDashboard')}
             </Link>
-            <Link href="/dashboard" className="flex items-center gap-1.5 px-1 text-xs text-muted hover:text-fg">
+            <Link href="/dashboard" className="flex min-h-6 items-center gap-1.5 px-1 text-xs text-muted hover:text-fg">
               <Home className="h-3.5 w-3.5" /> {t('adminShell.goToFamilyDashboard')}
             </Link>
           </div>
@@ -117,7 +117,7 @@ export function AdminShell({
             <ShieldCheck className="h-3.5 w-3.5" /> {t('adminShell.superAdmin')}
           </span>
           <form action="/admin/users" method="GET" className="hidden flex-1 max-w-md md:flex">
-            <label className="flex h-10 w-full items-center gap-2 rounded-xl border border-border bg-surface/40 px-3 text-muted">
+            <label className="flex h-10 w-full items-center gap-2 rounded-xl border border-border bg-surface/40 px-3 text-muted focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
               <Search className="h-4 w-4 shrink-0" />
               <input
                 name="q"

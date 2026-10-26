@@ -66,7 +66,7 @@ export function InsightHero({ insight }: { insight: { id: string; kind: string; 
           <p className="mt-0.5 text-xs text-muted">{insight.detail}</p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <Link href={insight.href}
-              className="inline-flex items-center gap-1.5 rounded-full bg-brand px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-brand/90">
+              className="inline-flex items-center gap-1.5 rounded-full bg-brand px-3.5 py-1.5 text-xs font-semibold text-white transition hover:brightness-95">
               {meta.cta} <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>

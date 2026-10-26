@@ -185,7 +185,7 @@ function CalendarSyncWorkspace() {
 
               {provider.connect === 'oauth' && provider.connectUrl && (
                 <a href={provider.connectUrl}
-                  className="flex items-center justify-center gap-2 rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand/90">
+                  className="flex items-center justify-center gap-2 rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white transition hover:brightness-95">
                   <Check className="h-4 w-4" /> {t('calendarSync.connect')} {provider.label} {t('calendarSync.twoWay')}
                 </a>
               )}

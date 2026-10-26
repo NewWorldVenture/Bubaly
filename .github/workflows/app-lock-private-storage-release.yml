@@ -1,0 +1,64 @@
+name: App Lock private storage release
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Apply only the reviewed App Lock transition after verifying the live revision
+        type: boolean
+        default: false
+      expected_revision:
+        description: Exact 40-character reviewed main commit already deployed to www.bubaly.com
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-production-migrations
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    env:
+      EXPECTED_REVISION: ${{ inputs.expected_revision }}
+      APPLY_APP_LOCK: ${{ inputs.apply }}
+    steps:
+      - name: Require the reviewed main revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$EXPECTED_REVISION" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$EXPECTED_REVISION" ]]
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+      - name: Verify or apply the App Lock transition
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_REVISION" ]]
+          if [[ "$APPLY_APP_LOCK" == true ]]; then
+            node scripts/apply-app-lock-private-storage.mjs --apply
+          else
+            node scripts/apply-app-lock-private-storage.mjs
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: app-lock-private-storage-release-${{ github.sha }}-${{ github.run_attempt }}
+          path: .next/app-lock-private-storage-release.json
+          retention-days: 3
+          if-no-files-found: ignore

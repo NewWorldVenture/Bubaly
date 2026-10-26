@@ -513,6 +513,7 @@ function AssistantSession() {
     setHighlightId(null);
 
     const userMsg: Message = { role: 'user', content: msg, id: generateId() };
+    const turnKey = crypto.randomUUID();
     const replyId = generateId();
     pendingSend.current = { controller: ticket.controller, replyId };
     // Add the user turn + an empty assistant bubble we fill as the stream arrives.
@@ -529,7 +530,9 @@ function AssistantSession() {
     try {
       const res = await fetch('/api/ai', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', 'X-Bubaly-Family-Id': family.id },
+        // One key per send, kept by any retry of it: the server answers a repeat
+        // with the saved reply instead of counting a second turn (F19).
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', 'X-Bubaly-Family-Id': family.id, 'Idempotency-Key': turnKey },
         body: JSON.stringify({ conversationId, message: msg }),
         signal: ticket.controller.signal,
       });
@@ -541,6 +544,8 @@ function AssistantSession() {
       }
       let finalText = '';
       let failed = false;
+      // The turn's request id: the spoken answer rides on this exchange (F19).
+      let exchangeId: string | null = null;
       const result = await consumeAssistantStream(res.body, (ev) => {
           if (!ticket.current()) return;
           if (ev.type === 'delta' && ev.text) { finalText += ev.text; patchReply((m) => ({ ...m, content: m.content + ev.text })); }
@@ -553,6 +558,7 @@ function AssistantSession() {
           else if (ev.type === 'error') { failed = true; patchReply((m) => ({ ...m, error: ev.error })); }
           else if (ev.type === 'done') {
             finalText = ev.content || finalText;
+            exchangeId = ev.requestId;
             if (!ev.persisted) failed = true;
             patchReply((m) => ({ ...m, content: ev.content || m.content,
               ...(!ev.persisted ? { error: m.error || t('mobileAssistant.notSaved') } : {}) }));
@@ -564,7 +570,7 @@ function AssistantSession() {
         patchReply((m) => ({ ...m, error: m.error || t('assistantModule.session.interrupted') }));
       }
       // Speak the reply aloud when voice output is enabled on this device.
-      if (!failed && finalText.trim() && voice.shouldSpeak()) void voice.speak(finalText);
+      if (!failed && finalText.trim() && voice.shouldSpeak()) void voice.speak(finalText, exchangeId);
     } catch (error) {
       if (!ticket.current()) return;
       console.error('[assistant] request failed', error);
@@ -951,7 +957,7 @@ function Composer({
 
       {isHero ? (
         /* Hero: tall textarea with gradient send button */
-        <div className="ai-composer flex items-end gap-2 p-3 sm:gap-3 sm:p-4">
+        <div className="ai-composer flex items-end gap-2 border p-3 focus-within:border-brand sm:gap-3 sm:p-4">
           <textarea
             rows={2}
             className="min-h-[3.5rem] w-full flex-1 resize-none bg-transparent text-base leading-7 outline-none placeholder:text-muted"
@@ -976,7 +982,7 @@ function Composer({
         </div>
       ) : (
         /* Bar: compact single-line input */
-        <div className="ai-composer flex items-center gap-2 px-3 py-3 sm:gap-3 sm:px-4">
+        <div className="ai-composer flex items-center gap-2 border px-3 py-3 focus-within:border-brand sm:gap-3 sm:px-4">
           <input
             className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted"
             placeholder={micStatus === 'transcribing' ? t('micButton.transcribing') : t('assistant.askAnythingOrGiveA')}

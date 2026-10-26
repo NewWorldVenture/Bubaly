@@ -4,6 +4,8 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { createSessionRefreshFetch } from '@/shared/auth/refresh-fetch';
 import { safeInternalRedirect } from '@/lib/auth/redirect';
 import { PROTECTED, PUBLIC, matchesPrefix } from '@/lib/auth/route-access';
+import { readAppLockRecord } from '@/lib/security/app-lock-store';
+import { APP_UNLOCK_COOKIE, isAppUnlocked, readAppLockSessionId } from '@/lib/security/app-lock-server';
 import {
   durableCookieOptions, hasAuthCookies, isRetryableAuthError, isSecureRequest,
   shouldForwardAuthCode, preservePendingPkceVerifier,
@@ -103,6 +105,10 @@ export async function middleware(req: NextRequest) {
   // redirect to an irrelevant page — a soft 404 — for every bad URL on the
   // internet that happens to point here.
   const isProtected = !isPublic && matchesPrefix(path, PROTECTED);
+  // Run before Next selects an RSC segment. A parent layout can be skipped on
+  // partial navigation; redirecting the request keeps that subtree out of its
+  // response. APIs/native clients retain their existing session/RLS boundary.
+  const appLockPage = isProtected && path !== '/app-lock' && path !== '/api' && !path.startsWith('/api/');
   // The AI edge (/api/ai, /api/ai/requests, /api/ai/runs/*) is called by the
   // mobile app with `Authorization: Bearer <supabase jwt>` and no cookie. Those
   // handlers verify the token themselves (`authenticateAI` /
@@ -176,7 +182,7 @@ export async function middleware(req: NextRequest) {
   if (!user && isProtected && !bearerApi) {
     if (sessionMayStillBeValid) {
       console.warn('[middleware] auth lookup failed transiently; keeping the session', error);
-      return res;
+      return appLockPage ? withCookies(appLockRedirect(req), res) : res;
     }
     if (isScriptApiRequest(req, path)) return withCookies(unauthenticated(), res);
     const url = req.nextUrl.clone();
@@ -186,7 +192,31 @@ export async function middleware(req: NextRequest) {
     // new response would drop them and strand the browser on a stale session.
     return withCookies(NextResponse.redirect(url), res);
   }
+  if (user && appLockPage) {
+    const loaded = await readAppLockRecord(user.id);
+    if (!loaded.ok) return withCookies(appLockRedirect(req), res);
+    const record = loaded.record;
+    if (record?.config?.enabled) {
+      const sessionId = await readAppLockSessionId(supabase, user.id);
+      if (!isAppUnlocked(user.id, record, sessionId, req.cookies.get(APP_UNLOCK_COOKIE)?.value)) {
+        return withCookies(appLockRedirect(req), res);
+      }
+    }
+    res.headers.set('cache-control', 'private, no-store');
+  }
   return res;
+}
+
+function appLockRedirect(req: NextRequest): NextResponse {
+  const url = req.nextUrl.clone();
+  const target = safeInternalRedirect(`${url.pathname}${url.search}`, '/dashboard');
+  url.pathname = '/app-lock';
+  url.search = '';
+  url.searchParams.set('next', target);
+  // A locked POST must not be replayed as a mutation at the lock-screen URL.
+  const response = NextResponse.redirect(url, req.method === 'GET' || req.method === 'HEAD' ? 307 : 303);
+  response.headers.set('cache-control', 'private, no-store');
+  return response;
 }
 
 /**
@@ -224,6 +254,7 @@ function withCookies(target: NextResponse, source: NextResponse): NextResponse {
 }
 
 export const config = {
+  runtime: 'nodejs',
   // Static, always-public files bypass middleware entirely — they carry no
   // session and must stay reachable signed-out. robots.txt and sitemap.xml are
   // fetched by crawlers; manifest.webmanifest and sw.js by PWA install and

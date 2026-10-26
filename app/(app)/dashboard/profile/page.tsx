@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
-import { createServer } from '@/lib/supabase/server';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
+import { storeListingUrl } from '@/lib/marketing/reputation';
 import { ProfileModule, type ProfileStats } from '@/components/modules/profile-module';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -22,7 +23,7 @@ export default async function ProfilePage() {
   const weekAhead = new Date(Date.now() + 7 * 86400_000).toISOString();
   const nowIso = new Date().toISOString();
 
-  const [{ data: member }, doneQ, upcomingQ, milestonesQ] = await settleAll([
+  const [{ data: member }, doneQ, upcomingQ, milestonesQ, listingQ] = await settleAll([
     supabase.from('family_members').select('*').eq('id', memberId).maybeSingle(),
     supabase.from('chore_assignments')
       .select('points_awarded, approved_at')
@@ -35,6 +36,9 @@ export default async function ProfilePage() {
     supabase.from('independence_milestones')
       .select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('member_id', memberId).eq('status', 'achieved'),
+    // The store listing behind "Rate the app" (INT-O01). reputation_settings is
+    // service-role only (0041), and only the two public store URLs are read.
+    createServiceClient().from('reputation_settings').select('app_store_url, play_store_url').eq('singleton', true).maybeSingle(),
   ]);
 
   // The member identity is the primary content and safely falls back to the
@@ -45,6 +49,8 @@ export default async function ProfilePage() {
   if (doneQ.error) console.error('[dashboard/profile] chore-points read failed', { memberId, error: doneQ.error });
   if (upcomingQ.error) console.error('[dashboard/profile] upcoming-events read failed', { memberId, error: upcomingQ.error });
   if (milestonesQ.error) console.error('[dashboard/profile] milestones read failed', { memberId, error: milestonesQ.error });
+  // A failed read hides the row, exactly as an unconfigured listing does.
+  if (listingQ.error) console.error('[dashboard/profile] store listing read failed', { error: listingQ.error });
 
   const done = doneQ.data ?? [];
   const stats: ProfileStats = {
@@ -60,6 +66,7 @@ export default async function ProfilePage() {
       userId={ctx.user.id}
       userEmail={ctx.user.email ?? ''}
       stats={stats}
+      storeListing={listingQ.error ? null : storeListingUrl(listingQ.data)}
     />
   );
 }

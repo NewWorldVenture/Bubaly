@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
 import { getTranslations } from '@/lib/i18n/server';
@@ -267,6 +268,9 @@ Rules:
 - Score categories 0-100 honestly from the data; be encouraging if data is sparse but never invent events.
 - Emojis: 🏥 medical, ⚽ sports, 📚 school, ✈️ travel, 🍽️ dinner, 💼 work, 🎂 birthday.`;
 
+    // F19: the monthly AI allowance the plans sell, checked before the model runs.
+    const overAllowance = await refuseOverAIAllowance(ctx, supabase);
+    if (overAllowance) return overAllowance;
     const briefing = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
       { feature: 'briefing.weekly', text: 'Generate the weekly briefing' },

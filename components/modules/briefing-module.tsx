@@ -348,7 +348,7 @@ function GenerateCTA({ onGenerate, loading, type }: { onGenerate: () => void; lo
       <h2 className="text-2xl font-bold text-fg mb-3">{title}</h2>
       <p className="text-muted max-w-md mb-8">{desc}</p>
       <Button onClick={onGenerate} disabled={loading}
-        className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white px-8 py-3 rounded-xl font-semibold text-base h-auto gap-2">
+        className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white px-8 py-3 rounded-xl font-semibold text-base h-auto gap-2">
         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
         {loading ? tr('briefingView.generating') : tr('briefingView.generate', { title })}
       </Button>

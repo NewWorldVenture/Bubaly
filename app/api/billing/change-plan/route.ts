@@ -15,7 +15,7 @@ import { refuseWithoutBillingStepUp } from '@/lib/billing/route-step-up';
 import { readFamilySubscription } from '@/lib/billing/subscription-row';
 import type { Tables } from '@/lib/database.types';
 import { reviewBillingPath } from '@/lib/billing/review-selection';
-import { createSubscriptionCheckout, stripeCustomerHasLiveSubscription } from '@/lib/billing/subscription-checkout';
+import { createFamilyStripeCustomer, createSubscriptionCheckout, stripeCustomerHasLiveSubscription } from '@/lib/billing/subscription-checkout';
 
 const MAX_BILLING_REQUEST_BYTES = 4_096;
 
@@ -81,6 +81,13 @@ export async function POST(req: NextRequest) {
     }
     const stepUp = await refuseWithoutBillingStepUp(ctx, t);
     if (stepUp) return stepUp;
+    // Closing set the subscription to end at period end. An in-place change
+    // clears that (cancel_at_period_end: false) and a Checkout starts a new
+    // one, either way billing a family the close locked. Reopen first; the
+    // reopen resumes what the close set to end.
+    if (ctx.active.family.closed_at) {
+      return NextResponse.json({ error: t('accountClosedGate.yourAccountIsClosed'), code: 'account_closed' }, { status: 403 });
+    }
     const familyId = ctx.active.familyId;
     if (!isStripePlanKey(plan)) {
       return NextResponse.json({ error: t('changePlan.invalidPlan') }, { status: 400 });
@@ -183,10 +190,8 @@ export async function POST(req: NextRequest) {
 
     let customerId = bc?.customer_ref ?? null;
     if (!customerId) {
-      const customer = await stripe.customers.create({
-        ...(ctx.user.email ? { email: ctx.user.email } : {}),
-        name: ctx.active.family.name,
-        metadata: { family_id: familyId, user_id: ctx.user.id },
+      const customer = await createFamilyStripeCustomer(stripe, {
+        familyId, userId: ctx.user.id, email: ctx.user.email, name: ctx.active.family.name,
       });
       customerId = customer.id;
       // Service client, per 0300 — see the note in app/api/billing/checkout.

@@ -56,6 +56,7 @@ import { translate } from '@/lib/i18n/messages';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { dayPhase, phaseGreeting } from '@/lib/home/time-of-day';
 import { readOnOpenGroceryLists } from '@/lib/services/groceries';
+import { inAppHref } from '@/lib/auth/redirect';
 
 function todayLabel(locale: LocaleCode) {
   return new Date().toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' });
@@ -538,7 +539,9 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
           // source unread now, an old conflict or an old grocery count is not
           // shown as today's insight (a fresh candidate from it is already withheld).
           .filter((r) => (!conflictsUnavailable || r.kind !== 'conflict') && (!groceryUnavailable || r.kind !== 'grocery'))
-          .map((r) => ({ id: r.id, kind: r.kind as InsightKind, title: r.title, detail: r.detail ?? '', href: r.href ?? '/dashboard', impact: r.impact }))
+          // `daily_insights.href` is writable by any family member (0141): a
+          // link that would leave the app is not shown as Bubaly's insight.
+          .map((r) => ({ id: r.id, kind: r.kind as InsightKind, title: r.title, detail: r.detail ?? '', href: inAppHref(r.href) ?? '/dashboard', impact: r.impact }))
         // Anyone else is shown their own reading, never a row's words, under
         // the day's active row of the same kind: its id is what a dismissal
         // marks, and a kind with no active row was dismissed today.
