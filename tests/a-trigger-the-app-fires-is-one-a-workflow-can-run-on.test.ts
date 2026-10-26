@@ -12,29 +12,91 @@ import { SCHEDULED_TRIGGERS } from '@/lib/marketing/automation-runner';
 // the decision was made on (onboarding_completed, onboarding_abandoned,
 // demo_abandoned): a paused onboarding welcome could not be switched back on,
 // and its card said nothing in it runs while it emailed every family. This
-// reads every call of fireAutomationEvent under app/, lib/ and components/,
-// under whatever name a file imports it by from another, and holds the
-// trigger each one passes to the list, so a newly fired trigger cannot drift
-// out of it again; and holds the list to the callers, so a trigger nothing
-// fires (demo_started) cannot drift in.
+// reads every call of fireAutomationEvent in the repository's sources (readAs
+// says which), under whatever name a file takes it by from another, and holds
+// the trigger each one passes to the list, so a newly fired trigger cannot
+// drift out of it again; and holds the list to the callers, so a trigger
+// nothing fires (demo_started) cannot drift in.
+//
+// It fails closed. Rounds 4 to 6 each closed some forms of reaching the
+// function and the next review found others, because each check named the
+// forms it followed and let everything else through. Now every reference to
+// the function, to the module that defines it and to a module that exports
+// it under any name is either followed to a call whose trigger `check` reads,
+// or reported: each check below that does not follow a use ends in `report`
+// (in analyse), and none of them returns past it unsaid.
+//
+// What it still cannot see, exactly. A path written as text that names a
+// module carrying the function is reported wherever it is written, so each
+// corner is a path computed at runtime:
+// - tests/, which it does not read (readAs).
+// - Outside the app (OUTSIDE_THE_APP), in a source no app source names: a
+//   module loaded by a path computed at runtime, by any loader. Those scripts
+//   load packages and configs that way on purpose.
+// - In the app, a module loaded by a path computed at runtime through a loader
+//   this guard does not know as one: a package that loads modules (jiti, say),
+//   or a builtin loader reached through a value rather than by its name
+//   (`globalThis[pick()]`, `Reflect.get(globalThis, 'ev' + 'al')`,
+//   `(() => {}).constructor`). A loader named as written (loaderUse), an
+//   import of a builtin that loads code (LOADER_MODULES), import() and
+//   require() are reported for a computed path.
 
 const ROOT = join(__dirname, '..');
 
+/**
+ * Sources outside the app, each with why. They are read for the function and
+ * the modules that carry it like any other, but their imports are not held
+ * to the app's: an unresolved or computed path there is tooling's own
+ * business. A source in one that an app source names is the app
+ * (programCalls): playwright.config.ts imports scripts/e2e-server-env.mjs.
+ */
+const OUTSIDE_THE_APP: ReadonlyMap<string, string> = new Map([
+  ['scripts/', 'operator and CI scripts, which node runs on their own and which load packages and configs by computed paths'],
+  ['mobile/scripts/', "the Expo app's patch and check scripts, which do the same"],
+  ['docs/', 'audit records, and the probes behind their evidence'],
+]);
+
+/**
+ * How this guard reads a path: as the app, as a source outside it, or not at
+ * all. R6-AW-GUARD-UNREAD-SOURCES-AND-REQUIRE: it read only .ts and .tsx
+ * under app/, lib/ and components/, so a module the app imports from
+ * shared/, from a file at the top or from a .js, .mjs or .cjs source was
+ * never read, and a name it exported the function under was missed. Every
+ * source a module can be is now read, whatever root it sits in (a new root,
+ * hooks/ say, is the app the day it appears), but what is installed or
+ * generated (node_modules anywhere; a dot-directory at the top: .next,
+ * .github, .claude), a type declaration (nothing in it runs) and tests/: the
+ * test suite mocks the function and calls it on purpose, and none of it is
+ * the app. A dot-folder further down is read: app/.well-known is a route.
+ */
+function readAs(path: string): 'app' | 'outside' | null {
+  const parts = path.split('/');
+  if (parts.includes('node_modules') || parts[0].startsWith('.') || (parts.length > 1 && parts[0] === 'tests')) return null;
+  if (!/\.(?:[cm]?[jt]s|[jt]sx)$/.test(path) || /\.d\.[cm]?ts$/.test(path)) return null;
+  return [...OUTSIDE_THE_APP.keys()].some((root) => path.startsWith(root)) ? 'outside' : 'app';
+}
+
+/** Every file under a folder, as a path from the root, but what is installed, and what is hidden at the top. */
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
-    if (entry === 'node_modules' || entry.startsWith('.')) continue;
+    if (entry === 'node_modules' || (dir === ROOT && entry.startsWith('.'))) continue;
     const path = join(dir, entry);
     if (statSync(path).isDirectory()) walk(path, out);
-    else if (/\.tsx?$/.test(entry) && !/\.d\.ts$/.test(entry)) out.push(path);
+    else out.push(relative(ROOT, path).split(sep).join('/'));
   }
   return out;
 }
 
-type Trigger = { literal: string } | { computed: string } | { unreadable: string } | { unfollowed: string } | { unresolved: string };
+/** The repository's sources, as this guard reads them. */
+const sources: ReadonlyMap<string, string> = new Map(walk(ROOT).filter((file) => readAs(file) !== null).map((file) => [file, readFileSync(join(ROOT, file), 'utf8')]));
+
+type Trigger = { literal: string } | { computed: string } | { unreadable: string } | { unfollowed: string } | { unresolved: string } | { loader: string };
 type Call = { file: string; line: number; trigger: Trigger };
 
 function parse(file: string, source: string): ts.SourceFile {
-  return ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const kind = file.endsWith('.tsx') ? ts.ScriptKind.TSX : file.endsWith('.jsx') ? ts.ScriptKind.JSX
+    : /\.[cm]?js$/.test(file) ? ts.ScriptKind.JS : ts.ScriptKind.TS;
+  return ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kind);
 }
 
 function unwrap(expression: ts.Expression): ts.Expression {
@@ -63,9 +125,14 @@ function triggerOf(params: ts.Expression | undefined, ast: ts.SourceFile): Trigg
 
 const FIRE = 'fireAutomationEvent';
 /**
- * The module that defines it, always one this guard knows: it exports the
- * function under its own name, which is followed wherever it goes. A planted
- * program that imports it without carrying its source still resolves it.
+ * The module that defines it. R6-AW-GUARD-DEFINER-NAMESPACE: its own
+ * `export async function` is a declaration, not a name it exports the
+ * function under, so a namespace of it (`import * as ev`, a dynamic import)
+ * was never tracked, and `ev[pick()](...)` or `register(ev)` passed with
+ * nothing said. It is now tracked like any module that exports the function
+ * under a name (programCalls seeds it), and it is always one this guard
+ * knows, so a planted program that imports it without carrying its source
+ * resolves it.
  */
 const DEFINER = 'lib/marketing/automation-events.ts';
 
@@ -87,7 +154,7 @@ function declares(node: ts.Identifier): boolean {
   if (ts.isPropertyAccessExpression(parent)) return parent.name === node;
   if (ts.isImportSpecifier(parent) || ts.isImportClause(parent) || ts.isNamespaceImport(parent)) return true;
   if (ts.isBindingElement(parent)) return parent.name === node || parent.propertyName === node;
-  return (ts.isFunctionDeclaration(parent) || ts.isVariableDeclaration(parent) || ts.isPropertyAssignment(parent)
+  return (ts.isFunctionDeclaration(parent) || ts.isVariableDeclaration(parent) || ts.isPropertyAssignment(parent) || ts.isImportEqualsDeclaration(parent)
     || ts.isMethodDeclaration(parent) || ts.isPropertyDeclaration(parent) || ts.isPropertySignature(parent)) && parent.name === node;
 }
 
@@ -98,27 +165,45 @@ type FireExports = ReadonlyMap<string, ReadonlyMap<string, Site>>;
 /** One source read: its calls, the names it exports the function under, and the `<module>#<name>` it takes from another (`#*`, all of them). */
 type Analysis = { calls: Call[]; exports: Map<string, Site>; imports: Set<string> };
 
-/** The path an import of the app's own names, from the root: `@/x` (tsconfig `paths`) or a relative path. A package has none. */
+/**
+ * The path an import of the app's own names, from the root: `@/x` (tsconfig
+ * `paths`) or a relative path. A package has none. A path from the file
+ * system's root and a URL (`file:`, `data:`, `https:`; not a `node:` builtin)
+ * are taken as the app's own too, by a path no source here answers, so an
+ * import by one is reported rather than read as a package.
+ */
 function localPath(from: string, specifier: string): string | null {
   if (specifier.startsWith('@/')) return specifier.slice(2);
   if (specifier === '.' || specifier === '..' || specifier.startsWith('./') || specifier.startsWith('../')) return posix.join(posix.dirname(from), specifier);
+  if (specifier.startsWith('/') || (/^[a-z][a-z\d+.-]*:/i.test(specifier) && !specifier.startsWith('node:'))) return specifier;
   return null;
 }
 
+/** Every extension a source this guard reads can have. */
+const EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts'];
+/** The sources a built extension an import names can be built from. */
+const BUILT_FROM: ReadonlyMap<string, readonly string[]> = new Map([['.js', ['.ts', '.tsx']], ['.jsx', ['.tsx']], ['.mjs', ['.mts']], ['.cjs', ['.cts']]]);
+
 /**
- * The source an import names, among those read, tried as the bundler does:
- * bare, with `.ts` or `.tsx`, or as a folder's index; `x.js` (or `.jsx`) as
- * the `x.ts` it is built from, and `x/` as the folder's index only.
- * R5-AW-GUARD-NAMESPACE-PASSED-ON: the last two were no source before, so a
- * file that took an exported name by either was not read as taking it.
+ * Every source an import names, among those read, tried as a bundler does:
+ * as written, `x.js` (`.jsx`, `.mjs`, `.cjs`) as the source it is built from,
+ * with any extension, as a folder's index; `x/` as the folder's index only.
+ * More than one can answer (`x.ts` beside `x.js`, which the type-check and
+ * the bundler would each take differently): the import is read as taking
+ * from every one, not from whichever is tried first.
  */
-function resolveModule(from: string, specifier: string, known: ReadonlySet<string>): string | null {
+function resolveModule(from: string, specifier: string, known: ReadonlySet<string>): string[] {
   const path = localPath(from, specifier);
-  if (path === null) return null;
-  const candidates = path.endsWith('/') ? [`${path}index.ts`, `${path}index.tsx`]
-    : /\.jsx?$/.test(path) ? [path.replace(/\.jsx?$/, '.ts'), path.replace(/\.jsx?$/, '.tsx')]
-      : [path, `${path}.ts`, `${path}.tsx`, `${path}/index.ts`, `${path}/index.tsx`];
-  return candidates.find((candidate) => known.has(candidate)) ?? null;
+  if (path === null) return [];
+  const extension = posix.extname(path);
+  const stem = path.slice(0, path.length - extension.length);
+  const candidates = path.endsWith('/') ? EXTENSIONS.map((e) => `${path}index${e}`) : [
+    path,
+    ...(BUILT_FROM.get(extension) ?? []).map((e) => stem + e),
+    ...EXTENSIONS.map((e) => path + e),
+    ...EXTENSIONS.map((e) => `${path}/index${e}`),
+  ];
+  return [...new Set(candidates.filter((candidate) => known.has(candidate)))];
 }
 
 /** Data, a stylesheet or an asset: an import of one cannot carry the function. */
@@ -133,10 +218,86 @@ function inExportedStatement(node: ts.Node): boolean {
   return false;
 }
 
+const isRequire = (callee: ts.Expression) => ts.isIdentifier(callee) && callee.text === 'require';
+
+/** Whether a string is where a module is named to be imported: an import, an export from, import(), require(), import x = require(), `declare module`. */
+function isSpecifier(node: ts.StringLiteralLike): boolean {
+  const parent = node.parent;
+  return ((ts.isImportDeclaration(parent) || ts.isExportDeclaration(parent)) && parent.moduleSpecifier === node)
+    || ts.isExternalModuleReference(parent)
+    || (ts.isModuleDeclaration(parent) && parent.name === node)
+    || (ts.isCallExpression(parent) && parent.arguments[0] === node && (parent.expression.kind === ts.SyntaxKind.ImportKeyword || isRequire(parent.expression)));
+}
+
+/** Whether a string may name a source as a path: anything outside an import but a bare `.` or `..`, which is punctuation there. */
+function mayNameASource(node: ts.StringLiteralLike): boolean {
+  return isSpecifier(node) || (node.text !== '.' && node.text !== '..');
+}
+
+/** The read sources the strings in a source name as paths, wherever they are: how one source reaches another. */
+function pathsNamed(file: string, ast: ts.SourceFile, known: ReadonlySet<string>): string[] {
+  const paths: string[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isStringLiteralLike(node) && mayNameASource(node)) paths.push(...resolveModule(file, node.text, known));
+    ts.forEachChild(node, visit);
+  };
+  visit(ast);
+  return paths;
+}
+
+/**
+ * Loaders that take a module by a path this guard does not read as written.
+ * `require` is one when it is not called on a path; called on one, it is an
+ * import, read with the others.
+ */
+const LOADERS = new Set(['require', 'createRequire', 'eval', 'Function', '__webpack_require__', '__non_webpack_require__']);
+/** What `import.meta` holds that loads nothing. */
+const IMPORT_META = new Set(['url', 'dirname', 'filename']);
+/** Node's builtins that load or run code by a path or a string (`createRequire`, `vm`, a worker, a child): an import of one in the app is a loader. */
+const LOADER_MODULES = new Set(['module', 'vm', 'worker_threads', 'child_process']);
+
+/**
+ * A loader named as a value, as written (`require` not called on a path,
+ * `createRequire`, `eval`, `Function`, `x.require`, `{ require: r } = module`,
+ * `import.meta.webpackContext`): the expression it is used in, or null.
+ * R6-AW-GUARD-UNREAD-SOURCES-AND-REQUIRE.
+ */
+function loaderUse(node: ts.Node): ts.Node | null {
+  if (ts.isIdentifier(node)) {
+    if (!LOADERS.has(node.text) || declares(node) || inTypePosition(node)) return null;
+    const parent = node.parent;
+    // `x instanceof Function` reads the constructor and runs nothing.
+    if (ts.isBinaryExpression(parent) && parent.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword && parent.right === node) return null;
+    return node.text === 'require' && ts.isCallExpression(parent) && parent.expression === node ? null : parent;
+  }
+  if (ts.isPropertyAccessExpression(node) && LOADERS.has(node.name.text)) return node.parent;
+  if (ts.isElementAccessExpression(node) && ts.isStringLiteralLike(node.argumentExpression) && LOADERS.has(node.argumentExpression.text)) return node.parent;
+  if (ts.isBindingElement(node) && ts.isObjectBindingPattern(node.parent)) {
+    const key = node.propertyName ?? node.name;
+    return (ts.isIdentifier(key) || ts.isStringLiteralLike(key)) && LOADERS.has(key.text) ? node.parent.parent : null;
+  }
+  if (ts.isMetaProperty(node) && node.keywordToken === ts.SyntaxKind.ImportKeyword) {
+    const access = node.parent;
+    if (ts.isPropertyAccessExpression(access) && access.expression === node) return IMPORT_META.has(access.name.text) ? null : access.parent;
+    return node.parent;
+  }
+  return null;
+}
+
+/** The methods of a promise: `.then`, `.catch` and `.finally` of a dynamic import. */
+const PROMISE_METHODS = new Set(['then', 'catch', 'finally']);
+
+/** Whether a function's body reads its `arguments`, which hold the module whatever its parameters are called. */
+function mentionsArguments(node: ts.Node): boolean {
+  return ts.forEachChild(node, (child) => ((ts.isIdentifier(child) && child.text === 'arguments') || mentionsArguments(child) ? true : undefined)) ?? false;
+}
+
 /**
  * Every call of fireAutomationEvent in one source, with the trigger it
  * passes, every other use of it, which this guard cannot follow, and the
- * names the source exports it under.
+ * names the source exports it under. `app`: whether the source is the app,
+ * whose imports are held to resolve (`loads`) and whose loaders are named
+ * (loaderUse).
  *
  * R3-AW-GUARD-ALIAS: a call was matched only when its callee was literally
  * named fireAutomationEvent, so `import { fireAutomationEvent as fire }` and
@@ -166,42 +327,71 @@ function inExportedStatement(node: ts.Node): boolean {
  * the guard does not follow it, unreported, as `export * as ns from` is. A
  * namespace, or the module a dynamic import resolves to, is now followed
  * through a member, a destructure naming its keys, another local name for it
- * and a `.then` callback's parameter, and reported anywhere else. And an
- * import by a path that names no source read here (a file it does not read,
- * a computed path) is reported when it may take a name some module exports
- * the function under.
+ * and a `.then` callback's parameter, and reported anywhere else.
+ *
+ * R6 (all three items, and the class they are instances of): the module
+ * that defines the function is one such module (DEFINER); a promise of one
+ * is followed through `.catch`, `.finally` and `.then()` as well as `.then`
+ * with a callback (R6-AW-GUARD-CATCH-FINALLY); `require(...)` is read as a
+ * dynamic import and `import x = require(...)` as a namespace import; in the
+ * app, an import by a path no source read here answers is reported whatever
+ * it takes, and so is a loader named as a value; and a path to such a module
+ * written anywhere a module is not imported (`new URL(path, import.meta.url)`,
+ * a string kept for a loader) is reported as a use of it
+ * (R6-AW-GUARD-UNREAD-SOURCES-AND-REQUIRE).
  */
-function analyse(file: string, ast: ts.SourceFile, exported: FireExports, known: ReadonlySet<string>): Analysis {
+function analyse(file: string, ast: ts.SourceFile, exported: FireExports, known: ReadonlySet<string>, app: boolean): Analysis {
   const names = new Set<string>([FIRE]);
-  /** The member names the function goes by on a namespace this source reads. */
+  /** The member names the function goes by on a module this source holds whole. */
   const members = new Set<string>([FIRE]);
-  /** The local names of a namespace of a module that exports the function under a name, and the dynamic imports of one. */
+  /** The local names of a module that carries the function, held whole: a namespace import, `import x = require()`, and the names those go by. */
   const namespaces = new Set<string>();
-  const namespaceImports = new Set<ts.CallExpression>();
-  /** Every name a module exports the function under. */
-  const aliases = new Set([...exported.values()].flatMap((their) => [...their.keys()]));
+  /** The expressions that are such a module, or a promise of one: import(), require(), and `.catch`, `.finally` or `.then()` on one. */
+  const modules = new Set<ts.CallExpression>();
   const imports = new Set<string>();
   const exports = new Map<string, Site>();
   const calls: Call[] = [];
   const lineOf = (node: ts.Node) => ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1;
   const site = (node: ts.Node): Site => ({ line: lineOf(node), text: node.getText(ast) });
+  /**
+   * Where everything this guard does not follow ends. Each check below either
+   * follows a use, to a call (whose trigger `check` reads) or to another name
+   * it goes by, or reports it here: that is the fail-closed default, and no
+   * check returns past it unsaid.
+   */
+  const report = (at: ts.Node, trigger: Trigger) => { calls.push({ file, line: lineOf(at), trigger }); };
+  const cannotFollow = (at: ts.Node, use: ts.Node) => report(at, { unfollowed: use.getText(ast) });
+  /** The modules a path names that carry the function, and every name they carry it under. */
   const theirs = (specifier: ts.Expression | undefined) => {
-    const target = specifier && ts.isStringLiteralLike(specifier) ? resolveModule(file, specifier.text, known) : null;
-    return { target, names: target ? exported.get(target) : undefined };
+    const tracked = specifier && ts.isStringLiteralLike(specifier) ? resolveModule(file, specifier.text, known).filter((target) => exported.has(target)) : [];
+    const their = new Set(tracked.flatMap((target) => [...(exported.get(target)?.keys() ?? [])]));
+    return { tracked, their: tracked.length > 0 ? their : undefined };
+  };
+  const take = (tracked: readonly string[], name: string) => { for (const target of tracked) imports.add(`${target}#${name}`); };
+  /** Such a module held whole: every name it carries the function under is a member here. */
+  const hold = (tracked: readonly string[], their: ReadonlySet<string>) => {
+    for (const name of their) members.add(name);
+    take(tracked, '*');
   };
   /**
-   * Report an import by a path no source here answers when what it takes
-   * (`*` for every name) may be the function under a name a module exports
-   * it by. Its own name is followed wherever it comes from.
+   * In the app, an import by a path that names no source read here: computed,
+   * or local and answered by none. R6-AW-GUARD-UNREAD-SOURCES-AND-REQUIRE: it
+   * was reported only when it took a name some read module exports the
+   * function under, so an alias in a module the guard did not read slipped
+   * past. Whatever it takes, it may be the function. And an import of a
+   * builtin that loads code is a loader (LOADER_MODULES), under whatever
+   * name it is taken.
    */
-  const unresolved = (specifier: ts.Expression | undefined, takes: readonly string[], at: ts.Node) => {
-    if (!specifier) return;
-    if (ts.isStringLiteralLike(specifier)) {
-      if (localPath(file, specifier.text) === null || NOT_A_MODULE.test(specifier.text) || resolveModule(file, specifier.text, known)) return;
+  const loads = (specifier: ts.Expression | undefined, at: ts.Node) => {
+    if (!app) return;
+    if (specifier && ts.isStringLiteralLike(specifier)) {
+      if (LOADER_MODULES.has(specifier.text.replace(/^node:/, ''))) {
+        report(at, { loader: at.getText(ast) });
+        return;
+      }
+      if (localPath(file, specifier.text) === null || NOT_A_MODULE.test(specifier.text) || resolveModule(file, specifier.text, known).length > 0) return;
     }
-    if (takes.some((name) => (name === '*' ? aliases.size > 0 : name !== FIRE && aliases.has(name)))) {
-      calls.push({ file, line: lineOf(at), trigger: { unresolved: specifier.getText(ast) } });
-    }
+    report(at, { unresolved: specifier ? specifier.getText(ast) : '(no path)' });
   };
   const isMember = (node: ts.Node): node is ts.Expression =>
     (ts.isPropertyAccessExpression(node) && members.has(node.name.text))
@@ -218,56 +408,71 @@ function analyse(file: string, ast: ts.SourceFile, exported: FireExports, known:
   };
 
   // What this source takes from the others: the names their exports go by
-  // here, and what it passes on.
+  // here, the modules it holds whole, and what it passes on.
   const readModules = (node: ts.Node) => {
     if (ts.isImportDeclaration(node) && !node.importClause?.isTypeOnly) {
-      const { target, names: their } = theirs(node.moduleSpecifier);
+      const { tracked, their } = theirs(node.moduleSpecifier);
       const clause = node.importClause;
-      if (clause?.name && their?.has('default')) { names.add(clause.name.text); imports.add(`${target}#default`); }
+      if (clause?.name && their?.has('default')) { names.add(clause.name.text); take(tracked, 'default'); }
       const bindings = clause?.namedBindings;
       if (bindings && ts.isNamespaceImport(bindings) && their) {
-        for (const name of their.keys()) members.add(name);
-        imports.add(`${target}#*`);
+        hold(tracked, their);
         namespaces.add(bindings.name.text);
       }
       if (bindings && ts.isNamedImports(bindings)) {
         for (const specifier of bindings.elements) {
           const imported = (specifier.propertyName ?? specifier.name).text;
           if (imported === FIRE || their?.has(imported)) names.add(specifier.name.text);
-          if (their?.has(imported)) imports.add(`${target}#${imported}`);
+          if (their?.has(imported)) take(tracked, imported);
         }
       }
-      unresolved(node.moduleSpecifier, [
-        ...(clause?.name ? ['default'] : []),
-        ...(bindings && ts.isNamespaceImport(bindings) ? ['*'] : []),
-        ...(bindings && ts.isNamedImports(bindings) ? bindings.elements.filter((s) => !s.isTypeOnly).map((s) => (s.propertyName ?? s.name).text) : []),
-      ], node);
+      // An import of types only loads nothing.
+      const onlyTypes = !clause?.name && bindings !== undefined && ts.isNamedImports(bindings) && bindings.elements.length > 0 && bindings.elements.every((s) => s.isTypeOnly);
+      if (!onlyTypes) loads(node.moduleSpecifier, node);
     }
-    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
-      const { target, names: their } = theirs(node.arguments[0]);
-      if (their) { for (const name of their.keys()) members.add(name); imports.add(`${target}#*`); namespaceImports.add(node); }
-      unresolved(node.arguments[0], ['*'], node);
+    // `import x = require(...)`: a namespace import.
+    if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference) && !node.isTypeOnly) {
+      const { tracked, their } = theirs(node.moduleReference.expression);
+      if (their) {
+        hold(tracked, their);
+        namespaces.add(node.name.text);
+        // `export import x = require(...)`: the module passed on whole.
+        if (ts.getModifiers(node)?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)) cannotFollow(node, node);
+      }
+      loads(node.moduleReference.expression, node);
+    }
+    // import(...) and require(...): the module, or a promise of it, as a value.
+    if (ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword || isRequire(node.expression))) {
+      const { tracked, their } = theirs(node.arguments[0]);
+      if (their) {
+        hold(tracked, their);
+        modules.add(node);
+      }
+      loads(node.arguments[0], node);
     }
     if (ts.isExportDeclaration(node) && node.moduleSpecifier && !node.isTypeOnly) {
-      const { target, names: their } = theirs(node.moduleSpecifier);
+      const { tracked, their } = theirs(node.moduleSpecifier);
       const clause = node.exportClause;
-      unresolved(node.moduleSpecifier, clause && ts.isNamedExports(clause)
-        ? clause.elements.filter((s) => !s.isTypeOnly).map((s) => (s.propertyName ?? s.name).text) : ['*'], node);
+      const onlyTypes = clause !== undefined && ts.isNamedExports(clause) && clause.elements.length > 0 && clause.elements.every((s) => s.isTypeOnly);
+      if (!onlyTypes) loads(node.moduleSpecifier, node);
       if (!clause) {
         // `export * from`: every name it exports the function under but the default.
-        for (const name of their?.keys() ?? []) {
+        for (const name of their ?? []) {
           if (name === 'default') continue;
           exports.set(name, site(node));
-          imports.add(`${target}#${name}`);
+          take(tracked, name);
         }
       } else if (ts.isNamespaceExport(clause)) {
         // `export * as ns from`: a namespace inside a namespace, not followed.
-        if (their) { calls.push({ file, line: lineOf(node), trigger: { unfollowed: node.getText(ast) } }); imports.add(`${target}#*`); }
+        if (their) {
+          cannotFollow(node, node);
+          take(tracked, '*');
+        }
       } else {
         for (const specifier of clause.elements) {
           const imported = (specifier.propertyName ?? specifier.name).text;
           if (imported === FIRE || their?.has(imported)) exports.set(specifier.name.text, site(specifier));
-          if (their?.has(imported)) imports.add(`${target}#${imported}`);
+          if (their?.has(imported)) take(tracked, imported);
         }
       }
     }
@@ -287,9 +492,9 @@ function analyse(file: string, ast: ts.SourceFile, exported: FireExports, known:
     collect(ast);
   }
 
-  /** Whether a node is such a namespace here: a dynamic import of the module, or a use of a name it goes by. */
+  /** Whether a node is such a module here: an import() or require() of it, a promise chained on one, or a use of a name it goes by. */
   const isNamespace = (node: ts.Node): node is ts.Expression => {
-    if (ts.isCallExpression(node)) return namespaceImports.has(node);
+    if (ts.isCallExpression(node)) return modules.has(node);
     if (!ts.isIdentifier(node) || !namespaces.has(node.text) || declares(node) || inTypePosition(node)) return false;
     const parent = node.parent;
     // A parameter or an attribute of that name, or another module's export of it, is not this namespace.
@@ -301,42 +506,61 @@ function analyse(file: string, ast: ts.SourceFile, exported: FireExports, known:
     const key = element.propertyName ?? element.name;
     return !element.dotDotDotToken && (ts.isIdentifier(key) || ts.isStringLiteralLike(key)) && (ts.isIdentifier(element.name) || !members.has(key.text));
   });
-  /** What is done with a namespace: read through a member or a destructure (null), given another local name, or taken where this guard does not follow it. */
-  const namespaceUse = (node: ts.Expression): { alias: string } | { unfollowed: ts.Node } | null => {
+  /**
+   * What is done with such a module: read through a member or a destructure
+   * that names its keys (null), given another local name (alias), chained to
+   * a promise that resolves to it again (again), or taken where this guard
+   * does not follow it (unfollowed), which is what anything not named here is.
+   */
+  const namespaceUse = (node: ts.Expression): { alias: string } | { again: ts.CallExpression } | { unfollowed: ts.Node } | null => {
     let outer = node;
     while (ts.isParenthesizedExpression(outer.parent) || ts.isAsExpression(outer.parent) || ts.isSatisfiesExpression(outer.parent)
       || ts.isNonNullExpression(outer.parent) || ts.isAwaitExpression(outer.parent)) outer = outer.parent;
     const parent = outer.parent;
-    if (ts.isPropertyAccessExpression(parent) && parent.expression === outer) {
-      // `import(...).then((m) => ...)`: the module is the callback's first parameter.
-      const call = parent.parent;
-      if (parent.name.text !== 'then' || !ts.isCallExpression(call) || call.expression !== parent || call.arguments.length === 0) return null;
+    const access = (ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) && parent.expression === outer ? parent : null;
+    if (access) {
+      const member = ts.isPropertyAccessExpression(access) ? access.name.text
+        : ts.isStringLiteralLike(access.argumentExpression) ? access.argumentExpression.text : null;
+      // `a[pick()]`: which member it reads is not in the source.
+      if (member === null) return { unfollowed: access };
+      // A member read: the names it carries the function under are calls or uses of it (isMember).
+      if (!PROMISE_METHODS.has(member)) return null;
+      // R6-AW-GUARD-CATCH-FINALLY: only `.then` with a callback was read as
+      // the promise it is, and any other method as a member of the module.
+      const call = access.parent;
+      if (!ts.isCallExpression(call) || call.expression !== access) return { unfollowed: access };
+      // `.catch(...)`, `.finally(...)` and `.then()` resolve to the module again.
+      if (member !== 'then' || call.arguments.length === 0) return { again: call };
+      // `.then((m) => ...)`: the module is the callback's first parameter.
       const callback = call.arguments[0];
       if (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) return { unfollowed: call };
+      if (ts.isFunctionExpression(callback) && mentionsArguments(callback.body)) return { unfollowed: call };
       const param = callback.parameters[0];
       if (!param) return null;
       if (param.dotDotDotToken) return { unfollowed: call };
       if (ts.isIdentifier(param.name)) return { alias: param.name.text };
       return namesItsKeys(param.name) ? null : { unfollowed: call };
     }
-    if (ts.isElementAccessExpression(parent) && parent.expression === outer) {
-      return ts.isStringLiteralLike(parent.argumentExpression) ? null : { unfollowed: parent };
-    }
     if (ts.isVariableDeclaration(parent) && parent.initializer === outer) {
       if (ts.isIdentifier(parent.name)) return inExportedStatement(parent) ? { unfollowed: parent } : { alias: parent.name.text };
       return namesItsKeys(parent.name) ? null : { unfollowed: parent };
     }
-    // Passed, returned, stored or exported: an export or an object it sits in is read whole.
+    // Thrown away (`import(...);`, `void import(...)`): nothing takes it.
+    if (ts.isExpressionStatement(parent) || ts.isVoidExpression(parent)) return null;
+    // An export or an object it sits in is read whole.
     if (ts.isExportSpecifier(parent)) return { unfollowed: parent.parent.parent };
     if (ts.isShorthandPropertyAssignment(parent) || ts.isSpreadAssignment(parent)) return { unfollowed: parent.parent };
+    // Passed, returned, stored, exported, compared, or anything else: the fail-closed default.
     return { unfollowed: parent };
   };
-  // The names a namespace goes by, to a fixed point (`const b = a;`, `.then((m) => ...)`).
-  for (let size = -1; size !== namespaces.size;) {
-    size = namespaces.size;
+  // The names and the promises such a module goes by, to a fixed point
+  // (`const b = a;`, `.then((m) => ...)`, `import(...).catch(...)`).
+  for (let size = -1; size !== namespaces.size + modules.size;) {
+    size = namespaces.size + modules.size;
     const collect = (node: ts.Node) => {
       const use = isNamespace(node) ? namespaceUse(node) : null;
       if (use && 'alias' in use) namespaces.add(use.alias);
+      if (use && 'again' in use) modules.add(use.again);
       ts.forEachChild(node, collect);
     };
     collect(ast);
@@ -345,8 +569,16 @@ function analyse(file: string, ast: ts.SourceFile, exported: FireExports, known:
   const visit = (node: ts.Node) => {
     if (isNamespace(node)) {
       const use = namespaceUse(node);
-      if (use && 'unfollowed' in use) calls.push({ file, line: lineOf(node), trigger: { unfollowed: use.unfollowed.getText(ast) } });
+      if (use && 'unfollowed' in use) cannotFollow(node, use.unfollowed);
     }
+    // A path to such a module written anywhere a module is not imported
+    // (`new URL(path, import.meta.url)`, a string kept for a loader): that
+    // module, where this guard does not follow it.
+    if (ts.isStringLiteralLike(node) && !isSpecifier(node) && mayNameASource(node)
+      && resolveModule(file, node.text, known).some((target) => exported.has(target)) && !inTypePosition(node)) cannotFollow(node, node.parent);
+    // In the app, a loader named as a value: what it loads is not in the source.
+    const loader = app ? loaderUse(node) : null;
+    if (loader) report(node, { loader: loader.getText(ast) });
     // `export const { fireAutomationEvent: fire } = events;`
     if (ts.isBindingElement(node) && bindsFire(node) && inExportedStatement(node)) exports.set(node.name.text, site(node));
     const reference = isMember(node) ? node
@@ -366,7 +598,7 @@ function analyse(file: string, ast: ts.SourceFile, exported: FireExports, known:
         exports.set('default', site(parent));
       } else {
         // Nothing else is followed.
-        calls.push({ file, line: lineOf(outer), trigger: { unfollowed: parent.getText(ast) } });
+        cannotFollow(outer, parent);
       }
     }
     ts.forEachChild(node, visit);
@@ -377,31 +609,43 @@ function analyse(file: string, ast: ts.SourceFile, exported: FireExports, known:
 
 /**
  * Every call of fireAutomationEvent across a set of sources, and every use
- * this guard cannot follow, in file order and by line.
+ * this guard cannot follow, in file order and by line. A path resolves to a
+ * source in the set or in `tree` (the repository's, by default: a planted
+ * program is read as if it were added to the tree, whose own sources are
+ * taken to carry nothing).
  *
- * The names each module exports the function under are worked out to a
- * fixed point, since one module can pass on another's (a barrel, a
- * re-export of a re-export). An export that no source read here takes is
- * reported: whatever calls it is somewhere this guard does not read.
+ * The app is every source readAs puts in it, and every source one of those
+ * names by a path, an import or any other (a script the app imports is the
+ * app). The names each module exports the function under are worked out to
+ * a fixed point, since one module can pass on another's (a barrel, a
+ * re-export of a re-export), starting from the module that defines it. An
+ * export that no source read here takes is reported: whatever calls it is
+ * somewhere this guard does not read.
  */
-function programCalls(sources: ReadonlyMap<string, string>): Call[] {
-  const known = new Set([...sources.keys(), DEFINER]);
-  const asts = [...sources].map(([file, source]) => [file, parse(file, source)] as const);
-  let exported: FireExports = new Map();
-  let analyses: [string, Analysis][];
-  for (let size = 0; ;) {
-    analyses = asts.map(([file, ast]) => [file, analyse(file, ast, exported, known)]);
-    exported = new Map(analyses.filter(([, a]) => a.exports.size > 0).map(([file, a]) => [file, a.exports]));
-    const found = [...exported.values()].reduce((n, names) => n + names.size, 0);
-    if (found === size) break;
-    size = found;
+function programCalls(program: ReadonlyMap<string, string>, tree: Iterable<string> = sources.keys()): Call[] {
+  const known = new Set([...tree, ...program.keys(), DEFINER]);
+  const asts = [...program].map(([file, source]) => [file, parse(file, source)] as const);
+  const app = new Set(asts.filter(([file]) => readAs(file) === 'app').map(([file]) => file));
+  const named = new Map(asts.map(([file, ast]) => [file, pathsNamed(file, ast, known)]));
+  for (const file of app) for (const next of named.get(file) ?? []) if (program.has(next)) app.add(next);
+  const seed: FireExports = new Map([[DEFINER, new Map([[FIRE, { line: 0, text: FIRE }]])]]);
+  const count = (exports: FireExports) => [...exports.values()].reduce((n, their) => n + their.size, 0);
+  let exported = seed;
+  for (;;) {
+    const analyses = asts.map(([file, ast]) => [file, analyse(file, ast, exported, known, app.has(file))] as const);
+    const found = new Map(seed);
+    for (const [file, { exports }] of analyses) if (exports.size > 0) found.set(file, new Map([...(found.get(file) ?? []), ...exports]));
+    if (count(found) !== count(exported)) {
+      exported = found;
+      continue;
+    }
+    const taken = new Set(analyses.flatMap(([, a]) => [...a.imports]));
+    return analyses.flatMap(([file, { calls, exports }]) => {
+      const untaken = [...exports].filter(([name]) => !taken.has(`${file}#${name}`) && !taken.has(`${file}#*`))
+        .map(([, at]): Call => ({ file, line: at.line, trigger: { unfollowed: at.text } }));
+      return [...calls, ...untaken].sort((a, b) => a.line - b.line);
+    });
   }
-  const taken = new Set(analyses.flatMap(([, a]) => [...a.imports]));
-  return analyses.flatMap(([file, { calls, exports }]) => {
-    const untaken = [...exports].filter(([name]) => !taken.has(`${file}#${name}`) && !taken.has(`${file}#*`))
-      .map(([, at]): Call => ({ file, line: at.line, trigger: { unfollowed: at.text } }));
-    return [...calls, ...untaken].sort((a, b) => a.line - b.line);
-  });
 }
 
 /** The calls in one source read on its own, so nothing takes what it exports. */
@@ -465,6 +709,10 @@ function check(calls: Call[], sourceOf: (file: string) => string): { passed: Set
       problems.push(`${where} may take fireAutomationEvent by ${call.trigger.unresolved}, which names no source this guard reads`);
       continue;
     }
+    if ('loader' in call.trigger) {
+      problems.push(`${where} loads a module where this guard cannot follow it: ${call.trigger.loader}`);
+      continue;
+    }
     let triggers: string[];
     if ('literal' in call.trigger) {
       triggers = [call.trigger.literal];
@@ -485,9 +733,6 @@ function check(calls: Call[], sourceOf: (file: string) => string): { passed: Set
   return { passed, problems };
 }
 
-// components/ too: a server component imports from lib/ as a page does.
-const files = ['app', 'lib', 'components'].flatMap((dir) => walk(join(ROOT, dir)));
-const sources = new Map(files.map((path) => [relative(ROOT, path).split(sep).join('/'), readFileSync(path, 'utf8')]));
 const calls = programCalls(sources);
 const sourceOf = (file: string) => sources.get(file) ?? '';
 
@@ -717,7 +962,7 @@ describe('every trigger the app fires is one a workflow can be switched on for',
         "import * as elsewhere from '../lib/zz-elsewhere.mjs';",
         'const later = await import(`@/lib/${name}`);',
         "export * from './zz-gone-too';",
-        // Not a name any module exports the function under, or not a module: nothing to say.
+        // Sources this guard reads (a .mjs, shared/: the tree's, which a planted program resolves against), or not a module: nothing to say.
         "import { parseBuildRevision } from '@/lib/build-identity.mjs';",
         "import messages from '@/lib/i18n/messages/en-US.json';",
         "import { createSessionRefreshFetch } from '@/shared/auth/refresh-fetch';",
@@ -736,6 +981,267 @@ describe('every trigger the app fires is one a workflow can be switched on for',
       "app/zz-gone.ts:2 may take fireAutomationEvent by '../lib/zz-elsewhere.mjs', which names no source this guard reads",
       'app/zz-gone.ts:3 may take fireAutomationEvent by `@/lib/${name}`, which names no source this guard reads',
       "app/zz-gone.ts:4 may take fireAutomationEvent by './zz-gone-too', which names no source this guard reads",
+    ]);
+  });
+
+  const unresolvedAt = (where: string, path: string) => `${where} may take fireAutomationEvent by ${path}, which names no source this guard reads`;
+  const loaderAt = (where: string, text: string) => `${where} loads a module where this guard cannot follow it: ${text}`;
+  const firesDemoStarted = (where: string) => `${where} fires 'demo_started', which FIRED_TRIGGERS leaves out`;
+  const literalsOf = (program: ReadonlyMap<string, string>) => programCalls(program).filter((c) => 'literal' in c.trigger).map((c) => `${c.file}:${c.line}`);
+  const problemsOf = (program: ReadonlyMap<string, string>) => check(programCalls(program), (file) => program.get(file) ?? '').problems;
+  /** A module that exports the function under a name of its own. */
+  const aliasModule = (name: string) => ["import { fireAutomationEvent } from '@/lib/marketing/automation-events';", `export const ${name} = fireAutomationEvent;`].join('\n');
+  /** The reviewer's control: a file that imports the alias normally, so its export is taken. */
+  const CONTROL = ["import { fireIt } from '@/lib/zz-a';", "await fireIt(admin, { trigger: 'payment_completed', email: null, subjectKey: 'n' });"].join('\n');
+
+  // R6-AW-GUARD-DEFINER-NAMESPACE. The reviewer's probes (zz-d, and zz-d2
+  // through zz-reg) passed at 095357766 with no call and no problem: a
+  // namespace of the module that defines the function was never tracked,
+  // since its own `export async function` is a declaration, not a name it
+  // exports the function under. The most direct form was the one left out:
+  // the same `a[pick()]` on a module that exports an alias is reported above.
+  it('tracks a namespace of the module that defines the function as it does one of a module that exports it under another name', () => {
+    const program = new Map<string, string>([
+      ['app/zz-d.ts', [
+        "import * as ev from '@/lib/marketing/automation-events';",
+        "await ev[pick()](admin, { trigger: 'demo_started', email: null, subjectKey: 'd1' });",
+        'register(ev);',
+        "const m = await import('@/lib/marketing/automation-events');",
+        "await m[pick()](admin, { trigger: 'demo_started', email: null, subjectKey: 'd2' });",
+      ].join('\n')],
+      ['lib/zz-reg.ts', "export function call(m, k) { return m[k](admin, { trigger: 'demo_started', email: null, subjectKey: 'reg' }); }"],
+      ['app/zz-d2.ts', [
+        "import * as ev from '@/lib/marketing/automation-events';",
+        "import { call } from '@/lib/zz-reg';",
+        "await call(ev, 'fireAutomationEvent');",
+        // Passed on whole, or chained and passed on.
+        'export { ev };',
+        "export * as events from '@/lib/marketing/automation-events';",
+        "export const later = import('@/lib/marketing/automation-events').catch(() => null);",
+        "import zz = require('@/lib/marketing/automation-events');",
+        'remember(zz);',
+        // Read in place: followed, nothing to report.
+        "await ev.fireAutomationEvent(admin, { trigger: 'payment_completed', email: null, subjectKey: 'd3' });",
+        "await zz['fireAutomationEvent'](admin, { trigger: 'payment_completed', email: null, subjectKey: 'd4' });",
+        "await require('@/lib/marketing/automation-events').fireAutomationEvent(admin, { trigger: 'payment_completed', email: null, subjectKey: 'd5' });",
+      ].join('\n')],
+    ]);
+    expect(literalsOf(program), 'a call through a namespace of the definer read in place was not found').toEqual([9, 10, 11].map((line) => `app/zz-d2.ts:${line}`));
+    expect(problemsOf(program), 'a namespace of the definer was neither followed nor reported').toEqual([
+      cannotFollow('app/zz-d.ts:2', 'ev[pick()]'),
+      cannotFollow('app/zz-d.ts:3', 'register(ev)'),
+      cannotFollow('app/zz-d.ts:5', 'm[pick()]'),
+      cannotFollow('app/zz-d2.ts:3', "call(ev, 'fireAutomationEvent')"),
+      cannotFollow('app/zz-d2.ts:4', 'export { ev };'),
+      cannotFollow('app/zz-d2.ts:5', "export * as events from '@/lib/marketing/automation-events';"),
+      cannotFollow('app/zz-d2.ts:6', "later = import('@/lib/marketing/automation-events').catch(() => null)"),
+      cannotFollow('app/zz-d2.ts:8', 'remember(zz)'),
+    ]);
+  });
+
+  // R6-AW-GUARD-CATCH-FINALLY. The reviewer's two files (zz-p1, zz-c) passed
+  // at 095357766: only `.then` with a callback was read as the promise of the
+  // module it is, and any other method of it as a member of the module, so
+  // `.catch(...)` and `.finally(...)`, which resolve to the module again, took
+  // it away unsaid. zz-p2 holds the rest of the class: `.then()` with no
+  // callback, a method taken and not called, a callback that reads its
+  // `arguments`, a method named by a string.
+  it('follows a dynamic import through every promise chain, and reports the module wherever the chain passes it on', () => {
+    const program = new Map<string, string>([
+      ['lib/zz-a.ts', ALIAS_MODULE],
+      ['app/zz-n.ts', CONTROL],
+      ['app/zz-p1.ts', [
+        "const mod = await import('@/lib/zz-a').catch(() => null);",
+        'register(mod);',
+        "const mod2 = await import('@/lib/zz-a').finally(() => {});",
+        'register(mod2);',
+      ].join('\n')],
+      ['app/zz-c.ts', [
+        "import('@/lib/zz-a').catch(() => null).then((m) => register(m));",
+        "export const load = import('@/lib/zz-a').catch(() => null);",
+      ].join('\n')],
+      ['app/zz-p2.ts', [
+        "register(import('@/lib/zz-a').then());",
+        "const pending = import('@/lib/zz-a');",
+        'register(pending.finally);',
+        "import('@/lib/zz-a').then(function () { register(arguments[0]); });",
+        "register(await import('@/lib/zz-a')['finally'](() => {}));",
+        // Read in place at the end of a chain: followed to the call.
+        "await import('@/lib/zz-a').catch(() => null).finally(() => {}).then((m) => m.fireIt(admin, { trigger: 'demo_started', email: null, subjectKey: 'p2' }));",
+        'const { fireIt: go } = await pending.then().catch(() => null);',
+        "await go(admin, { trigger: 'payment_completed', email: null, subjectKey: 'p3' });",
+        // Thrown away: nothing takes it.
+        "await import('@/lib/zz-a').finally(() => {});",
+        "void import('@/lib/zz-a').catch(() => null);",
+      ].join('\n')],
+    ]);
+    expect(literalsOf(program), 'a call at the end of a promise chain was not found').toEqual(['app/zz-n.ts:2', 'app/zz-p2.ts:6', 'app/zz-p2.ts:8']);
+    expect(problemsOf(program), 'a module passed on down a promise chain was neither followed nor reported').toEqual([
+      cannotFollow('app/zz-p1.ts:2', 'register(mod)'),
+      cannotFollow('app/zz-p1.ts:4', 'register(mod2)'),
+      cannotFollow('app/zz-c.ts:1', 'register(m)'),
+      cannotFollow('app/zz-c.ts:2', "load = import('@/lib/zz-a').catch(() => null)"),
+      cannotFollow('app/zz-p2.ts:1', "register(import('@/lib/zz-a').then())"),
+      cannotFollow('app/zz-p2.ts:3', 'pending.finally'),
+      cannotFollow('app/zz-p2.ts:4', "import('@/lib/zz-a').then(function () { register(arguments[0]); })"),
+      cannotFollow('app/zz-p2.ts:5', "register(await import('@/lib/zz-a')['finally'](() => {}))"),
+      firesDemoStarted('app/zz-p2.ts:6'),
+    ]);
+  });
+
+  // R6-AW-GUARD-UNREAD-SOURCES-AND-REQUIRE, what is read. At 095357766 the
+  // guard read .ts and .tsx under app/, lib/ and components/ only, and the
+  // tree imports '@/lib/build-identity.mjs' and '@/shared/auth/refresh-fetch'
+  // from there.
+  it('reads every source the app can import, of every extension, and leaves out only the test suite, what is installed or generated, and type declarations', () => {
+    // The tree as read: what the app imports from outside app/, lib/ and components/, and the files at the top.
+    for (const file of ['lib/build-identity.mjs', 'lib/security/csp.mjs', 'shared/auth/refresh-fetch.ts', 'design/tokens.ts', 'held/api/cron/location-retention/route.ts',
+      'middleware.ts', 'instrumentation.ts', 'next.config.mjs', 'public/sw.js', 'scripts/e2e-server-env.mjs', DEFINER]) {
+      expect(sources.has(file), `${file} is not read`).toBe(true);
+    }
+    expect([...sources.keys()].filter((file) => file.startsWith('tests/') || file.endsWith('.d.ts'))).toEqual([]);
+    // And every path as it would be read.
+    const as = (paths: string[]) => Object.fromEntries(paths.map((path) => [path, readAs(path)]));
+    const app = ['shared/zz-x.ts', 'lib/zz-y.js', 'lib/zz-y.jsx', 'lib/zz-y.mjs', 'lib/zz-y.cjs', 'lib/zz-y.mts', 'lib/zz-y.cts', 'hooks/use-zz.tsx',
+      'design/zz.ts', 'zz-at-the-top.mjs', 'held/zz/route.ts', 'public/zz.js', 'mobile/src/zz.ts', 'app/zz/page.tsx', 'app/.well-known/zz/route.ts'];
+    expect(as(app)).toEqual(Object.fromEntries(app.map((path) => [path, 'app'])));
+    const outside = ['scripts/zz.mjs', 'scripts/lib/zz.ts', 'mobile/scripts/zz.mjs', 'docs/zz/probe.mjs'];
+    expect(as(outside)).toEqual(Object.fromEntries(outside.map((path) => [path, 'outside'])));
+    const unread = ['tests/zz.test.ts', 'tests/helpers/zz.ts', 'node_modules/zz/index.js', 'lib/node_modules/zz.js', '.next/server/zz.js', '.claude/worktrees/zz/lib/zz.ts',
+      'lib/zz.d.ts', 'lib/zz.json', 'app/zz.css'];
+    expect(as(unread)).toEqual(Object.fromEntries(unread.map((path) => [path, null])));
+    // localPath knows `@/` and relative paths only: hold the app to having no other way to name its own sources.
+    const tsconfig = ts.parseConfigFileTextToJson('tsconfig.json', readFileSync(join(ROOT, 'tsconfig.json'), 'utf8')).config;
+    expect(tsconfig.compilerOptions.paths, 'tsconfig names its sources by a path localPath does not know').toEqual({ '@/*': ['./*'] });
+    expect(tsconfig.compilerOptions.baseUrl, 'a baseUrl names sources by a bare path').toBeUndefined();
+    expect(JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).imports, 'package.json `imports` name sources by `#`').toBeUndefined();
+    expect(sourceOf('next.config.mjs'), 'next.config.mjs aliases a path to a source').not.toMatch(/\balias\s*:|\.alias\b|resolveAlias|extensionAlias/);
+  });
+
+  // R6-AW-GUARD-UNREAD-SOURCES-AND-REQUIRE, the reviewer's first probe. With
+  // shared/zz-x.ts and lib/zz-y.js not read, it passed at 095357766 with no
+  // call and no problem: an import by a path no source answers was reported
+  // only when it took a name some READ module exports the function under.
+  it('follows the function out of every source the app can import, and reports an import by a path it reads no source for, whatever it takes', () => {
+    const importer: [string, string] = ['app/zz-c.ts', [
+      "import { fireIt } from '@/shared/zz-x';",
+      "await fireIt(admin, { trigger: 'demo_started', email: null, subjectKey: 'x' });",
+      "import { fireJs } from '@/lib/zz-y';",
+      "await fireJs(admin, { trigger: 'demo_started', email: null, subjectKey: 'y' });",
+      "import { fireMjs } from '../lib/zz-m.mjs';",
+      "await fireMjs(admin, { trigger: 'demo_started', email: null, subjectKey: 'm' });",
+      "import { helper } from '@/lib/zz-helper';",
+      "import '@/lib/zz-side-effect';",
+      "import type { Only } from '@/lib/zz-types';",
+      "import { type AlsoOnly } from '@/lib/zz-types';",
+    ].join('\n')];
+    // Not read: every path that names no source is reported, whatever it takes; an import of types only loads nothing.
+    expect(problemsOf(new Map([importer])), 'an import by a path that names no source was not reported').toEqual([
+      unresolvedAt('app/zz-c.ts:1', "'@/shared/zz-x'"),
+      unresolvedAt('app/zz-c.ts:3', "'@/lib/zz-y'"),
+      unresolvedAt('app/zz-c.ts:5', "'../lib/zz-m.mjs'"),
+      unresolvedAt('app/zz-c.ts:7', "'@/lib/zz-helper'"),
+      unresolvedAt('app/zz-c.ts:8', "'@/lib/zz-side-effect'"),
+    ]);
+    // Read, in shared/ and as .js, .mjs and .cjs: followed to the calls, and a CommonJS export of the function reported.
+    const program = new Map<string, string>([
+      importer,
+      ['shared/zz-x.ts', aliasModule('fireIt')],
+      ['lib/zz-y.js', aliasModule('fireJs')],
+      ['lib/zz-m.mjs', aliasModule('fireMjs')],
+      ['lib/zz-helper.ts', 'export const helper = 1;'],
+      ['lib/zz-side-effect.cjs', ["const events = require('./marketing/automation-events');", 'module.exports = { fireCjs: events.fireAutomationEvent };'].join('\n')],
+      ['lib/zz-types.ts', 'export type Only = 1;\nexport type AlsoOnly = 2;'],
+    ]);
+    expect(literalsOf(program), 'a call of a name a .js, .mjs or shared/ module exports was not found').toEqual(['app/zz-c.ts:2', 'app/zz-c.ts:4', 'app/zz-c.ts:6']);
+    expect(problemsOf(program)).toEqual([
+      firesDemoStarted('app/zz-c.ts:2'),
+      firesDemoStarted('app/zz-c.ts:4'),
+      firesDemoStarted('app/zz-c.ts:6'),
+      cannotFollow('lib/zz-side-effect.cjs:2', 'fireCjs: events.fireAutomationEvent'),
+    ]);
+    // Outside the app a name or a path that reaches the function is followed too, and a script an app source names is the app.
+    const outside = new Map<string, string>([
+      ['scripts/zz-s.mjs', [
+        "import { fireAutomationEvent } from '../lib/marketing/automation-events.ts';",
+        "await fireAutomationEvent(admin, { trigger: 'demo_started', email: null, subjectKey: 's' });",
+        // The corner the header names: a script no app source names may load what it likes by a computed path.
+        'await import(process.argv[2]);',
+      ].join('\n')],
+      ['app/zz-u.ts', "import { helper } from '@/scripts/zz-v.mjs';"],
+      ['scripts/zz-v.mjs', ['export const helper = 1;', 'await import(process.argv[2]);'].join('\n')],
+    ]);
+    expect(problemsOf(outside)).toEqual([
+      firesDemoStarted('scripts/zz-s.mjs:2'),
+      unresolvedAt('scripts/zz-v.mjs:2', 'process.argv[2]'),
+    ]);
+  });
+
+  // R6-AW-GUARD-UNREAD-SOURCES-AND-REQUIRE, the reviewer's second probe.
+  // zz-r and zz-q passed at 095357766 beside the control: require() and
+  // `import x = require()` were not read as imports, so their four calls of
+  // demo_started were missed. zz-l holds the rest of the class: the module
+  // passed on, and in the app every loader whose path is not written where
+  // this guard reads it.
+  it('reads require() and import x = require() as the imports they are, and reports a loader it cannot follow', () => {
+    const program = new Map<string, string>([
+      ['lib/zz-a.ts', ALIAS_MODULE],
+      ['app/zz-n.ts', CONTROL],
+      ['app/zz-r.ts', [
+        "const m = require('@/lib/zz-a');",
+        "await m.fireIt(admin, { trigger: 'demo_started', email: null, subjectKey: 'r1' });",
+        "await require('@/lib/zz-a').fireIt(admin, { trigger: 'demo_started', email: null, subjectKey: 'r2' });",
+        "const { fireIt: go } = require('../lib/zz-a');",
+        "await go(admin, { trigger: 'demo_started', email: null, subjectKey: 'r3' });",
+      ].join('\n')],
+      ['app/zz-q.ts', ["import zz = require('@/lib/zz-a');", "await zz.fireIt(admin, { trigger: 'demo_started', email: null, subjectKey: 'q' });"].join('\n')],
+      ['app/zz-l.ts', [
+        "register(require('@/lib/zz-a'));",
+        "export import again = require('@/lib/zz-a');",
+        'const load = require;',
+        'const late = require(name);',
+        'const own = createRequire(import.meta.url);',
+        'eval(code);',
+        "const built = new Function('return 1');",
+        'const context = import.meta.webpackContext(dir);',
+        'const viaModule = module.require(path);',
+        "const where = '@/lib/marketing/automation-events';",
+        "new Worker(new URL('../lib/zz-a.ts', import.meta.url));",
+        "import { createRequire as cr } from 'node:module';",
+        'const { require: req } = module;',
+        "const vm = await import('vm');",
+        "import { fromTheTop } from '/lib/zz-a';",
+        "const inline = await import('data:text/javascript,export default 1');",
+        // A package, a URL beside this file, and a check against the constructor: nothing to say.
+        "const crypto = require('crypto');",
+        "const asset = new URL('./zz-asset.png', import.meta.url);",
+        'const callable = handler instanceof Function;',
+      ].join('\n')],
+    ]);
+    expect(literalsOf(program), 'a call through require() or import x = require() was not found').toEqual([
+      'app/zz-n.ts:2', 'app/zz-r.ts:2', 'app/zz-r.ts:3', 'app/zz-r.ts:5', 'app/zz-q.ts:2',
+    ]);
+    expect(problemsOf(program), 'a require, or a loader, was neither followed nor reported').toEqual([
+      firesDemoStarted('app/zz-r.ts:2'),
+      firesDemoStarted('app/zz-r.ts:3'),
+      firesDemoStarted('app/zz-r.ts:5'),
+      firesDemoStarted('app/zz-q.ts:2'),
+      cannotFollow('app/zz-l.ts:1', "register(require('@/lib/zz-a'))"),
+      cannotFollow('app/zz-l.ts:2', "export import again = require('@/lib/zz-a');"),
+      loaderAt('app/zz-l.ts:3', 'load = require'),
+      unresolvedAt('app/zz-l.ts:4', 'name'),
+      loaderAt('app/zz-l.ts:5', 'createRequire(import.meta.url)'),
+      loaderAt('app/zz-l.ts:6', 'eval(code)'),
+      loaderAt('app/zz-l.ts:7', "new Function('return 1')"),
+      loaderAt('app/zz-l.ts:8', 'import.meta.webpackContext(dir)'),
+      loaderAt('app/zz-l.ts:9', 'module.require(path)'),
+      cannotFollow('app/zz-l.ts:10', "where = '@/lib/marketing/automation-events'"),
+      cannotFollow('app/zz-l.ts:11', "new URL('../lib/zz-a.ts', import.meta.url)"),
+      loaderAt('app/zz-l.ts:12', "import { createRequire as cr } from 'node:module';"),
+      loaderAt('app/zz-l.ts:13', '{ require: req } = module'),
+      loaderAt('app/zz-l.ts:14', "import('vm')"),
+      unresolvedAt('app/zz-l.ts:15', "'/lib/zz-a'"),
+      unresolvedAt('app/zz-l.ts:16', "'data:text/javascript,export default 1'"),
     ]);
   });
 });
