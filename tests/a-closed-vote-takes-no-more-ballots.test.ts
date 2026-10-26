@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { at } from './helpers/source-order';
+import { at, between } from './helpers/source-order';
 import { isPollClosed } from '@/lib/voting/polls';
 
 // The held 0525: a ballot is cast or changed only while its vote is open, on
@@ -40,7 +40,7 @@ describe('a closed vote takes no more ballots (0525)', () => {
     expect(sql).toContain('create trigger trg_meal_vote_ballots_while_open before insert or update on public.meal_vote_ballots\n    for each row execute function public.a_meal_ballot_is_cast_while_its_vote_is_open();');
     expect(sql).toContain('create trigger trg_family_poll_votes_while_open before insert or update on public.family_poll_votes\n    for each row execute function public.a_poll_vote_is_cast_while_its_poll_is_open();');
     // Each body names only its own table's columns, so it resolves against it.
-    const meal = sql.slice(at(sql, 'create or replace function public.a_meal_ballot_is_cast_while_its_vote_is_open()'), at(sql, 'create or replace function public.a_poll_vote_is_cast_while_its_poll_is_open()'));
+    const meal = between(sql, 'create or replace function public.a_meal_ballot_is_cast_while_its_vote_is_open()', 'create or replace function public.a_poll_vote_is_cast_while_its_poll_is_open()');
     expect(meal).not.toContain('poll_id');
   });
 
