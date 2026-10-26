@@ -146,6 +146,7 @@ source allocations are not evidence that production applied any migration.
 | 0522 proposed, held | `0522_a_guest_does_not_change_the_households_tasks_and_reminders.sql` | 0464's guest guard (`household_write_is_not_a_guests()`, BEFORE INSERT, UPDATE and DELETE) on `todo_lists`, `todo_items`, `reminder_lists` and `family_reminders`. Follows ROLE-M03; KIDS-O01's two triggers and Support's reminder DB half. Requested on #771 (comment 6402500834), not yet confirmed. |
 | 0523 proposed, held | `0523_a_member_changes_only_the_rows_they_can_read.sql` | `a_row_you_cannot_read_is_not_yours_to_change()` (SECURITY INVOKER) BEFORE UPDATE OR DELETE and AFTER UPDATE on `home_warranties`, `vehicle_registrations`, `vacation_documents`, `voice_commands`, `wallet_cards`, `wallet_passes`, `wallet_rewards`, `auto_insurance_policies`, `home_locations`, `utility_bills`, `vacation_medical_information` and `family_communications`: a signed-in caller changes only rows they read. Follows the held read rules; requested on #771 (comment 6402627160), not yet confirmed. |
 | 0524 proposed, held | `0524_a_guest_adds_nothing_to_the_areas_withheld_from_them.sql` | 0464's guest guard on `auto_insurance_policies`, `driving_trips`, `family_communications`, `home_locations`, `utility_bills`, `vacation_medical_information`, `wallet_cards`, `wallet_passes` and `wallet_rewards`. Follows ROLE-M03 and ROLE-SCOPE-001; requested on #771 (comment 6402627160), not yet confirmed. |
+| 0525 proposed, held | `0525_a_closed_vote_takes_no_more_ballots.sql` | `a_ballot_is_cast_while_its_vote_is_open()` BEFORE INSERT OR UPDATE on `meal_vote_ballots` and `family_poll_votes`: a ballot is cast or changed only while its vote is open, read in the row's family FOR SHARE. Support's database half of 6137789822; requested on #771 (comment 6402862474), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4783,6 +4784,47 @@ Dropping any one table's trigger turns the probe red on that table. 184 of
 families, try to vote in one family's poll under their member id from the
 other family and confirm 42501; then vote as their own member there and
 confirm it lands.
+
+## `0525` (proposed, held) — a closed vote still took ballots
+
+`supabase/reserved/0525_a_closed_vote_takes_no_more_ballots.sql`
+— **held**: requested on #771 in comment 6402862474. Not yet confirmed.
+
+**Severity: low (a member's ballot after a meal vote or poll closed could
+change a decided result; no data crosses a household). Deploy order: any.**
+`meal_vote_ballots` and `family_poll_votes` check who votes, never whether the
+vote is open; the screens ask first, but a page left open, a second device, a
+direct request or a close racing the screen's own read goes through. Measured
+with every held file through 0524 applied, as a child: a ballot on a closed
+meal vote, a vote on a closed poll and a vote past a poll's `closes_at`, `OK 1`
+each. This is the database rule Support left for the owner in 6137789822.
+
+**Database.** `a_ballot_is_cast_while_its_vote_is_open()`, SECURITY DEFINER
+with a pinned search_path, BEFORE INSERT OR UPDATE on both tables: it reads the
+row's vote or poll, in the row's family, `FOR SHARE` (so a close in flight is
+waited for, then seen), and refuses with 42501 ("That vote is closed") unless
+`meal_votes.status = 'open'`, or for a poll `status = 'open'` and no
+`closes_at` at or before now (`isPollClosed`'s rule). A missing vote, or one in
+another family, is not open. The service role is exempt; deletes, reads and
+every other rule are unchanged; reopening takes ballots again.
+
+**Proof:** `.github/workflows/closed-vote-runtime.yml` requires the held probe
+`docs/audit/reserved/a-closed-vote-takes-no-more-ballots-check.sql` to fail on
+the released schema on the defect, with no control failing, then applies 0525
+twice and requires it to pass, then re-runs six released probes over the
+ballot tables. The passing run shows the child's ballot and ballot change on
+the closed meal vote and their votes on the closed and past-deadline polls
+refused; open votes, a poll closing tomorrow and one with no deadline taking
+ballots; the reopened meal vote taking one; the guard's wiring (a FOR SHARE
+read); **N1** (triggers disabled): the closed vote takes the ballot; **M1**
+(the poll rule on status alone): the vote past the deadline lands. The share
+lock's wait on a concurrent close needs two sessions and is not run.
+
+All 189 released probes pass with 0525 applied, and with every held file
+applied twice.
+
+**After approved release:** close a test meal vote and confirm a direct
+`meal_vote_ballots` insert for it answers 42501.
 
 ## `0523` (proposed, held) — a member rewrote and deleted rows they could not read
 
