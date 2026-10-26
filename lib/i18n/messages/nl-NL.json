@@ -17190,6 +17190,6 @@
   "marketplaceItem.questionsAcrossHouseholdsAreNotOpenYet": "Vragen tussen twee huishoudens zijn nog niet mogelijk.",
   "assistantActions.couldNotReadTheBoard": "De marktplaats kon nu niet worden gelezen. Probeer het zo meteen opnieuw.",
   "negotiations.theOtherSideActedAtTheSameMoment": "De andere partij reageerde op hetzelfde moment op dit aanbod. Vernieuw de pagina en probeer het opnieuw.",
-  "childMoney.onlyYourOwnWallet": "Je ziet hier je eigen portemonnee. Een ouder of volwassene ziet die van elk kind.",
-  "filesHubModule.sensitiveStaysInVault": "Bestanden in de map {category} blijven in de beveiligde kluis, waar alleen een ouder of een andere volwassene ze kan openen."
+  "filesHubModule.sensitiveStaysInVault": "Bestanden in de map {category} blijven in de beveiligde kluis, waar alleen een ouder of een andere volwassene ze kan openen.",
+  "childMoney.onlyYourOwnWallet": "Je ziet hier je eigen portemonnee. Een ouder of volwassene ziet die van elk kind."
 }
