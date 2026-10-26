@@ -41,10 +41,12 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
     table: 'vacation_budgets', familyId, deps: [familyId, vacationId],
     fetcher: (sb) => sb.from('vacation_budgets').select('*').eq('family_id', familyId).eq('vacation_id', vacationId),
   });
-  const { data: expenses, loading: expensesLoading, error: expensesError, refresh: refreshExpenses } = useRealtimeQuery<Expense>({
+  // One read of the expenses for the totals AND the list below (`source`).
+  const expensesQuery = useRealtimeQuery<Expense>({
     table: 'vacation_expenses', familyId, deps: [familyId, vacationId],
     fetcher: (sb) => sb.from('vacation_expenses').select('*').eq('family_id', familyId).eq('vacation_id', vacationId),
   });
+  const { data: expenses, loading: expensesLoading, error: expensesError, refresh: refreshExpenses } = expensesQuery;
 
   const summary = useMemo(() => summarizeBudget(budgets, expenses), [budgets, expenses]);
   const plannedByCat = useMemo(() => new Map(budgets.map((b) => [b.category, b])), [budgets]);
@@ -118,7 +120,7 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
 
       <TripCrudSection<Expense>
         table="vacation_expenses" vacationId={vacationId} title={t('tripBudget.expenses')} icon={Receipt}
-        fields={expenseFields} emptyText={t('tripBudget.noExpensesLogged')} addLabel="Log expense"
+        fields={expenseFields} emptyText={t('tripBudget.noExpensesLogged')} addLabel="Log expense" source={expensesQuery}
         orderBy={(a, b) => b.spent_on.localeCompare(a.spent_on)}
         renderRow={(x, members) => {
           const who = x.paid_by_member_id ? members.get(x.paid_by_member_id)?.display_name : null;

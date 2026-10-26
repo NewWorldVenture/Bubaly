@@ -103,8 +103,11 @@ export function fromRow(row: Row, fields: FieldDef[], timeZone: string): Record<
   return o;
 }
 
+/** A read a parent already holds, for a section that must show the same rows as the rest of its page. */
+export type TripSectionSource<T> = { data: T[]; loading: boolean; error: string | null; refresh: () => Promise<void> };
+
 export function TripCrudSection<T extends Row>({
-  table, vacationId, title, icon, fields, renderRow, emptyText, addLabel = 'Add', orderBy, personal,
+  table, vacationId, title, icon, fields, renderRow, emptyText, addLabel = 'Add', orderBy, personal, source,
 }: {
   table: string;
   vacationId: string;
@@ -117,6 +120,12 @@ export function TripCrudSection<T extends Row>({
   orderBy?: (a: T, b: T) => number;
   /** A table of records about one member (the held 0517): show each viewer the rows that rule gives them. */
   personal?: PersonalRecordKind;
+  /**
+   * The page's own read of `table`, when the page shows totals over the same
+   * rows (the Budget tab's Spent and Remaining). With a second read here, a
+   * save re-read only this list and the totals kept the old rows.
+   */
+  source?: TripSectionSource<T>;
 }) {
   const t = useTranslations();
   const tr = useTranslations();
@@ -125,12 +134,16 @@ export function TripCrudSection<T extends Row>({
   const clock = useFamilyClock();
   const memberMap = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data, loading, error, refresh } = useRealtimeQuery<T>({
-    table, familyId, deps: [familyId, vacationId],
+  // Hooks run unconditionally; with a `source` this one reads nothing.
+  const own = useRealtimeQuery<T>({
+    table, familyId, deps: [familyId, vacationId, source ? 'source' : 'own'],
     // Generic over an arbitrary table name, so we step outside the typed client here.
-    fetcher: (sb) => (sb as never as { from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { eq: (k: string, v: string) => PromiseLike<{ data: T[] | null; error: { message: string } | null }> } } } })
-      .from(table).select('*').eq('family_id', familyId).eq('vacation_id', vacationId),
+    fetcher: (sb) => source
+      ? Promise.resolve({ data: [] as T[], error: null })
+      : (sb as never as { from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { eq: (k: string, v: string) => PromiseLike<{ data: T[] | null; error: { message: string } | null }> } } } })
+        .from(table).select('*').eq('family_id', familyId).eq('vacation_id', vacationId),
   });
+  const { data, loading, error, refresh } = source ?? own;
 
   const rows = useMemo(() => {
     const visible = personal ? recordsInScope(data as (T & { member_id: string | null })[], role, selfMember?.id, personal) : data;
