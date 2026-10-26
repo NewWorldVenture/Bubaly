@@ -8,7 +8,7 @@
 // switched off. But every family created since migration 0164 carries a
 // trial_ends_at, and once its trial has passed with no paid subscription (a
 // lapsed trial, or Basic paid for and then cancelled: "connects X on Basic,
-// then downgrades") it is LOCKED. GatedShell (app/(app)/layout.tsx) then
+// then downgrades") it is LOCKED. UnlockedShell (app/(app)/layout.tsx) then
 // returns <TrialPaywallGate /> in place of every (app) route, the social layout
 // and its list included, and the paywall offers plans, pricing, log out and
 // closing the account. Closing deletes nothing, X's tokens included, and

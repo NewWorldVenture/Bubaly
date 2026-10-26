@@ -218,22 +218,26 @@ for (const [gate, title, firstControl] of [
     });
 
     test('types the PIN, the server takes it, and the fresh document is the gate, focused inside it, with the accounts and their Disconnect', async ({ page }) => {
-      const { errors } = await fixture(page, { gate, left: true, appLock: 'on' });
+      const locked = await fixture(page, { gate, left: true, appLock: 'on' });
       // The keypad answers the keyboard; a right PIN opens a fresh document.
       await page.keyboard.type(PIN.slice(0, 3));
       expect(await page.evaluate(() => window.__lockOverGate.unlockCalls)).toEqual([]);
-      expect(await errors()).toEqual([]);
+      expect(await locked.errors()).toEqual([]);
       const fresh = page.waitForEvent('framenavigated');
       await page.keyboard.type(PIN.slice(3));
       await fresh;
+      expect(locked.unexpected).toEqual([]);
       // That document, rendered by the server with the unlock it set.
-      await fixture(page, { gate, left: true, appLock: 'on', unlocked: true });
+      const unlocked = await fixture(page, { gate, left: true, appLock: 'on', unlocked: true });
       await expect(page.getByRole('dialog', { name: messages['appLockGate.enterYourPin'] })).toHaveCount(0);
       await page.evaluate(() => window.__lockOverGate.settle());
       const after = await where(page);
       expect(after.dialogs).toEqual([title]);
       expect(after).toMatchObject({ inDialog: true, focused: firstControl });
       await expect(page.getByRole('button', { name: 'Disconnect' })).toBeVisible();
+      // The gate with its card renders cleanly once unlocked.
+      expect(await unlocked.errors()).toEqual([]);
+      expect(unlocked.unexpected).toEqual([]);
     });
 
     test('a wrong PIN keeps the lock alone on the page (control)', async ({ page }) => {
