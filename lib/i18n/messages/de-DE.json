@@ -17195,5 +17195,7 @@
   "medicationsModule.otherMembersDosesAreKeptByManagers": "Die Einnahmen der anderen Mitglieder erfassen und verfolgen die Eltern und Erwachsenen Ihrer Familie.",
   "nutrition.aGuestSeesSavedEstimatesOnly": "Gäste sehen eine gespeicherte Nährwertschätzung, können aber keine neue anfordern. Bitten Sie ein Familienmitglied, sie zu analysieren.",
   "mealsModule.guestsSeeTheVoteOnly": "Gäste sehen die Familienabstimmung, können aber nicht mit abstimmen.",
+  "remindersModule.completed": "Erinnerung erledigt ✓",
+  "remindersModule.completedNextScheduled": "Erledigt ✓ — nächste Erinnerung geplant",
   "remindersModule.completedNextUnconfirmed": "Erinnerung erledigt, aber die nächste Erinnerung konnte nicht bestätigt werden. Prüfe deine Erinnerungen, bevor du eine weitere hinzufügst."
 }

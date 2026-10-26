@@ -17195,5 +17195,7 @@
   "medicationsModule.otherMembersDosesAreKeptByManagers": "De innames van andere leden worden vastgelegd en bijgehouden door de ouders en volwassenen van je gezin.",
   "nutrition.aGuestSeesSavedEstimatesOnly": "Gasten kunnen een opgeslagen voedingsschatting zien, maar geen nieuwe aanvragen. Vraag een gezinslid om deze te analyseren.",
   "mealsModule.guestsSeeTheVoteOnly": "Gasten kunnen de gezinsstemming zien, maar niet meestemmen.",
+  "remindersModule.completed": "Herinnering voltooid ✓",
+  "remindersModule.completedNextScheduled": "Voltooid ✓ — volgende herinnering gepland",
   "remindersModule.completedNextUnconfirmed": "Herinnering voltooid, maar we konden de volgende niet bevestigen. Controleer je herinneringen voordat je er nog een toevoegt."
 }

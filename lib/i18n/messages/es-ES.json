@@ -17195,5 +17195,7 @@
   "medicationsModule.otherMembersDosesAreKeptByManagers": "Las tomas de los demás miembros las registran y siguen los padres y adultos de tu familia.",
   "nutrition.aGuestSeesSavedEstimatesOnly": "Los invitados pueden ver una estimación nutricional guardada, pero no pedir una nueva. Pide a un miembro de la familia que la analice.",
   "mealsModule.guestsSeeTheVoteOnly": "Los invitados pueden ver la votación familiar, pero no votar en ella.",
+  "remindersModule.completed": "Recordatorio completado ✓",
+  "remindersModule.completedNextScheduled": "Completado ✓ — siguiente recordatorio programado",
   "remindersModule.completedNextUnconfirmed": "Recordatorio completado, pero no hemos podido confirmar el siguiente. Revisa tus recordatorios antes de añadir otro."
 }
