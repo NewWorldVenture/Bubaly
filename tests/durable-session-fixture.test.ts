@@ -12,7 +12,7 @@ const value = { access_token: 'synthetic-access', refresh_token: 'synthetic-refr
 const cookie = (key: string, data: string): Cookie => ({ name: key, value: data, domain: 'localhost', path: '/', expires: 99_999_999_999, httpOnly: false, secure: false, sameSite: 'Lax' });
 const encoded = (data: unknown) => `base64-${Buffer.from(JSON.stringify(data)).toString('base64url')}`;
 
-afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe('durable-session fixture isolation', () => {
   it.each(['http://localhost:3107', origin, 'http://[::1]:54321'])('allows explicit HTTP loopback %s', (url) => {
@@ -84,6 +84,92 @@ describe('durable-session fixture isolation', () => {
     const account = await createOwnedAccount(origin, 'synthetic-service-key');
     await expect(account.dispose()).rejects.toThrow('Durable-session E2E could not clean up its owned fixture.');
     expect(calls.some((call) => call.method === 'DELETE' && call.path === `/auth/v1/admin/users/${firstUserId}`)).toBe(true);
+  });
+
+  type Stage = 'auth-user' | 'household' | 'membership' | 'preferences';
+  type Fault = 'response' | 'transport';
+  const privateDetail = 'SYNTHETIC_PROVIDER_DETAIL_MUST_NOT_ESCAPE';
+
+  function setupFault(stage: Stage, fault: Fault, cleanup: Partial<Record<'household' | 'account', Fault>> = {}) {
+    const calls: Array<{ path: string; method: string; query: URLSearchParams; body: Record<string, unknown> }> = [];
+    const errorLog = vi.spyOn(console, 'error');
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.origin !== origin) throw new Error('Unexpected fixture origin');
+      if (init?.redirect !== 'error') throw new Error('Fixture request must refuse redirects');
+      const method = init?.method ?? 'GET';
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {};
+      calls.push({ path: url.pathname, method, query: url.searchParams, body });
+      let current: Stage | 'cleanup-household' | 'cleanup-account';
+      if (method === 'POST' && url.pathname === '/auth/v1/admin/users') current = 'auth-user';
+      else if (method === 'POST' && url.pathname === '/rest/v1/families') current = 'household';
+      else if (method === 'POST' && url.pathname === '/rest/v1/family_members') current = 'membership';
+      else if (method === 'POST' && url.pathname === '/rest/v1/user_preferences') current = 'preferences';
+      else if (method === 'DELETE' && url.pathname === '/rest/v1/families') current = 'cleanup-household';
+      else if (method === 'DELETE' && url.pathname === `/auth/v1/admin/users/${firstUserId}`) current = 'cleanup-account';
+      else throw new Error('Unexpected fixture request');
+      const injected = current === stage ? fault
+        : current === 'cleanup-household' ? cleanup.household
+          : current === 'cleanup-account' ? cleanup.account : undefined;
+      if (injected === 'transport') throw new Error(`${privateDetail} ${origin} synthetic-service-key`);
+      if (injected === 'response') return Response.json({ message: privateDetail, details: privateDetail, hint: privateDetail }, { status: 500 });
+      if (current === 'auth-user') return Response.json({ id: firstUserId, email: body.email });
+      if (current === 'cleanup-account') return Response.json({});
+      return new Response(null, { status: 204 });
+    }));
+    return { calls, errorLog };
+  }
+
+  async function failedSetup(stage: Stage, fault: Fault, cleanup: Partial<Record<'household' | 'account', Fault>> = {}) {
+    const { calls, errorLog } = setupFault(stage, fault, cleanup);
+    const result = await createOwnedAccount(origin, 'synthetic-service-key').then(() => null, error => error);
+    expect(result instanceof Error).toBe(true);
+    const failedPath = { 'auth-user': '/auth/v1/admin/users', household: '/rest/v1/families',
+      membership: '/rest/v1/family_members', preferences: '/rest/v1/user_preferences' }[stage];
+    expect(calls.some(call => call.method === 'POST' && call.path === failedPath), 'the intended SDK request must reach the injected boundary').toBe(true);
+    const error = result as Error;
+    const loggedSurface = errorLog.mock.calls.flat().map(value => value instanceof Error
+      ? [value.name, value.message, value.stack].join(' ') : JSON.stringify(value)).join('\n');
+    const publicSurface = [error.message, error.stack, JSON.stringify(error, Object.getOwnPropertyNames(error)),
+      loggedSurface].join('\n');
+    const credentials = calls.flatMap(call => [call.body.email, call.body.password, call.body.id])
+      .filter((value): value is string => typeof value === 'string');
+    for (const secret of [privateDetail, origin, 'synthetic-service-key', firstUserId, ...credentials]) {
+      expect(publicSurface.includes(secret), 'diagnostics must not disclose provider or fixture request data').toBe(false);
+    }
+    expect(error.message).toContain(`stage=${stage}; failure=${fault === 'transport' ? 'transport' : 'returned-error'}`);
+    expect(error.message).toContain(`status=${fault === 'transport' ? 'none' : '500'}`);
+    const deletes = calls.filter(call => call.method === 'DELETE');
+    if (stage === 'auth-user') expect(deletes).toHaveLength(0);
+    else {
+      expect(deletes).toHaveLength(2);
+      const family = calls.find(call => call.method === 'POST' && call.path === '/rest/v1/families')!;
+      expect(deletes[0].query.get('id') === `eq.${family.body.id}`).toBe(true);
+      expect(deletes[0].query.get('created_by') === `eq.${firstUserId}`).toBe(true);
+      expect(deletes[1].path === `/auth/v1/admin/users/${firstUserId}`).toBe(true);
+    }
+    return error;
+  }
+
+  it.each((['auth-user', 'household', 'membership', 'preferences'] as const)
+    .flatMap(stage => (['response', 'transport'] as const).map(fault => ({ stage, fault }))))(
+    'identifies $stage $fault without leaking request or provider details', async ({ stage, fault }) => {
+      const error = await failedSetup(stage, fault);
+      expect(error.message).toContain('cleanup=ok');
+      expect(error.message).toContain(stage === 'auth-user' ? 'household=not-needed; account=not-needed' : 'household=ok; account=ok');
+    });
+
+  it.each((['household', 'account'] as const)
+    .flatMap(target => (['response', 'transport'] as const).map(fault => ({ target, fault }))))(
+    'retains the setup stage and both cleanup attempts after $target cleanup $fault', async ({ target, fault }) => {
+      const error = await failedSetup('membership', 'response', { [target]: fault });
+      expect(error.message).toContain('cleanup=failed');
+      expect(error.message).toContain(`household=${target === 'household' ? 'failed' : 'ok'}; account=${target === 'account' ? 'failed' : 'ok'}`);
+    });
+
+  it('retains the original setup stage when both owned cleanup operations fail', async () => {
+    const error = await failedSetup('membership', 'response', { household: 'transport', account: 'response' });
+    expect(error.message).toContain('cleanup=failed; household=failed; account=failed');
   });
 });
 
