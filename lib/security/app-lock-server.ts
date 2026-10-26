@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { AppLockRecord } from '@/lib/security/app-lock-store';
+import { configuredSecret } from '@/lib/server/configured-secret';
 
 // App Lock hides the web UI for casual device privacy. Supabase authentication
 // and RLS remain the authorization boundary for API/native clients. Credentials
@@ -16,7 +17,7 @@ const MAC = /^[A-Za-z0-9_-]{43}$/;
 
 function signingKey(): string | null {
   const configured = [process.env.INTERNAL_SECRET, process.env.SUPABASE_SERVICE_ROLE_KEY]
-    .find((value) => typeof value === 'string' && value.trim() !== '');
+    .map(configuredSecret).find((value): value is string => value !== null);
   if (configured) return configured;
   if (process.env.NODE_ENV === 'production') {
     console.error('[app-lock] signing key unavailable');

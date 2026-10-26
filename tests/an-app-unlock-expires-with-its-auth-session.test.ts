@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { buildAppLockConfig, type AppLockConfig } from '@/lib/security/app-lock';
+import { PUBLISHED_SECRET_PLACEHOLDERS } from '@/lib/server/configured-secret';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 import { rateLimitHit } from './helpers/rate-limit-rpc';
 
@@ -122,6 +123,33 @@ beforeEach(async () => {
 });
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.useRealTimers(); });
+
+describe('App Lock uses the shared signing-key configuration policy', () => {
+  it.each([...PUBLISHED_SECRET_PLACEHOLDERS])('does not report production readiness for the example value %s', async (value) => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('INTERNAL_SECRET', value);
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', value);
+    const { canSignAppUnlock } = await import('@/lib/security/app-lock-server');
+    expect(canSignAppUnlock()).toBe(false);
+    expect(state.reads).toBe(0);
+    expect(state.writes).toBe(0);
+  });
+
+  it.each(['INTERNAL_SECRET', 'SUPABASE_SERVICE_ROLE_KEY'])('remains ready when %s has an independently configured value', async (name) => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('INTERNAL_SECRET', 'generate_a_random_string');
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'your-service-role-secret-key');
+    vi.stubEnv(name, 'app-lock-configured-key-fixture');
+    const { canSignAppUnlock } = await import('@/lib/security/app-lock-server');
+    expect(canSignAppUnlock()).toBe(true);
+  });
+
+  it('retains the development fallback outside production', async () => {
+    vi.stubEnv('INTERNAL_SECRET', undefined);
+    const { canSignAppUnlock } = await import('@/lib/security/app-lock-server');
+    expect(canSignAppUnlock()).toBe(true);
+  });
+});
 
 describe('an unlock belongs to the sign-in that earned it', () => {
   it('cannot remove the lock after logout and a new sign-in by the same user', async () => {

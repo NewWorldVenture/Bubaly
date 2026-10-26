@@ -112,7 +112,7 @@ try {
   await put('tsconfig.json', JSON.stringify({ compilerOptions: { target: 'ES2020', jsx: 'preserve', module: 'esnext', moduleResolution: 'bundler', esModuleInterop: true, baseUrl: '.', paths: { '@/*': ['./*'] } } }));
   await put('next.config.mjs', `import path from 'node:path'; export default { devIndicators: false, webpack(config) { config.resolve.alias['@supabase/ssr$'] = path.resolve('./fixture/ssr.ts'); return config; } };`);
   for (const name of ['app/(app)/layout.tsx', 'lib/security/app-lock.ts', 'lib/security/app-lock-server.ts', 'lib/security/app-lock-store.ts',
-    'lib/auth/redirect.ts', 'lib/auth/route-access.ts', 'lib/auth/session.ts', 'lib/marketing/page-types.ts', 'shared/auth/refresh-fetch.ts']) await copy(name);
+    'lib/server/configured-secret.ts', 'lib/auth/redirect.ts', 'lib/auth/route-access.ts', 'lib/auth/session.ts', 'lib/marketing/page-types.ts', 'shared/auth/refresh-fetch.ts']) await copy(name);
   await persist();
   await put('fixture/sdk.ts', `import { readFileSync } from 'node:fs';
 export const state = () => JSON.parse(readFileSync(process.env.APP_LOCK_FIXTURE_STATE!, 'utf8'));
