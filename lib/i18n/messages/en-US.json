@@ -17195,5 +17195,7 @@
   "medicationsModule.otherMembersDosesAreKeptByManagers": "Other members' doses are logged and tracked by your family's parents and adults.",
   "nutrition.aGuestSeesSavedEstimatesOnly": "Guests can see a saved nutrition estimate but not request a new one. Ask a family member to analyze it.",
   "mealsModule.guestsSeeTheVoteOnly": "Guests can see the family vote but not vote in it.",
+  "remindersModule.completed": "Reminder completed ✓",
+  "remindersModule.completedNextScheduled": "Completed ✓ — next one scheduled",
   "remindersModule.completedNextUnconfirmed": "Reminder completed, but we could not confirm the next occurrence. Check your reminders before adding another."
 }

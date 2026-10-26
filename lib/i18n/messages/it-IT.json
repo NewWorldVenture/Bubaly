@@ -17195,5 +17195,7 @@
   "medicationsModule.otherMembersDosesAreKeptByManagers": "Le assunzioni degli altri membri sono registrate e seguite dai genitori e dagli adulti della tua famiglia.",
   "nutrition.aGuestSeesSavedEstimatesOnly": "Gli ospiti possono vedere una stima nutrizionale salvata, ma non richiederne una nuova. Chiedi a un membro della famiglia di analizzarla.",
   "mealsModule.guestsSeeTheVoteOnly": "Gli ospiti possono vedere la votazione di famiglia, ma non parteciparvi.",
+  "remindersModule.completed": "Promemoria completato ✓",
+  "remindersModule.completedNextScheduled": "Completato ✓ — prossimo promemoria programmato",
   "remindersModule.completedNextUnconfirmed": "Promemoria completato, ma non abbiamo potuto confermare il prossimo. Controlla i tuoi promemoria prima di aggiungerne un altro."
 }

@@ -263,7 +263,7 @@ export function RemindersModule() {
           return;
         }
       }
-      success(recurred ? 'Completed ✓ — next one scheduled' : 'Reminder completed ✓');
+      success(recurred ? tr('remindersModule.completedNextScheduled') : tr('remindersModule.completed'));
       void refresh();
     });
   }
