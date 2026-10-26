@@ -40,7 +40,7 @@
 // Usage: node scripts/audit-supabase-queries.mjs   (exit 1 on any finding)
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { dirname, extname, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -168,7 +168,7 @@ export function conflictTargetVerdict(target, indexes) {
 }
 
 /** Read the whole migration set into a table -> columns map plus RLS facts. */
-export function readSchema(directory = MIGRATIONS_DIR) {
+export function readSchema(directory = MIGRATIONS_DIR, files = readdirSync(directory).filter((name) => name.endsWith('.sql'))) {
   const columns = new Map();
   const views = new Set();
   const withPolicy = new Set();
@@ -187,7 +187,7 @@ export function readSchema(directory = MIGRATIONS_DIR) {
     });
   };
 
-  for (const file of readdirSync(directory).filter((name) => name.endsWith('.sql')).sort()) {
+  for (const file of [...files].sort()) {
     const sql = stripSql(readFileSync(join(directory, file), 'utf8'));
     let match;
 
@@ -505,6 +505,30 @@ export const RESERVED_RPC_DEPENDENCIES = Object.freeze({
   calendar_read_occurrence_inputs: { caller: 'lib/calendar/source-snapshot.ts', sql: 'supabase/reserved/0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim.sql' },
 });
 
+// This one credential table is held until server-private source is live. Only
+// its reviewed server-only service client may depend on the held definition.
+// Do not add the reserved directory to the runnable schema or bless other
+// callers: the table's deployment is still explicitly unverified here.
+export const RESERVED_TABLE_DEPENDENCIES = Object.freeze({
+  app_lock_credentials: {
+    caller: 'lib/security/app-lock-store.ts',
+    sql: 'supabase/reserved/20261025234230_app_lock_credentials_are_server_private.sql',
+  },
+});
+
+export function resolveTableReference(table, file, client, schema, root = ROOT) {
+  if (schema.columns.has(table)) return { columns: schema.columns.get(table), migration: null };
+  const approved = Object.hasOwn(RESERVED_TABLE_DEPENDENCIES, table) ? RESERVED_TABLE_DEPENDENCIES[table] : undefined;
+  if (approved?.caller !== file || client !== 'service') return { columns: null, migration: null };
+  try {
+    const path = join(root, approved.sql);
+    const candidate = readSchema(dirname(path), [basename(path)]);
+    const columns = candidate.columns.get(table);
+    if (columns) return { columns, migration: approved.sql };
+  } catch { /* Missing or malformed held SQL remains a missing-table finding. */ }
+  return { columns: null, migration: null };
+}
+
 /** Audit literals and local string constants; held SQL never enters functions. */
 export function auditRpcCalls(src, file, functions, root = ROOT) {
   const findings = [], reservedDependencies = [], unresolvedRpcCalls = [];
@@ -577,11 +601,15 @@ export function auditSupabaseQueries() {
       if (!readers.has(table)) readers.set(table, []);
       readers.get(table).push({ file: rel, line, client });
 
-      if (!schema.columns.has(table)) {
+      const resolved = resolveTableReference(table, rel, client, schema);
+      if (!resolved.columns) {
         findings.push({ kind: 'missing-table', file: rel, line, detail: table });
         continue;
       }
-      const cols = schema.columns.get(table);
+      if (resolved.migration) reservedDependencies.push({
+        kind: 'reserved-table', file: rel, line, detail: table, migration: resolved.migration, runnable: false,
+      });
+      const cols = resolved.columns;
 
       for (const { method, args } of readChain(src, match.index + match[0].length)) {
         if (method === 'select') {
@@ -680,8 +708,12 @@ function runCli() {
   );
 
   if (reservedDependencies.length) {
-    console.warn('\nApproved held RPC dependencies (not in the runnable migration schema; deployment is not verified):');
-    for (const held of reservedDependencies) console.warn('  ' + held.detail + ' at ' + held.file + ':' + held.line + ' -> ' + held.migration);
+    for (const [kind, label] of [['reserved-function', 'RPC'], ['reserved-table', 'table']]) {
+      const dependencies = reservedDependencies.filter(item => item.kind === kind);
+      if (!dependencies.length) continue;
+      console.warn(`\nApproved held ${label} dependencies (not in the runnable migration schema; deployment is not verified):`);
+      for (const held of dependencies) console.warn('  ' + held.detail + ' at ' + held.file + ':' + held.line + ' -> ' + held.migration);
+    }
   }
 
   if (unresolvedRpcCalls.length) {
@@ -693,13 +725,15 @@ function runCli() {
   // held outside the runnable migration ledger. Dynamic names remain explicitly
   // unverified metadata; this flag makes no claim to resolve those wrappers.
   if (requireRunnableRpcs && reservedDependencies.length) {
-    console.error(`\nRunnable RPC gate failed: ${reservedDependencies.length} held RPC call site(s) depend on reserved SQL outside the runnable migration schema. Production migration workflow is blocked; review and release the required SQL before proceeding.`);
+    const rpcs = reservedDependencies.filter(item => item.kind === 'reserved-function').length;
+    const tables = reservedDependencies.filter(item => item.kind === 'reserved-table').length;
+    console.error(`\nRunnable RPC gate failed: ${rpcs} held RPC call site(s) and ${tables} held table call site(s) depend on reserved SQL outside the runnable migration schema. Production migration workflow is blocked; review and release the required SQL before proceeding.`);
     process.exitCode = 1;
   }
 
   if (findings.length === 0) {
     console.log(reservedDependencies.length || unresolvedRpcCalls.length
-      ? 'No unapproved statically named query problems. ' + reservedDependencies.length + ' held RPC call site(s), ' + unresolvedRpcCalls.length + ' unresolved dynamic RPC call site(s); production function availability is unverified.'
+      ? 'No unapproved statically named query problems. ' + reservedDependencies.filter(item => item.kind === 'reserved-function').length + ' held RPC call site(s), ' + reservedDependencies.filter(item => item.kind === 'reserved-table').length + ' held table call site(s), ' + unresolvedRpcCalls.length + ' unresolved dynamic RPC call site(s); production function availability is unverified.'
       : 'Supabase query audit passed: every table, column, function and route resolves in the repository migration schema.');
     return;
   }

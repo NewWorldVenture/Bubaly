@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
+import ts from 'typescript';
 import {
   ROOT_CHROME_SCOPE, MARKETING_SCOPE, AUTH_SCOPE, PUBLIC_LINK_SCOPE, SURVEY_SCOPE, scopeMessages,
 } from '@/lib/i18n/scopes';
@@ -210,7 +211,7 @@ const entryFiles = (dirs: string[]): string[] =>
 
 const messages = enUS as Record<string, string>;
 
-const SURFACES: { name: string; entries: string[]; scope: readonly string[] }[] = [
+const SURFACES: { name: string; entries: string[]; scope: readonly string[] | 'all' }[] = [
   {
     name: 'the root layout and its error boundaries',
     entries: ['app/layout.tsx', 'app/error.tsx', 'app/not-found.tsx', 'app/global-error.tsx'],
@@ -236,7 +237,29 @@ const SURFACES: { name: string; entries: string[]; scope: readonly string[] }[] 
     entries: entryFiles(['app/s/']),
     scope: SURVEY_SCOPE,
   },
+  {
+    name: 'the standalone App Lock screen and its unavailable escape',
+    entries: entryFiles(['app/app-lock/']),
+    scope: 'all',
+  },
 ];
+
+/** Which App Lock client branches actually sit below the declared full scope. */
+function appLockClientScopes(source: string): { component: string; fullScope: boolean }[] {
+  const file = ts.createSourceFile('app/app-lock/page.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const scopes: { component: string; fullScope: boolean }[] = [];
+  const visit = (node: ts.Node, inherited: boolean) => {
+    const opening = ts.isJsxElement(node) ? node.openingElement : ts.isJsxSelfClosingElement(node) ? node : null;
+    const component = opening?.tagName.getText(file);
+    const fullScope = inherited || (component === 'ScopedLocaleProvider' && opening!.attributes.properties.some(attribute =>
+      ts.isJsxAttribute(attribute) && attribute.name.getText(file) === 'namespaces'
+      && attribute.initializer && ts.isStringLiteral(attribute.initializer) && attribute.initializer.text === 'all'));
+    if (component === 'AppLockBoundary' || component === 'SignOutForm') scopes.push({ component, fullScope });
+    ts.forEachChild(node, child => visit(child, fullScope));
+  };
+  visit(file, false);
+  return scopes;
+}
 
 /**
  * Which pages a provider declaring the WHOLE catalogue governs.
@@ -302,9 +325,27 @@ describe('the scan reaches each surface, named rather than counted', () => {
       'app/(auth)/layout.tsx',
       'app/join/layout.tsx',
       'app/join/page.tsx',
+      'app/app-lock/page.tsx',
     ]) {
       expect(walked, `${file} mounts shared chrome and must be walked`).toContain(file);
     }
+  });
+
+  it('the standalone lock and unavailable sign-out branches both mount their declared full catalogue', () => {
+    const source = readFileSync('app/app-lock/page.tsx', 'utf8');
+    const expected = [
+      { component: 'SignOutForm', fullScope: true },
+      { component: 'AppLockBoundary', fullScope: true },
+    ];
+    expect(appLockClientScopes(source)).toEqual(expected);
+    // Losing only the unavailable branch's provider must fail too: its
+    // initial server prose can remain translated while client session review
+    // would otherwise fall back to raw signOutButton.* keys.
+    const narrowedUnavailable = source.replace('namespaces="all"', 'namespaces={["appLock"]}');
+    expect(appLockClientScopes(narrowedUnavailable)).toContainEqual({ component: 'SignOutForm', fullScope: false });
+    const clients = clientModulesFrom(['app/app-lock/page.tsx']);
+    expect(clients).toContain(resolve(ROOT, 'components/auth/sign-out-form.tsx'));
+    expect(clients).toContain(resolve(ROOT, 'components/app/app-lock-gate.tsx'));
   });
 });
 
@@ -350,7 +391,7 @@ describe('a surface ships every string its client components ask for', () => {
   for (const surface of SURFACES) {
     it(`${surface.name} has no key outside its scope`, () => {
       expect(surface.entries.length).toBeGreaterThan(0);
-      const scoped = scopeMessages(messages, surface.scope);
+      const scoped = surface.scope === 'all' ? messages : scopeMessages(messages, surface.scope);
       const missing = [...translationKeys(clientModulesFrom(surface.entries))]
         // A key absent from en-US entirely is a different defect, caught by the
         // i18n gate; this test is about the scope, so only judge real keys.
@@ -414,6 +455,10 @@ describe('the scoped surfaces still ask for keys no static reading can name', ()
   it('names every expression-keyed translator call, and finds no new one', () => {
     const found = new Set<string>();
     for (const surface of SURFACES) {
+      // Full catalogues have no subset whose expression-keyed calls could
+      // escape. Their client graph and actual provider branches are checked
+      // above, just as the authenticated app remains full-catalogue by design.
+      if (surface.scope === 'all') continue;
       for (const file of clientModulesFrom(surface.entries)) {
         const source = readFileSync(file, 'utf8');
         if (!/useTranslations/.test(source)) continue;

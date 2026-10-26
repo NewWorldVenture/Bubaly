@@ -132,7 +132,7 @@ export const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security
  * This list is exhaustive by test, not by convention.
  */
 export const PROTECTED = [
-  '/account', '/admin', '/api', '/capture', '/dashboard',
+  '/account', '/admin', '/api', '/app-lock', '/capture', '/dashboard',
   // The signed-in kiosk. NOT the public /family-display page, which is the
   // marketing and setup page for it and is on the public list above — the two
   // differ by one word and only one of them may render without a session.

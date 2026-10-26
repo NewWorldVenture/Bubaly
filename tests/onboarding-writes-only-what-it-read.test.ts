@@ -21,10 +21,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { buildFinalizePayload, emptyDraft } from '@/lib/onboarding/flow';
 import { makeInviteMember, makeLocalMember, removeMember } from '@/lib/onboarding/draft';
+import { buildAppLockConfig, verifyPin } from '@/lib/security/app-lock';
+import type { AppLockRecord } from '@/lib/security/app-lock-store';
 
 const mock = vi.hoisted(() => ({
   db: null as unknown, sendReactEmail: vi.fn(), saveUserProfile: vi.fn(), rateAllowed: true, epoch: 0, accountWriteFails: false,
   ctxRole: 'parent', ctxFamily: '20000000-0000-4000-8000-000000000001', limiterHits: new Map<string, number>(),
+  appLocks: new Map<string, AppLockRecord>(), readAppLockRecord: vi.fn(), replaceAppLockRecord: vi.fn(),
+}));
+vi.mock('@/lib/security/app-lock-store', () => ({
+  readAppLockRecord: mock.readAppLockRecord,
+  replaceAppLockRecord: mock.replaceAppLockRecord,
 }));
 vi.mock('@/lib/server/rate-limit', async (original) => {
   const real = await original<typeof import('@/lib/server/rate-limit')>();
@@ -164,6 +171,16 @@ beforeEach(() => {
   mock.limiterHits = new Map();
   mock.ctxRole = 'parent';
   mock.ctxFamily = OWN;
+  mock.appLocks.clear();
+  mock.readAppLockRecord.mockReset().mockImplementation(async (userId: string) => ({
+    ok: true, record: structuredClone(mock.appLocks.get(userId) ?? null),
+  }));
+  mock.replaceAppLockRecord.mockReset().mockImplementation(async (userId: string, expectedRevision: string | null, config: AppLockRecord['config']) => {
+    if ((mock.appLocks.get(userId)?.revision ?? null) !== expectedRevision) return { ok: false, reason: 'conflict' };
+    const record = { userId, config, revision: 'seed-revision' };
+    mock.appLocks.set(userId, record);
+    return { ok: true, record };
+  });
   build();
 });
 
@@ -224,8 +241,55 @@ describe('finishing onboarding (A13/A20, A10)', () => {
     expect(raced).toBe(true);
     expect(db.table('user_preferences')).toHaveLength(1);
     const saved = db.table('user_preferences')[0].notification_prefs as Record<string, unknown>;
-    expect(saved).toMatchObject({ onboardingComplete: true, age: 38, appLock: expect.objectContaining({ enabled: false }) });
+    expect(saved).toMatchObject({ onboardingComplete: true, age: 38 });
+    expect(saved).not.toHaveProperty('appLock');
+    expect(mock.appLocks.get(USER)?.config).toMatchObject({ enabled: false });
+    expect(await verifyPin('1234', mock.appLocks.get(USER)!.config!)).toBe(true);
     expect(saved).toMatchObject({ sidebarNav: ['home', 'money'], captureShortcuts: ['note'] });
+  });
+
+  it('resetting and finishing onboarding cannot replace or disable an enabled App Lock', async () => {
+    const lock = { userId: USER, config: await buildAppLockConfig('4071'), revision: 'chosen-pin' };
+    mock.appLocks.set(USER, lock);
+    db.seed('user_preferences', [{ user_id: USER, notification_prefs: { onboardingComplete: true }, active_family_id: OWN }]);
+    db.seed('family_members', [{ id: 'own-row', family_id: OWN, user_id: USER, role: 'parent', is_active: true, created_at: '2026-01-01' }]);
+    db.seed('onboarding_progress', [{ id: 'op', user_id: USER, family_id: OWN, source: 'wizard', status: 'completed' }]);
+
+    expect(await resetOnboardingAction()).toEqual({ ok: true });
+    expect(await finalizeOnboardingAction(payload({ appearance: { pin: '1234' } }))).toMatchObject({ ok: true });
+    expect(mock.appLocks.get(USER)).toEqual(lock);
+    expect(mock.replaceAppLockRecord).not.toHaveBeenCalled();
+    expect(db.table('user_preferences')[0].notification_prefs).not.toHaveProperty('appLock');
+  });
+
+  it('a PIN set while onboarding is preparing its first seed wins the race', async () => {
+    const lock = { userId: USER, config: await buildAppLockConfig('4071'), revision: 'concurrent-pin' };
+    mock.readAppLockRecord.mockImplementationOnce(async () => {
+      mock.appLocks.set(USER, lock);
+      return { ok: true, record: null };
+    });
+    expect(await finalizeOnboardingAction(payload({ appearance: { pin: '1234' } }))).toMatchObject({ ok: true });
+    expect(mock.replaceAppLockRecord).toHaveBeenCalledWith(USER, null, expect.objectContaining({ enabled: false }));
+    expect(mock.appLocks.get(USER)).toEqual(lock);
+  });
+
+  it('onboarding does not recreate a PIN the user explicitly removed', async () => {
+    const removed = { userId: USER, config: null, revision: 'removed-pin' };
+    mock.appLocks.set(USER, removed);
+    expect(await finalizeOnboardingAction(payload({ appearance: { pin: '1234' } }))).toMatchObject({ ok: true });
+    expect(mock.appLocks.get(USER)).toEqual(removed);
+    expect(mock.replaceAppLockRecord).not.toHaveBeenCalled();
+  });
+
+  it.each(['read', 'write'] as const)('a private PIN %s failure does not report a completed setup', async (failure) => {
+    const privateError = { code: '23514', details: 'FAILING-ROW-PRIVATE-SALT-HASH-7491' };
+    if (failure === 'read') mock.readAppLockRecord.mockResolvedValue({ ok: false, error: privateError });
+    else mock.replaceAppLockRecord.mockResolvedValue({ ok: false, reason: 'unavailable', error: privateError });
+    expect(await finalizeOnboardingAction(payload({ appearance: { pin: '1234' } }))).toMatchObject({ ok: false });
+    expect(mock.appLocks.size).toBe(0);
+    expect(db.table('user_preferences').every(row => !(row.notification_prefs as Record<string, unknown> | null)?.onboardingComplete)).toBe(true);
+    if (failure === 'read') expect(mock.replaceAppLockRecord).not.toHaveBeenCalled();
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain(privateError.details);
   });
 
   it('the setup page is told which completeness reads did not answer', async () => {

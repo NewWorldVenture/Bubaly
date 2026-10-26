@@ -1,24 +1,29 @@
+import { cookies } from 'next/headers';
 import { createServer } from '@/lib/supabase/server';
 import { getTranslations } from '@/lib/i18n/server';
-import { AppLockGate } from '@/components/app/app-lock-gate';
-import { isAppLockConfig } from '@/lib/security/app-lock';
+import { AppLockBoundary } from '@/components/app/app-lock-boundary';
+import { APP_UNLOCK_COOKIE, isAppUnlocked, readAppLockSessionId } from '@/lib/security/app-lock-server';
+import { readAppLockRecord } from '@/lib/security/app-lock-store';
 import { closedFamilyStanding, resolveEntitlement } from '@/lib/server/entitlement';
 import { isSuperAdmin } from '@/lib/supabase/auth';
 import { TrialPaywallGate } from '@/components/app/trial-paywall-gate';
 import { AccountClosedGate } from '@/components/app/account-closed-gate';
 import { SessionKeeper } from '@/components/auth/session-keeper';
+import { SignOutForm } from '@/components/auth/sign-out-form';
 import { ScopedLocaleProvider } from '@/components/i18n/scoped-locale-provider';
 import { FamilyTimeZoneProvider } from '@/components/i18n/locale-provider';
 import { activeFamilyTimeZone } from '@/lib/server/family-time-zone';
 import { ConfirmProvider } from '@/components/ui/confirm';
+import { ToastProvider } from '@/components/ui/toast';
 
 // Shared layout for ALL authenticated (app) routes — dashboard, wallet, economy,
 // admin, family, missions, etc. It does two things: mounts the SessionKeeper so
 // a signed-in user stays signed in until they sign out (see that component),
-// and applies the opt-in App Lock — when the signed-in user has set a PIN, the
-// whole app is gated behind the lock screen (not just the dashboard). It
-// intentionally does NOT enforce auth/redirects — each section's own layout
-// still does that — so this can never change sign-in behavior.
+// and applies the opt-in App Lock — when the signed-in user has set a PIN and
+// this browser has not unlocked it, the whole app is replaced by the lock
+// screen (not just the dashboard), on the server. It intentionally does NOT
+// enforce auth/redirects — each section's own layout still does that — so
+// this can never change sign-in behavior.
 // The authenticated app keeps the WHOLE catalogue. Its client components reach
 // 3,791 keys across 368 namespaces and call t() with a non-literal argument in
 // 96 places, so no static subset can be proved complete — and behind a login
@@ -27,113 +32,62 @@ import { ConfirmProvider } from '@/components/ui/confirm';
 export default async function AppGroupLayout({ children }: { children: React.ReactNode }) {
   return (
     <ScopedLocaleProvider namespaces="all">
-      {/* Destructive actions ask here rather than in the root layout: every one
-          of them is behind this login, and mounting the dialog at the root would
-          put its strings (and the Modal's) in the scope every marketing page
-          ships. */}
-      <ConfirmProvider>
-        <AuthenticatedShell>{children}</AuthenticatedShell>
-      </ConfirmProvider>
+      <AuthenticatedShell>{children}</AuthenticatedShell>
     </ScopedLocaleProvider>
   );
 }
 
 async function AuthenticatedShell({ children }: { children: React.ReactNode }) {
   const supabase = await createServer();
-  const { data: auth } = await supabase.auth.getUser();
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError && authError.name !== 'AuthSessionMissingError') return <AppLockUnavailable />;
   const user = auth.user;
   if (!user) return <>{children}</>;
 
-  // The family's zone enters the locale context here, above every family
-  // surface — the framed routes and the ones with no frame (kids view, kitchen
-  // display, settings) alike — so every client clock and day below reads in it
-  // (TIME-003). Resolved beside the super-admin check; it never throws.
-  const [superAdmin, familyZone] = await Promise.all([
-    isSuperAdmin(),
-    activeFamilyTimeZone(supabase, user.id),
-  ]);
-  return (
-    <FamilyTimeZoneProvider timeZone={familyZone}>
-      <GatedShell supabase={supabase} userId={user.id} superAdmin={superAdmin}>{children}</GatedShell>
-    </FamilyTimeZoneProvider>
-  );
-}
+  // Read the private credential before billing, household names, timezone or
+  // any protected child is handed to the client. An unreadable store cannot
+  // be interpreted as an absent lock (including during the schema rollout).
+  const current = await readAppLockRecord(user.id);
+  if (!current.ok) return <AppLockUnavailable />;
+  const record = current.record;
+  const enabled = record?.config?.enabled === true;
+  const sessionId = enabled ? await readAppLockSessionId(supabase, user.id) : null;
+  const locked = enabled && !isAppUnlocked(user.id, record!, sessionId, (await cookies()).get(APP_UNLOCK_COOKIE)?.value);
 
-async function GatedShell({
-  supabase, userId, superAdmin, children,
-}: {
-  supabase: Awaited<ReturnType<typeof createServer>>;
-  userId: string;
-  superAdmin: boolean;
-  children: React.ReactNode;
-}) {
-  const user = { id: userId };
-  // Billing gate: a soft-closed account, or a NEW family whose 5-day free trial
-  // has ended without subscribing, is locked behind an overlay (super-admins and
-  // grandfathered existing free families pass; resolveEntitlement fails open).
-  if (!superAdmin) {
-    const ent = await resolveEntitlement(supabase, user.id, { isSuperAdmin: false });
-    if (ent.closed) {
-      // The gate replaces every route below, switcher included, so a member of
-      // two households is handed their open ones here, and a non-parent is not
-      // offered a reopen the action would refuse (closedFamilyStanding).
-      const standing = await closedFamilyStanding(supabase, user.id, ent.familyId);
-      return <AccountClosedGate canReopen={standing.canReopen} otherFamilies={standing.openFamilies} />;
-    }
-    if (ent.locked) return <TrialPaywallGate trialEndsAt={ent.trialEndsAt} />;
-  }
-
-  // This read decides whether App Lock is applied, and it FAILED OPEN.
-  //
-  // A refused or failed read left `prefs` null, `appLock` null, and the gate
-  // simply not rendered — so a user who set a PIN to protect their family's
-  // data on a shared or stolen device had that protection silently removed,
-  // across the entire authenticated app, with nothing on screen to say so. It
-  // is a security control chosen by the user, and the one direction it must
-  // never fail is open.
-  //
-  // Note the deliberate CONTRAST with the two gates above: `resolveEntitlement`
-  // fails open by design, and the comment there says so, because locking a
-  // paying family out of their own data over a billing outage is the worse
-  // error. App Lock is the opposite case — the thing it withholds is exactly
-  // what the user asked to have withheld.
-  //
-  // It cannot fail closed by rendering the gate: `AppLockGate` verifies the PIN
-  // against the `salt` and `hash` from this very read, so a gate without them
-  // would lock the user out permanently rather than asking for their PIN. The
-  // honest closed answer is to withhold `children` — the protected content —
-  // and say why, which is retryable and leaks nothing. Audit C1-S9-44.
-  const { data: prefs, error: prefsError } = await supabase
-    .from('user_preferences')
-    .select('notification_prefs')
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  if (prefsError) {
-    console.error('[app-layout] app-lock preference read failed; withholding the app rather than unlocking it', {
-      userId: user.id, error: prefsError.message,
-    });
-    return <AppLockUnavailable />;
-  }
-
-  const appLockRaw = (prefs?.notification_prefs as Record<string, unknown> | null)?.appLock;
-  const appLock = isAppLockConfig(appLockRaw) ? appLockRaw : null;
-
-  // The keeper sits outside the App Lock gate on purpose: the session must keep
-  // refreshing while the lock screen is up, so unlocking with the PIN lands on a
-  // live session rather than a login page.
+  // Only an unlocked render includes children. The client boundary retires
+  // already-rendered content on local/cross-tab lock and history restoration.
+  // Supabase sessions/RLS continue to authorize direct API and native traffic.
   return (
     <>
       <SessionKeeper userId={user.id} />
-      {appLock?.enabled
-        ? (
-          <AppLockGate enabled salt={appLock.salt} hash={appLock.hash} userId={user.id}>
-            {children}
-          </AppLockGate>
-        )
-        : children}
+      <AppLockBoundary userId={user.id} enabled={enabled} locked={locked}>
+        {locked ? null : <UnlockedShell supabase={supabase} userId={user.id}>{children}</UnlockedShell>}
+      </AppLockBoundary>
     </>
   );
+}
+
+async function UnlockedShell({
+  supabase, userId, children,
+}: {
+  supabase: Awaited<ReturnType<typeof createServer>>;
+  userId: string;
+  children: React.ReactNode;
+}) {
+  const [superAdmin, familyZone] = await Promise.all([
+    isSuperAdmin(), activeFamilyTimeZone(supabase, userId),
+  ]);
+  let content = children;
+  if (!superAdmin) {
+    const ent = await resolveEntitlement(supabase, userId, { isSuperAdmin: false });
+    if (ent.closed) {
+      const standing = await closedFamilyStanding(supabase, userId, ent.familyId);
+      content = <AccountClosedGate canReopen={standing.canReopen} otherFamilies={standing.openFamilies} />;
+    } else if (ent.locked) {
+      content = <TrialPaywallGate trialEndsAt={ent.trialEndsAt} />;
+    }
+  }
+  return <FamilyTimeZoneProvider timeZone={familyZone}><ToastProvider><ConfirmProvider>{content}</ConfirmProvider></ToastProvider></FamilyTimeZoneProvider>;
 }
 
 /**
@@ -150,6 +104,7 @@ async function AppLockUnavailable() {
       <div className="grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-2xl">🔒</div>
       <h1 className="text-xl font-bold">{t('appLock.weCouldNotConfirmYourLockSettings')}</h1>
       <p className="text-sm text-muted">{t('appLock.stayingLockedUntilWeCanCheck')}</p>
+      <SignOutForm><button type="submit" className="rounded-lg border border-border px-4 py-2 text-sm font-medium focus-ring">{t('signOutButton.signOut')}</button></SignOutForm>
     </div>
   );
 }
