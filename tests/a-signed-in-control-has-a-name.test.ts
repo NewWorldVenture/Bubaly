@@ -194,6 +194,9 @@ describe('a table in a sideways-scrolling box', () => {
     ['app/(app)/family/permissions/page.tsx', 'familyPermissions.permissionMatrix'],
     // Found by the re-crawl on the build with the first fixes.
     ['app/(app)/dashboard/journeys/page.tsx', 'dashboardJourneys.perJourneyMedians'],
+    // Found by the admin console's axe sweep at 390 px.
+    ['app/(app)/admin/audit/page.tsx', 'adminAudit.loggedEvents'],
+    ['app/(app)/admin/audit-logs/page.tsx', 'adminAuditLogs.auditLogs'],
   ];
 
   it.each(REGIONS)('%s: is a named, focusable region', (file, key) => {
