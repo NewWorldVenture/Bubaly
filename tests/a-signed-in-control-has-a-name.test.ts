@@ -117,7 +117,7 @@ describe('a form control axe found unnamed', () => {
     ['app/(app)/admin/marketing/crm/page.tsx', 'name="lead_status"'],
     ['app/(app)/admin/marketing/crm/page.tsx', 'name="lifecycle_stage"'],
     ['app/(app)/admin/marketing/email/page.tsx', 'name="segment_id"'],
-    ['app/(app)/admin/marketing/exit-intent/page.tsx', 'name="status" defaultValue="active"'],
+    ['app/(app)/admin/marketing/exit-intent/page.tsx', 'name="status" defaultValue="paused"'],
     ['app/(app)/admin/marketing/exit-intent/page.tsx', 'name="mode"'],
     ['app/(app)/admin/marketing/exit-intent/page.tsx', 'name="returning"'],
     ['app/(app)/admin/marketing/personalization/page.tsx', 'name="status" defaultValue="active"'],
@@ -136,8 +136,6 @@ describe('a form control axe found unnamed', () => {
     ['components/admin/feedback-admin.tsx', "t('feedbackAdmin.allCategories')"],
     ['components/admin/service-descriptions-editor.tsx', 'maxLength={400}'],
     ['components/guardian/contact-list.tsx', "tr('contactList.allTrustLevels')"],
-    ['components/knowledge/seed-screen.tsx', 'id="kb-seed-sql"'],
-    ['components/marketplace/seed-screen.tsx', 'id="seed-sql"'],
     ['components/modules/behavior-module.tsx', "tr('behavior.allKids')"],
     // The points-period picker sits in the desktop-only right rail (found at 1280 px).
     ['components/modules/chores-module.tsx', 'setPointsWindow(e.target.value'],
@@ -196,6 +194,9 @@ describe('a table in a sideways-scrolling box', () => {
     ['app/(app)/family/permissions/page.tsx', 'familyPermissions.permissionMatrix'],
     // Found by the re-crawl on the build with the first fixes.
     ['app/(app)/dashboard/journeys/page.tsx', 'dashboardJourneys.perJourneyMedians'],
+    // Found by the admin console's axe sweep at 390 px.
+    ['app/(app)/admin/audit/page.tsx', 'adminAudit.loggedEvents'],
+    ['app/(app)/admin/audit-logs/page.tsx', 'adminAuditLogs.auditLogs'],
   ];
 
   it.each(REGIONS)('%s: is a named, focusable region', (file, key) => {

@@ -265,7 +265,7 @@ export function InboxModule() {
                     <Sparkles className="h-3.5 w-3.5" /> {tr('inbox.aiImport')}
                   </button>
                   <button onClick={() => setShowAdd(true)}
-                    className="flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90 transition">
+                    className="flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:brightness-95 transition">
                     <Plus className="h-3.5 w-3.5" /> {tr('inbox.logMessage')}
                   </button>
                 </div>
@@ -623,7 +623,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
                   {copied ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />} {copied ? tr('inboxModule.copied') : tr('inboxModule.copy')}
                 </button>
                 <button onClick={logReply} disabled={sendingReply}
-                  className="flex items-center gap-1 rounded-md bg-brand px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-brand/90 transition disabled:opacity-60">
+                  className="flex items-center gap-1 rounded-md bg-brand px-2.5 py-1.5 text-[11px] font-semibold text-white hover:brightness-95 transition disabled:opacity-60">
                   {sendingReply ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />} {tr('inbox.logReply')}
                 </button>
               </div>

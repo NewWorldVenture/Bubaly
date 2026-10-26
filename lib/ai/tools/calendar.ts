@@ -83,7 +83,7 @@ const searchOccurrenceFields = {
   displayOrder: z.number().int().nonnegative(), when: z.string(),
 };
 const nativeSearchOutput = z.object({
-  ...searchOccurrenceFields, kind: z.literal('native'), id: z.string().uuid(), eventId: z.string().uuid(),
+  ...searchOccurrenceFields, kind: z.literal('native'), id: z.string().guid(), eventId: z.string().guid(),
   title: z.string(), category: z.string(), assignee_id: z.string().nullable(),
   feed_id: z.string().nullable(), external_uid: z.string().nullable(),
   readOnly: z.boolean(), mutable: z.boolean(),

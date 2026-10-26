@@ -10,7 +10,9 @@ import { at, between } from './helpers/source-order';
 // picked against the dark theme; on a light surface they read at 1.2 to 4.2:1.
 // app/globals.css gives each hue's 200/300/400 shade, every 500 and 600 that
 // fails the same bar, and their hover and group-hover forms, a darker colour
-// in `.light`. This test reads that block and holds it to two things: every
+// in `.light`. The neutral greys (slate, gray, zinc) joined later, when
+// the admin console's axe sweep found a pipeline stage in text-slate-300 at
+// 1.41:1 on the light theme. This test reads that block and holds it to two things: every
 // such class the source uses has a rule, and every rule's colour is readable
 // as text (4.5:1) on the light theme's surfaces and on the hue's own pale chip
 // tint.
@@ -22,13 +24,13 @@ const block = between(css, "/* The light theme's raw palette text (A11Y-001).", 
 const TAILWIND_500: Record<string, string> = {
   emerald: '10b981', green: '22c55e', amber: 'f59e0b', yellow: 'eab308', sky: '0ea5e9', blue: '3b82f6', teal: '14b8a6',
   rose: 'f43f5e', red: 'ef4444', orange: 'f97316', lime: '84cc16', cyan: '06b6d4', violet: '8b5cf6', purple: 'a855f7',
-  pink: 'ec4899', indigo: '6366f1', fuchsia: 'd946ef',
+  pink: 'ec4899', indigo: '6366f1', fuchsia: 'd946ef', slate: '64748b', gray: '6b7280', zinc: '71717a',
 };
 // And their 600s, which a light-first class string reaches for (`text-amber-600`).
 const TAILWIND_600: Record<string, string> = {
   emerald: '059669', green: '16a34a', amber: 'd97706', yellow: 'ca8a04', sky: '0284c7', blue: '2563eb', teal: '0d9488',
   rose: 'e11d48', red: 'dc2626', orange: 'ea580c', lime: '65a30d', cyan: '0891b2', violet: '7c3aed', purple: '9333ea',
-  pink: 'db2777', indigo: '4f46e5', fuchsia: 'c026d3',
+  pink: 'db2777', indigo: '4f46e5', fuchsia: 'c026d3', slate: '475569', gray: '4b5563', zinc: '52525b',
 };
 const SHADES = ['200', '300', '400', '500', '600'] as const;
 
@@ -109,9 +111,9 @@ const USED = /(?:^|["'`\s:])((?:hover:|group-hover:)?text-([a-z]+)-(200|300|400|
 describe('the light theme’s palette text is readable', () => {
   it('has a rule for every hue it names (non-vacuity)', () => {
     expect(rules().size).toBe(Object.keys(TAILWIND_500).length);
-    // Every 500 fails on a light surface; of the 600s only indigo's passes.
+    // Every 500 fails on a light surface; of the 600s indigo's and the three greys' pass.
     expect(Object.keys(TAILWIND_500).filter((hue) => !needsRule(hue, '500'))).toEqual([]);
-    expect(Object.keys(TAILWIND_500).filter((hue) => !needsRule(hue, '600'))).toEqual(['indigo']);
+    expect(Object.keys(TAILWIND_500).filter((hue) => !needsRule(hue, '600'))).toEqual(['indigo', 'slate', 'gray', 'zinc']);
   });
 
   it('every rule’s colour keeps 4.5:1 on white, on --bg, on --surface and on its hue’s 500/20 tint', () => {

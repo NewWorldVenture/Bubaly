@@ -290,7 +290,7 @@ export function ClosetModule() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-brand-text"><Sparkles className="h-4 w-4" /> {t('closet.todaysOutfitFor')} {memberName(memberId)}</div>
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <label className="flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-2 py-1">
+              <label className="flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-2 py-1 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
                 <Thermometer className="h-4 w-4 text-muted" />
                 <input
                   type="number" value={tempF} min={-30} max={120} aria-label={t('closet.temperatureInFahrenheit')}

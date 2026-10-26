@@ -145,10 +145,10 @@ function approvalTitle(tool: ToolDefinition, input: unknown): string {
   return `${last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut}…`;
 }
 
-function issueSummary(error: { issues: { path: (string | number)[]; message: string }[] }): string {
+function issueSummary(error: { issues: { path: PropertyKey[]; message: string }[] }): string {
   return error.issues
     .slice(0, 6)
-    .map((issue) => `${issue.path.length ? issue.path.join('.') : 'input'}: ${issue.message}`)
+    .map((issue) => `${issue.path.length ? issue.path.map(String).join('.') : 'input'}: ${issue.message}`)
     .join('; ');
 }
 
@@ -863,7 +863,8 @@ export async function executeTool(
     const activity = await recordActivity(callScope, {
       agent: tool.domain,
       action: trailActionFor(tool),
-      title: summary,
+      // The feed is every member's; the summary above is the requester's.
+      title: tool.activityTitle ? tool.activityTitle(input, output) : summary,
       detail: verificationDetail,
       href: DOMAIN_HREF[tool.domain] ?? null,
     });

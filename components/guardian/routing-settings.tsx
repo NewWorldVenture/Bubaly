@@ -234,7 +234,7 @@ function RoutingForm({ initial, member }: { initial: RoutingProfile; member: Mem
       <button
         onClick={save}
         disabled={saving}
-        className="w-full rounded-2xl bg-brand py-3 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-50 transition"
+        className="w-full rounded-2xl bg-brand py-3 text-sm font-semibold text-white hover:brightness-95 disabled:opacity-50 transition"
       >
         {saving ? 'Saving…' : 'Save Settings'}
       </button>

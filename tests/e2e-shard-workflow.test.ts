@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { at } from './helpers/source-order';
 
 type Step = {
-  name?: string; uses?: string; run?: string; if?: string;
+  name?: string; uses?: string; run?: string; if?: string; shell?: string;
   env?: Record<string, string>; with?: Record<string, unknown>;
   'continue-on-error'?: boolean;
 };
@@ -23,6 +23,12 @@ const installName = 'Install held bill anchor fixture in the owned PG15 stack';
 const modernName = 'Verify authenticated durable bill anchors after fresh server start';
 const cleanupName = 'Stop isolated Supabase';
 const aggregateName = 'Require every E2E shard and its owned cleanup to succeed';
+const stagedStartup = [
+  'node scripts/ci-stage-app-lock-private-storage.mjs',
+  "trap 'node scripts/ci-stage-app-lock-private-storage.mjs --remove' EXIT",
+  'supabase start',
+  '',
+].join('\n');
 
 function step(job: Job, name: string) {
   const matches = job.steps.filter((entry) => entry.name === name);
@@ -38,7 +44,7 @@ function requireShardGraph(candidate: Workflow) {
   expect(job.if).toBeUndefined();
   expect(job['continue-on-error']).toBeUndefined();
   expect(job.name).toBe('E2E shard (${{ matrix.shard }}/${{ matrix.shardTotal }})');
-  expect(job.strategy).toEqual({ 'fail-fast': false, matrix: { shard: [1, 2, 3, 4], shardTotal: [4] } });
+  expect(job.strategy).toEqual({ 'fail-fast': false, matrix: { shard: [1, 2, 3, 4, 5, 6, 7, 8], shardTotal: [8] } });
   for (const entry of job.steps) expect(entry['continue-on-error']).toBeUndefined();
 
   const smoke = step(job, smokeName);
@@ -54,7 +60,12 @@ function requireShardGraph(candidate: Workflow) {
   expect(smoke.env?.E2E_PROVIDER_STUB).toBe('1');
 
   expect(step(job, 'Attest empty local stack before owned startup').env?.BUBALY_BILL_STACK_PHASE).toBe('prepare');
-  expect(step(job, 'Start isolated Supabase').run).toBe('supabase start');
+  const startup = step(job, 'Start isolated Supabase');
+  expect(startup.run).toBe(stagedStartup);
+  expect(startup.if).toBeUndefined();
+  expect(startup.shell).toBeUndefined();
+  expect(startup.env?.BUBALY_DISPOSABLE_APP_LOCK_SCHEMA).toBe('1');
+  expect(startup.env?.SUPABASE_DB_MIGRATIONS_ENABLED).toBe('true');
   expect(step(job, 'Capture immutable owned bill stack identities').env?.BUBALY_BILL_STACK_PHASE).toBe('capture');
   const sql = step(job, 'Verify home brief kind uniqueness in disposable PostgreSQL');
   expect(sql.run).toBe('node scripts/ci-home-brief-kind-runtime.mjs');
@@ -123,8 +134,8 @@ function aggregateResults(results: unknown, candidate = graph()) {
   new Function('process', source.slice(prefix.length, -suffix.length))({ env: { CI_DEPENDENCIES: JSON.stringify(results) } });
 }
 
-describe('four complete E2E shards preserve each owned qualification and cleanup', () => {
-  it('the actual YAML preserves all four shards, required checks and per-runner ownership phases', () => {
+describe('eight complete E2E shards preserve each owned qualification and cleanup', () => {
+  it('the actual YAML preserves all eight shards, required checks and per-runner ownership phases', () => {
     requireShardGraph(graph());
   });
   it('the actual aggregate accepts only a successful E2E matrix including cleanup', () => {
@@ -142,12 +153,12 @@ describe('four complete E2E shards preserve each owned qualification and cleanup
     expect(() => aggregateResults(results)).toThrow();
   });
   it.each([
-    ['missing shard', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.shard = [1, 2, 3]; }],
-    ['duplicate shard', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.shard = [1, 2, 3, 3]; }],
-    ['invalid shard', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.shard = [0, 1, 2, 3]; }],
-    ['wrong total', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.shardTotal = [8]; }],
-    ['excluded shard', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.exclude = [{ shard: 4 }]; }],
-    ['extra shard', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.include = [{ shard: 5 }]; }],
+    ['missing shard', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.shard = [1, 2, 3, 4, 5, 6, 7]; }],
+    ['duplicate shard', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.shard = [1, 2, 3, 4, 5, 6, 7, 7]; }],
+    ['invalid shard', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.shard = [0, 1, 2, 3, 4, 5, 6, 7]; }],
+    ['wrong total', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.shardTotal = [4]; }],
+    ['excluded shard', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.exclude = [{ shard: 8 }]; }],
+    ['extra shard', (copy: Workflow) => { copy.jobs.e2e.strategy!.matrix!.include = [{ shard: 9 }]; }],
     ['fail-fast', (copy: Workflow) => { copy.jobs.e2e.strategy!['fail-fast'] = true; }],
     ['serialized shards', (copy: Workflow) => { copy.jobs.e2e.strategy!['max-parallel'] = 1; }],
     ['filtered projects', (copy: Workflow) => { step(copy.jobs.e2e, smokeName).run += ' --project=chromium'; }],
@@ -157,8 +168,15 @@ describe('four complete E2E shards preserve each owned qualification and cleanup
     ['skipped smoke', (copy: Workflow) => { step(copy.jobs.e2e, smokeName).if = '${{ false }}'; }],
     ['lost Auth gate', (copy: Workflow) => { copy.jobs.e2e.steps = copy.jobs.e2e.steps.filter((entry) => entry.name !== authName); }],
     ['lost SQL gate', (copy: Workflow) => { copy.jobs.e2e.steps = copy.jobs.e2e.steps.filter((entry) => entry.name !== 'Verify home brief kind uniqueness in disposable PostgreSQL'); }],
+    ['missing App Lock staging', (copy: Workflow) => { step(copy.jobs.e2e, 'Start isolated Supabase').run = 'supabase start'; }],
+    ['missing staged SQL cleanup', (copy: Workflow) => { step(copy.jobs.e2e, 'Start isolated Supabase').run = 'node scripts/ci-stage-app-lock-private-storage.mjs\nsupabase start\n'; }],
+    ['late staged SQL cleanup trap', (copy: Workflow) => { step(copy.jobs.e2e, 'Start isolated Supabase').run = "node scripts/ci-stage-app-lock-private-storage.mjs\nsupabase start\ntrap 'node scripts/ci-stage-app-lock-private-storage.mjs --remove' EXIT\n"; }],
+    ['missing disposable schema authorization', (copy: Workflow) => { delete step(copy.jobs.e2e, 'Start isolated Supabase').env!.BUBALY_DISPOSABLE_APP_LOCK_SCHEMA; }],
+    ['disabled disposable migration replay', (copy: Workflow) => { step(copy.jobs.e2e, 'Start isolated Supabase').env!.SUPABASE_DB_MIGRATIONS_ENABLED = 'false'; }],
+    ['skipped isolated startup', (copy: Workflow) => { step(copy.jobs.e2e, 'Start isolated Supabase').if = '${{ false }}'; }],
+    ['startup shell ignores staging failure', (copy: Workflow) => { step(copy.jobs.e2e, 'Start isolated Supabase').shell = 'bash {0}'; }],
     ['lost modern bill', (copy: Workflow) => { copy.jobs.e2e.steps = copy.jobs.e2e.steps.filter((entry) => entry.name !== modernName); }],
-    ['modern bill accidentally sharded', (copy: Workflow) => { step(copy.jobs.e2e, modernName).run += ' --shard=1/4'; }],
+    ['modern bill accidentally sharded', (copy: Workflow) => { step(copy.jobs.e2e, modernName).run += ' --shard=1/8'; }],
     ['cleanup only on success', (copy: Workflow) => { step(copy.jobs.e2e, cleanupName).if = 'success()'; }],
     ['cleanup failure ignored', (copy: Workflow) => { step(copy.jobs.e2e, cleanupName)['continue-on-error'] = true; }],
     ['stack job identity changed', (copy: Workflow) => { copy.jobs.other = copy.jobs.e2e; delete copy.jobs.e2e; }],
@@ -181,10 +199,10 @@ describe('four complete E2E shards preserve each owned qualification and cleanup
     expect(wrapper.split(forwarding)).toHaveLength(2);
     const calls: { module: string; args: string[] }[] = [];
     const invoke = new Function('process', 'run', `let testStatus; ${forwarding} return testStatus;`);
-    expect(invoke({ argv: ['node', 'scripts/run-e2e.mjs', '--shard=3/4'] }, (module: string, args: string[]) => {
+    expect(invoke({ argv: ['node', 'scripts/run-e2e.mjs', '--shard=3/8'] }, (module: string, args: string[]) => {
       calls.push({ module, args }); return 0;
     })).toBe(0);
-    expect(calls).toEqual([{ module: 'node_modules/@playwright/test/cli.js', args: ['test', '--shard=3/4'] }]);
+    expect(calls).toEqual([{ module: 'node_modules/@playwright/test/cli.js', args: ['test', '--shard=3/8'] }]);
     for (const file of ['scripts/ci-recurring-bill-anchor-fixture.mjs', 'scripts/ci-home-brief-kind-runtime.mjs', 'tests/messages-authenticated-rpc-race.test.ts']) {
       expect(readFileSync(file, 'utf8')).toContain("GITHUB_JOB");
       expect(readFileSync(file, 'utf8')).toContain("'e2e'");

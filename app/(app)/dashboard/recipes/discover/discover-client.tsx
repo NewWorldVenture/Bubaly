@@ -77,7 +77,7 @@ export function DiscoverClient() {
             className="h-11 w-full rounded-xl border border-border bg-bg pl-10 pr-3 text-sm outline-none focus:border-brand"
           />
         </div>
-        <button type="submit" disabled={searching} className="rounded-xl bg-brand px-5 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-60">
+        <button type="submit" disabled={searching} className="rounded-xl bg-brand px-5 text-sm font-semibold text-white hover:brightness-95 disabled:opacity-60">
           {searching ? 'Searching…' : 'Search'}
         </button>
       </form>

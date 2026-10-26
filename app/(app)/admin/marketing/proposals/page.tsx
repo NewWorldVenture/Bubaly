@@ -27,7 +27,7 @@ type Contact = Tables<'crm_contacts'>;
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
 /** Quotes the tiles may page through before they are reported as not shown (one round trip per 1,000). */
 const SUM_ROW_CEILING = 25_000;
-const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
+const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:brightness-95';
 
 const STATUS_TINT: Record<QuoteStatus, string> = {
   draft: 'bg-slate-500/15 text-slate-300', sent: 'bg-blue-500/15 text-blue-300',

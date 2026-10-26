@@ -342,7 +342,7 @@ function SuggestionRow({ s, onApprove, onDismiss, busy, outcome, onRefresh }: {
           {action.kind === 'review' ? <Link href={action.href} className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white">{t(action.labelKey)}</Link>
             : action.kind === 'unavailable' ? <span className="max-w-40 text-xs text-muted">{t(action.labelKey)}</span>
             : <button onClick={onApprove} disabled={busy || !!(outcome && !outcome.ok && outcome.code === 'sourceChanged')}
-            className="flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 transition">
+            className="flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:brightness-95 transition">
             <Check className="h-3.5 w-3.5" /> {t(outcome && !outcome.ok && outcome.code === 'resolutionPending' ? 'autopilotResolution.retryStatus' : action.labelKey)}
           </button>}
           <button onClick={onDismiss} disabled={busy} aria-label={t('autopilot.dismiss')}

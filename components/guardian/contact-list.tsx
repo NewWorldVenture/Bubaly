@@ -129,7 +129,7 @@ export function ContactList({ contacts: initial, members }: { contacts: Contact[
         </select>
         <button
           onClick={() => setEditing('new')}
-          className="flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90 transition shrink-0"
+          className="flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-white hover:brightness-95 transition shrink-0"
         >
           <Plus className="h-4 w-4" /> {tr('contactList.addContact')}
         </button>
@@ -335,7 +335,7 @@ function ContactModal({
           <button
             onClick={() => { if (form.name.trim()) onSave(form); }}
             disabled={saving || !form.name.trim()}
-            className="flex-1 rounded-xl bg-brand py-2.5 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-50 transition"
+            className="flex-1 rounded-xl bg-brand py-2.5 text-sm font-semibold text-white hover:brightness-95 disabled:opacity-50 transition"
           >
             {saving ? 'Saving…' : 'Save'}
           </button>

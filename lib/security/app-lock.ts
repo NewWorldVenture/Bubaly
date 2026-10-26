@@ -1,8 +1,7 @@
-// App Lock — an OPT-IN 4-digit PIN that gates the app for casual privacy (handing
-// your phone to a kid, leaving it on the counter). It is NOT a server security
-// boundary — the real boundary is the Supabase session/RLS. The PIN is salted +
-// SHA-256 hashed on the client; the plaintext never leaves the device. A 4-digit
-// PIN is low-entropy by nature, so this is convenience, not cryptographic secrecy.
+// App Lock is an opt-in privacy screen, not an authorization boundary.
+// Only server code builds, stores or verifies a PIN configuration. The browser
+// receives status booleans and submits a PIN to rate-limited server actions.
+// Supabase authentication/RLS still controls direct API and native access.
 
 export type AppLockConfig = {
   enabled: boolean;
@@ -18,7 +17,7 @@ export function isAppLockConfig(v: unknown): v is AppLockConfig {
 
 /** A 4-digit numeric PIN (exactly 4 digits). */
 export function isValidPin(pin: string): boolean {
-  return /^\d{4}$/.test(pin);
+  return typeof pin === 'string' && pin.length === 4 && /^\d{4}$/.test(pin);
 }
 
 function toHex(buf: ArrayBuffer): string {
@@ -46,13 +45,10 @@ export async function verifyPin(pin: string, cfg: { salt: string; hash: string }
   return h === cfg.hash;
 }
 
-/** Build a fresh config from a plaintext PIN (client-side; PIN never persisted). */
+/** Build a fresh server-stored config; never send this verifier to a client. */
 export async function buildAppLockConfig(pin: string): Promise<AppLockConfig> {
+  if (!isValidPin(pin)) throw new Error('Invalid App Lock PIN');
   const salt = randomSalt();
   const hash = await hashPin(pin, salt);
   return { enabled: true, salt, hash };
 }
-
-// Session-scoped unlock flag — once unlocked, stays unlocked until the tab/session
-// ends (or sign-out). Per-user so switching accounts re-locks.
-export const unlockKey = (userId: string) => `bubaly_applock_unlocked_${userId}`;

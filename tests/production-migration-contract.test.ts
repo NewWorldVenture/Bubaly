@@ -51,3 +51,76 @@ describe('forward-only production migration reconciliation', () => {
     expect(sql).toContain('commit;');
   });
 });
+
+// Run the real metadata entrypoint locally. Only fetch is replaced, inside an
+// isolated child with synthetic credentials; no CLI/provider request is made.
+import { spawnSync as spawnMetadataAudit } from 'node:child_process';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { pathToFileURL } from 'node:url';
+import { dirname, join } from 'node:path';
+
+function runMetadataHistoryControl(version: '0003' | '0004') {
+  const tempRoot = realpathSync(tmpdir());
+  const sandbox = mkdtempSync(join(tempRoot, 'bubaly-readonly-metadata-'));
+  const home = join(sandbox, 'home'), temp = join(sandbox, 'temp');
+  mkdirSync(home); mkdirSync(temp);
+  const preload = join(sandbox, 'synthetic-fetch.mjs');
+  writeFileSync(preload, `import assert from 'node:assert/strict';
+import { writeFileSync } from 'node:fs';
+const requests = [];
+globalThis.fetch = async (url, options) => {
+  assert.equal(String(url), 'https://api.supabase.com/v1/projects/abcdefghijklmnopqrst/database/query');
+  assert.equal(options.method, 'POST'); assert.equal(options.redirect, 'error');
+  assert(options.signal instanceof AbortSignal);
+  const body = JSON.parse(options.body); assert.equal(body.read_only, true);
+  assert.match(body.query.trim(), /^select\\b/i);
+  requests.push({ url: String(url), method: options.method, readOnly: body.read_only, redirect: options.redirect, hasDeadline: !!options.signal });
+  writeFileSync('metadata-requests.json', JSON.stringify(requests));
+  if (requests.length === 1) return Response.json([{ snapshot: { hasMigrationLedger: true, tables: [], policies: [{ table: 'profiles', name: 'profiles_insert_self' }], functions: [], moneyWritePolicies: [] } }]);
+  assert.equal(requests.length, 2);
+  return Response.json([{ version: ${JSON.stringify(version)}, name: 'synthetic_recorded_history' }]);
+};
+`);
+  const env: NodeJS.ProcessEnv = {
+    PATH: dirname(process.execPath), HOME: home, USERPROFILE: home, APPDATA: home, LOCALAPPDATA: home,
+    TEMP: temp, TMP: temp, TMPDIR: temp, XDG_CACHE_HOME: home, XDG_CONFIG_HOME: home, XDG_DATA_HOME: home,
+    SUPABASE_PROJECT_REF: 'abcdefghijklmnopqrst', SUPABASE_ACCESS_TOKEN: 'synthetic-management-token',
+    SUPABASE_TELEMETRY_DISABLED: '1', DO_NOT_TRACK: '1', NODE_ENV: 'test',
+    ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
+    ...(process.env.ComSpec ? { ComSpec: process.env.ComSpec } : {}),
+  };
+  const result = spawnMetadataAudit(process.execPath, ['--import', pathToFileURL(preload).href, resolve(root, 'scripts/audit-production-migration-state.mjs'), '--enforce-history'], {
+    cwd: sandbox, env, encoding: 'utf8', windowsHide: true, timeout: 15_000, maxBuffer: 4 * 1024 * 1024,
+  });
+  writeFileSync(join(sandbox, 'stdout.txt'), result.stdout ?? ''); writeFileSync(join(sandbox, 'stderr.txt'), result.stderr ?? '');
+  expect(result.error, `Metadata control setup failed: ${sandbox}`).toBeUndefined();
+  const artifact = JSON.parse(readFileSync(join(sandbox, '.next/production-schema-audit.json'), 'utf8'));
+  const requests = JSON.parse(readFileSync(join(sandbox, 'metadata-requests.json'), 'utf8'));
+  expect(requests).toHaveLength(2);
+  for (const request of requests) expect(request).toMatchObject({ method: 'POST', readOnly: true, redirect: 'error', hasDeadline: true });
+  expect(artifact.migrations).toEqual([{ version, name: 'synthetic_recorded_history' }]);
+  expect(artifact.policies).toContainEqual({ table: 'profiles', name: 'profiles_insert_self' });
+  return { result, artifact, requests, cleanup: () => {
+    if (dirname(realpathSync(sandbox)) !== tempRoot) throw new Error('Unsafe metadata selftest cleanup target');
+    rmSync(sandbox, { recursive: true, force: true });
+  } };
+}
+
+describe('the actual read-only production metadata entrypoint retains its history boundary', () => {
+  it('writes its metadata artifact and fails when baseline history is unrecorded', () => {
+    const control = runMetadataHistoryControl('0003');
+    expect(control.result.status).toBe(1);
+    expect(control.result.stderr).toContain('Existing production policies have no recorded baseline migration 0004.');
+    expect(control.result.stdout).toContain('"requiresBaselineReview":true');
+    expect(control.result.stderr).not.toContain('synthetic-management-token');
+    control.cleanup();
+  });
+  it('retains metadata and succeeds when the synthetic baseline is recorded', () => {
+    const control = runMetadataHistoryControl('0004');
+    expect(control.result.status).toBe(0);
+    expect(control.result.stdout).toContain('"requiresBaselineReview":false');
+    expect(control.result.stderr).toBe('');
+    control.cleanup();
+  });
+});

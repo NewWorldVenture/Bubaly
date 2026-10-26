@@ -366,6 +366,9 @@ export async function localizeAeoQuestions(
       // ranking first would let an empty overlay silently replace a usable
       // parent answer with nothing.
       if (!row.question?.trim() || !row.answer?.trim()) continue;
+      // The English row passed the retired-claims filter; its translation is
+      // separate text, and an older one can still state what English no longer does.
+      if (statesARetiredClaim(row.question, row.answer)) continue;
       const nearer = byId.get(row.question_id);
       if (nearer && (distance.get(nearer.locale) ?? Infinity) <= (distance.get(row.locale) ?? Infinity)) continue;
       byId.set(row.question_id, row);
