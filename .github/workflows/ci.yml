@@ -380,6 +380,14 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
+      # Reserve before npm/image pulls can allocate a fixed service port as a
+      # Linux ephemeral source port. Refuse unknown occupied ports; never kill,
+      # retry startup or remove mailbox/browser coverage to make setup green.
+      - name: Verify CI port guard and reserve disposable stack ports
+        run: |
+          node --test scripts/tests/ci-reserve-supabase-ports.test.mjs
+          node scripts/ci-reserve-supabase-ports.mjs
+
       - name: Install dependencies
         run: npm ci
 
