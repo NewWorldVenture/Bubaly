@@ -151,6 +151,7 @@ source allocations are not evidence that production applied any migration.
 | 0527 proposed, held | `0527_a_post_on_the_idea_board_is_the_callers_own.sql` | `a_feedback_comment_is_the_callers_own()` and `a_feedback_idea_starts_as_the_callers_own()`, BEFORE INSERT on `feedback_comments` and `feedback_ideas`: a signed-in caller posts no team reply, a new idea starts under review with no note, pin, counts or tracker link, `author_name` is the caller's own, and an author files no more than five ideas a minute or twenty a day on the database's clock. CALHUB-O1 and CALHUB-O5; requested on #771 (comment 6421813855), not yet confirmed. |
 | 0528 proposed, held | `0528_a_budget_drift_signal_is_a_parents_or_adults.sql` | A RESTRICTIVE SELECT and `a_budget_drift_signal_is_written_by_a_parent_or_adult()` (BEFORE INSERT, UPDATE and DELETE) on `family_signals`: a budget-drift signal is read and written only by a parent or adult. OPSD-O05; requested on #771 (comment 6422105432), not yet confirmed. |
 | 0529 proposed, held | `0529_the_households_day_is_written_by_a_parent_or_adult.sql` | `a_household_day_is_written_by_a_parent_or_adult()`, BEFORE INSERT, UPDATE and DELETE on `family_operating_index`, `reasoning_snapshots` and `workload_snapshots`: only a parent or adult writes the household's day. OPSD-O06 and COORD-O01; requested on #771 (comment 6422372306), not yet confirmed. |
+| 0530 proposed, held | `0530_a_pending_recommendation_is_a_parents_or_adults_decision.sql` | `a_recommendation_is_decided_by_a_parent_or_adult()`, BEFORE INSERT, UPDATE and DELETE on `family_ai_recommendations`: only a parent or adult files, decides or removes a recommendation. CALHUB-O3; requested on #771 (comment 6422815707), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4923,6 +4924,61 @@ applied twice.
 
 **After approved release:** as a test guest, try to insert a `utility_bills`
 row and confirm 42501.
+
+## `0530` (proposed, held) — a child decided the parents' pending recommendations
+
+`supabase/reserved/0530_a_pending_recommendation_is_a_parents_or_adults_decision.sql`
+— **held**: requested on #771 in comment 6422815707. Not yet confirmed.
+
+**Severity: low to medium (a non-manager could take a decision off every
+parent's Needs You queue unseen, or plant one there). Deploy order: any.**
+CALHUB-O3, the database half of CALHUB-02. `family_ai_recommendations` (0022)
+has one policy, FOR ALL `is_family_member(family_id)`. The app makes every
+write a parent's or adult's, or the server's: `setRecommendationStatus`
+refuses anyone but `isManager`, the generic record actions list the table in
+`MANAGER_ONLY`, and the planner files its cards through the run ledger's
+service client. Measured on a replay of main, as the teen, the child, the
+caregiver and a guest (`is_family_member` admits every active member), `OK n`
+each: dismissing the parents' pending card by id and unfiltered, deleting it,
+and planting a high-priority pending card.
+`sameAppHref` already keeps a planted `cta_href` inside the app.
+
+**Database.** `a_recommendation_is_decided_by_a_parent_or_adult()`, SECURITY
+DEFINER with a pinned search_path, BEFORE INSERT, UPDATE and DELETE: for a
+signed-in caller, a write needs `can_manage_family` of the row's family, old
+and new (42501). INSERT is covered as well as the finding's UPDATE and DELETE,
+since the app never files one as a non-manager. The service role is exempt,
+and so are two cascades that may run in a signed-in session: the household's
+deletion once its family row is gone (Postgres runs the cascades from
+`families` in constraint-trigger-name order, which is not fixed, so its members
+may be gone first), and a member's removal emptying `member_id` (`on delete set
+null`) once their row is gone and nothing else changes. Reads are unchanged. A trigger, as
+0464 reasoned, so `gated-write-tables` and the client guard keep their
+inventory. No application change.
+
+**Proof:** `.github/workflows/recommendation-decision-runtime.yml` requires the
+held probe `docs/audit/reserved/a-pending-recommendation-is-a-parents-or-adults-decision-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0530 twice and requires it to pass, then re-runs six released probes
+(an-erasure-actually-erases, family-delete-cascade,
+family-erasure-leaves-nothing, gated-write-tables, plpgsql-bodies-resolve,
+rls-sweep). The passing run shows every write above refused by 0530's guard;
+parents and adults dismissing, accepting, deleting and filing; the teen, the
+child and the caregiver still reading; the server filing; a child's member row removed in their session and
+the household deleted in the parent's session, and in a session that is not
+its parent's (which forces the cascade order that leaves no parent); the
+wiring; **N1** (guard disabled): the child's dismiss and planted card land;
+**M1** (the guard checking the new row only): the child's delete lands. Four
+hand mutants (no household exemption, no member-removal exemption, no new-row
+clause, the new-row clause loosened to any member but a guest) are each
+caught.
+
+All 189 released probes pass with 0530 applied, and with every held file
+applied twice.
+
+**After approved release:** as a test child, try to update a pending
+`family_ai_recommendations` row and confirm 42501; as a parent, accept one from
+Needs You and confirm it leaves the queue.
 
 ## `0529` (proposed, held) — a child rewrote the household's day
 
