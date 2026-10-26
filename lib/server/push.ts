@@ -623,8 +623,9 @@ type PushPosition = { createdAt: string; id: string };
 /**
  * Where the forward traversal is, and where the retries behind it go on from
  * (`retry`, absent when they start again from the oldest row behind; after it
- * they go round to the oldest row, up to it). A cursor main writes has no
- * `retry`, and main's reader ignores one, so the two read each other's.
+ * they go round to the oldest row, up to it). A cursor an earlier deploy wrote
+ * has no `retry`, and an earlier deploy's reader ignores one, so a deploy in
+ * either direction keeps reading the cursor it finds.
  */
 type PushCursor = { version: 1; createdAt: string; id: string; retry?: PushPosition };
 
