@@ -24,6 +24,7 @@ import { accessDeniedResponse, assertAIAllowance } from '@/lib/server/ai-access'
 import { insightFeatureHrefs } from '@/lib/ai/insight-features';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { readAll, readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { OPEN_HOMEWORK_STATUSES } from '@/lib/homework/board';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -387,7 +388,7 @@ async function fetchRows(
     case 'homework': {
       // Open = still to do (lib/homework/board.ts isOpen): `.neq('done')` listed
       // submitted work under "Open homework".
-      const hw = await eq(sb, 'homework_assignments', familyId).in('status', ['assigned', 'in_progress']).order('due_at', { ascending: true, nullsFirst: false }).limit(60);
+      const hw = await eq(sb, 'homework_assignments', familyId).in('status', OPEN_HOMEWORK_STATUSES).order('due_at', { ascending: true, nullsFirst: false }).limit(60);
       required([['homework_assignments', hw.error]]);
       return { homework_assignments: hw.data ?? [] };
     }
@@ -629,9 +630,12 @@ async function fetchRows(
     }
     case 'school': {
       const [hw, grades] = await Promise.all([
-        eq(sb, 'homework_assignments', familyId).in('status', ['assigned', 'in_progress']).order('due_at', { ascending: true, nullsFirst: false }).limit(20),
+        eq(sb, 'homework_assignments', familyId).in('status', OPEN_HOMEWORK_STATUSES).order('due_at', { ascending: true, nullsFirst: false }).limit(20),
         eq(sb, 'grades', familyId).order('created_at', { ascending: false }).limit(15),
       ]);
+      // A failed read is not "no homework" and "no grades": the coach planned
+      // for a child with nothing due, at HTTP 200.
+      required([['homework_assignments', hw.error], ['grades', grades.error]]);
       return { homework_assignments: hw.data ?? [], grades: grades.data ?? [] };
     }
     case 'sports': {

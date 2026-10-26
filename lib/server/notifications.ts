@@ -38,9 +38,29 @@ type Candidate = {
   related_type: string;
   related_id: string;
   user_id: string | null; // null = whole family
+  /**
+   * When set, an earlier notice under the same key counts as sent only if it
+   * was written at or after this instant (ms). A one-off calendar, school or
+   * sports event's key is its bare id, so without this its first reminder
+   * stood in for every date it was later moved to (`eventReminderOpensAt`).
+   */
+  freshFrom?: number;
 };
 
 const HOUR = 3600_000;
+/** How far the database's `created_at` may trail this server's clock. */
+const CREATED_AT_SKEW_MS = HOUR;
+
+/**
+ * The earliest a reminder for this start can have been written, less the skew:
+ * 48 hours before it, or before the family's midnight for an all-day date (the
+ * read below takes an all-day row when any of its family day is within 48
+ * hours, which in Auckland is two and a half days before its stored midnight).
+ */
+function eventReminderOpensAt(e: { starts_at: string; all_day: boolean }, tz: string): number | undefined {
+  const opens = e.all_day ? zonedDayBoundsMs(allDayDate(e.starts_at), tz).start : Date.parse(e.starts_at);
+  return Number.isFinite(opens) ? opens - 48 * HOUR - CREATED_AT_SKEW_MS : undefined;
+}
 
 /**
  * Whose words the money-approval reminders are in — and the honest answer is
@@ -275,6 +295,10 @@ export async function generateFamilyNotifications(
       // so Greenwich's date gave Saturday's and Sunday's occurrences one key and
       // Sunday's reminder was taken for already sent.
       related_id: isSeries(e) ? `${e.id}:${occurrenceDay(e, tz)}` : e.id,
+      // A one-off keeps that bare id, so a notice for it only counts when it was
+      // written for THIS start: a game rained out to next Saturday was otherwise
+      // taken as already reminded, and never was.
+      freshFrom: isSeries(e) ? undefined : eventReminderOpensAt(e, tz),
       title: e.title,
       body: `${timeLabel(e.starts_at, tz, e.all_day)}${e.location ? ` · ${e.location}` : ''}`,
     });
@@ -293,6 +317,9 @@ export async function generateFamilyNotifications(
     const target = s.member_id ? userByMember.get(s.member_id) ?? null : null;
     candidates.push({
       type: 'school_event', related_type: 'school_events', related_id: s.id, user_id: target,
+      // Keyed by the bare id, like a one-off calendar event, and read by its
+      // instant: a school night pushed back a week is reminded at its new date.
+      freshFrom: eventReminderOpensAt({ starts_at: s.starts_at, all_day: false }, tz),
       title: `School: ${s.title}`,
       body: `${timeLabel(s.starts_at, tz)}${s.event_type ? ` · ${s.event_type}` : ''}`,
     });
@@ -302,6 +329,7 @@ export async function generateFamilyNotifications(
     const target = s.member_id ? userByMember.get(s.member_id) ?? null : null;
     candidates.push({
       type: 'sports_event', related_type: 'sports_events', related_id: s.id, user_id: target,
+      freshFrom: eventReminderOpensAt({ starts_at: s.starts_at, all_day: false }, tz),
       title: `${s.sport ?? 'Sports'}: ${s.title}`,
       body: `${timeLabel(s.starts_at, tz)}${s.location ? ` · ${s.location}` : ''}`,
     });
@@ -573,11 +601,11 @@ export async function generateFamilyNotifications(
     // empty and re-inserts every candidate. Observed exactly that, every run.
     // 50 per batch keeps the longest URL near 3 KB.
     const { data: existing, error: existingErr } = await readInChunks<
-      { type: string; related_id: string | null; user_id: string | null }, { message: string }
+      { type: string; related_id: string | null; user_id: string | null; created_at?: string | null }, { message: string }
     >(relatedIds, async (chunk) => {
-      const query=()=>supabase.from('notifications').select('id, type, related_id, user_id',{count:'exact'})
+      const query=()=>supabase.from('notifications').select('id, type, related_id, user_id, created_at',{count:'exact'})
         .eq('family_id',familyId).in('related_id',chunk).order('id');
-      return readCountedRows<{id:string;type:string;related_id:string|null;user_id:string|null}>(
+      return readCountedRows<{id:string;type:string;related_id:string|null;user_id:string|null;created_at?:string|null}>(
         ()=>query().limit(1000),(from,to)=>query().range(from,to),20_000,'notification dedupe rows');
     }, 50);
     // An incomplete dedupe answer cannot authorize another delivery. Other
@@ -588,12 +616,24 @@ export async function generateFamilyNotifications(
     }
     // Keyed per recipient. A NULL row written before the fan-out (or by another
     // writer) is already in every member's list, so it covers them all.
-    const seen = new Set((existing ?? []).map((e) => `${e.type}:${e.related_id}:${e.user_id ?? 'all'}`));
+    // The latest notice under each key. One whose write time cannot be read
+    // counts as recent: a missing clock must never send a reminder again.
+    const latestSent = new Map<string, number>();
+    for (const e of existing ?? []) {
+      const key = `${e.type}:${e.related_id}:${e.user_id ?? 'all'}`;
+      const at = Date.parse(e.created_at ?? '');
+      latestSent.set(key, Math.max(latestSent.get(key) ?? -Infinity, Number.isFinite(at) ? at : Infinity));
+    }
+    // Sent, unless the candidate counts only notices from `freshFrom` on.
+    const sent = (key: string, freshFrom: number | undefined) => {
+      const at = latestSent.get(key);
+      return at !== undefined && (freshFrom === undefined || at >= freshFrom);
+    };
     rows = fanOutFamilyWide(existingErr ? [] : candidates)
       .filter((c) => {
         const key = `${c.type}:${c.related_id}:${c.user_id ?? 'all'}`;
-        if (seen.has(key) || (c.familyWide && seen.has(`${c.type}:${c.related_id}:all`))) return false;
-        seen.add(key); // one copy per recipient even when two sources produce it
+        if (sent(key, c.freshFrom) || (c.familyWide && sent(`${c.type}:${c.related_id}:all`, c.freshFrom))) return false;
+        latestSent.set(key, Infinity); // one copy per recipient even when two sources produce it
         return true;
       })
       .slice(0, 100)
