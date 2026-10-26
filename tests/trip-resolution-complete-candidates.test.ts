@@ -48,7 +48,8 @@ function fixture(seed: Row[], options: { cap?: number; fault?: Fault; faultAt?: 
       require(method === 'GET' && table === 'vacations', 'Unexpected operation');
       const p = url.searchParams;
       require(p.get('family_id') === `eq.${FAMILY}` && p.get('select') === '*', 'Read missing family/projection');
-      require([...p.keys()].every(k => ['family_id', 'select', 'status', 'order', 'limit', 'offset', 'title', 'start_date'].includes(k)), 'Unexpected query clause');
+      // `or` is listTrips' "not over yet" date filter; trips here are all still to come.
+      require([...p.keys()].every(k => ['family_id', 'select', 'status', 'order', 'limit', 'offset', 'title', 'start_date', 'or'].includes(k)), 'Unexpected query clause');
       let eligible = rows.filter(r => r.family_id === FAMILY);
       const live = p.has('status');
       if (live) {
@@ -115,7 +116,8 @@ function fixture(seed: Row[], options: { cap?: number; fault?: Fault; faultAt?: 
       return wrapped;
     };
   } }) : db;
-  const scope: ServiceScope = { db: scopedDb, familyId: FAMILY, userId: 'user', memberId: 'member', role: 'parent', actorKind: 'member', tz: 'UTC', idempotencyKey: 'trip-operation' };
+  // Pinned before the fixture trips (November 2026): a trip that is over is not a candidate.
+  const scope: ServiceScope = { db: scopedDb, familyId: FAMILY, userId: 'user', memberId: 'member', role: 'parent', actorKind: 'member', tz: 'UTC', idempotencyKey: 'trip-operation', now: new Date('2026-10-01T12:00:00Z') };
   return { rows, requests, writes, scans, scope, combinedReplies };
 }
 
