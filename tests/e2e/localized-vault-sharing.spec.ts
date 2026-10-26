@@ -62,6 +62,10 @@ async function mount(page: Page, category: string, uploadView: 'shared' | 'vault
       const object = decodeURIComponent(parsed.pathname.slice('/storage/v1/object/documents/'.length));
       expect(object.startsWith(family + '/')).toBe(true);
       expect(body).toMatchObject({ fileName: 'synthetic-statement.pdf', fileSize: 26, contentType: 'application/pdf' });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ family_id: family, storage_path: object, is_secure: true, created_by: user });
+      expect(operations.find(operation => operation.method === 'POST' && operation.pathname === '/rest/v1/documents')).toMatchObject({ committed: true });
+      expect(objects).toEqual([]);
       objects.push(object); op.committed = true;
       return { status: 200, body: { Key: 'documents/' + object, Id: documentId } };
     }
@@ -69,22 +73,28 @@ async function mount(page: Page, category: string, uploadView: 'shared' | 'vault
     if (method === 'GET') {
       expect(parsed.searchParams.get('family_id')).toBe('eq.' + family);
       const offset = Number(parsed.searchParams.get('offset') ?? 0), limit = Number(parsed.searchParams.get('limit') ?? 1000);
-      return { status: 200, body: structuredClone(rows.slice(offset, offset + limit)) };
+      const id = parsed.searchParams.get('id');
+      const matching = rows.filter(row => row.family_id === family && (id === null || id === 'eq.' + row.id));
+      return { status: 200, body: structuredClone(matching.slice(offset, offset + limit)) };
     }
     if (method === 'POST') {
       expect(body).toMatchObject({ family_id: family, category, is_secure: true, created_by: user, title: 'Synthetic statement' });
-      expect(objects).toEqual([body.storage_path]);
-      rows.push({ ...body, id: documentId, created_at: '2026-10-23T12:00:00Z', is_favorite: false });
+      expect(body.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+      expect(body.storage_path.startsWith(family + '/')).toBe(true);
+      expect(objects).toEqual([]);
+      expect(rows).toEqual([]);
+      rows.push({ ...body, created_at: '2026-10-23T12:00:00Z', is_favorite: false });
       op.committed = true; op.status = 201;
-      return { status: 201, body: null };
+      return { status: 201, body: structuredClone(rows[0]) };
     }
     if (method === 'PATCH') {
-      expect(op.query).toMatchObject({ id: 'eq.' + documentId, family_id: 'eq.' + family, select: 'id' });
+      expect(rows).toHaveLength(1);
+      expect(op.query).toMatchObject({ id: 'eq.' + rows[0].id, family_id: 'eq.' + family, select: 'id' });
       expect(Object.keys(body)).toEqual(['is_secure']); expect(typeof body.is_secure).toBe('boolean');
       if (mode === 'refused') { op.status = 403; return { status: 403, body: { code: '42501', message: 'Synthetic refusal' } }; }
       if (mode === 'zero') return { status: 200, body: [] };
       Object.assign(rows[0], body); op.committed = true;
-      return { status: 200, body: [{ id: documentId }] };
+      return { status: 200, body: [{ id: rows[0].id }] };
     }
     throw new Error('Unexpected synthetic operation ' + method + ' ' + parsed.pathname);
   });
@@ -190,7 +200,7 @@ for (const scenario of cases) test(scenario.label, async ({ page }, info) => {
     } else {
       await expect.poll(() => page.evaluate(() => (window as any).__vault.consumedPatch)).toBe(1);
       expect(patches).toHaveLength(1);
-      expect(patches[0].query).toMatchObject({ id: 'eq.' + documentId, family_id: 'eq.' + family, select: 'id' });
+      expect(patches[0].query).toMatchObject({ id: 'eq.' + proof.rows[0].id, family_id: 'eq.' + family, select: 'id' });
       if (scenario.mode === 'healthy') {
         expect(patches[0]).toMatchObject({ committed: true, status: 200 });
         expect(notices).toEqual([{ kind: 'success', message: 'File uploaded' }, { kind: 'success', message: scenario.direction === 'in' ? messages['filesHubModule.movedVault'] : messages['filesHubModule.movedShared'] }]);

@@ -17197,6 +17197,8 @@
   "medicationsModule.otherMembersDosesAreKeptByManagers": "As tomas dos outros membros são registadas e acompanhadas pelos pais e adultos da sua família.",
   "nutrition.aGuestSeesSavedEstimatesOnly": "Os convidados podem ver uma estimativa nutricional guardada, mas não pedir uma nova. Peça a um membro da família que a analise.",
   "mealsModule.guestsSeeTheVoteOnly": "Os convidados podem ver a votação da família, mas não votar nela.",
+  "remindersModule.completed": "Lembrete concluído ✓",
+  "remindersModule.completedNextScheduled": "Concluído ✓ — próximo lembrete agendado",
   "remindersModule.completedNextUnconfirmed": "Lembrete concluído, mas não foi possível confirmar o próximo. Verifica os teus lembretes antes de adicionares outro.",
   "householdRoles.guestViewsOnly": "Os convidados podem ver isto, mas não alterá-lo.",
   "socialActions.notInYourPlan": "As ferramentas de redes sociais não fazem parte do plano da sua família.",

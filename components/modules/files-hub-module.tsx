@@ -23,7 +23,7 @@ import { Button } from '@/components/ui/button';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
-import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument, DOCUMENT_MAX_MB, DOCUMENT_MAX_BYTES } from '@/lib/storage/documents';
+import { buildFamilyPath, isReservedDocumentPath, uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument, DOCUMENT_MAX_MB, DOCUMENT_MAX_BYTES } from '@/lib/storage/documents';
 import {
   VIEW_META, filterByView, filterByCategory, searchDocs, sortDocs, groupByCategory, storageSummary, formatBytes, fileKind,
   type FileView, type SortKey, type DocLike,
@@ -35,6 +35,10 @@ import { useFormat } from '@/components/i18n/use-format';
 import type { Format } from '@/lib/utils/format';
 
 type Document = Tables<'documents'>;
+type UploadAttempt = {
+  id: string; path: string; familyId: string; userId: string; view: FileView;
+  title: string; category: string; file: File; pending: boolean;
+};
 
 // In the family's zone (TIME-003), through the shared formatter.
 function displayDate(value: string, fmtDate: Format['fmtDate']) {
@@ -88,6 +92,9 @@ export function FilesHubModule({ view }: { view: FileView }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<{ familyId: string; view: FileView; category: string | null } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const uploadAttempt = useRef<UploadAttempt | null>(null);
+  const uploadDraft = useRef({ familyId, userId, view, file, title: title.trim(), category: category.trim() });
+  uploadDraft.current = { familyId, userId, view, file, title: title.trim(), category: category.trim() };
 
   const { data, loading, error, refresh } = useRealtimeQuery<Document>({
     table: 'documents', familyId, deps: [familyId],
@@ -177,40 +184,84 @@ export function FilesHubModule({ view }: { view: FileView }) {
     e.preventDefault();
     if (!file) return toastError(t('filesHubModule.chooseAFileToUpload'));
     if (!title.trim()) return toastError(t('filesHubModule.addANameForThis'));
+    if (file.size > DOCUMENT_MAX_BYTES) return toastError(t('filesHubModule.tooLarge', { limit: DOCUMENT_MAX_MB }));
+
+    let attempt = uploadAttempt.current;
+    if (!attempt || attempt.familyId !== familyId || attempt.userId !== userId || attempt.view !== view ||
+      attempt.file !== file || attempt.title !== title.trim() || attempt.category !== category.trim()) {
+      attempt = { id: crypto.randomUUID(), path: '', familyId, userId, view, file,
+        title: title.trim(), category: category.trim(), pending: false };
+      uploadAttempt.current = attempt;
+    }
+    if (attempt.pending) return;
+    const currentAttempt = attempt;
+    const sameDraft = () => Object.entries(uploadDraft.current).every(([key, value]) =>
+      currentAttempt[key as keyof typeof uploadDraft.current] === value);
+    currentAttempt.pending = true;
 
     // REFUSE, DO NOT DOWNGRADE, AND DO IT BEFORE THE BYTES MOVE.
     //
     // The decision and the ordering live in `lib/documents/upload.ts` so they
     // can be executed by a test holding real spies, rather than asserted by
     // reading this file. `performUpload` refuses first and only then calls
-    // `store`, so a refused Vault submission makes neither a storage upload nor
-    // a document insert — which is the property, and it is now provable.
+    // any effect, so a refused Vault submission makes neither a storage upload
+    // nor a document insert. A confirmed metadata reservation must then precede
+    // bytes, because the row is what makes Storage restrict a private object.
     setSaving(true);
-    const sb = createClient();
-    const outcome = await performUpload(
+    try {
+      const sb = createClient();
+      const outcome = await performUpload(
       { view, category, manager, folderFallback: meta.folder },
       {
-        store: async (folder) => {
-          const { path, error } = await uploadFamilyDocument(sb, { familyId, folder, file });
-          return { path: path ?? null, error: error ? (file.size > DOCUMENT_MAX_BYTES ? t('filesHubModule.tooLarge', { limit: DOCUMENT_MAX_MB }) : t('avatarPicker.uploadFailed')) : null };
+        prepare: folder => {
+          currentAttempt.path ||= buildFamilyPath(familyId, `${folder}/${currentAttempt.id}`, file.name);
+          if (!isReservedDocumentPath(familyId, folder, currentAttempt.path)) throw new Error('Invalid upload destination');
+          return currentAttempt.path;
         },
         record: async ({ storagePath, isSecure }) => {
-          const { error } = await sb.from('documents').insert({
-            family_id: familyId, title: title.trim(), category: category.trim() || null,
+          if (!sameDraft()) return { error: t('quickCapture.saveUncertain') };
+          const fields = {
+            id: currentAttempt.id, family_id: familyId, title: currentAttempt.title, category: currentAttempt.category || null,
             storage_path: storagePath, mime_type: file.type || null, size_bytes: file.size,
-            // The requested destination, honoured as asked.
             is_secure: isSecure, created_by: userId,
-          });
-          return { error: error ? t('avatarPicker.uploadFailed') : null };
+          };
+          const columns = 'id,family_id,title,category,storage_path,mime_type,size_bytes,is_secure,created_by';
+          const matches = (row: unknown) => !!row && typeof row === 'object' &&
+            Object.entries(fields).every(([key, value]) => (row as Record<string, unknown>)[key] === value);
+          const read = () => sb.from('documents').select(columns).eq('id', currentAttempt.id).eq('family_id', familyId).maybeSingle();
+          const existing = await read();
+          if (!sameDraft()) return { error: t('quickCapture.saveUncertain') };
+          if (existing.error) return { error: t('quickCapture.saveUncertain') };
+          if (existing.data) return { error: matches(existing.data) ? null : t('quickCapture.saveUncertain') };
+          const inserted = await sb.from('documents').insert(fields).select(columns).single();
+          if (!sameDraft()) return { error: t('quickCapture.saveUncertain') };
+          if (inserted.error?.code === '23505') {
+            const raced = await read();
+            return { error: !raced.error && matches(raced.data) ? null : t('quickCapture.saveUncertain') };
+          }
+          if (inserted.error) return { error: /^(?:(?:22|23|28|42)[0-9A-Z]{3}|P0001)$/.test(inserted.error.code ?? '')
+            ? t('avatarPicker.uploadFailed') : t('quickCapture.saveUncertain') };
+          return { error: matches(inserted.data) ? null : t('quickCapture.saveUncertain') };
         },
-        discard: async (path) => { await removeFamilyDocument(sb, path); },
+        store: async reservedPath => {
+          if (!sameDraft()) return { error: t('quickCapture.saveUncertain') };
+          const { error } = await uploadFamilyDocument(sb, { familyId, folder: currentAttempt.category || meta.folder, file, reservedPath });
+          return { error: error ? t('quickCapture.saveUncertain') : null };
+        },
       },
       t,
     );
-    setSaving(false);
-    if (!outcome.ok) return toastError(outcome.reason);
-    success(t('filesHubModule.fileUploaded'));
-    setOpen(false); setTitle(''); setCategory(''); setFile(null); refresh();
+      if (uploadAttempt.current !== currentAttempt || !sameDraft()) return;
+      if (!outcome.ok) return toastError(outcome.reason);
+      success(t('filesHubModule.fileUploaded'));
+      uploadAttempt.current = null;
+      setOpen(false); setTitle(''); setCategory(''); setFile(null); refresh();
+    } catch {
+      if (uploadAttempt.current === currentAttempt && sameDraft()) toastError(t('quickCapture.saveUncertain'));
+    } finally {
+      currentAttempt.pending = false;
+      if (uploadAttempt.current === currentAttempt || uploadAttempt.current === null) setSaving(false);
+    }
   }
 
   if (loading) return <SkeletonList count={6} />;

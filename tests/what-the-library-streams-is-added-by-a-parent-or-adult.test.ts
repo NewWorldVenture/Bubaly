@@ -6,8 +6,8 @@ import { at, bodyOf } from './helpers/source-order';
 // address reach every member's library and stream through Bubaly's own media
 // route; the actions let only a parent or adult add them, but 0284's policies
 // let any member write any library row, and created_by is whatever the writer
-// says. 0526 puts the rule on library_feeds and library_items. Refresh, which
-// is anyone's, now ingests on the server's client
+// says. 0526 puts the rule on library_feeds and library_items. Human Refresh
+// retains the caller's write client and may fail under that future policy
 // (tests/a-library-refresh-is-the-servers-write-and-not-a-guests.test.ts).
 
 const M = 'supabase/reserved/0526_what_the_library_streams_is_added_by_a_parent_or_adult.sql';
