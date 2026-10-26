@@ -43,7 +43,15 @@ it provably safe, we don't ship it.
    so the guarantee is a bounded budget, not "can never be inferred".
 7. **Reversible + forgettable.** Turning off consent deletes the family's
    contribution row immediately; the published figures are rebuilt without it
-   at the next epoch's snapshot (up to a month at the default epoch).
+   at the next epoch's snapshot (up to a month at the default epoch). Leaving,
+   and switching off a scope that contributes, are written under the same
+   publication claim the aggregation publishes under, and the aggregation
+   re-reads consent after its upserts (under that claim when it publishes), so
+   no run stores the family's row again and no publication written after the
+   family is told it left counts it (`lib/network/withdrawal-server.ts`). The
+   copy says the rest: this month's published summaries keep the family's
+   share until next month's, and the noise makes a join or leave unlikely to
+   read from two months, not impossible.
 
 ## 3. What we do NOT do
 
@@ -96,7 +104,9 @@ Runs daily, service role:
    holds or publishes (a claim in `app_settings`); a run that overlaps it
    refreshes the contributions and leaves the figures alone, and the prune
    only removes earlier epochs' rows, so overlapping runs neither publish an
-   epoch twice nor delete its snapshot.
+   epoch twice nor delete its snapshot. Before it holds or publishes, a run
+   re-reads consent for every family it stored and drops (and deletes) any
+   that left or switched a scope off since it started.
 3. **Serve.** `visibleInsights()` maps `network_aggregates` rows a family is
    entitled to (opted-in scope) into `InsightCandidate`s; the k-floor is re-checked
    at read time as defense-in-depth.

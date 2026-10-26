@@ -1,7 +1,7 @@
 // Leaving the Intelligence Network, and what the network shows a family.
 //
-// N8 — "Left the network — nothing is shared", and the panel's "leaving stops
-// all sharing immediately", were a consent write and nothing else. The
+// N8 — "Left the network", and the panel's "leaving stops all sharing
+// immediately", were a consent write and nothing else. The
 // family's stored contribution row stayed in network_contributions until a
 // nightly run got all the way to its prune, and every aggregate built from it
 // stayed published with it — for as long as the cron kept failing. The design
@@ -32,6 +32,23 @@ vi.mock('@/components/i18n/locale-provider', async () => (await import('./helper
 vi.mock('@/components/app/page-header', async () => ({ PageHeader: (await import('./helpers/module-harness')).ui.PageHeader }));
 vi.mock('@/components/ui/states', async () => (await import('./helpers/module-harness')).ui);
 vi.mock('next/link', async () => ({ default: (await import('./helpers/module-harness')).ui.Link }));
+// The server half of a leave or a scope switch-off: the real action, with the
+// session stubbed. Its consent write and its delete go through the member's
+// own client (h.fault reaches them); the service client holds only the claim.
+vi.mock('@/lib/i18n/server', async () => {
+  const { SOURCE_MESSAGES: messages, translate: tr } = await import('@/lib/i18n/messages');
+  return { getTranslations: async () => (key: string, params?: Record<string, string | number>) => tr(messages, key, params) };
+});
+vi.mock('@/lib/supabase/auth', () => ({
+  requireUserContext: async () => ({
+    user: { id: h.app.userId, email: null },
+    active: { familyId: h.app.familyId, role: (h.app as { role?: string }).role ?? 'parent', member: { id: 'member-1' }, family: { timezone: 'UTC' } },
+  }),
+}));
+vi.mock('@/lib/supabase/server', async () => {
+  const { clientFor } = await import('./helpers/module-harness');
+  return { createServer: async () => clientFor(h), createServiceClient: () => h.db };
+});
 
 const { IntelligenceModule } = await import('@/components/modules/intelligence-module');
 
@@ -40,6 +57,7 @@ const NEIGHBOUR = '0f0f0f0f-0000-4000-8000-000000000002';
 const JOIN = 'Join the network';
 const TIMING = 'Timing patterns';
 const BENCHMARKS = 'Gentle benchmarks';
+const LEFT = 'Left the network. Your data is no longer used and your stored contribution is deleted. Summaries already published this month keep your share, mixed with at least 20 families and noise, until next month’s update.';
 let db: InMemorySupabase;
 
 const screen = (props: Parameters<typeof IntelligenceModule>[0] = {}) => render(h.hooks, createElement(IntelligenceModule, props));
@@ -71,7 +89,24 @@ describe('leaving the network forgets what the family contributed, at once', () 
     expect(db.table('network_consent')[0]).toMatchObject({ enabled: false });
     expect(contributionsOf(FAMILY)).toEqual([]);
     expect(contributionsOf(NEIGHBOUR)).toHaveLength(1);
-    expect(h.toasts.success).toEqual(['Left the network — nothing is shared']);
+    expect(h.toasts.success).toEqual([LEFT]);
+  });
+
+  // N8-leave-copy-overpromises: the published summaries are held for their
+  // month (aggregate.ts, PUBLICATION_EPOCH), so they keep the family's share
+  // until the next month's snapshot. "Nothing is shared" said otherwise.
+  it('says what leaving does and what it does not: nothing is used from now on, this month\'s summaries keep the share', async () => {
+    await click(byName(screen(), JOIN));
+    const [toast] = h.toasts.success;
+    expect(toast).not.toMatch(/nothing is shared/i);
+    expect(toast).toContain('Your data is no longer used and your stored contribution is deleted.');
+    expect(toast).toContain('Summaries already published this month keep your share, mixed with at least 20 families and noise, until next month’s update.');
+  });
+
+  it('the privacy panel no longer promises that leaving stops all sharing immediately', () => {
+    const shown = text(screen());
+    expect(shown).not.toMatch(/stops all sharing immediately/i);
+    expect(shown).toContain('Reversible anytime. Leaving stops your data being used and deletes what’s stored at once; summaries already published that month keep your share until the next monthly update.');
   });
 
   it('switching a scope off deletes it too; the next nightly run rebuilds what is still consented', async () => {
@@ -103,7 +138,7 @@ describe('leaving the network forgets what the family contributed, at once', () 
     expect(contributionsOf(FAMILY)).toHaveLength(1);
   });
 
-  it('a refused delete is said, not covered by "nothing is shared"', async () => {
+  it('a refused delete is said, not covered by a success toast', async () => {
     h.fault = (table, calls) => (table === 'network_contributions' && calls.includes('delete') ? { message: 'permission denied for table network_contributions', code: '42501' } : null);
     await click(byName(screen(), JOIN));
     expect(h.toasts.success).toEqual([]);
@@ -121,7 +156,10 @@ describe('leaving the network forgets what the family contributed, at once', () 
 // rejoining ever made the consent count.
 describe('a consent its author may not give is said, and a manager\'s switch takes it over', () => {
   const CONTRIBUTING = 'You’re contributing anonymized patterns and can see network insights.';
-  const NEEDS_A_MANAGER = 'Sharing was switched on by a family member who can’t give consent for the household, so nothing is shared yet. A parent or adult confirms it by changing any option below, or by leaving and joining again.';
+  // N8-leave-copy-overpromises: "so nothing is shared yet" was the same absolute
+  // promise. A consent its author may not give is not used from now on; a
+  // summary already published this month may hold the household's share.
+  const NEEDS_A_MANAGER = 'Sharing was switched on by a family member who can’t give consent for the household, so your household’s data isn’t being used. A parent or adult confirms it by changing any option below, or by leaving and joining again.';
   const roster = h.app.members;
   beforeEach(() => {
     h.app.members = [
@@ -136,6 +174,7 @@ describe('a consent its author may not give is said, and a manager\'s switch tak
     const shown = text(screen());
     expect(shown).toContain(NEEDS_A_MANAGER);
     expect(shown).not.toContain(CONTRIBUTING);
+    expect(shown).not.toMatch(/nothing is shared yet/i);
   });
 
   it('control: a consent a parent gave reads as contributing', () => {
