@@ -1,5 +1,15 @@
 # Final Production Audit
 
+## CI and latest audit merged; first real audit-only checkpoint — 2026-10-26T21:21:57.173Z
+
+- Last Updated: 2026-10-26T21:21:57.173Z
+
+PR1132 is closed/merged at5986345adb3fb33e0a454b1fec07d4a4eb63cea6, parents8e333+34556, exacttreec14657b9; GitHub confirms21:18:33Z. Root independently rehashed63original bindings and preserved every6,969 nonledger tested blob plus the complete current ledger/new15,701inventory. Source/directpublication and independent preservation peerc7983d31 confirm all15,698 baseline IDs/statuses, exactly3newIP rows and only the two explicitly appended display evidence rows; no broad closure or source loss.
+
+The real mixed workflow+Markdown main event started coreCI40403255482, dedicated messaging40403255478/40403255514 and Audit ledger40403255557. Its actual Audit register counts job121854349316 succeeded with checkout598 and raw efb4c9a1:15,701rows/3,312IP/2,040closed (12.99%). CoreCI was still in progress at21:20:13Z; that later mixed-source test run is not labeled complete from this observation. The independently qualified original PR19jobs remain the source release evidence.
+
+This ordinary single-file finalaudit.md update is the first live audit-only path-filter observation. No job was manually cancelled, dispatched or rerun. Expected routing is the real audit-count workflow plus the two unchanged messaging workflows, with no new coreCI run and the prior mixed core run retained. CI-AUDIT-ONLY-CHECKPOINT-20261026 stays IN PROGRESS until the actual event/raw output and non-cancellation controls qualify. All15,701IDs/statuses/counts remain unchanged by this prose-only checkpoint. The default product release8e was last verified21:43:54Z; new598/checkpoint production identity is pending and no global readiness is claimed. Production readiness remains NO.
+
 ## CI release qualified; complete current audit preserved for publication — 2026-10-26T21:17:19.534Z
 
 - Last Updated: 2026-10-26T21:17:19.534Z
