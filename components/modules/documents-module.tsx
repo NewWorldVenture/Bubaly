@@ -160,7 +160,7 @@ export function DocumentsModule() {
   const [confirmDoc, setConfirmDoc] = useState<Document | null>(null);
   const [favPending, setFavPending] = useState<Record<string, boolean>>({});
 
-  const { data, loading, stale, error, refresh } = useRealtimeQuery<Document>({
+  const { data, loading, error, refresh } = useRealtimeQuery<Document>({
     table: 'documents', familyId, deps: [familyId],
     // Paged to the end: one select stops at db-max-rows (1,000) and says
     // nothing, so past it the oldest files fell out of the list, the search,
@@ -371,8 +371,8 @@ export function DocumentsModule() {
     }
   }
 
+  if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
-  if (loading || stale) return <SkeletonList />;
 
   const folderCards = showAllFolders ? folders : folders.slice(0, 6);
   const hasFilters = Boolean(query || typeFilter !== 'all' || folderFilter);

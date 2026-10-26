@@ -50,18 +50,18 @@ beforeEach(() => {
 afterEach(() => { expect(forbidden).not.toHaveBeenCalled(); vi.unstubAllGlobals(); });
 
 describe('document list read verification', () => {
-  it('hides cached file rows, actions and capacity totals until revalidated', () => {
+  it('keeps authorized cached file rows, actions and last-synced capacity during revalidation', () => {
     live.stale = true;
-    expect(hasRole('status')).toBe(true);
-    expect(text(screen())).not.toContain(TITLE);
-    expect(text(screen())).not.toContain('1.0 GB');
-    expect(nodes(screen()).some(n => n.type === 'button')).toBe(false);
+    expect(hasRole('status')).toBe(false);
+    expect(text(screen())).toContain(TITLE);
+    expect(text(screen())).toContain('1.0 GB');
+    expect(nodes(screen()).some(n => n.type === 'button')).toBe(true);
   });
-  it('does not describe a stale empty cache as an empty collection or free capacity', () => {
+  it('keeps the authorized last-synced empty collection and capacity during revalidation', () => {
     live.data = []; live.stale = true;
-    expect(hasRole('status')).toBe(true);
-    expect(text(screen())).not.toContain('No files yet');
-    expect(text(screen())).not.toContain('free');
+    expect(hasRole('status')).toBe(false);
+    expect(text(screen())).toContain('No files yet');
+    expect(text(screen())).toContain('free');
   });
   it('keeps ordinary initial loading pending', () => {
     live.loading = true; expect(hasRole('status')).toBe(true); expect(text(screen())).not.toContain(TITLE);
@@ -78,10 +78,10 @@ describe('document list read verification', () => {
   it('allows a verified empty collection to say no files yet', () => {
     live.data = []; expect(text(screen())).toContain('No files yet'); expect(hasRole('status')).toBe(false);
   });
-  it('refreshes on retry but exposes rows only after the read is actually current', async () => {
+  it('retries a failed read and keeps authorized cached rows while that retry revalidates', async () => {
     live.stale = true; live.error = 'Synthetic document read failed';
     await click(byName(screen(), 'Retry document read', 'button')); expect(live.refreshes).toBe(1);
-    live.error = null; expect(hasRole('status')).toBe(true); expect(text(screen())).not.toContain(TITLE);
+    live.error = null; expect(hasRole('status')).toBe(false); expect(text(screen())).toContain(TITLE);
     live.stale = false; expect(text(screen())).toContain(TITLE); expect(hasRole('status')).toBe(false);
   });
   it.each(['parent', 'child'])('preserves verified read display for %s without a Storage operation', role => {
