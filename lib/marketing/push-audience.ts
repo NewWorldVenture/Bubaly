@@ -2,6 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { hasMarketingPushConsent, MARKETING_PUSH_EXCLUDED_ROLES, selectPushRecipients } from '@/lib/marketing/push';
+import { ROLE_ORDER, isManager } from '@/lib/constants/roles';
 import { ageOnDay } from '@/lib/members/age';
 import { isChildLoginEmail } from '@/lib/onboarding/child-login';
 
@@ -22,6 +23,8 @@ const MAX_READ_REQUESTS = 1_000;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** A member whose recorded birthday says they are younger than this is a minor, whatever role the row now carries. */
 const ADULT_AGE = 18;
+/** The excluded roles, as the member_role values an invite carries. */
+const MINOR_ROLES = ROLE_ORDER.filter(role => MARKETING_PUSH_EXCLUDED_ROLES.includes(role));
 type ReadBudget = { rows: number; requests: number };
 
 /** A short page can be the Data API's response cap, so only an empty page ends traversal. */
@@ -109,9 +112,9 @@ export async function loadPushCampaignAudience(supabase: DB): Promise<string[]> 
 
 /**
  * Keep only accounts that explicitly opted in to marketing push, hold no
- * child or teen membership in any family (by its role, or by the birthday the
- * family recorded on it), and are not left only with families that closed
- * their account.
+ * child or teen membership in any family (by its role, by the birthday the
+ * family recorded on it, or by the role of the invite they joined it by), and
+ * are not left only with families that closed their account.
  *
  * The device table says who CAN be reached, not who agreed to marketing: a
  * child with the app installed was in the audience because their family left
@@ -152,21 +155,47 @@ async function consentingAdults(supabase: DB, userIds: string[], budget: ReadBud
     // role alone left a teen removed through the app in the audience
     // (R3-AW-REMOVED-MINOR-PUSH). The birthday is kept.
     const memberships = await readPages(cursor => {
-      let query = supabase.from('family_members').select('id, user_id, role, birthday, is_active, family:families!inner(closed_at)')
+      let query = supabase.from('family_members').select('id, family_id, user_id, role, birthday, is_active, family:families!inner(closed_at)')
         .in('user_id', chunk).order('id', { ascending: true }).limit(PAGE_SIZE);
       if (cursor !== null) query = query.gt('id', cursor);
       return query;
     }, row => row.id, budget, 'member roles');
+    /** By `<user>:<family>`: whether the family has since said this member is grown up (made them a parent or an adult, or recorded an 18th birthday). */
+    const grownUpIn = new Map<string, boolean>();
     for (const row of memberships) {
       if (typeof row.user_id !== 'string') continue;
       const age = ageOnDay(row.birthday, earliestDay);
       if (MARKETING_PUSH_EXCLUDED_ROLES.includes(String(row.role)) || (age !== null && age < ADULT_AGE)) minors.add(row.user_id);
+      grownUpIn.set(`${row.user_id}:${row.family_id}`, isManager(row.role) || (age !== null && age >= ADULT_AGE));
       // A family the account was removed from is not one of its families.
       if (!row.is_active) continue;
       members.add(row.user_id);
       // A family that was not returned with the row is not known to be open.
       const family = row.family as { closed_at?: unknown } | null;
       if (family && family.closed_at === null) inOpenFamily.add(row.user_id);
+    }
+    // R4-AW-REMOVED-TEEN-OWN-ADDRESS. A teen who signs in with their own
+    // address, and whose family recorded no birthday, was left with nothing
+    // that said so once removed: the row is `guest` by then. The invite they
+    // joined by still does. accept_invite (0136) keeps its role and records
+    // who accepted it, and nothing deletes one. So an invite accepted at a
+    // minor's role marks the account a minor, unless the family has since said
+    // otherwise on the row it put them in: a parent's or an adult's role (a
+    // teen made an adult), or a recorded birthday 18 years back. A `guest` row
+    // does not say so: removal writes it, and accept_invite brings a removed
+    // member back at it, whatever the new invite's role. Read only for the
+    // accounts still in, so the read costs the shared budget nothing for a
+    // chunk no one in it consented.
+    const undecided = chunk.filter(id => consented.has(id) && !minors.has(id));
+    const joinedAsMinors = undecided.length === 0 ? [] : await readPages(cursor => {
+      let query = supabase.from('invites').select('id, family_id, accepted_by')
+        .in('accepted_by', undecided).eq('status', 'accepted').in('role', MINOR_ROLES)
+        .order('id', { ascending: true }).limit(PAGE_SIZE);
+      if (cursor !== null) query = query.gt('id', cursor);
+      return query;
+    }, row => row.id, budget, 'accepted invites');
+    for (const invite of joinedAsMinors) {
+      if (typeof invite.accepted_by === 'string' && !grownUpIn.get(`${invite.accepted_by}:${invite.family_id}`)) minors.add(invite.accepted_by);
     }
   }
   return userIds.filter(id => consented.has(id) && !minors.has(id) && (!members.has(id) || inOpenFamily.has(id)));

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
+import { createInMemorySupabase, withFaults, type InMemorySupabase } from './helpers/in-memory-supabase';
 
 // admin-writers N1-S1. Two audiences reached people they should not have:
 //
@@ -165,6 +165,69 @@ describe('a marketing push campaign', () => {
       account('u-grown');
       memberBorn('u-grown', 'adult', '1988-06-30');
       expect(await audience()).toEqual(['u-grown', 'u-removed-adult']);
+    });
+
+    // R4-AW-REMOVED-TEEN-OWN-ADDRESS. A teen who signs in with their own
+    // address, with no birthday on record, kept nothing that said so once
+    // removed: the row is a guest's. The invite they joined by still does
+    // (accept_invite keeps its role and who accepted it).
+    const joinedBy = (user: string, role: string, family = 'fam-open', n = 1) =>
+      db.seed('invites', [{ id: `inv-${user}-${family}-${n}`, family_id: family, email: `${user}@example.com`, role, status: 'accepted', accepted_by: user }]);
+
+    it('a teen who joined by a teen invite with their own address, no birthday on record, is not pushed to once removed', async () => {
+      account('u-teen-own');
+      memberBorn('u-teen-own', 'teen', null);
+      joinedBy('u-teen-own', 'teen');
+      expect(await audience()).toEqual([]);
+      await remove('u-teen-own');
+      expect(await audience(), 'a removed teen with their own address was pushed to').toEqual([]);
+    });
+
+    it('a removed teen brought back by a second teen invite is still not pushed to, though accept_invite reactivated the row as a guest', async () => {
+      account('u-back');
+      memberBorn('u-back', 'teen', null);
+      joinedBy('u-back', 'teen');
+      await remove('u-back');
+      // What accept_invite (0136) does with a second invite: `on conflict ... set is_active = true`, the role left as removal wrote it.
+      Object.assign(db.table('family_members').find((row) => row.id === 'm-u-back-fam-open')!, { is_active: true });
+      joinedBy('u-back', 'teen', 'fam-open', 2);
+      expect(await audience(), 'a teen back in the family as a guest was pushed to').toEqual([]);
+    });
+
+    it('a teen invite in one family is not undone by a family of their own', async () => {
+      account('u-own-family');
+      memberBorn('u-own-family', 'teen', null);
+      joinedBy('u-own-family', 'teen');
+      await remove('u-own-family');
+      member('u-own-family', 'fam-other');
+      db.seed('families', [{ id: 'fam-other', name: 'Their own', created_at: '2026-01-01T00:00:00Z', closed_at: null }]);
+      expect(await audience()).toEqual([]);
+    });
+
+    it('controls: a teen the family made an adult, one whose 18th birthday is on record, and an adult who joined by an adult invite are still reached', async () => {
+      account('u-made-adult');
+      memberBorn('u-made-adult', 'adult', null);
+      joinedBy('u-made-adult', 'teen');
+      account('u-turned-18');
+      memberBorn('u-turned-18', 'teen', '2007-03-01');
+      joinedBy('u-turned-18', 'teen');
+      await remove('u-turned-18');
+      account('u-invited-adult');
+      memberBorn('u-invited-adult', 'adult', null);
+      joinedBy('u-invited-adult', 'adult');
+      await remove('u-invited-adult');
+      expect(await audience()).toEqual(['u-invited-adult', 'u-made-adult', 'u-turned-18']);
+    });
+
+    it('an accepted-invite read that fails sends nothing, and is not made when no one is left to decide', async () => {
+      const faulty = withFaults(db, (table) => (table === 'invites' ? { message: 'invites unavailable' } : null));
+      // A device whose owner never consented: nothing for the invites to decide.
+      db.seed('push_devices', [{ id: 'dev-u-quiet', user_id: 'u-quiet', enabled: true }]);
+      db.seed('profiles', [{ id: 'u-quiet', email: 'u-quiet@example.com' }]);
+      expect(await loadPushCampaignAudience(faulty as unknown as DB)).toEqual([]);
+      account('u-adult');
+      memberBorn('u-adult', 'adult', null);
+      await expect(loadPushCampaignAudience(faulty as unknown as DB)).rejects.toThrow('Could not completely load marketing push accepted invites. No campaign push was sent.');
     });
 
     it('counts a member as grown up only once their 18th birthday has come in every zone', async () => {

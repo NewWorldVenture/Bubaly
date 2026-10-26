@@ -248,6 +248,46 @@ describe('an audience past the cap is sent in parts, never cut', () => {
     expect(db.table('marketing_audit_logs').map((row) => (row.metadata as { outcome: string }).outcome)).toEqual(['capped', 'complete']);
   });
 
+  // R4-AW-EMAIL-PAGE-AUDIENCE-READS. Working out each capped draft's note,
+  // the page read the customers and the suppressions whole once per capped
+  // draft, one after another, on every render.
+  it('reads the customers and the suppressions once a render however many capped drafts it shows, and still answers each draft for itself', async () => {
+    const AUDIENCE_TABLES = ['families', 'subscriptions', 'family_members', 'profiles', 'marketing_suppressions'];
+    async function render() {
+      const from = db.log.length;
+      const text = await emailPage();
+      const reads = Object.fromEntries(AUDIENCE_TABLES.map((table) => [table, db.log.slice(from).filter((entry) => entry.table === table).length]));
+      return { text, reads };
+    }
+    const count = (text: string, phrase: string) => text.split(phrase).length - 1;
+    const soFar = m('adminMarketingEmail.sentOfAudienceSoFar', { n: 1000, total: 1001 });
+    const noOneLeft = m('adminMarketingEmail.sentNoOneLeft', { n: 1000 });
+
+    expect(await (await send()).json()).toEqual({ sent: 1000, remaining: 1 });
+    const delivered = new Set(mailed());
+    const [held] = Array.from({ length: 1001 }, (_, i) => `parent${pad(i)}@example.com`).filter((e) => !delivered.has(e));
+    // cmp-1's held address leaves, so its next Send only marks it sent.
+    db.seed('marketing_suppressions', [{ email: held, reason: 'unsubscribe' }]);
+    const one = await render();
+    expect(one.reads.families, 'the capped draft read no audience').toBeGreaterThan(0);
+    expect(one.reads.marketing_suppressions, 'the capped draft read no suppressions').toBeGreaterThan(0);
+    expect(count(one.text, noOneLeft)).toBe(1);
+
+    // A second capped draft, which reached that address and held back another
+    // that is still in the audience.
+    const first = campaign();
+    const [kept] = [...delivered].sort();
+    const raw = (first.metadata as { delivery: Record<string, unknown> }).delivery;
+    db.seed('marketing_email_campaigns', [{
+      ...first, id: 'cmp-2', subject: 'Winter news', created_at: undefined, updated_at: undefined,
+      metadata: { ...(first.metadata as object), delivery: { ...raw, attempt: 'attempt-2', delivered: [...[...delivered].filter((e) => e !== kept), held] } },
+    }]);
+    const two = await render();
+    expect(two.reads, 'a second capped draft read the customers or the suppressions again').toEqual(one.reads);
+    expect(count(two.text, noOneLeft), 'the draft with no one left lost its note').toBe(1);
+    expect(count(two.text, soFar), 'the draft still holding someone lost its note').toBe(1);
+  });
+
   it('control: a capped draft whose audience cannot be read keeps its note, and the page still renders', async () => {
     expect(await (await send()).json()).toEqual({ sent: 1000, remaining: 1 });
     const healthy = h.db;

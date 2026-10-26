@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/database.types';
 import { FROM_EMAIL, emailEnabled, APP_URL } from '@/lib/email';
-import { getMarketingCustomersWithError, evaluateSegment, type SegmentRules } from '@/lib/marketing/customers';
+import { getMarketingCustomersWithError, evaluateSegment, type MarketingCustomer, type SegmentRules } from '@/lib/marketing/customers';
 import { unsubUrl } from '@/lib/marketing/unsubscribe';
 import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
@@ -73,6 +73,35 @@ async function suppressedInboxes(supabase: DB): Promise<Set<string>> {
 }
 
 /**
+ * The two whole-table reads every campaign's audience is made from: the
+ * customer view and the suppressed inboxes. Each is read once, when first
+ * asked for, and shared by whatever asks after; a read that failed is the
+ * answer for every campaign that asks.
+ *
+ * The email page works out, for each capped draft, who its next Send would
+ * still reach (R4-AW-EMAIL-PAGE-AUDIENCE-READS): it read both tables whole
+ * once per capped draft, one draft after another, on every render. Its drafts
+ * now share one of these per render. A send and its preview each take a fresh
+ * one, as before, so what they answer is read when they ask.
+ */
+export type AudienceReads = {
+  customers: () => Promise<MarketingCustomer[]>;
+  suppressed: () => Promise<Set<string>>;
+};
+
+export function audienceReads(supabase: DB): AudienceReads {
+  let customers: Promise<MarketingCustomer[]> | undefined;
+  let suppressed: Promise<Set<string>> | undefined;
+  return {
+    customers: () => (customers ??= getMarketingCustomersWithError(supabase).then((result) => {
+      if (result.error) throw new Error('Could not load marketing customers for this campaign.');
+      return result.customers;
+    })),
+    suppressed: () => (suppressed ??= suppressedInboxes(supabase)),
+  };
+}
+
+/**
  * Resolve the deduped, valid, non-suppressed recipient list for a campaign:
  * every eligible address, uncapped (sendEmailCampaign sends an audience past
  * MAX_RECIPIENTS in parts rather than cutting it).
@@ -80,14 +109,13 @@ async function suppressedInboxes(supabase: DB): Promise<Set<string>> {
 export async function resolveRecipients(
   supabase: DB,
   campaign: { segment_id: string | null },
+  reads: AudienceReads = audienceReads(supabase),
 ): Promise<string[]> {
-  const customerResult = await getMarketingCustomersWithError(supabase);
-  if (customerResult.error) throw new Error('Could not load marketing customers for this campaign.');
   // A family that closed its account (families.closed_at) is not marketed to.
   // Closing writes no suppression row, so nothing else stops it, and the
   // scheduled automation runner already leaves these families out
   // (automation-runner.ts): the two senders now agree.
-  const customers = customerResult.customers.filter((c) => !c.closedAt);
+  const customers = (await reads.customers()).filter((c) => !c.closedAt);
 
   let pool = customers;
   if (campaign.segment_id) {
@@ -110,7 +138,7 @@ export async function resolveRecipients(
   // Remove suppressed inboxes (unsubscribes, bounces, complaints), under any
   // spelling the opt-out was recorded with.
   if (emails.size > 0) {
-    const suppressed = await suppressedInboxes(supabase);
+    const suppressed = await reads.suppressed();
     for (const e of [...emails]) if (suppressed.has(canonicalMailbox(e))) emails.delete(e);
   }
 
@@ -163,8 +191,9 @@ export function campaignDelivery(metadata: unknown): CampaignDelivery | null {
 export async function campaignAudience(
   supabase: DB,
   campaign: { segment_id: string | null; metadata?: unknown },
+  reads?: AudienceReads,
 ): Promise<{ remaining: string[]; alreadySent: number; prior: CampaignDelivery | null }> {
-  const eligible = await resolveRecipients(supabase, campaign);
+  const eligible = await resolveRecipients(supabase, campaign, reads);
   const prior = campaignDelivery(campaign.metadata);
   const delivered = new Set(prior?.delivered ?? []);
   return { remaining: eligible.filter((e) => !delivered.has(e)), alreadySent: delivered.size, prior };

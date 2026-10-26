@@ -64,6 +64,9 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
   // Per-device receipts (0440). Present by default because every dispatch reads
   // them; a test that needs the pre-0440 database deletes the key.
   tables.push_deliveries ??= [];
+  // The marketing push audience reads the accepted invites of the accounts
+  // still in it (R4-AW-REMOVED-TEEN-OWN-ADDRESS); none, unless a test adds one.
+  tables.invites ??= [];
   const faults = new Set<string>();
   const thrownFaults = new Set<string>();
   const emptyWrites = new Set<string>();

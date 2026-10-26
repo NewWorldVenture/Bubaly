@@ -9,7 +9,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { createEmailDraft } from '../actions';
 import { SendCampaignButton } from '@/components/admin/send-campaign-button';
-import { campaignAudience, campaignDelivery, finishesCampaign } from '@/lib/marketing/send';
+import { audienceReads, campaignAudience, campaignDelivery, finishesCampaign } from '@/lib/marketing/send';
 import { getTranslations } from '@/lib/i18n/server';
 import { SubmitButton } from '@/components/ui/submit-button';
 
@@ -112,17 +112,20 @@ export default async function EmailPage() {
  * next Send only marks them sent (finishesCampaign). Their note said Send
  * reaches the rest. Read only for a capped draft, the one card whose note
  * makes that promise; an audience that cannot be read keeps the note, and
- * Send's own preview still answers who it reaches.
+ * Send's own preview still answers who it reaches. The customers and the
+ * suppressions are read once for all of them (audienceReads), not once per
+ * capped draft (R4-AW-EMAIL-PAGE-AUDIENCE-READS).
  */
 async function cappedDraftsWithNoOneLeft(
   supabase: ReturnType<typeof createServiceClient>,
   emails: readonly { id: string; status: string; segment_id: string | null; metadata: unknown }[],
 ): Promise<Set<string>> {
   const finishing = new Set<string>();
+  const reads = audienceReads(supabase);
   for (const e of emails) {
     if (e.status !== 'draft' || campaignDelivery(e.metadata)?.outcome !== 'capped') continue;
     try {
-      const { remaining, prior } = await campaignAudience(supabase, e);
+      const { remaining, prior } = await campaignAudience(supabase, e, reads);
       if (finishesCampaign(prior, remaining)) finishing.add(e.id);
     } catch (err) {
       console.error('[admin-marketing-email] capped draft audience read failed', err);
