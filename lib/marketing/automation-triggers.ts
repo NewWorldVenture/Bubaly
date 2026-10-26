@@ -71,6 +71,21 @@ export function workflowIsRunnable(trigger: string, steps: unknown): boolean {
   return stepsAreRunnable(steps);
 }
 
+/**
+ * Whether the console switches this workflow on (setAutomationStatus): one
+ * that does everything it says, or one on a trigger the app fires that the
+ * builder does not offer (onboarding_completed, onboarding_abandoned,
+ * demo_abandoned) with an email step. The runners send its email steps and
+ * skip the rest, which is what its card says ("Only its email steps run").
+ * On a builder trigger the console can make the email-only workflow instead;
+ * on these it cannot, so refusing it left a paused onboarding welcome that
+ * also held a tag step off for good, with no way back but SQL.
+ */
+export function workflowCanBeSwitchedOn(trigger: string, steps: unknown): boolean {
+  if (workflowIsRunnable(trigger, steps)) return true;
+  return triggerFires(trigger) && !(CONSOLE_TRIGGERS as readonly string[]).includes(trigger) && hasRunnableStep(steps);
+}
+
 /** Whether a runner executes this step (RUNNABLE_ACTIONS); any other is recorded `<action>:unsupported`. */
 export function isRunnableStep(step: unknown): boolean {
   return !!step && typeof step === 'object'

@@ -7,7 +7,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { createAutomation, setAutomationStatus } from '../actions';
 import { getTranslations } from '@/lib/i18n/server';
 import { SubmitButton } from '@/components/ui/submit-button';
-import { CONSOLE_TRIGGERS, RUNNABLE_ACTIONS, hasRunnableStep, isRunnableStep, triggerFires, workflowIsRunnable } from '@/lib/marketing/automation-triggers';
+import { CONSOLE_TRIGGERS, RUNNABLE_ACTIONS, hasRunnableStep, isRunnableStep, triggerFires, workflowCanBeSwitchedOn, workflowIsRunnable } from '@/lib/marketing/automation-triggers';
 
 export const metadata: Metadata = { title: 'Marketing · Automation', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -102,10 +102,12 @@ export default async function AutomationPage() {
  * onboarding_abandoned and demo_abandoned too, and a workflow on one of them
  * sends.
  * Telling the admin such a workflow "cannot be turned on" beside its Active
- * badge described neither.
+ * badge described neither. A paused or draft one the console still switches
+ * on (workflowCanBeSwitchedOn: an email step on an app event the builder does
+ * not offer) says what will run, as an active one does.
  */
 function notRunnableNote(tr: Awaited<ReturnType<typeof getTranslations>>, status: string, trigger: string, steps: unknown): string {
-  if (status !== 'active') return tr('adminMarketingAutomation.notRunnable');
+  if (status !== 'active' && !workflowCanBeSwitchedOn(trigger, steps)) return tr('adminMarketingAutomation.notRunnable');
   if (!triggerFires(trigger) || !hasRunnableStep(steps)) return tr('adminMarketingAutomation.activeNothingRuns');
   const skipped = (steps as unknown[]).filter((step) => !isRunnableStep(step))
     .map((step) => String((step as { action?: unknown } | null)?.action ?? 'step').replace(/_/g, ' '));

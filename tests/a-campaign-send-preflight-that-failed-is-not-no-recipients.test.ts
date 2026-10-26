@@ -36,7 +36,7 @@ vi.mock('@/lib/i18n/server', () => ({
 }));
 
 const { SendCampaignButton } = await import('@/components/admin/send-campaign-button');
-const { GET } = await import('@/app/api/admin/marketing/email/send/route');
+const { GET, POST } = await import('@/app/api/admin/marketing/email/send/route');
 
 let db: InMemorySupabase;
 let faulted = 0;
@@ -44,6 +44,8 @@ let confirms: string[] = [];
 let sends: unknown[] = [];
 let network: 'route' | 'down' = 'route';
 let postAnswer: Record<string, unknown> = { sent: 3 };
+/** Where the send goes: recorded and answered with `postAnswer`, or to the real route. */
+let postTo: 'record' | 'route' = 'record';
 
 function seed() {
   db.seed('marketing_email_campaigns', [{ id: 'cmp-1', name: 'Autumn', segment_id: null, status: 'draft', deleted_at: null }]);
@@ -74,12 +76,17 @@ beforeEach(() => {
   sends = [];
   network = 'route';
   postAnswer = { sent: 3 };
+  postTo = 'record';
   vi.stubGlobal('window', { confirm: (message: string) => { confirms.push(message); return true; } });
-  // The preflight goes to the real route handler; the send is only recorded.
+  // The preflight goes to the real route handler; the send is only recorded,
+  // unless a case sends it to the real route too.
   vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
     if (network === 'down') throw new TypeError('Failed to fetch');
     if (init?.method === 'POST') {
       sends.push(JSON.parse(String(init.body)));
+      if (postTo === 'route') {
+        return POST(new NextRequest(new URL(url, 'https://www.bubaly.com'), { method: 'POST', body: String(init.body), headers: { 'content-type': 'application/json' } }));
+      }
       return Response.json(postAnswer);
     }
     return GET(new NextRequest(new URL(url, 'https://www.bubaly.com')));
@@ -88,6 +95,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
@@ -150,5 +158,32 @@ describe('an audience past the per-send cap', () => {
     expect(confirms).toEqual([translate(SOURCE_MESSAGES, 'sendCampaignButton.confirmFirstOf', { n: 1000, total: 1001 })]);
     expect(sends).toEqual([{ id: 'cmp-1' }]);
     expect(h.toasts.success).toEqual([translate(SOURCE_MESSAGES, 'sendCampaign.sentSomeRestRemain', { count: 1000, remaining: 1 })]);
+  });
+});
+
+// R2-AW-3. A capped send reached its first part and held the rest; when every
+// held address leaves the audience before the next Send, the preflight counts
+// no one. The button then said "No eligible recipients" and never sent, so the
+// campaign stayed `draft` for good while the page said Send reaches the rest.
+// The preflight now says the send finishes it, and the button asks that and
+// sends it, through the REAL route both ways.
+describe('a capped campaign whose held addresses have all left', () => {
+  it('is confirmed as finishing it and recorded sent, mailing no one', async () => {
+    seed();
+    vi.stubEnv('RESEND_API_KEY', 're_fixture');
+    db.seed('marketing_audit_logs', []);
+    db.replace('marketing_email_campaigns', [{
+      id: 'cmp-1', name: 'Autumn', subject: 'Autumn news', segment_id: null, status: 'draft', deleted_at: null, recipients: 2,
+      metadata: { delivery: { attempt: 'att-1', delivered: ['parent1@example.com', 'parent2@example.com'], pending: null, outcome: 'capped', held: 1 } },
+    }]);
+    // The one address the capped send held back unsubscribed since.
+    db.seed('marketing_suppressions', [{ email: 'parent3@example.com', reason: 'unsubscribe' }]);
+    postTo = 'route';
+    await pressSend();
+    expect(confirms, 'the button said there is no one to send to and stopped').toEqual([SOURCE_MESSAGES['sendCampaignButton.confirmFinish']]);
+    expect(sends).toEqual([{ id: 'cmp-1' }]);
+    expect(h.toasts.error).toEqual([]);
+    expect(h.toasts.success).toEqual([SOURCE_MESSAGES['sendCampaign.finishedNoOneLeft']]);
+    expect(db.table('marketing_email_campaigns')[0]).toMatchObject({ status: 'sent', recipients: 2 });
   });
 });

@@ -238,6 +238,47 @@ describe('an event trigger the app fires, though the builder does not offer it',
     },
   );
 
+  // R2-AW-1-S1. One that also holds a step no runner executes sends its email
+  // and skips the rest, as its card says. Paused, it was refused when switched
+  // back on (the steps are not all runnable), and the builder cannot make an
+  // email-only one on these triggers, so the welcome stayed off for good.
+  it.each(['onboarding_completed', 'onboarding_abandoned', 'demo_abandoned'] as const)(
+    'a paused %s workflow that mixes email with a step no runner executes can be switched back on, and sends its email again',
+    async (trigger) => {
+      workflow(trigger, [{ action: 'send_email', subject: 'Welcome' }, { action: 'apply_tag' }]);
+      expect(await welcome(trigger, 'first')).toMatchObject({ workflows: 1, emails: 1, unrunnable: 1 });
+
+      await actions.setAutomationStatus(form({ id: 'wf-1', status: 'paused' }));
+      expect(flow().status).toBe('paused');
+      expect(await welcome(trigger, 'while-paused'), 'a paused workflow sent').toMatchObject({ workflows: 0, emails: 0 });
+      // Paused, its card says what will run, not that it cannot be turned on.
+      const { default: AutomationPage } = await import('@/app/(app)/admin/marketing/automation/page');
+      const card = textOf(await renderServerPage(await AutomationPage()));
+      expect(card).toContain(m('adminMarketingAutomation.activeOnlyEmailRuns', { steps: 'apply tag' }));
+      expect(card, 'the paused card said it cannot be turned on').not.toContain(m('adminMarketingAutomation.notRunnable'));
+
+      await expect(actions.setAutomationStatus(form({ id: 'wf-1', status: 'active' })), 'resuming it was refused').resolves.toBeUndefined();
+      expect(flow().status, 'the workflow stayed paused for good').toBe('active');
+      expect(await welcome(trigger, 'after-resume')).toMatchObject({ workflows: 1, emails: 1, failures: 0, unrunnable: 1 });
+      expect(h.sent).toEqual([
+        { to: 'first@example.com', subject: 'Welcome' },
+        { to: 'after-resume@example.com', subject: 'Welcome' },
+      ]);
+    },
+  );
+
+  it.each([
+    ['a fired trigger with no email step', 'onboarding_completed', [{ action: 'apply_tag' }]],
+    ['demo_started, which nothing fires', 'demo_started', [{ action: 'send_email' }, { action: 'apply_tag' }]],
+    ['a builder trigger, where the console makes the email-only workflow', 'customer_created', [{ action: 'send_email' }, { action: 'apply_tag' }]],
+  ])('control: a paused workflow on %s is still not switched on, and its card says so', async (_label, trigger, steps) => {
+    workflow(trigger, steps, 'paused');
+    await expect(actions.setAutomationStatus(form({ id: 'wf-1', status: 'active' }))).rejects.toThrow();
+    expect(flow().status).toBe('paused');
+    const { default: AutomationPage } = await import('@/app/(app)/admin/marketing/automation/page');
+    expect(textOf(await renderServerPage(await AutomationPage()))).toContain(m('adminMarketingAutomation.notRunnable'));
+  });
+
   it('control: a draft on demo_started, which nothing fires, is still not switched on', async () => {
     workflow('demo_started', [{ action: 'send_email' }], 'draft');
     await expect(actions.setAutomationStatus(form({ id: 'wf-1', status: 'active' }))).rejects.toThrow();

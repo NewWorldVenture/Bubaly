@@ -66,7 +66,7 @@ vi.mock('@/app/(app)/admin/marketing/actions', () => ({
   createSegment: async () => {}, archiveSegment: async () => {}, setCampaignStatus: async () => {}, createEmailDraft: async () => {},
 }));
 
-const { resolveRecipients } = await import('@/lib/marketing/send');
+const { resolveRecipients, campaignDelivery } = await import('@/lib/marketing/send');
 const route = await import('@/app/api/admin/marketing/email/send/route');
 type DB = SupabaseClient<Database>;
 
@@ -198,6 +198,56 @@ describe('an audience past the cap is sent in parts, never cut', () => {
     expect(await emailPage()).not.toContain(m('adminMarketingEmail.sentOfAudienceSoFar', { n: 1000, total: 1001 }));
     expect((await send()).status, 'a sent campaign cannot be sent again').toBe(400);
     expect(db.table('marketing_audit_logs').map((row) => (row.metadata as { outcome: string }).outcome)).toEqual(['capped', 'complete']);
+  });
+
+  // R2-AW-3. What a capped send held back can leave the audience before the
+  // next Send: the address unsubscribes, or its family closes. The next Send
+  // then found no one, threw "No eligible recipients" and answered 400, so the
+  // campaign stayed `draft` with 1,000 for good, never `sent`, while the page
+  // kept saying Send reaches the rest. It now records the campaign sent.
+  it.each([
+    ['unsubscribes', (held: string) => db.seed('marketing_suppressions', [{ email: held, reason: 'unsubscribe' }])],
+    ['closes its family', (held: string) => {
+      const id = `fam-${held.slice('parent'.length, held.indexOf('@'))}`;
+      db.replace('families', db.table('families').map((row) => (row.id === id ? { ...row, closed_at: '2026-10-01T00:00:00Z' } : row)));
+    }],
+  ])('a capped campaign whose held address %s is finished by the next Send, mailing no one', async (_label, leave) => {
+    expect(await (await send()).json()).toEqual({ sent: 1000, remaining: 1 });
+    const delivered = new Set(mailed());
+    const held = Array.from({ length: 1001 }, (_, i) => `parent${pad(i)}@example.com`).filter((e) => !delivered.has(e));
+    expect(held).toHaveLength(1);
+    leave(held[0]);
+
+    expect(await (await preview()).json()).toEqual({ recipients: 0, audience: 0, alreadySent: 1000, finishes: true });
+    const last = await send();
+    expect(last.status, 'a capped campaign with no one left could never be completed').toBe(200);
+    expect(await last.json()).toEqual({ sent: 0, remaining: 0 });
+    expect(mailed(), 'finishing it mailed someone').toHaveLength(1000);
+    expect(campaign()).toMatchObject({ status: 'sent', recipients: 1000 });
+    expect(campaignDelivery(campaign().metadata)).toMatchObject({ outcome: 'complete', pending: null, delivered: [...delivered].sort() });
+    const page = await emailPage();
+    expect(page, 'the page still says Send reaches the rest').not.toContain(m('adminMarketingEmail.sentOfAudienceSoFar', { n: 1000, total: 1001 }));
+    expect(page).toContain('1000 sent');
+    expect(db.table('marketing_audit_logs').map((row) => (row.metadata as { outcome: string }).outcome)).toEqual(['capped', 'complete']);
+    expect((await send()).status, 'a sent campaign cannot be sent again').toBe(400);
+  });
+
+  it('two Sends that finish it at once record it once: the second finds it no longer a capped draft', async () => {
+    expect(await (await send()).json()).toEqual({ sent: 1000, remaining: 1 });
+    const delivered = new Set(mailed());
+    const held = Array.from({ length: 1001 }, (_, i) => `parent${pad(i)}@example.com`).filter((e) => !delivered.has(e));
+    db.seed('marketing_suppressions', [{ email: held[0], reason: 'unsubscribe' }]);
+    const answers = await Promise.all([send(), send()]);
+    expect(answers.map((res) => res.status).sort()).toEqual([200, 400]);
+    expect(campaign()).toMatchObject({ status: 'sent', recipients: 1000 });
+    expect(db.table('marketing_audit_logs').map((row) => (row.metadata as { outcome: string }).outcome)).toEqual(['capped', 'complete']);
+  });
+
+  it('control: a campaign never sent whose audience is empty is still refused, and the preview offers no finish', async () => {
+    db.replace('family_members', []);
+    expect(await (await preview()).json()).toEqual({ recipients: 0, audience: 0, alreadySent: 0 });
+    expect((await send()).status).toBe(400);
+    expect(campaign()).toMatchObject({ status: 'draft' });
   });
 
   it('an audience of exactly the cap is sent whole (control)', async () => {

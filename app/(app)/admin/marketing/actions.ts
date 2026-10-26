@@ -9,7 +9,7 @@ import { normalizeSlug } from '@/lib/marketing/landing';
 import type { SegmentRules, Lifecycle } from '@/lib/marketing/customers';
 import type { Json } from '@/lib/database.types';
 import { refuseInput } from '@/lib/actions/refusal';
-import { CONSOLE_TRIGGERS, RUNNABLE_ACTIONS, workflowIsRunnable } from '@/lib/marketing/automation-triggers';
+import { CONSOLE_TRIGGERS, RUNNABLE_ACTIONS, workflowCanBeSwitchedOn } from '@/lib/marketing/automation-triggers';
 
 function str(v: FormDataEntryValue | null): string {
   return (v == null ? '' : String(v)).trim();
@@ -504,11 +504,13 @@ export async function setAutomationStatus(formData: FormData) {
   if (status === 'active') {
     // A workflow made before the console offered only what runs (a trigger
     // nothing fires, a step that is never executed) is not switched on: it
-    // read `active` and sent nothing, or failed every subject every day.
+    // read `active` and sent nothing, or failed every subject every day. One
+    // on an app event the builder does not offer is, with its email steps
+    // only running, since the console cannot make it again (workflowCanBeSwitchedOn).
     const { data: flow, error: flowError } = await supabase.from('marketing_automation_workflows')
       .select('trigger, steps').eq('id', id).is('deleted_at', null).maybeSingle();
     if (flowError || !flow) marketingActionFailure('update the automation workflow', flowError ?? new Error('Automation workflow not found'));
-    if (!workflowIsRunnable(flow.trigger, flow.steps)) refuseInput('This workflow has a trigger or step that automation does not run yet.');
+    if (!workflowCanBeSwitchedOn(flow.trigger, flow.steps)) refuseInput('This workflow has a trigger or step that automation does not run yet.');
   }
   const { data, error } = await supabase.from('marketing_automation_workflows')
     .update({ status, updated_by: actorId }).eq('id', id).is('deleted_at', null).select('id').maybeSingle();

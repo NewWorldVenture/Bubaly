@@ -61,6 +61,32 @@ describe('a marketing push campaign', () => {
     expect(await loadPushCampaignAudience(db as unknown as DB), 'a closed family\'s members were still pushed to').toEqual([]);
   });
 
+  // R2-AW-2. Removing a member deactivates the row (REMOVED_MEMBER_PATCH) and
+  // keeps it, so an inactive guest row in an open family kept an account whose
+  // own family closed in the push audience; the email side counts only active
+  // members.
+  it('does not reach an account whose own family closed through a family it was removed from', async () => {
+    account('u-1');
+    member('u-1', 'fam-closed');
+    member('u-1', 'fam-open', 'guest', false);
+    expect(await loadPushCampaignAudience(db as unknown as DB), 'an old, inactive row in an open family kept a closed family\'s parent in').toEqual([]);
+  });
+
+  it('a removed account with no family left is an account without a family, and a removed teen row still keeps a minor out (controls)', async () => {
+    // Removed from an open family and in no other: no family, as before.
+    account('u-removed');
+    member('u-removed', 'fam-open', 'guest', false);
+    // Active in an open family, with an old row in a closed one: still in.
+    account('u-moved');
+    member('u-moved', 'fam-closed', 'parent', false);
+    member('u-moved', 'fam-open', 'adult');
+    // An inactive teen row is still a teen's.
+    account('u-kid');
+    member('u-kid', 'fam-open', 'parent');
+    member('u-kid', 'fam-closed', 'teen', false);
+    expect((await loadPushCampaignAudience(db as unknown as DB)).sort()).toEqual(['u-moved', 'u-removed']);
+  });
+
   it('still reaches an account with an open family, one without any family, and never a minor (controls)', async () => {
     account('u-open');
     member('u-open', 'fam-open');

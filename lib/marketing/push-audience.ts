@@ -109,14 +109,18 @@ export async function loadPushCampaignAudience(supabase: DB): Promise<string[]> 
  * push on, and the only way out was to turn off all push, including the
  * family's own notices. Closing an account (families.closed_at) leaves its
  * devices enabled, and the email campaign and the automation runner already
- * leave closed families out; a member of an open family stays in. Read
+ * leave closed families out; a member of an open family stays in. Only an
+ * ACTIVE membership makes an account a member of a family: removing someone
+ * deactivates their row (REMOVED_MEMBER_PATCH) and does not delete it, so an
+ * account whose own family closed stayed in through an old row in a family it
+ * was removed from, while the email side counts only active members. Read
  * completely before dispatch, on the same budget; an incomplete read throws,
  * so a refused read sends nothing.
  */
 async function consentingAdults(supabase: DB, userIds: string[], budget: ReadBudget): Promise<string[]> {
   const consented = new Set<string>();
   const minors = new Set<string>();
-  /** Accounts with any membership, and those with one in a family still open. */
+  /** Accounts with an active membership, and those with one in a family still open. */
   const members = new Set<string>();
   const inOpenFamily = new Set<string>();
   for (let offset = 0; offset < userIds.length; offset += ID_CHUNK) {
@@ -132,7 +136,7 @@ async function consentingAdults(supabase: DB, userIds: string[], budget: ReadBud
     // with its family's closure, joined on the foreign key (a membership has
     // exactly one family).
     const memberships = await readPages(cursor => {
-      let query = supabase.from('family_members').select('id, user_id, role, family:families!inner(closed_at)')
+      let query = supabase.from('family_members').select('id, user_id, role, is_active, family:families!inner(closed_at)')
         .in('user_id', chunk).order('id', { ascending: true }).limit(PAGE_SIZE);
       if (cursor !== null) query = query.gt('id', cursor);
       return query;
@@ -140,6 +144,8 @@ async function consentingAdults(supabase: DB, userIds: string[], budget: ReadBud
     for (const row of memberships) {
       if (typeof row.user_id !== 'string') continue;
       if (MARKETING_PUSH_EXCLUDED_ROLES.includes(String(row.role))) minors.add(row.user_id);
+      // A family the account was removed from is not one of its families.
+      if (!row.is_active) continue;
       members.add(row.user_id);
       // A family that was not returned with the row is not known to be open.
       const family = row.family as { closed_at?: unknown } | null;

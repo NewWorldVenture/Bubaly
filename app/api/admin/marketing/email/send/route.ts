@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireMarketingAdmin, logMarketingAudit, isMarketingAuthError, marketingRefusalBody } from '@/lib/marketing/admin';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
-import { sendEmailCampaign, campaignAudience, CampaignSendError, MAX_RECIPIENTS } from '@/lib/marketing/send';
+import { sendEmailCampaign, campaignAudience, CampaignSendError, finishesCappedCampaign, MAX_RECIPIENTS } from '@/lib/marketing/send';
 
 export const runtime = 'nodejs';
 
@@ -22,12 +22,17 @@ export async function GET(req: NextRequest) {
     if (!c) return NextResponse.json({ error: t('send.notFound') }, { status: 404 });
     // The count a send would mail NOW: the audience less whoever an earlier,
     // stopped attempt already reached — the number the confirm dialog asks about.
-    const { remaining, alreadySent } = await campaignAudience(supabase, c);
+    const { remaining, alreadySent, prior } = await campaignAudience(supabase, c);
     // Past the cap a send reaches the first MAX_RECIPIENTS and the next Send
     // the rest, so the preview answers both: what this send mails
     // (`recipients`) and everyone still to be reached (`audience`). It used to
-    // answer the capped 1,000 as if that were the whole audience.
-    return NextResponse.json({ recipients: Math.min(remaining.length, MAX_RECIPIENTS), audience: remaining.length, alreadySent });
+    // answer the capped 1,000 as if that were the whole audience. `finishes`
+    // marks a capped campaign whose held addresses have all left the
+    // audience: Send records it sent, mailing no one (finishesCappedCampaign).
+    return NextResponse.json({
+      recipients: Math.min(remaining.length, MAX_RECIPIENTS), audience: remaining.length, alreadySent,
+      ...(finishesCappedCampaign(prior, remaining) ? { finishes: true } : {}),
+    });
   } catch (err) {
     // The status rides on the error now, rather than being recovered by reading
     // the refusal's own sentence back — reword the sentence and this kept
