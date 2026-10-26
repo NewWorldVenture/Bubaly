@@ -36,7 +36,7 @@ describe('prescription app privacy before 0465', () => {
     expect(MEDS).toContain('const ownDosesOnly = canEdit ? null : (selfMember?.id ?? NIL_UUID);');
     expect(MEDS).toContain("const NIL_UUID = '00000000-0000-0000-0000-000000000000';");
     expect(MEDS).toMatch(/table: 'medications', familyId, deps: \[familyId, ownMemberOnly\],\s*fetcher: \(sb\) => \{\s*const q = sb\.from\('medications'\)\.select\('\*'\)\.eq\('family_id', familyId\);\s*return \(ownMemberOnly \? q\.eq\('member_id', ownMemberOnly\) : q\)/);
-    expect(MEDS).toMatch(/table: 'medication_doses', familyId, deps: \[familyId, dayKey, ownDosesOnly\],[\s\S]{0,200}?return ownDosesOnly \? q\.eq\('member_id', ownDosesOnly\) : q;/);
+    expect(MEDS).toMatch(/table: 'medication_doses', familyId, deps: \[familyId, dayKey, windowStart, ownDosesOnly\],[\s\S]{0,200}?return ownDosesOnly \? q\.eq\('member_id', ownDosesOnly\) : q;/);
   });
 
   it('refuses someone else before health reads and restricts the coach picker', () => {
