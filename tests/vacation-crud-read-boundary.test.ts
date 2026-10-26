@@ -9,7 +9,8 @@ describe('vacation CRUD read boundaries', () => {
   it('surfaces generic CRUD list failures with a retry action', () => {
     // The section's read is its own, or the page's (`source`, the Budget tab); either way its error and retry are surfaced.
     expect(shared).toContain('const own = useRealtimeQuery');
-    expect(shared).toContain('const { data, loading, error, refresh } = source ?? own;');
+    expect(shared).toContain('const { data, loading, error, refresh } = source');
+    expect(shared).toContain('error: own.error');
     expectSays(shared, 'shared.sectionLoadFailed', 'This section could not be loaded. Refresh and try again.');
     expect(shared).toContain('onRetry={refresh}');
   });
