@@ -16,6 +16,7 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { logWalletAudit } from '@/lib/server/audit';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readsEveryWallet } from '@/lib/wallet/own-wallets';
 
 // POST /api/ai/invest — the kids' EDUCATIONAL Money Mentor. Same tier gating +
 // per-day metering as the wallet coach. Explains an investing concept; never
@@ -76,6 +77,17 @@ export async function POST(req: NextRequest) {
     // The two name lookups degrade honestly: "your child" instead of a first
     // name is a blander answer, not a wrong one, so a failed read is logged and
     // the fallback stands.
+    // The held 0515: a sibling's wallet and holdings answer anyone but a parent
+    // or adult as not there, which is what the database will answer them.
+    if (body.childWalletId && !readsEveryWallet(ctx.active.role)) {
+      const { data: own, error: ownError } = await supabase.from('child_wallets').select('id')
+        .eq('id', body.childWalletId).eq('family_id', familyId).eq('member_id', ctx.active.member.id).maybeSingle();
+      if (ownError) {
+        console.error('[ai/invest] own wallet read failed', { familyId, error: ownError.message });
+        return NextResponse.json({ error: t('ai.recommendationsAreTemporarilyUnavailable') }, { status: 503 });
+      }
+      if (!own) return NextResponse.json({ error: t('child.childWalletNotFound') }, { status: 404 });
+    }
     let childName = 'your child';
     if (body.childWalletId) {
       const { data: cw, error: cwError } = await supabase.from('child_wallets').select('member_id').eq('id', body.childWalletId).eq('family_id', familyId).maybeSingle();

@@ -15,6 +15,7 @@ import { buildWalletCoachPrompt, parseWalletCoach, type CoachChild, type CoachGo
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { logWalletAudit } from '@/lib/server/audit';
+import { readsEveryWallet } from '@/lib/wallet/own-wallets';
 
 // POST /api/ai/wallet — the AI Family Financial Coach. Gated by wallet tier
 // (Free has no coach; Basic limited; Plus unlimited). Computes balances + goal
@@ -32,6 +33,12 @@ export async function POST() {
     }
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
+    // The family coach reads every child's wallet, and a child's money is read
+    // by a parent or adult and by that child (the held 0515). Anyone else has
+    // the coach on their own wallet (/api/ai/wallet/child/<theirs>).
+    if (!readsEveryWallet(ctx.active.role)) {
+      return NextResponse.json({ error: tr('householdMoney.keptByParentsBody') }, { status: 403 });
+    }
 
     const tier = walletTierForPlanLevel(await effectivePlanLevel(await resolveFamilyPlanLevel(supabase, familyId)));
     if (aiCoachLevel(tier) === 'none') {

@@ -204,23 +204,29 @@ describe('the Invest page offers an order only where one is allowed', () => {
     }]);
   });
 
-  it("shows Mia the order controls on her own card and not on her brother's", async () => {
+  it("shows Mia her own card, with its order controls, and not her brother's", async () => {
     signInAs('child', MIA.member);
     const cards = await openTheInvestPage();
-    expect([...cards.keys()]).toEqual(['Mia', 'Leo']);
+    // The held 0515: a child's money is read by a parent or adult and by that
+    // child, so Leo's card, cash and portfolio are not Mia's to see.
+    expect([...cards.keys()]).toEqual(['Mia']);
     for (const control of ['Buy', 'Sell', 'Request']) {
       expect(cards.get('Mia'), control).toContain(` ${control} `);
-      expect(cards.get('Leo'), control).not.toContain(` ${control} `);
     }
-    // She can still look at Leo's portfolio and ask what an investment is.
-    expect(cards.get('Leo')).toContain(' Explain ');
+    expect(cards.get('Mia')).toContain(' Explain ');
   });
 
-  it('shows a caregiver no order controls on any card', async () => {
+  it('shows a caregiver no child\'s card, and so no order controls', async () => {
     signInAs('caregiver', 'member-caregiver');
     const cards = await openTheInvestPage();
-    expect(cards.size).toBe(2);
-    for (const card of cards.values()) expect(card).not.toContain(' Request ');
+    expect(cards.size).toBe(0);
+  });
+
+  it.each(['parent', 'adult'])('shows a %s every child\'s card, with the order controls on each', async (role) => {
+    signInAs(role, `member-${role}`);
+    const cards = await openTheInvestPage();
+    expect([...cards.keys()]).toEqual(['Mia', 'Leo']);
+    for (const card of cards.values()) expect(card).toContain(' Buy ');
   });
 
   it('sends a guest away before any card renders (main\'s refuseGuest)', async () => {
