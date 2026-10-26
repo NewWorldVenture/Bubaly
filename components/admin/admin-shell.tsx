@@ -96,10 +96,10 @@ export function AdminShell({
         </nav>
         <div className="space-y-3 px-3 pb-4">
           <div className="space-y-1.5">
-            <Link href="/dashboard/briefing" className="flex items-center gap-1.5 px-1 text-xs text-muted hover:text-fg">
+            <Link href="/dashboard/briefing" className="flex min-h-6 items-center gap-1.5 px-1 text-xs text-muted hover:text-fg">
               <LayoutDashboard className="h-3.5 w-3.5" /> {t('adminShell.goToParentDashboard')}
             </Link>
-            <Link href="/dashboard" className="flex items-center gap-1.5 px-1 text-xs text-muted hover:text-fg">
+            <Link href="/dashboard" className="flex min-h-6 items-center gap-1.5 px-1 text-xs text-muted hover:text-fg">
               <Home className="h-3.5 w-3.5" /> {t('adminShell.goToFamilyDashboard')}
             </Link>
           </div>
