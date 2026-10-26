@@ -5,11 +5,11 @@
 // episodes, audio addresses included, as the child. Under 0526 that write is
 // refused, and every child's Refresh would fail.
 //
-// So the ingest is the server's write: after the action's family-pinned read
-// and its curator check, the episodes go through serverWriter(), as the nightly
-// cron already writes them. No RLS stands behind that write, so the action
-// refuses a guest itself (0481 refuses a guest's write in the database today),
-// and the page does not offer a guest the button.
+// Human ingest retains the caller's write client after the family-pinned read
+// and curator check, including after the external fetch. The deferred-fetch
+// regression separately checks revocation against the released permission model.
+// Held0526 must fail honestly for a child until an atomic refresh is approved;
+// the background cron's service client does not authorize a human request.
 import { createElement } from 'react';
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -75,18 +75,18 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
-describe('a Refresh is written by the server, for whoever may press it', () => {
-  it.each([['user-child', 'child'], ['user-parent', 'parent']])('%s: the episodes and the feed\'s description land through the server\'s client, not the presser\'s', async (user, role) => {
+describe('a human Refresh keeps the presser\'s write client', () => {
+  it.each([['user-child', 'child'], ['user-parent', 'parent']])('%s: episodes and description land through the presser\'s client even when a service client exists', async (user, role) => {
     as(user, role);
     expect((await refreshFeedAction('feed-parent')).ok).toBe(true);
 
-    expect(episodes(server)).toEqual([[FAMILY, 'feed-parent', 'ep-1', 'https://cdn.test/1.mp3']]);
-    expect(server.table('library_feeds').find((f) => f.id === 'feed-parent')).toMatchObject({ title: 'Show', last_error: null, last_fetched_at: expect.any(String) });
-    expect(episodes(caller)).toEqual([]);
-    expect(caller.table('library_feeds').find((f) => f.id === 'feed-parent')).toMatchObject({ title: 'https://parent.test/feed', last_fetched_at: null });
+    expect(episodes(caller)).toEqual([[FAMILY, 'feed-parent', 'ep-1', 'https://cdn.test/1.mp3']]);
+    expect(caller.table('library_feeds').find((f) => f.id === 'feed-parent')).toMatchObject({ title: 'Show', last_error: null, last_fetched_at: expect.any(String) });
+    expect(episodes(server)).toEqual([]);
+    expect(server.table('library_feeds').find((f) => f.id === 'feed-parent')).toMatchObject({ title: 'https://parent.test/feed', last_fetched_at: null });
   });
 
-  it('the server writes only after the presser\'s own family-pinned read: another family\'s feed is not found', async () => {
+  it('publication follows the presser\'s own family-pinned read: another family\'s feed is not found', async () => {
     as('user-child', 'child');
     expect(await refreshFeedAction('feed-other')).toEqual({ ok: false, error: 'That subscription could not be found.' });
     expect(h.fetchPublicFeed).not.toHaveBeenCalled();
