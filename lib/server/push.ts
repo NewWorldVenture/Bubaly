@@ -19,8 +19,8 @@ import { isMissingRelationError } from '@/lib/supabase/errors';
 import { readAll } from '@/lib/supabase/read-all';
 import { readAllInChunks } from '@/lib/supabase/chunked-in';
 import {
-  aheadAndBehind, latestCreatedAt, MARKETPLACE_RELATED_TYPE, NOTIFICATION_CLOCK_SKEW_MS, readFairBatch, recipientList,
-  type FairExclusion,
+  aheadAndBehind, isMarketplaceNotice, latestCreatedAt, MARKETPLACE_RELATED_TYPE, NOTIFICATION_CLOCK_SKEW_MS, readFairBatch,
+  recipientList, type FairExclusion, type FairRow,
 } from '@/lib/notifications/fair-batch';
 
 type DB = SupabaseClient<Database>;
@@ -46,7 +46,7 @@ export const PUSH_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
  * while anyone else's are (lib/notifications/fair-batch.ts). A family's
  * whole-family rows count as one more of its recipients. 0191's price drops
  * are the marketplace's, wherever they land: it takes a family's share, and
- * each listing a recipient's.
+ * each seller (the listing's family) a recipient's, as does each listing.
  *
  * A member's session may still insert notifications addressed to themselves,
  * any number of them, dated whenever they like (0388), and a member can cause
@@ -54,11 +54,14 @@ export const PUSH_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
  * theirs, through 0191's price-drop trigger, so a child's flood ahead of the
  * cursor held back every family's pushes for as many ticks as it took to
  * drain at 200 rows a tick. Now their family takes 40 of a batch, the child 10
- * of those, all price drops 40 and one listing's 10 of those, whichever
- * families they land in, and the room left goes to everyone else first.
+ * of those, all price drops 40 and one seller's listings 10 of those however
+ * many listings it has, whichever families they land in, and the room left
+ * goes to everyone else first.
  */
 export const PUSH_ROWS_PER_FAMILY = 40;
 export const PUSH_ROWS_PER_RECIPIENT = 10;
+/** A listing id as 0191 writes it into related_id (marketplace_listings.id is a uuid). */
+const LISTING_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * The part of each read a run keeps for the rows behind its cursor: the
@@ -66,7 +69,9 @@ export const PUSH_ROWS_PER_RECIPIENT = 10;
  * configuration or cut by the run's time budget) and any surplus a fair batch
  * left behind. 50 of a 200-row batch. The wrap used to run only when the
  * forward page came back short, so a forward range one member kept full
- * starved every family's retries.
+ * starved every family's retries. The retries keep their own place in the
+ * stored cursor (`retry`), so each run's reserve goes on through the rows
+ * behind rather than re-reading the oldest of them.
  */
 export const PUSH_RETRY_SHARE = 0.25;
 
@@ -613,7 +618,12 @@ export function pushConfigured(): { web: boolean; native: boolean } {
   return { web: ensureVapid(), native: native.fcm || native.apns };
 }
 
-type PushCursor = { version: 1; createdAt: string; id: string };
+type PushPosition = { createdAt: string; id: string };
+/**
+ * Where the forward traversal is, and where the retries behind it go on from
+ * (`retry`, absent when they start again from the oldest row behind).
+ */
+type PushCursor = { version: 1; createdAt: string; id: string; retry?: PushPosition };
 
 /**
  * created_at then id, as the pending-push query orders them, to the
@@ -633,16 +643,26 @@ function traversalOrder(a: { created_at: string; id: string }, b: { created_at: 
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
+function parsePushPosition(value: unknown): PushPosition | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const position = value as Record<string, unknown>;
+  // Keep PostgreSQL's fractional-second precision: Date.toISOString() would
+  // truncate microseconds and revisit/skip rows at the page boundary.
+  if (typeof position.createdAt !== 'string'
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(position.createdAt)
+    || !Number.isFinite(Date.parse(position.createdAt)) || typeof position.id !== 'string'
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(position.id)) return null;
+  return { createdAt: position.createdAt, id: position.id };
+}
+
 function parsePushCursor(value: unknown): PushCursor | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const cursor = value as Record<string, unknown>;
-  // Keep PostgreSQL's fractional-second precision: Date.toISOString() would
-  // truncate microseconds and revisit/skip rows at the page boundary.
-  if (cursor.version !== 1 || typeof cursor.createdAt !== 'string'
-    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(cursor.createdAt)
-    || !Number.isFinite(Date.parse(cursor.createdAt)) || typeof cursor.id !== 'string'
-    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cursor.id)) return null;
-  return { version: 1, createdAt: cursor.createdAt, id: cursor.id };
+  const position = cursor.version === 1 ? parsePushPosition(cursor) : null;
+  if (!position) return null;
+  if (cursor.retry === undefined || cursor.retry === null) return { version: 1, ...position };
+  const retry = parsePushPosition(cursor.retry);
+  return retry ? { version: 1, ...position, retry } : null;
 }
 
 /**
@@ -678,8 +698,8 @@ function parsePushCursor(value: unknown): PushCursor | null {
  * dated after now is not read. A member may plant rows addressed to
  * themselves with any created_at, and cause whole-family rows through 0191's
  * price-drop trigger in every family that saved their listing, which count
- * against the marketplace and the listing, not the families they land in
- * (lib/notifications/fair-batch.ts). No writer sets
+ * against the marketplace, the listing and its seller, not the families they
+ * land in (lib/notifications/fair-batch.ts). No writer sets
  * created_at, so the date bound leaves out only planted rows, and the shares
  * hold back only a family's or a recipient's own surplus, only while someone
  * else's rows are waiting.
@@ -726,14 +746,17 @@ export async function dispatchPendingPushes(
     if (cursor) {
       // Strictly validated timestamp/UUID values cannot inject filter syntax.
       q = q.or(`created_at.${wrap ? 'lt' : 'gt'}.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.${wrap ? 'lte' : 'gt'}.${cursor.id})`);
+      // Behind it, the retries go on from where the last run's left off.
+      const from = wrap ? cursor.retry : undefined;
+      if (from) q = q.or(`created_at.gt.${from.createdAt},and(created_at.eq.${from.createdAt},id.gt.${from.id})`);
     }
-    // Families, recipients, families' whole-family rows, the marketplace and
-    // its listings that already hold their share of this batch, exactly as
-    // isExcluded leaves them out. 0191's price drops (user_id null,
-    // related_type MARKETPLACE_RELATED_TYPE, related_id the listing) count
-    // against the marketplace and their listing, not the family they land in.
-    // Each `or` ANDs with the rest; a NULL user_id passes the recipients' and
-    // is judged by the others.
+    // Families, recipients, families' whole-family rows, the marketplace, its
+    // listings and its full sellers' landing families that already hold their
+    // share of this batch, exactly as isExcluded leaves them out. 0191's price
+    // drops (user_id null, related_type MARKETPLACE_RELATED_TYPE, related_id
+    // the listing) count against the marketplace, their listing and their
+    // seller, not the family they land in. Each `or` ANDs with the rest; a
+    // NULL user_id passes the recipients' and is judged by the others.
     const notMarket = `user_id.not.is.null,related_type.is.null,related_type.neq.${MARKETPLACE_RELATED_TYPE}`;
     if (excluded.families.length) q = q.not('family_id', 'in', recipientList(excluded.families));
     if (excluded.recipients.length) q = q.or(`user_id.is.null,user_id.not.in.${recipientList(excluded.recipients)}`);
@@ -742,13 +765,39 @@ export async function dispatchPendingPushes(
     }
     if (excluded.marketplace) q = q.or(notMarket);
     if (excluded.listings.length) q = q.or(`${notMarket},related_id.is.null,related_id.not.in.${recipientList(excluded.listings)}`);
+    if (excluded.landing.length) q = q.or(`${notMarket},family_id.not.in.${recipientList(excluded.landing)}`);
     if (excluded.unlisted) q = q.or(`${notMarket},related_id.not.is.null`);
     const { data, error } = await q;
     if (error) {
       console.error('[push] pending-push read failed', { familyId: opts.familyId ?? null, error });
       throw new Error('Pending-push read failed.');
     }
-    return data ?? [];
+    return withSellers(data ?? []);
+  }
+  // The family whose listing each price drop names, so the batch counts the
+  // drop against its seller (sellerOf in lib/notifications/fair-batch.ts):
+  // one lookup a page, of the listings this run has not looked up yet, each
+  // listing once a run. A listing not found (deleted since), an id that is
+  // not one, or a lookup that failed leaves the drop counted against the
+  // family it landed in, which is the seller's own whenever a member floods
+  // their own family; a failed lookup is logged, not a failed run.
+  const sellers = new Map<string, string | null>();
+  async function withSellers<R extends FairRow>(rows: R[]): Promise<(R & { seller_family_id?: string | null })[]> {
+    const unknown = [...new Set(rows.filter((n) => isMarketplaceNotice(n) && n.related_id && !sellers.has(n.related_id))
+      .map((n) => n.related_id!))];
+    for (const id of unknown) sellers.set(id, null);
+    const listingIds = unknown.filter((id) => LISTING_ID.test(id));
+    if (listingIds.length) {
+      try {
+        const { data: listings, error } = await readAllInChunks<{ id: string; family_id: string }>(listingIds, (chunk, from, to) => supabase
+          .from('marketplace_listings').select('id, family_id').in('id', chunk).order('id').range(from, to));
+        if (error || !listings) console.error('[push] price-drop seller read failed', { error });
+        else for (const listing of listings) sellers.set(listing.id, listing.family_id);
+      } catch (error) {
+        console.error('[push] price-drop seller read failed', { error });
+      }
+    }
+    return rows.map((n) => (isMarketplaceNotice(n) && n.related_id ? { ...n, seller_family_id: sellers.get(n.related_id) ?? null } : n));
   }
   const forward = (size: number, excluded: FairExclusion) => page(size, false, excluded);
   // With a cursor, every read keeps part of the batch for the rows behind it,
@@ -766,11 +815,21 @@ export async function dispatchPendingPushes(
   // rode along on their reserve keeps its place ahead.
   const wraps = !ranges || ahead.length === 0 || behind.length === 0 || ranges.aheadExhausted(batch);
   const last = wraps ? rows[rows.length - 1] : ahead[ahead.length - 1];
-  const nextPosition = parsePushCursor({ version: 1, createdAt: last.created_at, id: last.id });
-  if (!nextPosition) throw new Error('Push notification cursor fields are invalid.');
+  const nextPosition = parsePushPosition({ createdAt: last.created_at, id: last.id });
+  // The retries keep a place of their own behind the cursor (R9-RV2): from
+  // the oldest row behind, every run re-read the same rows, so under a flood
+  // ahead (no wrap) a retry behind a reserve's worth of older ones still
+  // failing waited until they aged out, or for good if they were skipped.
+  // They go on after the last row they took, and start again from the oldest
+  // once they have taken everything behind (or the cursor wraps to them).
+  const restart = !ranges || ranges.behindExhausted(batch) || (wraps && behind.length > 0);
+  const retryRow = restart ? null : behind.at(-1) ?? null;
+  const retry = restart ? null
+    : retryRow ? parsePushPosition({ createdAt: retryRow.created_at, id: retryRow.id }) : cursor?.retry ?? null;
+  if (!nextPosition || (retryRow && !retry)) throw new Error('Push notification cursor fields are invalid.');
   // A wrap can return to the same position. Change the stored identity even
   // then, so only one competing snapshot can match the original JSON value.
-  const nextCursor = { ...nextPosition, generation: randomUUID() };
+  const nextCursor = { version: 1, ...nextPosition, ...(retry ? { retry } : {}), generation: randomUUID() };
   // Save progress before any external send. A write failure sends nothing;
   // a later delivery failure stays pending and is revisited on wrap-around.
   //

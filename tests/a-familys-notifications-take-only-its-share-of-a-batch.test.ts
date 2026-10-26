@@ -278,7 +278,7 @@ describe('the shares, read by read', async () => {
   };
   const rowsOf = (familyId: string, userId: string | null, count: number, prefix: string): R[] =>
     Array.from({ length: count }, (_, i) => ({ id: `${prefix}${i}`, family_id: familyId, user_id: userId }));
-  const NONE: FairExclusion = { families: [], recipients: [], familyWide: [], marketplace: false, listings: [], unlisted: false };
+  const NONE: FairExclusion = { families: [], recipients: [], familyWide: [], marketplace: false, listings: [], landing: [], unlisted: false };
 
   it('a family takes its share while another family waits, its whole-family rows counting as one recipient', async () => {
     const { read } = range([
@@ -334,7 +334,7 @@ describe('the shares, read by read', async () => {
     expect(ranges.isBehind(first[1])).toBe(false);
     expect(ranges.aheadExhausted(first)).toBe(false);
     // A short read is remembered: a later one leaving out at least as much is not asked again.
-    await ranges.read(10, { families: [], recipients: ['other'], familyWide: [], marketplace: false, listings: [], unlisted: false });
+    await ranges.read(10, { families: [], recipients: ['other'], familyWide: [], marketplace: false, listings: [], landing: [], unlisted: false });
     expect(behind.calls).toHaveLength(1);
 
     const small = range(aheadRows.slice(0, 2));

@@ -232,13 +232,17 @@ describe('push: a family\'s own whole-family notices are not queued behind its m
 
 describe('the marketplace bucket, read by read', () => {
   type FairExclusion = import('@/lib/notifications/fair-batch').FairExclusion;
-  type R = { id: string; family_id: string; user_id: string | null; related_type: string | null; related_id: string | null };
+  type R = {
+    id: string; family_id: string; user_id: string | null; related_type: string | null; related_id: string | null;
+    seller_family_id?: string | null;
+  };
   /** What an exclusion leaves out, written out here rather than imported. */
   const leftOut = (excluded: FairExclusion, r: R) => {
     if (excluded.families.includes(r.family_id)) return true;
     if (r.user_id) return excluded.recipients.includes(r.user_id);
     if (r.related_type === 'marketplace_listings') {
-      return excluded.marketplace || (r.related_id ? excluded.listings.includes(r.related_id) : excluded.unlisted);
+      return excluded.marketplace || excluded.landing.includes(r.family_id)
+        || (r.related_id ? excluded.listings.includes(r.related_id) : excluded.unlisted);
     }
     return excluded.familyWide.includes(r.family_id);
   };
@@ -250,12 +254,19 @@ describe('the marketplace bucket, read by read', () => {
     };
     return { read, calls };
   };
-  const drops = (familyId: string, listing: string | null, count: number, prefix: string): R[] =>
-    Array.from({ length: count }, (_, i) => ({ id: `${prefix}${i}`, family_id: familyId, user_id: null, related_type: 'marketplace_listings', related_id: listing }));
+  /** A listing's drops into one family; `seller` is the listing's own family, as push resolves it. */
+  const drops = (familyId: string, listing: string | null, count: number, prefix: string, seller?: string): R[] =>
+    Array.from({ length: count }, (_, i) => ({
+      id: `${prefix}${i}`, family_id: familyId, user_id: null, related_type: 'marketplace_listings', related_id: listing,
+      ...(seller ? { seller_family_id: seller } : {}),
+    }));
 
   it('counts a listing\'s drops once across every family they land in, then the marketplace as one family', async () => {
     const { read, calls } = range([
-      ...['a', 'b', 'c', 'd'].flatMap((f) => [...drops(f, 'L1', 5, `${f}1-`), ...drops(f, 'L2', 5, `${f}2-`), ...drops(f, 'L3', 5, `${f}3-`)]),
+      // Three listings of three sellers, each saved by four families.
+      ...['a', 'b', 'c', 'd'].flatMap((f) => [
+        ...drops(f, 'L1', 5, `${f}1-`, 's1'), ...drops(f, 'L2', 5, `${f}2-`, 's2'), ...drops(f, 'L3', 5, `${f}3-`, 's3'),
+      ]),
       { id: 'own', family_id: 'a', user_id: null, related_type: null, related_id: null },
       { id: 'other', family_id: 'z', user_id: 'u-z', related_type: null, related_id: null },
     ]);
