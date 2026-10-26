@@ -143,7 +143,9 @@ export function TripCrudSection<T extends Row>({
       : (sb as never as { from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { eq: (k: string, v: string) => PromiseLike<{ data: T[] | null; error: { message: string } | null }> } } } })
         .from(table).select('*').eq('family_id', familyId).eq('vacation_id', vacationId),
   });
-  const { data, loading, error, refresh } = source ?? own;
+  // The section shows whichever read it holds, and that read's failure with it.
+  const { data, loading, error, refresh } = source
+    ?? { data: own.data, loading: own.loading, error: own.error, refresh: own.refresh };
 
   const rows = useMemo(() => {
     const visible = personal ? recordsInScope(data as (T & { member_id: string | null })[], role, selfMember?.id, personal) : data;
