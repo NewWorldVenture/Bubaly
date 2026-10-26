@@ -104,11 +104,14 @@ export function IntelligenceModule({
   // (lib/network/aggregate.ts, PUBLICATION_EPOCH), which the toast says.
   // `fenced: false` is a withdrawal written without the claim (it was held
   // past the wait, or could not be read), and the toast says what that leaves
-  // open.
+  // open. It names the household and member on screen: the server's active
+  // household is shared by every tab and device, so a tab left open here after
+  // another household was chosen elsewhere withdrew THAT one, and this one
+  // went on contributing. The action refuses unless both are still active.
   async function withdraw(change: Parameters<typeof withdrawFromNetworkAction>[0], done: { fenced: string; unfenced: string }) {
     setSaving(true);
     try {
-      const result = await withdrawFromNetworkAction(change);
+      const result = await withdrawFromNetworkAction(change, { expectedFamilyId: familyId, expectedUserId: userId });
       // The consent that was written goes on screen even when the forget
       // failed: a screen still showing "joined" rejoins on the next tap.
       if (result.rows) setData(result.rows);

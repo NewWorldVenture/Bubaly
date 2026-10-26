@@ -109,32 +109,39 @@ const stored = (familyId: string) => db.table('network_contributions').filter((r
 const consentOf = (familyId: string) => db.table('network_consent').find((r) => r.family_id === familyId);
 const screen = () => render(h.hooks, createElement(IntelligenceModule, {}));
 
-type Hold = { table: string; method: string };
+/** `familyId`: only the write of that family's row (its upsert's `family_id`). */
+type Hold = { table: string; method: string; familyId?: string };
 const WRITES = ['insert', 'upsert', 'update', 'delete'];
+const TRANSPORT_ERROR = { data: null, error: { message: 'connection reset', code: 'XX000' } };
 
 /**
  * The database as one actor sees it. Every statement it sends is logged when
  * it lands; `pause` holds back its first statement on `table` that called
  * `method` (`reached` settles when the actor gets there, and the statement is
  * sent only after `release()`); `fail` answers every matching statement with
- * a transport error instead.
+ * a transport error instead; `lose` sends it, so it lands, and then answers
+ * with that error, as a reply lost on the way back does.
  */
-function wire(actor: string, opts: { pause?: Hold; fail?: Hold } = {}) {
+function wire(actor: string, opts: { pause?: Hold; fail?: Hold | Hold[]; lose?: Hold } = {}) {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
   let arrive!: () => void;
   const reached = new Promise<void>((resolve) => { arrive = resolve; });
   let held = false;
-  const matches = (hold: Hold | undefined, table: string, calls: string[]) => !!hold && hold.table === table && calls.includes(hold.method);
-  const settle = (table: string, calls: string[], send: () => PromiseLike<unknown>): Promise<unknown> => {
+  const matches = (hold: Hold | Hold[] | undefined, table: string, calls: string[], row: unknown): boolean => {
+    if (Array.isArray(hold)) return hold.some((one) => matches(one, table, calls, row));
+    return !!hold && hold.table === table && calls.includes(hold.method)
+      && (hold.familyId === undefined || (row as { family_id?: string } | undefined)?.family_id === hold.familyId);
+  };
+  const settle = (table: string, calls: string[], send: () => PromiseLike<unknown>, row?: unknown): Promise<unknown> => {
     const verb = calls.find((c) => WRITES.includes(c)) ?? 'select';
     const go = async () => {
-      if (matches(opts.fail, table, calls)) return { data: null, error: { message: 'connection reset', code: 'XX000' } };
+      if (matches(opts.fail, table, calls, row)) return TRANSPORT_ERROR;
       const out = await send();
       events.push(`${actor}:${table}.${verb}`);
-      return out;
+      return matches(opts.lose, table, calls, row) ? TRANSPORT_ERROR : out;
     };
-    if (!held && matches(opts.pause, table, calls)) {
+    if (!held && matches(opts.pause, table, calls, row)) {
       held = true;
       arrive();
       return gate.then(go);
@@ -148,17 +155,19 @@ function wire(actor: string, opts: { pause?: Hold; fail?: Hold } = {}) {
       return (table: string) => {
         const builder = (target as InMemorySupabase).from(table) as unknown as object;
         const calls: string[] = [];
+        let row: unknown;
         const wrapped: object = new Proxy(builder, {
           get(b, key) {
-            if (key === 'then') return ((resolve, reject) => settle(table, calls, () => b as PromiseLike<unknown>).then(resolve, reject)) as Settle;
+            if (key === 'then') return ((resolve, reject) => settle(table, calls, () => b as PromiseLike<unknown>, row).then(resolve, reject)) as Settle;
             const value = Reflect.get(b, key);
             if (typeof value !== 'function') return value;
             return (...args: unknown[]) => {
               calls.push(String(key));
+              if (key === 'upsert' || key === 'insert') row = args[0];
               // `.maybeSingle()` runs its query when it is called, so it is
               // held back here rather than at its `then`.
               if (key === 'single' || key === 'maybeSingle') {
-                return { then: ((resolve, reject) => settle(table, calls, () => Reflect.apply(value, b, args) as PromiseLike<unknown>).then(resolve, reject)) as Settle };
+                return { then: ((resolve, reject) => settle(table, calls, () => Reflect.apply(value, b, args) as PromiseLike<unknown>, row).then(resolve, reject)) as Settle };
               }
               const out = Reflect.apply(value, b, args);
               return out === b ? wrapped : out;
@@ -350,6 +359,102 @@ describe('a run that finds the publication taken still forgets a family that lef
   });
 });
 
+// N8-withdrawal-during-run/failed-upsert-skips-recheck (round 4, re-fix 1). A
+// run in which ANY family's upsert failed returned 'failed to persist family
+// contributions' straight after the upserts, before the claim and the
+// re-check. So a leaver's row it wrote back after a confirmed, fenced leave
+// stayed stored until the next good run's prune, after the toast had said it
+// was deleted. Nothing was published, but the storage promise did not hold.
+describe('a run that fails to store another family still forgets a family that left meanwhile', () => {
+  const PERSIST_FAILED = 'failed to persist family contributions';
+  const OTHER = 'f-20';
+
+  it('a leave during buildContributionsBatch, then another family\'s upsert fails: the leaver has no stored row', async () => {
+    const without = await publicationWith(null);
+    const run = wire('run', {
+      pause: { table: 'meal_plans', method: 'select' },
+      fail: { table: 'network_contributions', method: 'upsert', familyId: OTHER },
+    });
+    const running = runNetworkAggregation(run.client, NOW);
+    await run.reached;
+
+    await click(byName(screen(), JOIN));
+    expect(consentOf(LEAVER)).toMatchObject({ enabled: false });
+    expect(stored(LEAVER)).toEqual([]);
+    expect(h.toasts.success).toEqual([LEFT]);
+
+    run.release();
+    expect(await running).toMatchObject({ ok: false, error: PERSIST_FAILED, contributors: 143, aggregates: 0 });
+    // The upsert wrote the row back after the leave's delete; the failing run's re-check took it away.
+    expect(at(events, 'run:network_contributions.upsert')).toBeGreaterThan(at(events, 'leave:network_contributions.delete'));
+    expect(stored(LEAVER)).toEqual([]);
+    // Every family that still consents keeps the row the run wrote, and nothing is published.
+    expect(db.table('network_contributions')).toHaveLength(143);
+    expect(stored(OTHER)).toEqual([]);
+    expect(db.table('network_aggregates')).toEqual([]);
+    // The next good run stores the family that failed and publishes without the leaver.
+    expect(await runNetworkAggregation(db as unknown as DB, NOW)).toMatchObject({ ok: true, held: false, contributors: 144 });
+    expect(stored(LEAVER)).toEqual([]);
+    expect(published()).toEqual(without);
+  });
+
+  it('a scope switched off during the build, then another family\'s upsert fails: the switched-off metrics are not stored again', async () => {
+    db = fresh(); h.db = db; seedNetwork(db, { timing: true, benchmarks: true }); leaveThrough();
+    const run = wire('run', {
+      pause: { table: 'meal_plans', method: 'select' },
+      fail: { table: 'network_contributions', method: 'upsert', familyId: OTHER },
+    });
+    const running = runNetworkAggregation(run.client, NOW);
+    await run.reached;
+
+    await click(byName(screen(), BENCHMARKS));
+    expect(consentOf(LEAVER)).toMatchObject({ enabled: true, scopes: { timing: true, benchmarks: false } });
+    expect(h.toasts.success).toEqual(['Preferences saved']);
+
+    run.release();
+    expect(await running).toMatchObject({ ok: false, error: PERSIST_FAILED, aggregates: 0 });
+    expect(at(events, 'run:network_contributions.upsert')).toBeGreaterThan(at(events, 'leave:network_contributions.delete'));
+    expect(stored(LEAVER)).toEqual([]);
+    expect(db.table('network_contributions')).toHaveLength(143);
+  });
+
+  it('the leaver\'s own upsert that lands but whose answer is lost is taken back too', async () => {
+    const run = wire('run', {
+      pause: { table: 'meal_plans', method: 'select' },
+      lose: { table: 'network_contributions', method: 'upsert', familyId: LEAVER },
+    });
+    const running = runNetworkAggregation(run.client, NOW);
+    await run.reached;
+
+    await click(byName(screen(), JOIN));
+    expect(stored(LEAVER)).toEqual([]);
+
+    run.release();
+    expect(await running).toMatchObject({ ok: false, error: PERSIST_FAILED, contributors: 144, aggregates: 0 });
+    // It landed (the run counted it a failure), after the leave's delete …
+    expect(at(events, 'run:network_contributions.upsert')).toBeGreaterThan(at(events, 'leave:network_contributions.delete'));
+    // … and the re-check took it back with the rows the run knows it wrote.
+    expect(stored(LEAVER)).toEqual([]);
+    expect(db.table('network_contributions')).toHaveLength(144);
+  });
+
+  it('a re-check on that path that cannot read consent takes back every row the run wrote; the next run rebuilds them', async () => {
+    const withLeaver = await publicationWith({ benchmarks: true });
+    const run = wire('run', {
+      fail: [
+        { table: 'network_contributions', method: 'upsert', familyId: OTHER },
+        { table: 'network_consent', method: 'in' },
+      ],
+    });
+    expect(await runNetworkAggregation(run.client, NOW)).toMatchObject({ ok: false, error: PERSIST_FAILED, contributors: 0, aggregates: 0 });
+    expect(db.table('network_contributions')).toEqual([]);
+    expect(db.table('network_aggregates')).toEqual([]);
+    expect(await runNetworkAggregation(db as unknown as DB, NOW)).toMatchObject({ ok: true, held: false, contributors: 145 });
+    expect(db.table('network_contributions')).toHaveLength(145);
+    expect(published()).toEqual(withLeaver);
+  });
+});
+
 describe('a claim held past the wait does not hold the leave back', () => {
   it('writes the withdrawal anyway after a bounded wait, and says what is not yet proven', async () => {
     // A run that died holding the claim keeps it until its ten-minute ttl.
@@ -382,16 +487,18 @@ describe('a re-check that cannot read consent vouches for nothing', () => {
 
 describe('only a manager withdraws, as only a manager may consent (0353)', () => {
   const NOT_SAVED = "That change wasn't saved — you may not have permission. Refresh and try again.";
+  /** The household and member the module shows, which the action is called with. */
+  const ON_SCREEN = () => ({ expectedFamilyId: h.app.familyId, expectedUserId: h.app.userId });
   it('a teen calling the action directly changes nothing and takes no claim', async () => {
     Object.assign(h.app, { role: 'teen' });
-    expect(await withdrawFromNetworkAction({ leave: true })).toEqual({ ok: false, error: NOT_SAVED });
+    expect(await withdrawFromNetworkAction({ leave: true }, ON_SCREEN())).toEqual({ ok: false, error: NOT_SAVED });
     expect(consentOf(LEAVER)).toMatchObject({ enabled: true, scopes: { benchmarks: true } });
     expect(events).toEqual([]);
   });
 
   it('a change that is not a leave or a scope map is refused before anything is written', async () => {
-    expect(await withdrawFromNetworkAction({ scopes: { benchmarks: 'off' } })).toMatchObject({ ok: false });
-    expect(await withdrawFromNetworkAction(null as never)).toMatchObject({ ok: false });
+    expect(await withdrawFromNetworkAction({ scopes: { benchmarks: 'off' } }, ON_SCREEN())).toMatchObject({ ok: false, error: NOT_SAVED });
+    expect(await withdrawFromNetworkAction(null as never, ON_SCREEN())).toMatchObject({ ok: false, error: NOT_SAVED });
     expect(consentOf(LEAVER)).toMatchObject({ enabled: true, scopes: { benchmarks: true } });
     expect(events).toEqual([]);
   });

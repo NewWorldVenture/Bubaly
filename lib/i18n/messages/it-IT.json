@@ -8219,6 +8219,7 @@
   "integrations.notConfigured": "Non configurato",
   "integrations.refreshIntegrations": "Aggiorna integrazioni",
   "intelligence.consentNeedsAManager": "La condivisione è stata attivata da un membro della famiglia che non può dare il consenso per il nucleo familiare, quindi i dati del tuo nucleo familiare non vengono usati. Un genitore o un adulto la conferma modificando un'opzione qui sotto, oppure uscendo e rientrando nella rete.",
+  "intelligence.contextChanged": "Il tuo account o il nucleo familiare attivo è cambiato dopo il caricamento di questa pagina, quindi non è stato modificato nulla. Aggiorna la pagina e riprova.",
   "intelligence.contributingStatus": "Stai contribuendo con schemi anonimizzati e puoi vedere le informazioni della rete.",
   "intelligence.couldNotLoadContributionPreview": "Impossibile caricare l’anteprima del tuo contributo da Supabase. Aggiorna e riprova.",
   "intelligence.couldNotLoadCustomerIntelligence": "Impossibile caricare l’analisi dei clienti da Supabase. Aggiorna e riprova.",

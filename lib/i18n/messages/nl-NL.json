@@ -8219,6 +8219,7 @@
   "integrations.notConfigured": "Niet ingesteld",
   "integrations.refreshIntegrations": "Integraties verversen",
   "intelligence.consentNeedsAManager": "Delen is ingeschakeld door een gezinslid dat geen toestemming kan geven voor het huishouden, dus de gegevens van je huishouden worden niet gebruikt. Een ouder of volwassene bevestigt het door hieronder een optie te wijzigen, of door het netwerk te verlaten en opnieuw lid te worden.",
+  "intelligence.contextChanged": "Je account of actieve huishouden is gewijzigd sinds deze pagina is geladen, dus er is niets gewijzigd. Vernieuw de pagina en probeer het opnieuw.",
   "intelligence.contributingStatus": "Je draagt geanonimiseerde patronen bij en kunt netwerkinzichten zien.",
   "intelligence.couldNotLoadContributionPreview": "Kon het voorbeeld van je bijdrage niet laden uit Supabase. Vernieuw en probeer het opnieuw.",
   "intelligence.couldNotLoadCustomerIntelligence": "Kon het klantinzicht uit Supabase niet laden. Ververs en probeer het opnieuw.",

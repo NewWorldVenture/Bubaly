@@ -8400,6 +8400,7 @@
   "integrations.notConfigured": "Not configured",
   "integrations.refreshIntegrations": "Refresh integrations",
   "intelligence.consentNeedsAManager": "Sharing was switched on by a family member who can’t give consent for the household, so your household’s data isn’t being used. A parent or adult confirms it by changing any option below, or by leaving and joining again.",
+  "intelligence.contextChanged": "Your account or active household changed since this page loaded, so nothing was changed. Refresh the page and try again.",
   "intelligence.contributingStatus": "You’re contributing anonymized patterns and can see network insights.",
   "intelligence.couldNotLoadContributionPreview": "Could not load your contribution preview from Supabase. Refresh and try again.",
   "intelligence.couldNotLoadCustomerIntelligence": "Could not load customer intelligence from Supabase. Refresh and try again.",

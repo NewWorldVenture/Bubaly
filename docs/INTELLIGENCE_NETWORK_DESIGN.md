@@ -46,12 +46,15 @@ it provably safe, we don't ship it.
    at the next epoch's snapshot (up to a month at the default epoch). Leaving,
    and switching off a scope that contributes, are written under the same
    publication claim the aggregation publishes under, and the aggregation
-   re-reads consent after its upserts (under that claim when it publishes), so
-   no run stores the family's row again and no publication written after the
-   family is told it left counts it (`lib/network/withdrawal-server.ts`). The
-   copy says the rest: this month's published summaries keep the family's
-   share until next month's, and the noise makes a join or leave unlikely to
-   read from two months, not impossible.
+   re-reads consent after its upserts (under that claim when it publishes, and
+   before it reports a failure when some of them failed), so no run stores the
+   family's row again and no publication written after the family is told it
+   left counts it (`lib/network/withdrawal-server.ts`). The withdrawal names
+   the household on screen and is refused when that is no longer the
+   account's active one, so a tab left open on another household changes
+   nothing. The copy says the rest: this month's published summaries keep the
+   family's share until next month's, and the noise makes a join or leave
+   unlikely to read from two months, not impossible.
 
 ## 3. What we do NOT do
 

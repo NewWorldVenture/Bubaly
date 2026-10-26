@@ -10,6 +10,14 @@
 // (lib/network/withdrawal-server.ts). Joining, widening, and switching off a
 // scope no metric belongs to stay in the module: none of them can put a
 // withdrawn family into the figures.
+//
+// The module names the household on screen (expectedFamilyId) and its member
+// (expectedUserId). The active household is user_preferences.active_family_id,
+// which every tab and device of the account shares: a tab left open on
+// household A after B was chosen elsewhere sent a leave that withdrew B, while
+// A, told it had left, went on contributing. A request for anything but the
+// active household and user is refused before anything is read or claimed,
+// the repo's contextChanged pattern (dashboard/autopilot/actions.ts).
 'use server';
 
 import { getTranslations } from '@/lib/i18n/server';
@@ -42,13 +50,24 @@ function scopesFrom(input: unknown): Partial<Record<ConsentScope, boolean>> | nu
   return out;
 }
 
+/** The household and member the screen shows: the change is theirs, or nobody's. */
+export type NetworkWithdrawalContext = { expectedFamilyId: string; expectedUserId: string };
+
 export async function withdrawFromNetworkAction(
   change: { leave: true } | { scopes: Record<string, unknown> },
+  expected: NetworkWithdrawalContext,
 ): Promise<NetworkWithdrawalResult> {
   const t = await getTranslations();
   // Outside the try: `requireUserContext` redirects a signed-out caller by throwing.
   const ctx = await requireUserContext();
   const notSaved = t('errors.thatChangeWasNotSaved');
+  // First, before the role (it is the active household's) and before any
+  // claim: a withdrawal written to another household than the one on screen
+  // withdraws the wrong one and leaves the intended one in.
+  if (!expected || typeof expected !== 'object'
+    || expected.expectedFamilyId !== ctx.active.familyId || expected.expectedUserId !== ctx.user.id) {
+    return { ok: false, error: t('intelligence.contextChanged') };
+  }
   // Consent is the household managers' decision. RLS refuses anyone else's
   // write since 0353; refused here too, so it is said rather than filtered.
   if (!isManager(ctx.active.role)) return { ok: false, error: notSaved };

@@ -8219,6 +8219,7 @@
   "integrations.notConfigured": "Sin configurar",
   "integrations.refreshIntegrations": "Actualizar integraciones",
   "intelligence.consentNeedsAManager": "El uso compartido lo activó un miembro de la familia que no puede dar el consentimiento por el hogar, así que los datos de tu hogar no se están usando. Una madre, un padre o un adulto lo confirma cambiando cualquier opción de abajo, o saliendo y volviendo a unirse.",
+  "intelligence.contextChanged": "Tu cuenta o tu hogar activo cambió después de cargar esta página, así que no se ha cambiado nada. Actualiza la página e inténtalo de nuevo.",
   "intelligence.contributingStatus": "Estás aportando patrones anonimizados y puedes ver las conclusiones de la red.",
   "intelligence.couldNotLoadContributionPreview": "No se pudo cargar la vista previa de tu aportación desde Supabase. Actualiza e inténtalo de nuevo.",
   "intelligence.couldNotLoadCustomerIntelligence": "Error al cargar la inteligencia de clientes de Supabase. Actualiza y vuelve a intentarlo.",

@@ -481,10 +481,13 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
   if (built === null) return { ok: false, error: 'failed to read family data', contributors: 0, aggregates: 0 };
 
   const contributions: Contribution[] = [];
+  /** Sent, then answered with an error or not at all: a lost answer can still have stored the row. */
+  const unconfirmed: Contribution[] = [];
   let contributionFailures = 0;
   for (const c of contributing) {
     // Per-family isolation: one family's bad data or a transient write error must
     // never abort the whole nightly aggregation for everyone else.
+    let unanswered: Contribution | null = null;
     try {
       const contrib = built.get(c.family_id);
       if (!contrib) continue;
@@ -493,6 +496,7 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
       // Unreachable while dinner and activities are always banded, and kept
       // that way: a family whose consent leaves it no metric contributes no row.
       if (Object.keys(contrib.metrics).length === 0) continue;
+      unanswered = contrib;
       const { error: upErr } = await sb.from('network_contributions').upsert({
         family_id: c.family_id,
         cohort_key: cohortKey(contrib.features),
@@ -507,13 +511,33 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
         console.error(`network_contributions upsert failed for ${c.family_id}:`, upErr.message);
         continue;
       }
+      unanswered = null;
       contributions.push(contrib);
     } catch (err) {
       contributionFailures++;
       console.error(`network contribution failed for family ${c.family_id}:`, err);
+    } finally {
+      if (unanswered) unconfirmed.push(unanswered);
     }
   }
-  if (contributionFailures > 0) return { ok: false, error: 'failed to persist family contributions', contributors: contributions.length, aggregates: 0 };
+  if (contributionFailures > 0) {
+    // A failed run publishes nothing, but the rows it DID write stay. One of
+    // them can be a family that left (or switched a scope off) after step 1:
+    // the leave deleted its row, an upsert above wrote it back, and returning
+    // here, before step 4's re-check, kept the row the family was told was
+    // deleted until the next good run's prune. So the same re-check runs here,
+    // over every row this run wrote or may have written. It needs no claim:
+    // it only deletes, and nothing is published after it. Its read follows
+    // every upsert above, and a leave writes consent before its delete, so it
+    // sees any leave whose delete an upsert undid. A re-check that cannot read
+    // consent takes them all back (the next good run rebuilds them).
+    const recheck = await keepStillConsenting(sb, [...contributions, ...unconfirmed]);
+    const kept = new Set(recheck.ok ? recheck.kept.map((c) => c.familyId) : []);
+    return {
+      ok: false, error: 'failed to persist family contributions',
+      contributors: contributions.filter((c) => kept.has(c.familyId)).length, aggregates: 0,
+    };
+  }
 
   // 4. CLAIM — one run at a time holds or publishes.
   //    The hold asks whether this epoch's snapshot is there, and the publish
@@ -561,7 +585,8 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
 /**
  * The contributions a run stored whose families still consent to them, read
  * after the run's own upserts (for the run that publishes, under the
- * publication claim). A family that left, closed its account, or switched off
+ * publication claim; for a run that failed to store some, before it returns
+ * the failure). A family that left, closed its account, or switched off
  * a scope one of its stored metrics belongs to is dropped from what the run
  * publishes, and its row is deleted; one that only widened its consent keeps
  * the row it has, which is a subset of what it now allows.

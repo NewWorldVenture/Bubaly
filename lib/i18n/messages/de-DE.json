@@ -8219,6 +8219,7 @@
   "integrations.notConfigured": "Nicht konfiguriert",
   "integrations.refreshIntegrations": "Integrationen aktualisieren",
   "intelligence.consentNeedsAManager": "Das Teilen wurde von einem Familienmitglied eingeschaltet, das nicht für den Haushalt zustimmen kann – deshalb werden die Daten Ihres Haushalts nicht verwendet. Ein Elternteil oder Erwachsener bestätigt es, indem er unten eine Option ändert oder das Netzwerk verlässt und erneut beitritt.",
+  "intelligence.contextChanged": "Ihr Konto oder Ihr aktiver Haushalt hat sich geändert, seit diese Seite geladen wurde, daher wurde nichts geändert. Laden Sie die Seite neu und versuchen Sie es erneut.",
   "intelligence.contributingStatus": "Sie tragen anonymisierte Muster bei und sehen Netzwerk-Erkenntnisse.",
   "intelligence.couldNotLoadContributionPreview": "Fehler beim Laden: die Vorschau Ihres Beitrags aus Supabase. Bitte aktualisieren und erneut versuchen.",
   "intelligence.couldNotLoadCustomerIntelligence": "Fehler beim Laden: die Kundenanalyse aus Supabase. Bitte aktualisieren und erneut versuchen.",
