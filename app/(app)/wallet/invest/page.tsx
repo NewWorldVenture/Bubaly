@@ -13,6 +13,7 @@ import {
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { inWalletScope, ownMemberOnly, readWalletScope } from '@/lib/wallet/own-wallets';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -34,18 +35,26 @@ export default async function WalletInvestPage() {
   }
   if (!wallet || !wallet.is_active) return <WalletActivation canActivate={isManager(ctx.active.role)} />;
 
+  // The held 0515: a child's investments are read by a parent or adult and by
+  // that child, so anyone else's page reads their own wallet's, narrowed in the
+  // query before any range.
+  const { scope, error: scopeError } = await readWalletScope(supabase, ctx);
+  if (scopeError) {
+    console.error('[wallet-invest] Own wallet read failed', scopeError);
+    return <ErrorState message={tr('invest.couldNotLoadInvestmentHoldings')} />;
+  }
   const [{ data: assets, error: assetsError }, { data: childWallets, error: childWalletsError }, { data: members, error: membersError }, { data: holdings, error: holdingsError }, { data: buckets, error: bucketsError }, { data: orders, error: ordersError }] = await settleAll([
     supabase.from('invest_assets').select('id, symbol, name, kind, emoji, description, price_cents, risk_level').eq('is_active', true).order('sort_order'),
-    supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
+    ownMemberOnly(supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true), scope, ctx.active.member.id),
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId),
     // Paged: PostgREST caps at db-max-rows whatever the client asks, so an
     // unbounded read shows a portfolio computed from part of the holdings.
     readAllAsQuery<{ child_wallet_id: string; asset_id: string; shares: number; avg_cost_cents: number }>(
-      (from, to) => supabase.from('invest_holdings').select('child_wallet_id, asset_id, shares, avg_cost_cents')
-        .eq('family_id', familyId).order('asset_id').order('id').range(from, to),
+      (from, to) => inWalletScope(supabase.from('invest_holdings').select('child_wallet_id, asset_id, shares, avg_cost_cents')
+        .eq('family_id', familyId), scope).order('asset_id').order('id').range(from, to),
     ),
-    supabase.from('wallet_buckets').select('id, child_wallet_id, kind').eq('family_id', familyId).eq('kind', 'invest'),
-    supabase.from('invest_orders').select('id, child_wallet_id, asset_id, side, shares, amount_cents, status, created_at').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }),
+    inWalletScope(supabase.from('wallet_buckets').select('id, child_wallet_id, kind').eq('family_id', familyId).eq('kind', 'invest'), scope),
+    inWalletScope(supabase.from('invest_orders').select('id, child_wallet_id, asset_id, side, shares, amount_cents, status, created_at').eq('family_id', familyId).eq('status', 'pending'), scope).order('created_at', { ascending: false }),
   ]);
   if (assetsError) { console.error('[wallet-invest] Asset read failed', assetsError); return <ErrorState message={tr('invest.couldNotLoadInvestmentsRefresh')} />; }
   if (childWalletsError) { console.error('[wallet-invest] Child wallets read failed', childWalletsError); dataWarnings.push('Child wallets'); }
@@ -59,9 +68,9 @@ export default async function WalletInvestPage() {
   const investCashByChild = new Map<string, number>();
   if ((buckets ?? []).length > 0) {
     const { data: txns, error: txnsError } = await readAllAsQuery<{ bucket_id: string | null; direction: string; amount_cents: number; status: string }>(
-      (from, to) => supabase
+      (from, to) => inWalletScope(supabase
         .from('wallet_transactions').select('bucket_id, direction, amount_cents, status')
-        .eq('family_id', familyId).in('bucket_id', Array.from(investBucketIds.keys())).in('status', ['completed', 'processing'])
+        .eq('family_id', familyId).in('bucket_id', Array.from(investBucketIds.keys())).in('status', ['completed', 'processing']), scope)
         .order('id').range(from, to),
     );
     if (txnsError) {
@@ -105,6 +114,7 @@ export default async function WalletInvestPage() {
           <p>{tr('walletInvest.someInvestmentDetailsAreTemporarilyUnavailable')} {dataWarnings.join(', ')}.</p>
         </div>
       )}
+      {!scope.all && <p className="mb-3 text-xs text-muted">{tr('childMoney.onlyYourOwnWallet')}</p>}
       <InvestView assets={assetList} childWallets={children} holdings={holdingList} pendingOrders={pendingOrders} canManage={manager} />
     </div>
   );

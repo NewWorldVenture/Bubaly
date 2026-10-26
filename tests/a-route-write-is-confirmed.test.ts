@@ -596,8 +596,8 @@ describe('the last lib/ groups (C1-S9-69)', () => {
   const chores = read('lib/chores/server.ts');
   const cc = read('lib/contact-center/server.ts');
 
-  it('only one reminder completion can win, so only one next occurrence is scheduled', () => {
-    expect(tools).toContain(".eq('id', r.id).eq('status', 'active').select('id');");
+  it('the reminder completion source requires its row, family and active-status predicates', () => {
+    expect(tools).toContain(".update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', r.id).eq('family_id', ctx.familyId).eq('status', 'active').select('id');");
   });
 
   it('counters count only rows that moved', () => {

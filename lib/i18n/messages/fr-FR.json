@@ -17191,5 +17191,6 @@
   "assistantActions.couldNotReadTheBoard": "Impossible de lire la place de marché pour le moment. Réessayez dans un instant.",
   "negotiations.theOtherSideActedAtTheSameMoment": "L’autre partie a agi sur cette offre au même moment. Actualisez la page et réessayez.",
   "filesHubModule.sensitiveStaysInVault": "Les fichiers du dossier {category} restent dans le coffre-fort sécurisé, où seul un parent ou un autre adulte peut les ouvrir.",
+  "childMoney.onlyYourOwnWallet": "Tu vois ici ton propre portefeuille. Un parent ou un adulte voit celui de chaque enfant.",
   "remindersModule.completedNextUnconfirmed": "Rappel terminé, mais nous n’avons pas pu confirmer la prochaine occurrence. Vérifiez vos rappels avant d’en ajouter un autre."
 }

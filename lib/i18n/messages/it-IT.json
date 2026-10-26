@@ -17191,5 +17191,6 @@
   "assistantActions.couldNotReadTheBoard": "Impossibile leggere il mercato in questo momento. Riprova tra poco.",
   "negotiations.theOtherSideActedAtTheSameMoment": "L’altra parte ha agito su questa offerta nello stesso momento. Aggiorna la pagina e riprova.",
   "filesHubModule.sensitiveStaysInVault": "I file nella cartella {category} restano nell’archivio protetto, dove solo un genitore o un altro adulto può aprirli.",
+  "childMoney.onlyYourOwnWallet": "Qui vedi il tuo portafoglio. Un genitore o un adulto vede quello di ogni figlio.",
   "remindersModule.completedNextUnconfirmed": "Promemoria completato, ma non abbiamo potuto confermare il prossimo. Controlla i tuoi promemoria prima di aggiungerne un altro."
 }
