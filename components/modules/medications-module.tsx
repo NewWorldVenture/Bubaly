@@ -97,6 +97,10 @@ export function MedicationsModule() {
   // the dose list, its buttons and the adherence ring are built only from
   // medicines whose doses this viewer reads and logs.
   const ownDosesOnly = canEdit ? null : (selfMember?.id ?? NIL_UUID);
+  // A caregiver therefore reads every medicine and only their own doses. The
+  // other members' doses are not an empty day: the panels say whose they are
+  // instead of "No doses scheduled for today." and a zero adherence summary.
+  const othersDosesWithheld = readsEveryMedicine && ownDosesOnly !== null;
 
   const [memberFilter, setMemberFilter] = useState<string>('all');
   const [medOpening, setMedOpening] = useState<object | null>(null);
@@ -277,6 +281,7 @@ export function MedicationsModule() {
   }, [doses, visibleMeds, ownDosesOnly]);
   const adherence = adherenceRate(windowDoseLogs);
   const counts = doseStatusCounts(windowDoseLogs);
+  const ownMedsShown = visibleMeds.some((m) => m.member_id === ownDosesOnly);
 
   const medById = useMemo(() => new Map((meds ?? []).map((m) => [m.id, m])), [meds]);
 
@@ -466,7 +471,9 @@ export function MedicationsModule() {
             <Clock className="h-4 w-4 text-brand-text" /> {t('medications.todayAposSDoses')}
           </h2>
           {todayDoses.length === 0 ? (
-            <p className="text-muted text-sm py-6 text-center">{t('medications.noDosesScheduledForToday')}</p>
+            <p className="text-muted text-sm py-6 text-center">
+              {othersDosesWithheld ? t('medicationsModule.otherMembersDosesAreKeptByManagers') : t('medications.noDosesScheduledForToday')}
+            </p>
           ) : (
             <ul className="space-y-2">
               {todayDoses.map((due) => {
@@ -512,19 +519,28 @@ export function MedicationsModule() {
               })}
             </ul>
           )}
+          {othersDosesWithheld && todayDoses.length > 0 && (
+            <p className="mt-3 text-xs text-muted">{t('medicationsModule.otherMembersDosesAreKeptByManagers')}</p>
+          )}
         </div>
 
         <div className="rounded-2xl bg-surface/50 border border-border p-5 flex flex-col items-center justify-center text-center">
           <h2 className="text-sm font-semibold text-fg uppercase tracking-wider mb-3 flex items-center gap-2">
             <Activity className="h-4 w-4 text-emerald-400" /> {t('medications.adherence')}
           </h2>
-          <AdherenceRing rate={adherence} />
-          <p className="text-xs text-muted mt-3">{t('medications.last')} {ADHERENCE_WINDOW_DAYS} days</p>
-          <div className="flex gap-3 mt-3 text-xs">
-            <span className="text-emerald-400">{counts.taken} taken</span>
-            <span className="text-amber-400">{counts.skipped} skipped</span>
-            <span className="text-rose-400">{counts.missed} missed</span>
-          </div>
+          {othersDosesWithheld && !ownMedsShown ? (
+            <p className="text-sm text-muted">{t('medicationsModule.otherMembersDosesAreKeptByManagers')}</p>
+          ) : (
+            <>
+              <AdherenceRing rate={adherence} />
+              <p className="text-xs text-muted mt-3">{t('medications.last')} {ADHERENCE_WINDOW_DAYS} days</p>
+              <div className="flex gap-3 mt-3 text-xs">
+                <span className="text-emerald-400">{counts.taken} taken</span>
+                <span className="text-amber-400">{counts.skipped} skipped</span>
+                <span className="text-rose-400">{counts.missed} missed</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 

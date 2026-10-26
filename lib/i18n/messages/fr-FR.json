@@ -17191,5 +17191,8 @@
   "assistantActions.couldNotReadTheBoard": "Impossible de lire la place de marché pour le moment. Réessayez dans un instant.",
   "negotiations.theOtherSideActedAtTheSameMoment": "L’autre partie a agi sur cette offre au même moment. Actualisez la page et réessayez.",
   "filesHubModule.sensitiveStaysInVault": "Les fichiers du dossier {category} restent dans le coffre-fort sécurisé, où seul un parent ou un autre adulte peut les ouvrir.",
-  "childMoney.onlyYourOwnWallet": "Tu vois ici ton propre portefeuille. Un parent ou un adulte voit celui de chaque enfant."
+  "childMoney.onlyYourOwnWallet": "Tu vois ici ton propre portefeuille. Un parent ou un adulte voit celui de chaque enfant.",
+  "medicationsModule.otherMembersDosesAreKeptByManagers": "Les prises des autres membres sont enregistrées et suivies par les parents et les adultes de votre famille.",
+  "nutrition.aGuestSeesSavedEstimatesOnly": "Les invités peuvent voir une estimation nutritionnelle enregistrée, mais pas en demander une nouvelle. Demandez à un membre de la famille de l’analyser.",
+  "mealsModule.guestsSeeTheVoteOnly": "Les invités peuvent voir le vote familial, mais pas y participer."
 }

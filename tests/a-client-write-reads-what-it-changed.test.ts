@@ -224,7 +224,9 @@ describe('a row that licenses the next write is confirmed before it (C1-S9-82)',
 
   it('expenses: a split rollback that matched nothing is logged, not silent', () => {
     const src = readFileSync('components/modules/expenses-module.tsx', 'utf8');
-    expect(src).toContain(".from('expense_splits').delete().eq('id', split.id).select('id')");
+    // Within the family too (N4-sibling), so the rollback stays scoped and
+    // confirmed once expense_splits is a gated table.
+    expect(src).toContain(".from('expense_splits').delete().eq('id', split.id).eq('family_id', familyId).select('id')");
     expect(at(src, 'if (rollbackError)')).toBeLessThan(at(src, 'else if (wroteNoRows(rolledBack)) console.error('));
   });
 
