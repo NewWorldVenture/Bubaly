@@ -25,6 +25,8 @@ vi.mock('@/lib/ai/provider', () => ({ isAIConfigured: async () => h.configured, 
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
 // The plan gate is covered by the kitchen feature's own tests.
 vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: async () => null }));
+// The monthly allowance (F19) is its own suite (every-ai-route-counts-against-the-allowance); this one is the failed-read boundary.
+vi.mock('@/lib/server/ai-access', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/server/ai-access')>()), refuseOverAIAllowance: async () => null, withinAIAllowance: async () => true }));
 vi.mock('@/lib/ai/observability', () => ({ withAiRequest: (_s: unknown, _f: unknown, run: (o: { used: () => void; failed: () => void }) => unknown) => run({ used: () => {}, failed: () => {} }) }));
 
 import { POST } from '@/app/api/ai/chef/route';

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withinAIAllowance, AIAllowanceSpent } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -58,6 +59,8 @@ export async function POST(req: NextRequest) {
         // the provider threw, or the research would not parse — are told apart
         // on the row. From the traveller's side they are one thing, and both
         // look like "no API key configured" too.
+        // F19: past the monthly AI allowance, give the answer this route gives without AI.
+        if (!(await withinAIAllowance(ctx, supabase))) throw new AIAllowanceSpent();
         const parsed = await withAiRequest(
           scopeFromUserContext(ctx, supabase),
           { feature: 'travel.research', text: 'Research a trip' },

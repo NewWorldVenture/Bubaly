@@ -38,9 +38,10 @@
 // refused: past the allowance the proof goes to a parent, as any review the
 // model cannot give does, and no model is asked.
 //
-// Each asks before the provider is called, and the voice routes record their
-// call where the allowance counts it and take a spoken request's worth of
-// audio. Driven through the real routes and actions, the real access gate and
+// Each asks before the provider is called, and the voice routes take a spoken
+// request's worth of audio. Standalone speech is recorded where the allowance
+// counts it; a transcript, and the spoken answer of a turn already counted,
+// ride on that turn (F19: one spoken exchange, one request). Driven through the real routes and actions, the real access gate and
 // the real request recorder, over the in-memory database.
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -473,11 +474,17 @@ describe('N17: voice', () => {
     expect(h.upstream).not.toHaveBeenCalled();
   });
 
-  it('records a transcription where the allowance counts it', async () => {
+  // F19, the owner's decision of 2026-10-02 (#771 review 5391362628): one
+  // spoken exchange counts as ONE request, the assistant turn it carries, so
+  // transcription is refused past the allowance (above) but files no row of its
+  // own. A row here would count each exchange twice, and an exchange admitted
+  // at 9 of 10 would spend the tenth on its transcript and be refused its turn.
+  // tests/a-spoken-exchange-counts-once.test.ts drives the whole exchange.
+  it('transcribes within the allowance and files no request of its own (one exchange, one request)', async () => {
     const res = await transcribe(audio(4_096));
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ text: 'Plan dinners for the week' });
-    expect(db.table('ai_requests').filter((r) => r.feature === 'voice.transcribe')).toHaveLength(1);
+    expect(db.table('ai_requests').filter((r) => r.feature === 'voice.transcribe')).toHaveLength(0);
   });
 });

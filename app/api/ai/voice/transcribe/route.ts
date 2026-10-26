@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { refuseClosedOrTrialEnded } from '@/lib/server/account-standing';
 import { assertAIRequestFamily, getAIRequestTranslations } from '@/lib/server/ai-request-context';
-import { accessDeniedResponse, assertAIAllowance, authenticateAI } from '@/lib/server/ai-access';
+import { authenticateAI, refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { getOpenAIKey } from '@/lib/ai/settings';
 import { cleanTranscript, isValidAudioUpload, VOICE_COMMAND_MAX_BYTES } from '@/lib/ai/voice';
-import { withAiRequest } from '@/lib/ai/observability';
-import { scopeFromUserContext } from '@/lib/services/scope';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 
 export const runtime = 'nodejs';
+
+const COULD_NOT_TRANSCRIBE = 'Could not transcribe that recording. Please try again.';
 export const maxDuration = 60;
 /** The recording plus the multipart framing around it. */
 const MAX_AUDIO_REQUEST_BYTES = VOICE_COMMAND_MAX_BYTES + 64 * 1024;
@@ -41,15 +41,19 @@ export async function POST(req: NextRequest) {
       { error: t('transcribe.tooManyVoiceRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
-    // A paid model call like any other: the Free plan's monthly allowance
-    // applies, and the call is recorded below where that allowance counts it.
-    // It had none of this, so any member of any family, Free included, could
-    // transcribe without limit and none of it showed in the family's usage.
-    // The allowance alone, not the assistant's tier or its Off switch: voice is
-    // how a member types into the concierge's Ask bar and the command bar too,
-    // and switching the assistant Off must not take the microphone off those.
-    const access = await assertAIAllowance(ctx, { db: supabase });
-    if (!access.ok) return accessDeniedResponse(access);
+    // A paid model call: the Free plan's monthly allowance applies, so a family
+    // past its month cannot keep a voice exchange going. The allowance alone,
+    // not the assistant's tier or its Off switch: voice is how a member types
+    // into the concierge's Ask bar and the command bar too, and switching the
+    // assistant Off must not take the microphone off those.
+    //
+    // F19, the owner's decision of 2026-10-02: one spoken exchange counts as
+    // ONE request, the assistant turn it carries, which files its own row.
+    // Transcription therefore files nothing. Recording it as well (main's N17)
+    // would count each exchange twice, and an exchange admitted at 9 of 10
+    // would spend the tenth here and then be refused its own turn.
+    const overAllowance = await refuseOverAIAllowance(ctx, supabase, t);
+    if (overAllowance) return overAllowance;
     const apiKey = await getOpenAIKey(supabase);
     if (!apiKey) {
       return NextResponse.json(
@@ -81,38 +85,41 @@ export async function POST(req: NextRequest) {
     upstream.append('model', model);
     upstream.append('response_format', 'json');
 
-    const outcome = await withAiRequest(
-      scopeFromUserContext(ctx, supabase),
-      { feature: 'voice.transcribe', text: 'Transcribe a spoken request' },
-      async (obs): Promise<{ text: string } | { upstreamStatus: number }> => {
-        const res = await fetchWithDeadline('https://api.openai.com/v1/audio/transcriptions', {
-          method: 'POST',
-          headers: { authorization: `Bearer ${apiKey}` },
-          body: upstream,
-        }, 60_000);
-        obs.used(model);
-        if (!res.ok) {
-          const bounded = await readBoundedResponseText(res, 64 * 1024);
-          const detail = bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]';
-          console.error('OpenAI transcription error', res.status, detail);
-          obs.failed(new Error(`The transcription provider answered ${res.status}.`));
-          return { upstreamStatus: res.status };
-        }
-        const data = await readBoundedResponseJson<{ text?: string }>(res, 256 * 1024);
-        return { text: cleanTranscript(data.text ?? '') };
-      },
-    );
+    const res = await fetchWithDeadline('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${apiKey}` },
+      body: upstream,
+    }, 60_000);
 
-    if ('upstreamStatus' in outcome) {
-      const msg = outcome.upstreamStatus === 429
+    if (!res.ok) {
+      const bounded = await readBoundedResponseText(res, 64 * 1024);
+      const detail = bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]';
+      console.error('OpenAI transcription error', res.status, detail);
+      const msg = res.status === 429
         ? 'The AI engine is busy. Please try again in a moment.'
-        : 'Could not transcribe that recording. Please try again.';
+        : COULD_NOT_TRANSCRIBE;
       return NextResponse.json({ error: msg }, { status: 502 });
     }
-    if (!outcome.text) {
+
+    // A 200 whose body is unreadable, or whose `text` is not a string, is a
+    // provider failure: the caller gets the same 502 as a provider error, not a
+    // 500 from a parse or a string method on a number.
+    let body: { text?: unknown };
+    try {
+      body = await readBoundedResponseJson<{ text?: unknown }>(res, 256 * 1024);
+    } catch (parseErr) {
+      console.error('OpenAI transcription returned an unreadable body', parseErr);
+      return NextResponse.json({ error: COULD_NOT_TRANSCRIBE }, { status: 502 });
+    }
+    if (body?.text !== undefined && body?.text !== null && typeof body.text !== 'string') {
+      console.error('OpenAI transcription returned a non-string text field', typeof body.text);
+      return NextResponse.json({ error: COULD_NOT_TRANSCRIBE }, { status: 502 });
+    }
+    const text = cleanTranscript(typeof body?.text === 'string' ? body.text : '');
+    if (!text) {
       return NextResponse.json({ error: t('transcribe.iCouldnTHearAnything') }, { status: 422 });
     }
-    return NextResponse.json({ text: outcome.text });
+    return NextResponse.json({ text });
   } catch (err) {
     console.error('Transcription route error', err);
     return NextResponse.json({ error: t('transcribe.somethingWentWrongPleaseTry') }, { status: 500 });
