@@ -85,6 +85,18 @@
 // of a full seller's listings than a batch has shares is enough for that,
 // whether those listings are still there or not.
 //
+// Push sends every id a read leaves out in the read's URL, 39 bytes an id, and
+// past the gateway's request-line limit (nginx's 8,192 bytes) the read fails
+// and no family gets a push. At push's shares the most the bound above allows,
+// counted kind by kind (5 families, 20 recipients, 80 listings, 60 landing
+// families: 165 ids, an over-count, since the listings at their own share are
+// among the 20 share holders), builds a request line of 7,854 bytes, in a
+// family-scoped read behind the cursor; the names round 12 added cost 2,340
+// bytes of that. A flood that fills every pool came to 5,563.
+// tests/the-most-a-push-read-leaves-out-fits-its-request-line.test.ts measures
+// both through push and supabase-js and holds each pool at its size, so a
+// wider pool fails there first.
+//
 // Rows dated after now (beyond a clock-skew allowance) are not read at all, by
 // either dispatcher: no writer sets created_at, which defaults to now(), so
 // such a row can only be planted, and one dated in the future sat outside the

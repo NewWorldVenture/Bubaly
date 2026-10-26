@@ -106,6 +106,11 @@ describe('push: a family\'s own deleted listings do not get a family that saved 
     [30, 5, 'live'],
     [30, 2, 'deleted'],
     [30, 5, 'deleted'],
+    // Round 13 (R12-RV2): more own deleted listings than the 40 listing names
+    // the drops not found keep, so only the cap of 20 for the drops that
+    // landed in one family leaves the watcher family its names.
+    [50, 5, 'deleted'],
+    [50, 15, 'deleted'],
   ] as const)('a child\'s %i own listings, saved in their family and deleted, with 100 drops each pending, and %i of their %s listings saved by a watcher family with 1,000 drops into it: another seller\'s drop into the watcher family goes out on the first tick', async (own, saved, state) => {
     db.seed('families', [CHILD_FAMILY, WATCHER, HONEST_SELLER].map(family));
     db.seed('family_members', [member(CHILD_FAMILY, 'u-child', 'child'), member(WATCHER, 'u-watcher'), member(HONEST_SELLER, 'u-honest')]);
@@ -142,6 +147,47 @@ describe('push: a family\'s own deleted listings do not get a family that saved 
     ]);
 
     expect(await ticksUntilPushed(HONEST_DROP, 30)).toBe(1);
+  });
+});
+
+// Round 13 (R12-RV2): the drops not found name their landing families from a
+// pool of their own, not the known sellers'. One seller's listings, forty
+// still there and sixty deleted, each saved by a different family: the known
+// drops spend their twenty listing names and twenty landing names, and the
+// drops not found theirs. Sharing one pool of landing names, the drops not
+// found found it spent, were taken against their own listing's share alone,
+// and filled the batch ahead of every watcher family's honest drop.
+describe('push: one seller\'s drops into a hundred watcher families, forty of its listings live and sixty deleted', () => {
+  it('the known drops and the drops not found each have at most twenty families wait, and every other watcher family\'s honest drop goes out on the first tick', async () => {
+    const SELLER = 'fam-seller';
+    const live = Array.from({ length: 40 }, (_, i) => `fam-live-${i}`);
+    const gone = Array.from({ length: 60 }, (_, i) => `fam-gone-${i}`);
+    const watchers = [...live, ...gone];
+    // Each honest drop is another seller's, about a listing still there.
+    const honestSeller = (w: string) => `${w}-seller`;
+    db.seed('families', [SELLER, ...watchers, ...watchers.map(honestSeller)].map(family));
+    db.seed('family_members', [member(SELLER, 'u-seller', 'child'), ...watchers.map((w) => member(w, `u-${w}`))]);
+    db.seed('push_devices', watchers.map((w) => device(`phone-${w}`, `u-${w}`)));
+    db.seed('marketplace_listings', [
+      ...live.map((_, i) => listing(listingId(1000 + i), SELLER)),
+      ...watchers.map((w, i) => listing(listingId(50_000 + i), honestSeller(w))),
+    ]);
+    const flood: Row[] = [];
+    let n = 0;
+    for (let r = 0; r < 20; r += 1) {
+      live.forEach((w, i) => { n += 1; flood.push(drop(notificationId(n), w, at(NOW.getTime() - 7_200_000 + n), listingId(1000 + i))); });
+      gone.forEach((w, i) => { n += 1; flood.push(drop(notificationId(n), w, at(NOW.getTime() - 7_200_000 + n), listingId(1500 + i))); });
+    }
+    const honest = watchers.map((w, i) => drop(notificationId(800_000 + i), w, at(NOW.getTime() - 60_000 + i), listingId(50_000 + i), 'Price dropped: "Honest bike"'));
+    db.seed('notifications', [...flood, ...honest]);
+
+    await dispatchPendingPushes(asDb(), { now: NOW });
+
+    const waiting = (group: string[]) => honest.filter((h) => group.includes(String(h.family_id)) && !row(String(h.id)).pushed_at).length;
+    expect(waiting(live), 'watcher families of the live listings left waiting').toBeLessThanOrEqual(20);
+    expect(waiting(gone), 'watcher families of the deleted listings left waiting').toBeLessThanOrEqual(20);
+    // Non-vacuity: the flood is ten batches, and most of it still waits.
+    expect(flood.filter((d) => !row(String(d.id)).pushed_at).length).toBeGreaterThan(1500);
   });
 });
 
