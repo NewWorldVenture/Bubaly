@@ -15,6 +15,7 @@ import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { readDisplayCalendarOccurrences } from '@/lib/calendar/display-occurrences';
 import { calendarConsumerKey, projectCalendarDay } from '@/lib/calendar/consumer-spans';
+import { onMembersDay } from '@/lib/calendar/members-day';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -68,7 +69,9 @@ export default async function KidsPage() {
   const myTasks = myTasksRes.data;
   const done = doneRes.data;
   let events;
-  try { events=projectCalendarDay(eventsRes.data??[],todayKey,tz).slice(0,6); }
+  // The household's events and the child's own, as the home dashboard shows a
+  // member: a parent's or a sibling's appointment is not on the child's day.
+  try { events=projectCalendarDay(eventsRes.data??[],todayKey,tz).filter(onMembersDay(me.id)).slice(0,6); }
   catch { return <ErrorState message={tr('kids.weCouldnTLoadYour')} />; }
 
   const choreIds = [...new Set((myTasks ?? []).map((t) => t.chore_id))];

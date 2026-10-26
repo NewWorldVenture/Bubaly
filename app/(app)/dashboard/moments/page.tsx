@@ -12,6 +12,7 @@ import { loadScheduleIntelligence } from '@/lib/schedule/intelligence-server';
 import { loadMomentPrep } from '@/app/(app)/dashboard/moment-actions';
 import { dayKeyInTz, addDaysToDayKey, zonedDayBoundsMs } from '@/lib/services/scope';
 import { localPartsAt } from '@/lib/time/zoned';
+import { OPEN_HOMEWORK_STATUSES } from '@/lib/homework/board';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -75,7 +76,7 @@ export default async function Page() {
       supabase.from('family_members').select('display_name, birthday').eq('family_id', familyId).eq('is_active', true).not('birthday', 'is', null),
       supabase.from('vacations').select('title, start_date').eq('family_id', familyId).not('start_date', 'is', null).gte('start_date', todayIso).order('start_date').limit(1),
       supabase.from('calendar_events').select('title, starts_at').eq('family_id', familyId).eq('category', 'holiday').gte('starts_at', now.toISOString()).lte('starts_at', in21).order('starts_at').limit(1),
-      supabase.from('homework_assignments').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'assigned').gte('due_at', tomorrowStart.toISOString()).lt('due_at', tomorrowEnd.toISOString()),
+      supabase.from('homework_assignments').select('id', { count: 'exact', head: true }).eq('family_id', familyId).in('status', OPEN_HOMEWORK_STATUSES).gte('due_at', tomorrowStart.toISOString()).lt('due_at', tomorrowEnd.toISOString()),
       supabase.from('moment_activations').select('moment_key, status').eq('family_id', familyId).eq('as_of_date', todayIso),
     ]);
 

@@ -129,43 +129,56 @@ export async function listEventsBetween(scope: ServiceScope, input: SchoolWindow
   return ok(data ?? []);
 }
 
-export type HomeworkDueInput = SchoolWindowInput & { includeDone?: boolean };
+export type HomeworkDueInput = SchoolWindowInput & {
+  includeDone?: boolean;
+  /** Also open work due BEFORE the window starts: what is overdue. Never finished work. */
+  includeOverdue?: boolean;
+};
 
 const OPEN_STATUSES: HomeworkStatus[] = ['assigned', 'in_progress'];
 
 /**
  * Homework due in a window, soonest first. Completed work is excluded by
  * default because every caller is asking "what still needs doing"; overdue
- * open work is included when `from` reaches back far enough to cover it.
+ * open work is included when `from` reaches back far enough to cover it, or
+ * when `includeOverdue` asks for it (read first, each part up to `limit`).
  */
 export async function listHomeworkDue(scope: ServiceScope, input: HomeworkDueInput = {}): Promise<ServiceResult<HomeworkRow[]>> {
   const window = resolveWindow(scope, input);
   if (!window.ok) return window;
   const limit = Math.min(Math.max(input.limit ?? 200, 1), MAX_ROWS);
-  const query = () => {
+  const query = (part: 'window' | 'overdue') => {
     let read = scope.db
     .from('homework_assignments')
     .select('*', { count: 'exact' })
     .eq('family_id', scope.familyId)
-    .not('due_at', 'is', null)
-    .gte('due_at', window.data.from);
-    read = window.data.toExclusive
-      ? read.lt('due_at', window.data.toExclusive)
-      : read.lte('due_at', window.data.to);
+    .not('due_at', 'is', null);
+    if (part === 'overdue') {
+      read = read.lt('due_at', window.data.from);
+    } else {
+      read = read.gte('due_at', window.data.from);
+      read = window.data.toExclusive
+        ? read.lt('due_at', window.data.toExclusive)
+        : read.lte('due_at', window.data.to);
+    }
     read = read.order('due_at', { ascending: true }).order('id');
-    if (!input.includeDone) read = read.in('status', OPEN_STATUSES);
+    if (part === 'overdue' || !input.includeDone) read = read.in('status', OPEN_STATUSES);
     if (input.memberId) read = read.eq('member_id', input.memberId);
     return read;
   };
-  const { data, error } = await readCountedRows<HomeworkRow>(
-    () => query().limit(limit), (from, to) => query().range(from, to),
-    MAX_ROWS, 'homework assignments', limit,
-  );
-  if (error) {
-    console.error('[service:school] homework read failed', error);
-    return fail(describeDbError(error, 'Could not load homework.'), { code: SERVICE_CODES.db });
+  const rows: HomeworkRow[] = [];
+  for (const part of input.includeOverdue ? ['overdue', 'window'] as const : ['window'] as const) {
+    const { data, error } = await readCountedRows<HomeworkRow>(
+      () => query(part).limit(limit), (from, to) => query(part).range(from, to),
+      MAX_ROWS, part === 'overdue' ? 'overdue homework assignments' : 'homework assignments', limit,
+    );
+    if (error) {
+      console.error('[service:school] homework read failed', error);
+      return fail(describeDbError(error, 'Could not load homework.'), { code: SERVICE_CODES.db });
+    }
+    rows.push(...(data ?? []));
   }
-  return ok(data ?? []);
+  return ok(rows);
 }
 
 /**
