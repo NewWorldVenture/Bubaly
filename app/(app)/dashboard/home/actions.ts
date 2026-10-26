@@ -8,6 +8,7 @@ import { createServer } from '@/lib/supabase/server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { refusalError, refusalForError } from '@/lib/actions/refusal';
 import { DEFAULT_CADENCES } from '@/lib/home/maintenance';
+import { isManager } from '@/lib/constants/roles';
 import { alreadyOnOrAfter, isDayKey, onlyForward } from '@/lib/home/service-dates';
 
 async function ctx() {
@@ -15,6 +16,7 @@ async function ctx() {
   return {
     familyId: c.active.familyId,
     userId: c.user.id,
+    role: c.active.role,
     supabase: await createServer(),
     // The family's day, for defaulting a date column. `new Date()` formatted as
     // a day key is the HOST's day, so a record logged at 6pm in California was
@@ -245,7 +247,11 @@ async function restoreLastServiced(supabase: Awaited<ReturnType<typeof createSer
 // ── Deterministic forecast → schedule recommended maintenance for an asset ────
 export async function scheduleRecommendedTasksAction(assetId: string): Promise<{ ok: boolean; created: number; error?: string }> {
   const tr = await getTranslations();
-  const { familyId, userId, supabase } = await ctx();
+  const { familyId, userId, role, supabase } = await ctx();
+  // The Home page offers "Add task" to a parent or adult only, and this writes a
+  // year of recurring tasks: a child, caregiver or guest is refused before
+  // anything is read (maintenance_tasks itself takes any member's insert).
+  if (!isManager(role)) return { ok: false, created: 0, error: tr('actions.onlyAParentOrAdultCanScheduleMaintenance') };
   const { data: asset, error: assetReadError } = await supabase
     .from('home_assets')
     .select('id, name, category, last_serviced_on')
