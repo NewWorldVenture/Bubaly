@@ -157,7 +157,7 @@ export function PaperworkModule({ items, ownOnly = false }: { items: Item[]; own
         <button
           ref={composerToggle}
           onClick={() => setComposerOpen((v) => !v)}
-          className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:opacity-90"
+          className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:brightness-95"
         >
           {composerOpen ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
           {composerOpen ? 'Close' : 'Add paperwork'}
@@ -430,7 +430,7 @@ function Composer({ onDone }: { onDone: (ownsFocus: boolean) => void }) {
         <button
           type="submit"
           aria-disabled={pending || undefined}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-brand px-5 text-sm font-bold text-brand-fg transition hover:opacity-90 aria-disabled:opacity-60"
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-brand px-5 text-sm font-bold text-brand-fg transition hover:brightness-95 aria-disabled:opacity-60"
         >
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
           {t('paperwork.triageIt')}

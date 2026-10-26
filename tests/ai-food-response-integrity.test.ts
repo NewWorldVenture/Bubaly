@@ -14,6 +14,15 @@ const mocks = vi.hoisted(() => ({
   cached: null as Record<string, unknown> | null,
 }));
 
+// F19 meters every AI route against the monthly allowance. These tests are
+// about other behaviour, so the family is on Basic, whose allowance is
+// unlimited: the real check runs and passes without a usage count.
+vi.mock('@/lib/server/plan', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/plan')>()),
+  resolveFamilyPlanLevel: async () => 1,
+  // The same, unlocked family as the whole entitlement the AI gates read.
+  resolveFamilyEntitlement: async () => ({ effectiveLevel: 1, locked: false, closed: false, inTrial: false, trialEndsAt: null }),
+}));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserContext }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.createServer }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.enforceAIRateLimit }));

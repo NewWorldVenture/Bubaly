@@ -20,51 +20,52 @@ type Faint = { at: string; file: string; line: string; alpha: number };
 
 /** Each control with no text of its own whose icon (or itself) is painted `text-muted/NN`. */
 function faintIconControls(files: string[]): Faint[] {
+  return files.flatMap((file) => scanSource(file, readFileSync(file, 'utf8')));
+}
+
+function scanSource(file: string, src: string): Faint[] {
   const found: Faint[] = [];
-  for (const file of files) {
-    const src = readFileSync(file, 'utf8');
-    if (!/text-muted\/\d/.test(src)) continue;
-    const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-    const classesOf = (n: ts.JsxOpeningElement | ts.JsxSelfClosingElement) => {
-      const attr = n.attributes.properties.filter(ts.isJsxAttribute).find((a) => a.name.getText(sf) === 'className');
-      const parts: string[] = [];
-      const collect = (x: ts.Node) => {
-        if (ts.isStringLiteral(x) || ts.isNoSubstitutionTemplateLiteral(x)) parts.push(x.text);
-        else if (ts.isTemplateExpression(x)) parts.push(x.head.text, ...x.templateSpans.map((s) => s.literal.text));
-        ts.forEachChild(x, collect);
-      };
-      if (attr?.initializer) collect(attr.initializer);
-      return parts.join(' ').split(/\s+/);
+  if (!/text-muted\/\d/.test(src)) return found;
+  const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const classesOf = (n: ts.JsxOpeningElement | ts.JsxSelfClosingElement) => {
+    const attr = n.attributes.properties.filter(ts.isJsxAttribute).find((a) => a.name.getText(sf) === 'className');
+    const parts: string[] = [];
+    const collect = (x: ts.Node) => {
+      if (ts.isStringLiteral(x) || ts.isNoSubstitutionTemplateLiteral(x)) parts.push(x.text);
+      else if (ts.isTemplateExpression(x)) parts.push(x.head.text, ...x.templateSpans.map((s) => s.literal.text));
+      ts.forEachChild(x, collect);
     };
-    const visit = (node: ts.Node) => {
-      if (ts.isJsxElement(node) && CONTROL.test(node.openingElement.tagName.getText(sf)) && !carriesText(node)) {
-        const within = (n: ts.Node) => {
-          if (ts.isJsxOpeningElement(n) || ts.isJsxSelfClosingElement(n)) {
-            for (const c of classesOf(n)) {
-              const m = MUTED_AT.exec(c);
-              if (m) found.push({ at: `${file}:${sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1}`, file, line: node.openingElement.getText(sf).replace(/\s+/g, ' '), alpha: Number(m[1]) / 100 });
-            }
+    if (attr?.initializer) collect(attr.initializer);
+    return parts.join(' ').split(/\s+/);
+  };
+  const visit = (node: ts.Node) => {
+    if (ts.isJsxElement(node) && CONTROL.test(node.openingElement.tagName.getText(sf)) && !carriesText(node)) {
+      const within = (n: ts.Node) => {
+        if (ts.isJsxOpeningElement(n) || ts.isJsxSelfClosingElement(n)) {
+          for (const c of classesOf(n)) {
+            const m = MUTED_AT.exec(c);
+            if (m) found.push({ at: `${file}:${sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1}`, file, line: node.openingElement.getText(sf).replace(/\s+/g, ' '), alpha: Number(m[1]) / 100 });
           }
-          ts.forEachChild(n, within);
-        };
-        within(node);
-      }
-      ts.forEachChild(node, visit);
-    };
-    visit(sf);
-  }
+        }
+        ts.forEachChild(n, within);
+      };
+      within(node);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
   return found;
 }
 
-const ALLOWED = [
-  { file: 'components/app/free-tier-sidebar.tsx', has: "onTogglePin(item.href)", why: 'the sidebar’s pin button: the sidebar is not changed here' },
-];
+// None: the sidebar's pin button, the last one allowed, is full --muted now.
+const ALLOWED: { file: string; has: string; why: string }[] = [];
 
 describe('an icon-only control is visible at 3:1', () => {
   const found = faintIconControls([...sourceFiles('components'), ...sourceFiles('app')]);
 
-  it('finds faint icon-only controls in the source (non-vacuity), and none below 3:1 but the allowed', () => {
-    expect(found.length).toBeGreaterThan(0);
+  it('finds a faint icon-only control (non-vacuity), and none below 3:1 in the source but the allowed', () => {
+    // The source has none left, so the scanner proves itself on the shape it was built for.
+    expect(scanSource('p.tsx', `export const P = () => (<button aria-label="Pin" className="text-muted/50"><Star className="h-4 w-4" /></button>);`)).toHaveLength(1);
     const faint = found.filter((f) => worstOnGround('muted', f.alpha) < 3);
     const allowed = (f: Faint) => ALLOWED.some((a) => f.file === a.file && f.line.includes(a.has));
     expect(faint.filter((f) => !allowed(f)).map((f) => `${f.at} text-muted/${Math.round(f.alpha * 100)} ${worstOnGround('muted', f.alpha).toFixed(2)}: ${f.line.slice(0, 160)}`)).toEqual([]);

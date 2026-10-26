@@ -13,7 +13,7 @@ const canonicalCiphertext = (value: string) => {
   return parts.length === 3 && parts.every((part) => part.length > 0 && Buffer.from(part, 'base64').toString('base64') === part);
 };
 const continuationSchema = z.object({
-  version: z.literal(1), kind: z.literal('onboarding_calendar'), userId: z.string().uuid(), familyId: z.string().uuid(),
+  version: z.literal(1), kind: z.literal('onboarding_calendar'), userId: z.string().guid(), familyId: z.string().guid(),
   provider: onboardingCalendarProvider, state: z.string().min(20).max(100), expiresAt: z.number().finite(),
   reviewPlan: z.custom<ReviewPlan>(isReviewPlan).optional(),
 });
@@ -30,8 +30,8 @@ export function readCalendarContinuation(value: string | undefined, now = Date.n
 }
 
 const receiptSchema = z.object({
-  version: z.literal(1), kind: z.literal('onboarding_calendar_preview'), userId: z.string().uuid(), familyId: z.string().uuid(),
-  accountId: z.string().uuid(), provider: onboardingCalendarProvider, calendarExternalId: z.string().min(1).max(2000),
+  version: z.literal(1), kind: z.literal('onboarding_calendar_preview'), userId: z.string().guid(), familyId: z.string().guid(),
+  accountId: z.string().guid(), provider: onboardingCalendarProvider, calendarExternalId: z.string().min(1).max(2000),
   eventKeys: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(1000), digest: z.string().regex(/^[a-f0-9]{64}$/),
   expiresAt: z.number().finite(),
 });

@@ -8,6 +8,7 @@
 //      (lib/marketplace/assistant.ts) composes the same grounded answer.
 // Either way the caller gets a reply + deep links; the UI never breaks on a
 // missing key. History is passed through for multi-turn context (LLM tier).
+import { assertAIAllowance } from '@/lib/server/ai-access';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
@@ -21,7 +22,6 @@ import { isAIConfigured, resolveProvider, type AIMessage } from '@/lib/ai/provid
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
-import { assertAIAllowance } from '@/lib/server/ai-access';
 
 export type MarketAssistantResult = {
   ok: true;
@@ -97,6 +97,11 @@ export async function askMarketAssistantAction(
 
   // Tier 2 (LLM) — best-effort on top of the same snapshot; the deterministic
   // links still ride along so the UI always has somewhere to go.
+  //
+  // F19 (the owner's decision of 2026-10-02): the model call is a member's own
+  // AI request, so it counts against the family's monthly allowance. Only the
+  // model is metered: a family past its month still gets the grounded answer,
+  // which reaches no provider, exactly as a family with no key configured does.
   try {
     // The model tier files an `ai_requests` row, so the Free plan's monthly AI
     // allowance applies to it as to every other helper. Past the allowance (or

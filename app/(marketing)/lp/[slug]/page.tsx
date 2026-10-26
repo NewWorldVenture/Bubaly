@@ -92,7 +92,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
           <Link
             href={cta.href}
             data-lp-cta
-            className="inline-flex items-center gap-2 rounded-xl bg-brand px-6 py-3 text-base font-semibold text-brand-fg transition hover:bg-brand/90"
+            className="inline-flex items-center gap-2 rounded-xl bg-brand px-6 py-3 text-base font-semibold text-brand-fg transition hover:brightness-95"
           >
             {cta.label ?? t(DEFAULT_CTA_LABEL_KEY)} <ArrowRight className="h-4 w-4" />
           </Link>

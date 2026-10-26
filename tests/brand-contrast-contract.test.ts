@@ -347,6 +347,44 @@ describe('muted text is readable on the brand selection tint', () => {
   }
 });
 
+// A status chip inside a selected row. An open contact's row is bg-brand/10
+// and its "Emergency" Badge is bg-danger/15 text-danger, so the chip's tint
+// lies over the selection tint. Found by opening every disclosure on the member
+// routes: danger read 4.37 over --bg, warning 4.33 and accent 4.01. Each Badge
+// tone has to clear 4.5 on its own tint over the selection tint, over every
+// ground, with each layer rounded to 8 bits as the browser composites it (an
+// unrounded 4.51 measured 4.49 in the browser); the neutral Badge is an opaque
+// fill and is judged elsewhere.
+describe('a status chip is readable inside a selected row', () => {
+  const css = readFileSync(resolve('app/globals.css'), 'utf8');
+  const badge = readFileSync(resolve('components/ui/badge.tsx'), 'utf8');
+  const contacts = readFileSync(resolve('components/modules/contacts-module.tsx'), 'utf8');
+  const tones = [...badge.matchAll(/^\s*(\w+): 'bg-([\w-]+)\/(\d+) text-([\w-]+)/gm)].map((m) => ({ tone: m[1], fill: m[2], alpha: Number(m[3]) / 100, ink: m[4] }));
+  const selection = Number(contacts.match(/isSelected \? 'bg-brand\/(\d+)'/)?.[1] ?? 0) / 100;
+
+  it('finds the selected row and its chips (non-vacuity)', () => {
+    expect(selection).toBe(0.1);
+    expect(contacts).toContain('<Badge tone="danger"');
+    expect(tones.map((t) => t.tone)).toEqual(['brand', 'success', 'warning', 'danger', 'accent']);
+  });
+
+  for (const [theme, selector] of [['light', '.light {'], ['dark', '.dark {']] as const) {
+    it(`${theme}: each Badge tone clears 4.5:1 on its tint over the selection tint, over every ground`, () => {
+      const tokens = tokensOf(css, selector);
+      const failures: string[] = [];
+      for (const { tone, fill, alpha, ink } of tones) {
+        for (const ground of GROUNDS) {
+          const row = tokens.brand.map((v, i) => Math.round(v * selection + tokens[ground][i] * (1 - selection)));
+          const chip = tokens[fill].map((v, i) => Math.round(v * alpha + row[i] * (1 - alpha)));
+          const ratio = contrast(tokens[ink], chip);
+          if (ratio < 4.5) failures.push(`${tone} Badge in a selected row over --${ground}: ${ratio.toFixed(2)}`);
+        }
+      }
+      expect(failures).toEqual([]);
+    });
+  }
+});
+
 // Muted text inside a status banner. The reminders page's overdue alert is
 // bg-danger/10 with the overdue titles in text-muted beside its danger
 // heading, found by an axe sweep of a seeded household at 4.36:1. A status

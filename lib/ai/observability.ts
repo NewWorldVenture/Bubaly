@@ -30,6 +30,8 @@ import type { ServiceScope } from '@/lib/services/types';
 import { MAX_AI_REQUEST_TEXT_CHARS } from '@/lib/ai/chat-request';
 import { createRequest, updateRequest } from '@/lib/ai/runs/store';
 import { recordModelCall } from '@/lib/ai/usage';
+import { monthlyAllowanceFor } from '@/lib/constants/ai-allowance';
+import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import type { TokenUsage } from '@/lib/ai/usage';
 
 export type AiRequestSpec = {
@@ -47,6 +49,14 @@ export type AiRequestSpec = {
   text: string;
   kind?: AiRequestKind;
   conversationId?: string | null;
+  /**
+   * The caller's retry key for this logical request, stored on the row under
+   * the (family_id, client_request_id) unique index. When a row with this key
+   * already exists the body does NOT run: `AiRequestDuplicate` is thrown before
+   * the model, so a retry that raced past the caller's own lookup files no
+   * second row and repeats no effect.
+   */
+  clientRequestId?: string | null;
 };
 
 export type AiObserver = {
@@ -95,10 +105,30 @@ export async function withAiRequest<T>(
     requestText: spec.text.slice(0, MAX_AI_REQUEST_TEXT_CHARS),
     conversationId: spec.conversationId ?? null,
     feature: spec.feature,
+    clientRequestId: spec.clientRequestId ?? null,
   }).catch((err: unknown) => {
     console.error('[ai-observability] could not open a request row', { feature: spec.feature, err });
     return null;
   });
+  // With a retry key the row is also the idempotency record. A filing that
+  // failed — including a key collision whose original row could not be read
+  // back — leaves an earlier attempt's outcome unknown, so the body must not
+  // run on ANY plan: running it could repeat that attempt's effects (#788
+  // review 5964206145). Unkeyed calls keep the plan-based rule below.
+  if (!opened?.ok && spec.clientRequestId) throw new AiRequestNotFiled(spec.feature);
+  if (!opened?.ok && await allowanceDependsOnTheRow(scope)) {
+    // The row is not only diagnostics: on a capped plan it IS the meter (F19).
+    // `monthlyAllowance` counts these rows, so a model call made without one
+    // is a call the allowance never sees, and a family at 9 of 10 whose filing
+    // failed stayed at 9 however often it called. On a capped plan the call is
+    // refused instead; on an unlimited plan nothing is metered by the row, and
+    // the family's work goes on as before, unrecorded.
+    throw new AiRequestNotFiled(spec.feature);
+  }
+  // The key named a request already filed: this is a retry of it, not a new
+  // one. Its row is left exactly as it is (it belongs to the first attempt) and
+  // nothing below runs.
+  if (opened?.ok && opened.data.existing) throw new AiRequestDuplicate(spec.feature, opened.data.id);
   if (opened?.ok) {
     requestId = opened.data.id;
     // `executing` with a start stamp, so a row that never completes is visibly
@@ -165,5 +195,34 @@ export async function withAiRequest<T>(
     // unchanged: this observes, it does not handle.
     await settle({ status: 'failed', error: describe(err) }, false);
     throw err;
+  }
+}
+
+/** The request row could not be filed on a plan whose allowance counts it (F19). */
+export class AiRequestNotFiled extends Error {
+  constructor(readonly feature: string) {
+    super(`could not file the AI request for ${feature}; refused because the allowance counts it`);
+    this.name = 'AiRequestNotFiled';
+  }
+}
+
+/** A retry key named a request already filed; the body did not run. */
+export class AiRequestDuplicate extends Error {
+  constructor(readonly feature: string, readonly requestId: string) {
+    super(`${feature} request ${requestId} was already filed under this retry key`);
+    this.name = 'AiRequestDuplicate';
+  }
+}
+
+// Whether this family's allowance is counted from `ai_requests`, i.e. its plan
+// is capped. A plan that cannot be read is treated as capped: an allowance that
+// cannot be checked is not an allowance, the rule `monthlyAllowance` follows.
+async function allowanceDependsOnTheRow(scope: ServiceScope): Promise<boolean> {
+  try {
+    const level = await resolveFamilyPlanLevel(scope.db, scope.familyId);
+    return monthlyAllowanceFor(level) !== null;
+  } catch (err) {
+    console.error('[ai-observability] plan level read failed after a failed filing', err);
+    return true;
   }
 }

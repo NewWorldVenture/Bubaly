@@ -40,7 +40,7 @@ export async function POST() {
     // The allowance alone: whether the prompt is available is the Journal
     // page's gate above, not the assistant's tier or its Off switch.
     const access = await assertAIAllowance(ctx, { db: supabase });
-    if (!access.ok) return accessDeniedResponse(access);
+    if (!access.ok) return accessDeniedResponse(access, t);
 
     // These five entries are the only thing that makes the prompt personal. A
     // refused read produced an empty list, which is also what a brand-new

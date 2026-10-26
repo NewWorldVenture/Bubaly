@@ -54,18 +54,18 @@ export default async function MarketingSettingsPage() {
   const byKey = new Map((settings ?? []).map((s) => [s.key, s.value]));
 
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       <Card>
         <h2 className="mb-3 font-semibold">{t('adminMarketingSettings.channelProviders')}</h2>
         <ul className="space-y-2">
           {providerStatus(aiConfig.view).map((p) => (
-            <li key={p.name} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
+            <li key={p.name} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-border px-3 py-2 text-sm">
               <span>{p.name}</span>
               {p.ready === null
                 ? <span className="inline-flex items-center gap-1 text-muted"><CircleAlert className="h-4 w-4" />{' '}{t('strategyMetrics.unavailable')}</span>
                 : p.ready
                   ? <span className="inline-flex items-center gap-1 text-success"><CheckCircle2 className="h-4 w-4" />{' '}{t('settings.connected')}</span>
-                  : <span className="inline-flex items-center gap-1 text-muted"><XCircle className="h-4 w-4" /> Set {p.env}</span>}
+                  : <span className="inline-flex min-w-0 items-center gap-1 text-muted [overflow-wrap:anywhere]"><XCircle className="h-4 w-4 shrink-0" /> Set {p.env}</span>}
             </li>
           ))}
         </ul>

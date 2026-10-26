@@ -23,12 +23,17 @@ const h = vi.hoisted(() => ({
   expireErrors: {} as Record<string, unknown>,
   /** Sessions that close (Stripe's own 24h expiry) just as the scripted expire fails. */
   closesBeforeExpire: new Set<string>(),
+  /** families.closed_at of the caller's active family. */
+  closedAt: null as string | null,
+  /** Every Stripe customer actually minted, and the idempotency keys Stripe has seen. */
+  customersMinted: [] as string[],
+  customerKeys: {} as Record<string, string>,
 }));
 
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/supabase/auth', () => {
   const ctx = () => ({ user: { id: 'user-a', email: 'parent@example.test' },
-    active: { role: 'parent', familyId: 'family-a', family: { name: 'Fixture family' } }, memberships: [] });
+    active: { role: 'parent', familyId: 'family-a', family: { name: 'Fixture family', closed_at: h.closedAt } }, memberships: [] });
   return { requireUserContext: async () => ctx(), getUserContext: async () => ctx() };
 });
 vi.mock('@/lib/auth/require-aal2', () => ({
@@ -102,7 +107,16 @@ vi.mock('@/lib/stripe', async () => {
   let n = 0;
   const stripe = {
     prices: { retrieve: async (id: string) => price(id) },
-    customers: { create: async () => ({ id: 'cus-new' }) },
+    // As Stripe does: every create mints a new customer, unless it repeats an
+    // idempotency key Stripe has already answered.
+    customers: { create: async (_params: Row, options?: { idempotencyKey?: string }) => {
+      const key = options?.idempotencyKey;
+      if (key && h.customerKeys[key]) return { id: h.customerKeys[key] };
+      const id = `cus-new-${h.customersMinted.length + 1}`;
+      h.customersMinted.push(id);
+      if (key) h.customerKeys[key] = id;
+      return { id };
+    } },
     subscriptions: {
       list: async () => ({ data: h.listed }),
       retrieve: async (id: string) => {
@@ -187,6 +201,7 @@ beforeEach(() => {
   h.writes = []; h.stepUp = false; h.stripeSubs = {}; h.listed = []; h.sessions = {};
   h.created = []; h.expired = []; h.updatedSubs = []; h.portalOpened = 0; h.event = null;
   h.retrieveErrors = {}; h.expireErrors = {}; h.closesBeforeExpire = new Set();
+  h.closedAt = null; h.customersMinted = []; h.customerKeys = {};
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
@@ -480,5 +495,83 @@ describe('a family whose past_due grace lapsed can still reach the payment fix',
     const response = await portal(post('/api/billing/portal'));
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ url: 'https://portal.example.test' });
+  });
+});
+
+describe('two first checkouts for a family Stripe does not know yet', () => {
+  // No billing_customers row: both requests take the create-customer branch.
+  it('share one Stripe customer, so they share one Checkout create', async () => {
+    const responses = await Promise.all([
+      checkout(post('/api/billing/checkout', { plan: 'plus_monthly' })),
+      checkout(post('/api/billing/checkout', { plan: 'plus_monthly' })),
+    ]);
+    expect(responses.map(r => r.status)).toEqual([200, 200]);
+    expect(h.customersMinted).toHaveLength(1);
+    expect(h.created.map(c => c.params.customer)).toEqual([h.customersMinted[0], h.customersMinted[0]]);
+    const keys = h.created.map(c => c.options?.idempotencyKey);
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it('a checkout and a change-plan from the same parent also share the customer', async () => {
+    await Promise.all([
+      checkout(post('/api/billing/checkout', { plan: 'plus_monthly' })),
+      changePlan(post('/api/billing/change-plan', { plan: 'plus_monthly' })),
+    ]);
+    expect(h.customersMinted).toHaveLength(1);
+  });
+});
+
+describe('a closed account cannot start, change or resume billing without reopening', () => {
+  // closeAccountAction set the subscription to end at period end; the family is
+  // locked (computeEntitlement: closed wins over paid), so anything billed now
+  // buys nothing. A second parent, or a billing tab left open, still reaches
+  // these routes.
+  beforeEach(() => {
+    h.closedAt = '2026-10-01T12:00:00.000Z';
+    h.tables.billing_customers = [{ family_id: 'family-a', customer_ref: 'cus-a' }];
+  });
+  const closingSub = () => {
+    h.tables.subscriptions = [{ id: 's1', family_id: 'family-a', plan: 'basic', status: 'active', provider_ref: 'sub-a', cancel_at_period_end: true }];
+    h.stripeSubs['sub-a'] = { ...stripeSub('sub-a', 'active', PRICES.stripePrices.basic_monthly.id), cancel_at_period_end: true };
+  };
+
+  it('checkout refuses before any Stripe customer or session exists', async () => {
+    h.tables.billing_customers = [];
+    const response = await checkout(post('/api/billing/checkout', { plan: 'plus_monthly' }));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: 'account_closed' });
+    expect(h.customersMinted).toEqual([]);
+    expect(h.created).toEqual([]);
+  });
+
+  it('change-plan refuses to update the subscription the close set to end', async () => {
+    closingSub();
+    const response = await changePlan(post('/api/billing/change-plan', { plan: 'plus_monthly' }));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: 'account_closed' });
+    expect(h.updatedSubs).toEqual([]);
+    expect(subscriptionRows()[0]).toMatchObject({ cancel_at_period_end: true });
+  });
+
+  it('change-plan refuses to start a Checkout for it', async () => {
+    const response = await changePlan(post('/api/billing/change-plan', { plan: 'plus_monthly' }));
+    expect(response.status).toBe(403);
+    expect(h.created).toEqual([]);
+  });
+
+  it('cancel refuses to resume the subscription', async () => {
+    closingSub();
+    const response = await cancel(post('/api/billing/cancel', { resume: true }));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: 'account_closed' });
+    expect(h.updatedSubs).toEqual([]);
+    expect(subscriptionRows()[0]).toMatchObject({ cancel_at_period_end: true });
+  });
+
+  it('cancel still lets it stop the billing', async () => {
+    h.tables.subscriptions = [{ id: 's1', family_id: 'family-a', plan: 'basic', status: 'active', provider_ref: 'sub-a', cancel_at_period_end: false }];
+    const response = await cancel(post('/api/billing/cancel', { resume: false }));
+    expect(response.status).toBe(200);
+    expect(h.updatedSubs).toEqual([{ id: 'sub-a', params: { cancel_at_period_end: true } }]);
   });
 });

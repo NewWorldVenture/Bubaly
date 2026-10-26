@@ -128,11 +128,19 @@
      carries a warning Badge (bg-warning/15) for its priority or its snooze.
      The two tints compound to 19.25%, where warning read 4.23 over --bg. So
      warning is darkened once more, the same way, to the first value that
-     clears 4.5 on that nested ground (4.53). */
-  --accent: 169 66 21; /* the status roles' rule for accent too: 3.71 on its 15% tint at 194 75 24, now 4.5 */
+     clears 4.5 on that nested ground (4.53).
+
+     And a chip can sit inside a selected row: the brand selection tint
+     (bg-brand/10) behind a Badge, as on an open contact's "Emergency" chip,
+     found by opening every disclosure on the member routes. Over --bg that
+     read danger 4.37, warning 4.33 and accent 4.01. Each is darkened once more,
+     the same way, to the first value that clears 4.5 there as the browser
+     composites it, rounding each layer to 8 bits (4.50 to 4.52; danger takes
+     one step past the unrounded value, which the browser measured at 4.49). */
+  --accent: 155 60 19; /* the status roles' rule for accent too: 3.71 on its 15% tint at 194 75 24, 4.5 at 169 66 21, now 4.52 on the selection tint */
   --success: 18 99 73;
-  --warning: 123 88 15;
-  --danger: 174 39 39;
+  --warning: 119 85 15;
+  --danger: 169 38 38;
   --danger-fg: 255 255 255;
   --success-fg: 255 255 255;
   --info: 37 99 235;
@@ -359,6 +367,34 @@
 }
 .light .group:hover .group-hover\:text-fuchsia-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-fuchsia-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-fuchsia-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-fuchsia-500:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-fuchsia-600:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
   color: rgb(162 28 175 / var(--tw-text-opacity, 1)); /* fuchsia-700 */
+}
+/* The neutral greys: 200 to 500 read 1.2 to 3.5:1 on a light surface; their 700s read 7.5:1 or more (600 already clears 4.5:1). */
+:where(.light) .text-slate-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-slate-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-slate-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-slate-500:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(51 65 85 / var(--tw-text-opacity, 1)); /* slate-700 */
+}
+.light .hover\:text-slate-200:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-slate-300:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-slate-400:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-slate-500:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(51 65 85 / var(--tw-text-opacity, 1)); /* slate-700 */
+}
+.light .group:hover .group-hover\:text-slate-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-slate-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-slate-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-slate-500:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(51 65 85 / var(--tw-text-opacity, 1)); /* slate-700 */
+}
+:where(.light) .text-gray-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-gray-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-gray-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-gray-500:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(55 65 81 / var(--tw-text-opacity, 1)); /* gray-700 */
+}
+.light .hover\:text-gray-200:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-gray-300:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-gray-400:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-gray-500:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(55 65 81 / var(--tw-text-opacity, 1)); /* gray-700 */
+}
+.light .group:hover .group-hover\:text-gray-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-gray-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-gray-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-gray-500:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(55 65 81 / var(--tw-text-opacity, 1)); /* gray-700 */
+}
+:where(.light) .text-zinc-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-zinc-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-zinc-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-zinc-500:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(63 63 70 / var(--tw-text-opacity, 1)); /* zinc-700 */
+}
+.light .hover\:text-zinc-200:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-zinc-300:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-zinc-400:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-zinc-500:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(63 63 70 / var(--tw-text-opacity, 1)); /* zinc-700 */
+}
+.light .group:hover .group-hover\:text-zinc-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-zinc-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-zinc-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-zinc-500:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(63 63 70 / var(--tw-text-opacity, 1)); /* zinc-700 */
 }
 /* End of the light theme's raw palette text. */
 
@@ -744,7 +780,7 @@ body::before {
 
   /* CTA button — the gradient call-to-action used across modules */
   .btn-cta {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-brand-fg shadow-glow transition hover:opacity-90 active:scale-[0.98] focus-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-brand-fg shadow-glow transition hover:brightness-95 active:scale-[0.98] focus-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none;
   }
 
   /* Inline action button — small pill-shaped action in lists */

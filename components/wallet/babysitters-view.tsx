@@ -95,7 +95,7 @@ export function BabysittersView({ sitters, payments, canManage, seesPayouts = tr
           <p className="text-sm font-semibold">{tr('babysitters.noBabysittersYet')}</p>
           <p className="mt-1 text-xs text-muted">{tr('babysitters.addASitterToTrackPayments')}</p>
           {canManage && (
-            <button onClick={() => setAdding(true)} className="mt-4 flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90 transition">
+            <button onClick={() => setAdding(true)} className="mt-4 flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:brightness-95 transition">
               <Plus className="h-3.5 w-3.5" /> {tr('babysitters.addSitter')}
             </button>
           )}

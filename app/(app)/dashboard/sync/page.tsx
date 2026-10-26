@@ -91,7 +91,7 @@ export default async function SyncHubPage() {
             {t('dashboardSync.connectGoogleMicrosoftOutlookOrApple')}
           </p>
         </div>
-        <Link href="/dashboard/sync/accounts" className="inline-flex h-11 items-center gap-2 rounded-xl bg-brand px-5 text-sm font-medium text-brand-fg shadow-glow transition hover:opacity-90">
+        <Link href="/dashboard/sync/accounts" className="inline-flex h-11 items-center gap-2 rounded-xl bg-brand px-5 text-sm font-medium text-brand-fg shadow-glow transition hover:brightness-95">
           <Plug className="h-4 w-4" /> {t('dashboardSync.connectAnAccount')}
         </Link>
       </div>

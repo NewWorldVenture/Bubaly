@@ -63,10 +63,10 @@ export type StructuredInput<T> = {
 /** How many issues to quote back to the model; enough to fix, short enough to read. */
 const MAX_REPAIR_ISSUES = 12;
 
-function issueSummary(error: { issues: { path: (string | number)[]; message: string }[] }): string {
+function issueSummary(error: { issues: { path: PropertyKey[]; message: string }[] }): string {
   return error.issues
     .slice(0, MAX_REPAIR_ISSUES)
-    .map((issue) => `- ${issue.path.length ? issue.path.join('.') : '<root>'}: ${issue.message}`)
+    .map((issue) => `- ${issue.path.length ? issue.path.map(String).join('.') : '<root>'}: ${issue.message}`)
     .join('\n');
 }
 

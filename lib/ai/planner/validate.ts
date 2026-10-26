@@ -156,8 +156,8 @@ function clip(text: string, max: number): string {
   return flat.length <= max ? flat : `${flat.slice(0, max - 1)}…`;
 }
 
-function issueSummary(error: { issues: { path: (string | number)[]; message: string }[] }): string {
-  return error.issues.slice(0, 5).map((issue) => `${issue.path.length ? issue.path.join('.') : 'input'}: ${issue.message}`).join('; ');
+function issueSummary(error: { issues: { path: PropertyKey[]; message: string }[] }): string {
+  return error.issues.slice(0, 5).map((issue) => `${issue.path.length ? issue.path.map(String).join('.') : 'input'}: ${issue.message}`).join('; ');
 }
 
 // ── Autonomy ────────────────────────────────────────────────────────────────

@@ -103,7 +103,7 @@ export default async function SegmentsPage() {
               <input name="inactiveForDays" type="number" min="0" className={inputCls} />
             </label>
           </div>
-          <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand/90">{t('adminMarketingSegments.createSegment')}</SubmitButton>
+          <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:brightness-95">{t('adminMarketingSegments.createSegment')}</SubmitButton>
         </form>
       </Card>
     </div>

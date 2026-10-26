@@ -31,7 +31,7 @@ export default async function OnboardingPage({ searchParams }: { searchParams?: 
   if (!('needsFamily' in ctx) && !await verifyCalendarWizard(scopeFromUserContext(ctx, supabase), { allowPendingActivation: true })) {
     redirect(reviewPlan ? reviewBillingPath(reviewPlan) : '/dashboard');
   }
-  const account = z.string().uuid().safeParse(query.calendarAccount);
+  const account = z.string().guid().safeParse(query.calendarAccount);
   const status = typeof query.calendarStatus === 'string' && ['connected', 'cancelled', 'unavailable'].includes(query.calendarStatus) ? query.calendarStatus : undefined;
   const providers = hasEncryptionKey() ? configuredAdapters().map((adapter) => adapter.provider).filter((provider): provider is 'google' | 'microsoft' => provider === 'google' || provider === 'microsoft') : [];
   const { data: auth, error: authError } = await supabase.auth.getUser();

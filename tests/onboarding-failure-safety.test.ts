@@ -2,12 +2,25 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   completeProfileOnboardingSchema,
+  finalizeOnboardingSchema,
   inviteMemberActionSchema,
   localMemberActionSchema,
   previewCalendarImportSchema,
 } from '@/lib/validation';
 
 describe('onboarding failure safety', () => {
+  it('keeps omitted appearance defaults and legacy PostgreSQL GUID inputs', () => {
+    const appearance = finalizeOnboardingSchema.shape.appearance;
+    expect(appearance.parse(undefined)).toEqual({ avatarUrl: '' });
+    expect(appearance.parse({})).toEqual({ avatarUrl: '' });
+    expect(appearance.parse({ avatarUrl: 'https://example.test/avatar.png', pin: '1234' }))
+      .toEqual({ avatarUrl: 'https://example.test/avatar.png', pin: '1234' });
+    const familyId = '00000000-0000-0000-0000-000000000001';
+    expect(localMemberActionSchema.safeParse({ familyId, displayName: 'Kid', role: 'child' }).success).toBe(true);
+    expect(localMemberActionSchema.safeParse({ familyId: 'not-a-uuid', displayName: 'Kid', role: 'child' }).success).toBe(false);
+    expect(localMemberActionSchema.safeParse({ familyId: familyId + '0', displayName: 'Kid', role: 'child' }).success).toBe(false);
+  });
+
   it('bounds and validates runtime action payloads', () => {
     expect(previewCalendarImportSchema.safeParse({ source: 'paste', icsText: 'x'.repeat(200_001) }).success).toBe(false);
     expect(previewCalendarImportSchema.safeParse({ source: 'demo' }).success).toBe(true);
@@ -53,9 +66,9 @@ describe('onboarding failure safety', () => {
     expect(source).toContain("onboardingFailure('membership lookup', membershipLookupError");
     expect(source).toContain('prefReadError');
     expect(source).toContain("onboardingFailure('onboarding preferences read', prefReadError");
-    // The member write is scoped by the upsert's conflict target rather than a
-    // pair of .eq() filters: (family_id, user_id) is the key, so it cannot
-    // touch a row in another household even if familyId were wrong.
+    // This source guard checks the upsert's (family_id,user_id) conflict target
+    // and supplied family/user payload. It does not exercise database
+    // authorization or prove access isolation if familyId is wrong.
     expect(source).toContain("{ onConflict: 'family_id,user_id' }");
     expect(source).toMatch(/family_id: familyId,\n\s*user_id: auth\.user\.id,/);
   });

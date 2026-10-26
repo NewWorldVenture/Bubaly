@@ -13,6 +13,15 @@
 // /admin/ai-activity useless, which is the number support looks at first.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// F19: on a capped plan the request row is the meter, so withAiRequest refuses
+// when it cannot be filed. This file is about other behaviour and its fake
+// database files no row, so the family is on Basic, whose allowance is
+// unlimited: an unfiled request is bookkeeping there, as it always was.
+vi.mock('@/lib/server/plan', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/plan')>()),
+  resolveFamilyPlanLevel: async () => 1,
+}));
+
 const mocks = vi.hoisted(() => ({ getProvider: vi.fn(), complete: vi.fn(), createRequest: vi.fn(), updateRequest: vi.fn(), recordModelCall: vi.fn() }));
 vi.mock('@/lib/ai/provider', () => ({ getProvider: mocks.getProvider }));
 vi.mock('@/lib/ai/runs/store', () => ({ createRequest: mocks.createRequest, updateRequest: mocks.updateRequest }));

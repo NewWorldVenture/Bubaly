@@ -568,7 +568,7 @@ export default async function HomePage() {
             <Link key={a.label} href={a.href}
               className={cn(
                 'inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-semibold transition',
-                a.primary ? 'bg-brand text-white hover:opacity-90' : 'border border-border bg-surface/40 hover:bg-elevated',
+                a.primary ? 'bg-brand text-white hover:brightness-95' : 'border border-border bg-surface/40 hover:bg-elevated',
               )}>
               <a.icon className="h-4 w-4" /> {a.label}
             </Link>

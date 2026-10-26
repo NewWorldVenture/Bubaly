@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { ReviewCard, type ReviewItem } from './review-card';
 import { getTranslations } from '@/lib/i18n/server';
+import { MAX_PROOF_FILES, isMemberProofPath } from '@/lib/chores/proof-media';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -84,8 +85,18 @@ export default async function MissionsPage() {
   // Chunked because the request carries every path in its body: a queue with
   // hundreds of photos should be a few requests, never one enormous one and
   // never one per photo.
+  //
+  // Only a path in the submission's OWN child's folder is signed and shown
+  // (SEC-002). submitProofAction accepts nothing else, but a child can insert
+  // their own submission directly, naming any path, and this page signs with
+  // the parent's session, which reads every member's proof: a sibling's photo
+  // was shown on the child's card as the child's proof. A path that is not
+  // theirs counts as proof that could not be loaded, so the parent is told.
   const SIGN_CHUNK = 100;
-  const proofPaths = [...new Set(subs.flatMap((s) => (s.media_paths ?? []).slice(0, 4)))];
+  const claimedProof = (s: { media_paths: string[] | null; member_id: string }) => (s.media_paths ?? []).slice(0, MAX_PROOF_FILES);
+  const shownProof = (s: { media_paths: string[] | null; member_id: string }) => claimedProof(s)
+    .filter((path) => isMemberProofPath(path, familyId, s.member_id));
+  const proofPaths = [...new Set(subs.flatMap(shownProof))];
   const signedByPath = new Map<string, string>();
   for (let i = 0; i < proofPaths.length; i += SIGN_CHUNK) {
     const chunk = proofPaths.slice(i, i + SIGN_CHUNK);
@@ -112,8 +123,8 @@ export default async function MissionsPage() {
     // see what looks like a proof-less submission and approve it, releasing
     // points or real cash. Counting what could not be signed turns a silent gap
     // into a stated one. Audit C1-S9-29. (The batch above logs a signing error.)
-    const expectedProof = (s.media_paths ?? []).slice(0, 4);
-    const mediaUrls = expectedProof
+    const expectedProof = claimedProof(s);
+    const mediaUrls = shownProof(s)
       .map((path) => signedByPath.get(path))
       .filter((url): url is string => !!url);
     const proofUnavailable = expectedProof.length > mediaUrls.length;

@@ -5,6 +5,8 @@
 // approvals, reminders) into ONE ranked, de-duplicated, de-noised list. DB-free;
 // the route feeds it real Supabase rows.
 
+import { inAppHref } from '@/lib/auth/redirect';
+
 export type CalmSource = 'agent' | 'autopilot' | 'operating_index' | 'approval' | 'reminder' | 'graph';
 export type ItemSeverity = 'action' | 'attention' | 'info';
 
@@ -34,6 +36,18 @@ export type CalmInbox = {
 
 const SEV_RANK: Record<ItemSeverity, number> = { action: 0, attention: 1, info: 2 };
 
+/**
+ * An item whose link would leave the app keeps its place but loses the link.
+ * Two sources hand this inbox an href somebody typed rather than one the route
+ * built: `agent_activity.href` (0127) and the Operating Index's stored
+ * `suggestions[].href` (0125), both writable by any family member. The calm
+ * inbox is what a parent reads as Bubaly's prioritised list, so an off-app
+ * value there is a link a child authored in Bubaly's voice.
+ */
+function inAppItem(item: CalmItem): CalmItem {
+  return item.href && !inAppHref(item.href) ? { ...item, href: null } : item;
+}
+
 /** Sort by severity, then soonest `at`, then title — deterministic. */
 function rank(a: CalmItem, b: CalmItem): number {
   if (SEV_RANK[a.severity] !== SEV_RANK[b.severity]) return SEV_RANK[a.severity] - SEV_RANK[b.severity];
@@ -58,7 +72,7 @@ export function buildCalmInbox(items: CalmItem[], opts: { urgentCap?: number; to
 
   // Dedupe by normalized title, keeping the most severe instance.
   const byTitle = new Map<string, CalmItem>();
-  for (const it of items) {
+  for (const it of items.map(inAppItem)) {
     const key = it.title.trim().toLowerCase();
     const prev = byTitle.get(key);
     if (!prev || SEV_RANK[it.severity] < SEV_RANK[prev.severity]) byTitle.set(key, it);

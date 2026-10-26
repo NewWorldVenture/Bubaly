@@ -69,3 +69,26 @@ export function buildWeekGrid(classes: ClassLike[], week: 'a' | 'b'): Record<num
 }
 
 export const WEEK_PATTERN_LABELS: Record<WeekPattern, string> = { all: 'Every week', a: 'A weeks', b: 'B weeks' };
+
+/** What the timetable's add/edit dialog holds: every field as typed. */
+export interface ClassForm {
+  member_id: string; subject: string; teacher: string; room: string;
+  time_slot: string; day_of_week: string; week_pattern: WeekPattern; school_name: string;
+}
+
+/**
+ * The columns a class form writes, on add AND on edit. The edit dialog lets a
+ * parent change the student, so the student is one of them: the update used
+ * to leave `member_id` out, reported "Class updated", and kept the class on
+ * the first child.
+ */
+export function classFormFields(form: ClassForm) {
+  return {
+    member_id: form.member_id,
+    subject: form.subject.trim(),
+    teacher: form.teacher.trim() || null, room: form.room.trim() || null,
+    time_slot: form.time_slot.trim() || null,
+    day_of_week: form.day_of_week === '' ? null : parseInt(form.day_of_week, 10),
+    week_pattern: form.week_pattern, school_name: form.school_name.trim() || null,
+  };
+}

@@ -268,17 +268,16 @@ describe('a security control the user chose does not fail open (C1-S9-44)', () =
     // family's data on a shared or stolen device had that protection silently
     // removed, with nothing on screen to say so.
     const source = layout();
-    expect(source).toContain('error: prefsError');
-    expect(source).toContain('if (prefsError)');
-    expect(at(source, 'if (prefsError)')).toBeLessThan(at(source, 'const appLockRaw'));
+    expect(source).toContain('await readAppLockRecord(user.id)');
+    expect(source).toContain('if (!current.ok) return <AppLockUnavailable />;');
+    expect(at(source, 'if (!current.ok)')).toBeLessThan(at(source, 'const locked ='));
   });
 
   it('the closed answer withholds the app instead of rendering it', () => {
     // The only thing that makes this a fix rather than a message: the bail must
     // not fall through to `children`. A banner above an unlocked app would be
     // the defect with an apology attached.
-    const bail = bodyOf(layout(), 'if (prefsError)', 'return <AppLockUnavailable />;');
-    expect(bail).toContain('console.error');
+    const bail = bodyOf(layout(), 'if (!current.ok)', 'return <AppLockUnavailable />;');
     expect(bail).not.toContain('{children}');
     const fallback = bodyOf(layout(), 'async function AppLockUnavailable', '\n}');
     expect(fallback).not.toContain('children');
@@ -286,22 +285,21 @@ describe('a security control the user chose does not fail open (C1-S9-44)', () =
   });
 
   it('it does not impersonate the lock screen it cannot verify against', () => {
-    // `AppLockGate` checks the PIN against the `salt` and `hash` from this very
-    // read, so a gate rendered without them could only ever reject — locking
-    // the user out permanently rather than asking for their PIN.
+    // Without this read we do not know the user HAS a PIN, so a lock screen
+    // here could ask one who never set one for a PIN it can only reject.
     const fallback = bodyOf(layout(), 'async function AppLockUnavailable', '\n}');
     expect(fallback).not.toContain('AppLockGate');
     expect(fallback).not.toContain('salt');
     expect(fallback).not.toContain('hash');
   });
 
-  it('the billing gates above still fail OPEN, which is their correct direction', () => {
+  it('the billing gates still fail OPEN, which is their correct direction', () => {
     // The contrast is the point, and pinning it stops a later sweep from
     // "consistently" hardening these too: locking a paying family out of their
     // own data over a billing outage is the worse error, and `resolveEntitlement`
     // is documented as failing open for that reason.
     const source = layout();
-    expect(source).toContain('resolveEntitlement fails open');
+    expect(source).toContain('resolveEntitlement(supabase, userId, { isSuperAdmin: false })');
     expect(source).not.toMatch(/const \{[^}]*error: entError/);
   });
 
@@ -421,7 +419,6 @@ describe('the page-side sweep is closed with a ratchet (C1-S9-45)', () => {
       'app/(app)/dashboard/family-digital-twin/page.tsx::savedSimRows',
       // auth.getUser() — the signed-out branch hands off to the section layouts
       // that actually enforce auth, which this file's header states it does not.
-      'app/(app)/layout.tsx::auth',
       // Display-name maps: the fallback narrows a label and never changes an
       // answer or an action (C1-S9-40's rule).
       'app/(app)/marketplace/creators/[id]/page.tsx::members',

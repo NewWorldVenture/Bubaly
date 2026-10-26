@@ -324,6 +324,32 @@ describe('current-owner subscription read lifecycle', () => {
     }
   });
 
+  // 0285 could not enforce one row per family (the trial seed beside a paid
+  // row), and maybeSingle answers such a family with PGRST116. The routes and
+  // the webhook read past it (lib/billing/subscription-row); the page did not,
+  // so the family saw "temporarily unavailable" forever and had no portal,
+  // cancel or plan change to reach.
+  it('reads a family holding more than one subscriptions row as its live subscription', async () => {
+    const seed = { ...row('family-a', 'free'), id: 'seed', status: 'trialing' as const, provider_ref: null, updated_at: '2026-09-02T00:00:00Z' };
+    const paid = row('family-a', 'plus');
+    mock.read.mockResolvedValue({ data: null, error: { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' } as Result['error'] });
+    const list = vi.fn(async () => ({ data: [seed, paid], error: null }));
+    mock.eq.mockImplementation(() => ({ maybeSingle: mock.read, order: () => ({ limit: list }) }));
+    hook(); await settle(); await settle();
+    const read = hook();
+    expect(read.status).toBe('ready');
+    expect(read.subscription).toMatchObject({ id: 'subscription-fixture', plan: 'plus', status: 'active' });
+    expect(read.isCurrentReady()).toBe(true);
+  });
+
+  it('keeps a failed list read of a multi-row family unavailable, not "no subscription"', async () => {
+    mock.read.mockResolvedValue({ data: null, error: { code: 'PGRST116', message: 'multiple rows' } as Result['error'] });
+    mock.eq.mockImplementation(() => ({ maybeSingle: mock.read, order: () => ({ limit: async () => ({ data: null, error: { message: 'boom' } }) }) }));
+    hook(); await settle(); await settle();
+    expect(hook().status).toBe('unavailable');
+    expect(hook().subscription).toBeNull();
+  });
+
   it('rejects a returned row belonging to another family', async () => {
     mock.read.mockResolvedValueOnce({ data: row('family-b'), error: null });
     hook(); await settle();

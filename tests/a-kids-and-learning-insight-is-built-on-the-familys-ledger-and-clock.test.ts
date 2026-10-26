@@ -9,7 +9,9 @@ import { createInMemorySupabase, withFaults } from './helpers/in-memory-supabase
 //   S6   the homework planner and school coach printed each due date as its
 //        GREENWICH day; an evening deadline in Los Angeles became tomorrow's
 //   S10  homework, todos, goals, rewards and timetable dropped a failed read and
-//        told the model the family had nothing, answered at HTTP 200
+//        told the model the family had nothing, answered at HTTP 200; so did
+//        the school coach, which wrote a plan for a child with nothing due
+//        when its homework or grades read failed
 //   S11  the rewards coach's "Total points earned" summed 20 of 40 unordered
 //        rows of any status, 'done' included
 //   S14/S15  a guest refused the 'school' summary was handed the same homework
@@ -79,6 +81,8 @@ describe('S10 — a failed read is not an empty family', () => {
     ['rewards', 'chore_assignments'],
     ['rewards', 'reward_redemptions'],
     ['timetable', 'school_classes'],
+    ['school', 'homework_assignments'],
+    ['school', 'grades'],
   ])('%s: a failed %s read answers "could not load", and the model is not asked', async (kind, table) => {
     failing = table;
 
@@ -89,7 +93,7 @@ describe('S10 — a failed read is not an empty family', () => {
     expect(h.complete).not.toHaveBeenCalled();
   });
 
-  it.each(['homework', 'todos', 'goals', 'rewards', 'timetable'])('%s still answers when every read succeeds', async (kind) => {
+  it.each(['homework', 'todos', 'goals', 'rewards', 'timetable', 'school'])('%s still answers when every read succeeds', async (kind) => {
     expect((await ask(kind)).status).toBe(200);
     expect(h.complete).toHaveBeenCalledTimes(1);
   });

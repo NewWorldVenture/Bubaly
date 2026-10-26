@@ -19,7 +19,7 @@ export async function RoleDonut({ counts, total }: { counts: Map<MemberRole, num
   }).filter((a) => a.count > 0);
 
   return (
-    <div className="flex items-center gap-5">
+    <div className="flex flex-wrap items-center gap-5">
       <div className="relative h-28 w-28 shrink-0">
         <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
           <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="14" />
