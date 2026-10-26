@@ -66,9 +66,9 @@ describe('onboarding failure safety', () => {
     expect(source).toContain("onboardingFailure('membership lookup', membershipLookupError");
     expect(source).toContain('prefReadError');
     expect(source).toContain("onboardingFailure('onboarding preferences read', prefReadError");
-    // The member write is scoped by the upsert's conflict target rather than a
-    // pair of .eq() filters: (family_id, user_id) is the key, so it cannot
-    // touch a row in another household even if familyId were wrong.
+    // This source guard checks the upsert's (family_id,user_id) conflict target
+    // and supplied family/user payload. It does not exercise database
+    // authorization or prove access isolation if familyId is wrong.
     expect(source).toContain("{ onConflict: 'family_id,user_id' }");
     expect(source).toMatch(/family_id: familyId,\n\s*user_id: auth\.user\.id,/);
   });

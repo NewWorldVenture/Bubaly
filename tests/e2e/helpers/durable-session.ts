@@ -20,15 +20,31 @@ export type OwnedAccount = { email: string; password: string; userId: string; fa
 export async function createOwnedAccount(provider: string, serviceKey: string): Promise<OwnedAccount> {
   const origin = requireLocalOrigin(provider);
   if (!serviceKey) throw new Error('Durable-session E2E requires the disposable backend service key.');
+  let requestTransportFailed = false;
   const admin: Admin = createClient<Database>(origin, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
-    global: { fetch: (input, init) => fetch(input, { ...init, redirect: 'error' }) },
+    global: { fetch: async (input, init) => {
+      try { return await fetch(input, { ...init, redirect: 'error' }); }
+      catch {
+        requestTransportFailed = true;
+        // The SDK can log a rejected fetch before returning it to this helper.
+        // Replace its message here, before it can expose request information.
+        throw new Error('Durable-session E2E local request failed.');
+      }
+    } },
   });
   const email = `durable-session-${randomUUID()}@example.test`;
   const password = `Ds1!${randomBytes(24).toString('base64url')}`;
   const familyId = randomUUID();
   let userId: string | null = null;
   let disposed = false;
+  let stage: 'auth-user' | 'household' | 'membership' | 'preferences' = 'auth-user';
+  let failure: 'thrown' | 'returned-error' | 'missing-user' = 'thrown';
+  let status: number | null = null;
+  let householdCleanup: 'not-needed' | 'ok' | 'failed' = 'not-needed';
+  let accountCleanup: 'not-needed' | 'ok' | 'failed' = 'not-needed';
+  const safeStatus = (value: unknown): number | null =>
+    typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599 ? value : null;
 
   async function dispose() {
     if (disposed || !userId) return;
@@ -37,12 +53,14 @@ export async function createOwnedAccount(provider: string, serviceKey: string): 
       // Only IDs created by this fixture, with an additional owner predicate.
       const { error } = await admin.from('families').delete().eq('id', familyId).eq('created_by', userId);
       failed = !!error;
-    } catch { failed = true; }
+      householdCleanup = error ? 'failed' : 'ok';
+    } catch { failed = true; householdCleanup = 'failed'; }
     try {
       const { error } = await admin.auth.admin.deleteUser(userId);
       failed ||= !!error;
-    } catch { failed = true; }
-    if (failed) throw new Error('Durable-session E2E could not clean up its owned fixture.');
+      accountCleanup = error ? 'failed' : 'ok';
+    } catch { failed = true; accountCleanup = 'failed'; }
+    if (failed) throw new Error(`Durable-session E2E could not clean up its owned fixture. [household=${householdCleanup}; account=${accountCleanup}]`);
     disposed = true;
   }
 
@@ -50,26 +68,49 @@ export async function createOwnedAccount(provider: string, serviceKey: string): 
     const { data, error } = await admin.auth.admin.createUser({
       email, password, email_confirm: true, user_metadata: { full_name: 'Session Fixture' },
     });
-    if (error || !data.user) throw new Error('Fixture account creation failed.');
+    if (error || !data.user) {
+      failure = error ? 'returned-error' : 'missing-user';
+      status = safeStatus(error?.status);
+      throw new Error('Fixture account creation failed.');
+    }
     userId = data.user.id;
+    stage = 'household';
+    requestTransportFailed = false;
     const family = await admin.from('families').insert({
       id: familyId, name: 'Durable Session Fixture', created_by: userId,
       timezone: 'UTC', trial_ends_at: new Date(Date.now() + 86_400_000).toISOString(),
     });
-    if (family.error) throw new Error('Fixture household creation failed.');
+    if (family.error) {
+      failure = 'returned-error'; status = safeStatus(family.status);
+      throw new Error('Fixture household creation failed.');
+    }
+    stage = 'membership';
+    requestTransportFailed = false;
     const member = await admin.from('family_members').upsert({
       family_id: familyId, user_id: userId, role: 'parent', display_name: 'Session Fixture', is_active: true,
     }, { onConflict: 'family_id,user_id' });
-    if (member.error) throw new Error('Fixture membership creation failed.');
+    if (member.error) {
+      failure = 'returned-error'; status = safeStatus(member.status);
+      throw new Error('Fixture membership creation failed.');
+    }
+    stage = 'preferences';
+    requestTransportFailed = false;
     const preferences = await admin.from('user_preferences').upsert({
       user_id: userId, active_family_id: familyId, notification_prefs: { onboardingComplete: true },
     }, { onConflict: 'user_id' });
-    if (preferences.error) throw new Error('Fixture preferences creation failed.');
+    if (preferences.error) {
+      failure = 'returned-error'; status = safeStatus(preferences.status);
+      throw new Error('Fixture preferences creation failed.');
+    }
     return { email, password, userId, familyId, dispose };
   } catch {
-    await dispose();
+    // Snapshot setup diagnostics before cleanup can change transport state.
+    const setupFailure = requestTransportFailed ? 'transport' : failure;
+    const setupStatus = status;
+    let cleanupFailed = false;
+    try { await dispose(); } catch { cleanupFailed = true; }
     // Provider errors may carry request details. Keep them out of CI reports.
-    throw new Error('Durable-session E2E could not initialize its owned fixture.');
+    throw new Error(`Durable-session E2E could not initialize its owned fixture. [stage=${stage}; failure=${setupFailure}; status=${setupStatus ?? 'none'}; cleanup=${cleanupFailed ? 'failed' : 'ok'}; household=${householdCleanup}; account=${accountCleanup}]`);
   }
 }
 
