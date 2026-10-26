@@ -503,21 +503,24 @@ function embeddableChunks(page: Pick<MarketingPage, 'title' | 'summary' | 'body'
  * the model call can take a minute. A save landing inside it queues the newer
  * version's own embedding, which an overlapping cron run can finish first: it
  * marked stale what it found, and these then landed 'ready' after it, beside
- * its own, until the page was embedded again. So once the version has moved
- * on, what this run made ready that the page no longer has is stale. With the
- * version unmoved nothing newer is queued to embed the page again, so its
- * chunks stay as they are. A chunk staled here that the newer version needs
- * after all is made ready again by that version's own run (runEmbedding).
+ * its own, until the page was embedded again. So what this run made ready that
+ * the page no longer has is stale, whether or not its version moved
+ * (RV62-F5-SAME-VERSION-REWRITE): the regeneration rewrites title, summary and
+ * body at the version it read (its write leaves updated_by null, so 0237 bumps
+ * nothing) and then queues that version's own embedding. An older run that
+ * read the page between a save and that save's regeneration embedded the raw
+ * saved text, and kept it ready beside the regenerated one. A chunk staled
+ * here that the page needs after all is made ready again by the run its
+ * newer text queued (runEmbedding).
  */
 async function staleWhatThePageMovedPast(
   supabase: MarketingPlatformDb,
-  page: { id: string; version: number },
+  page: { id: string },
   madeReady: { id: string; content_hash: string }[],
 ): Promise<{ superseded: true; staled: number } | null> {
   if (!madeReady.length) return null;
-  const { data: now, error: nowError } = await supabase.from('marketing_pages').select('version, title, summary, body').eq('id', page.id).maybeSingle();
+  const { data: now, error: nowError } = await supabase.from('marketing_pages').select('title, summary, body').eq('id', page.id).maybeSingle();
   if (nowError) throw nowError;
-  if (now?.version === page.version) return null;
   const kept = new Set((now ? embeddableChunks(now) : []).map(contentHash));
   const outdated = madeReady.filter((row) => !kept.has(row.content_hash)).map((row) => row.id);
   if (!outdated.length) return null;
@@ -577,22 +580,34 @@ async function runEmbedding(supabase: MarketingPlatformDb, job: Tables<'marketin
   const gone = new Set([...restore.keys()].filter((hash) => !madeReady.some((row) => row.content_hash === hash)));
   const reusable = new Set(existing.filter((row) => currentHashes.has(row.content_hash) && !gone.has(row.content_hash)).map((row) => row.content_hash));
   const missing = chunks.map((content, index) => ({ content, index, hash: hashes[index] })).filter((row) => !reusable.has(row.hash));
-  const result = (embedded: number) => ({ pageId: page.id, chunks: chunks.length, embedded, reused: reusable.size, ...(restored ? { restored } : {}) });
+  const result = (embedded: number, skipped = 0) => ({
+    pageId: page.id, chunks: chunks.length, embedded, reused: reusable.size, ...(restored ? { restored } : {}), ...(skipped ? { skipped } : {}),
+  });
   if (!missing.length) return { ...result(0), ...await staleWhatThePageMovedPast(supabase, page, madeReady) };
   const aiConfig = await getAIConfig(supabase);
   let embedded = 0;
+  let skipped = 0;
   for (let offset = 0; offset < missing.length; offset += 32) {
     const batch = missing.slice(offset, offset + 32);
     const { vectors, model } = await openAIEmbeddings(batch.map((row) => row.content), aiConfig.openaiKey);
-    const { data: landed, error: insertError } = await supabase.from('marketing_embeddings').insert(batch.map((row, index) => ({
+    // Admin reach RV62-EMBED-OVERLAP-DUPLICATE-KEY. An overlapping cron run
+    // that needed the same chunk can insert it inside this run's model call,
+    // and a plain insert then hit 0237's unique key and failed the job (a 502
+    // for a superseded job, until a retry). That row is this very chunk,
+    // inserted ready, and the run that inserted it stales it in its own
+    // staleWhatThePageMovedPast if the page has moved on. So it is skipped,
+    // and only the rows this run inserted are counted here or checked there.
+    const { data: landed, error: insertError } = await supabase.from('marketing_embeddings').upsert(batch.map((row, index) => ({
       source_type: 'page', source_id: page.id, chunk_index: row.index, content_hash: row.hash, content: row.content,
       embedding: JSON.stringify(vectors[index]) as unknown as Json, model, dimensions: vectors[index].length, status: 'ready',
-    }))).select('id, content_hash');
+    })), { onConflict: 'source_type,source_id,chunk_index,content_hash', ignoreDuplicates: true }).select('id, content_hash');
     if (insertError) throw insertError;
-    madeReady.push(...(landed ?? []));
-    embedded += batch.length;
+    const inserted = landed ?? [];
+    madeReady.push(...inserted);
+    embedded += inserted.length;
+    skipped += batch.length - inserted.length;
   }
-  return { ...result(embedded), ...await staleWhatThePageMovedPast(supabase, page, madeReady) };
+  return { ...result(embedded, skipped), ...await staleWhatThePageMovedPast(supabase, page, madeReady) };
 }
 
 async function runJob(supabase: MarketingPlatformDb, job: Tables<'marketing_generation_jobs'>) {

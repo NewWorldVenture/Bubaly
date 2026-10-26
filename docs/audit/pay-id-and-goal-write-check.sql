@@ -211,6 +211,18 @@ begin
   if n <> 0 then failures := array_append(failures, format('a child DELETED %s savings goal(s)', n)); end if;
 
   -- 3. Reads stay open, deliberately. Recorded so the decision is visible.
+  -- The held 0515 is that decision, taken by the account holder: a child's
+  -- goals and Pay-IDs are that child's and a manager's to read, so a
+  -- sibling's (these are the sibling's) are not this child's. Read from its
+  -- policy, by name, so this holds on either schema.
+  if exists (select 1 from pg_policy
+              where polrelid = 'public.wallet_goals'::regclass and polcmd = 'r' and polpermissive
+                and polname = 'A child''s money is read by a manager or that child') then
+    select count(*) into n from public.wallet_goals where id = goal_id;
+    if n <> 0 then failures := array_append(failures, 'the held 0515 is installed, yet a child READ a sibling''s savings goal'); end if;
+    select count(*) into n from public.pay_handles where id = handle_id;
+    if n <> 0 then failures := array_append(failures, 'the held 0515 is installed, yet a child READ a sibling''s Pay-ID'); end if;
+  else
   select count(*) into n from public.wallet_goals where id = goal_id;
   if n = 0 then
     failures := array_append(failures, 'a child can no longer READ savings goals — that is a change of decision; update finalaudit.md and this probe');
@@ -218,6 +230,7 @@ begin
   select count(*) into n from public.pay_handles where id = handle_id;
   if n = 0 then
     failures := array_append(failures, 'a child can no longer READ Pay-IDs — that is a change of decision; update finalaudit.md and this probe');
+  end if;
   end if;
 
   -- 4. The goal row the parent is about to fund must still be the parent's own.

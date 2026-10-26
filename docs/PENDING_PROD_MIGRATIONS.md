@@ -138,8 +138,15 @@ source allocations are not evidence that production applied any migration.
 | 0512 proposed, held | `0512_a_kid_login_is_never_a_parent_or_adult.sql` | A member whose account is a kid login (the synthetic kid address or the server's `bubaly_kid_login` mark; not a mapping alone, for 0495's reason) is refused a parent or adult role when the role or the login changes, and a kid-login mapping is refused for a parent or adult member or an account that is one in any family (42501, every caller). Nothing stored is changed. Decided by the account holder ("refuse until the PIN login is gone"); requested on #771 (comment 6104294318), not yet confirmed. |
 | 0513 proposed, held | `0513_a_removed_member_keeps_no_social_raise.sql` | When a member is removed (`is_active` to false) or their row deleted, their `social_access_permissions` grant in that family is deleted if its social role carries any permission their role's default lacks; a restriction stays. Adds `social_role_permissions(social_role)`, the matrix as a set. Decided by the account holder ("drop raises, keep limits"); requested on #771 (comment 6104294318), not yet confirmed. |
 | 0514 proposed, held | `0514_household_money_is_a_parents_or_adults.sql` | A row of `financial_accounts`, `family_wallets`, `stripe_connected_accounts`, `stripe_financial_accounts`, `billing_customers`, `checkout_sessions` or `babysitter_payments` is read by a manager of its family; a `transactions` row also by the member it is tagged to; a `home_warranties`, `auto_insurance_policies`, `vehicle_registrations` or `paperwork_items` row also by whoever added it; all inside `is_family_member(family_id)`. Writes unchanged. Decided by the account holder (the audit's open sensitive-table finding, household-money group, with the transactions and added-by follow-ups); requested on #771 (comment 6109587749, transactions in 6110569862), not yet confirmed. |
+| 0515 proposed, held | `0515_a_childs_money_is_read_by_managers_and_that_child.sql` | A row of `child_wallets`, `wallet_cards`, `wallet_passes`, `wallet_rewards` or `stripe_cardholders` is read by a manager of its family or the member it is for; a row of `stripe_issuing_cards`, `stripe_authorizations`, `wallet_transactions`, `invest_holdings`, `invest_orders`, `pay_handles`, `wallet_buckets`, `wallet_goals`, `wallet_rules`, `allowance_rules` or `gift_links` by a manager or the child whose wallet it is on, through `is_own_child_wallet_in_family()` (SECURITY DEFINER, pinned to the row's family); all inside `is_family_member(family_id)`. Writes unchanged (`allowance_rules`' FOR ALL split per command). Decided by the account holder (the audit's open sensitive-table finding, child-money group); requested on #771 (comment 6109587749), not yet confirmed. |
 | 0516 proposed, held | `0516_location_history_is_read_by_managers_the_member_and_caregivers.sql` | A row of `location_events`, `safety_check_ins` or `driving_trips` is read by a manager of its family, the member it is about, or a caregiver, inside `is_family_member(family_id)`. Live location keeps its own rule; writes unchanged. Decided by the account holder (the audit's open sensitive-table finding, location group); requested on #771 (comment 6109587749), not yet confirmed. |
 | 0517 proposed, held | `0517_a_personal_record_is_read_by_managers_and_its_member.sql` | A row of `insurance_policies`, `family_insurance_policies`, `vacation_documents` or `voice_commands` is read by a manager of its family or the member it is about, inside `is_family_member(family_id)`; `vacation_medical_information` and `health_providers` also by a caregiver. The two travel tables' FOR ALL policies are split so their member-wide writes stay exactly as they were. Decided by the account holder (the audit's open sensitive-table finding, personal-records group); requested on #771 (comment 6109587749), not yet confirmed. |
+| 0520 proposed, held | `0520_a_guest_does_not_read_the_front_desks_call_history_or_the_hub.sql` | A row of `call_logs` or `family_communications` is not read by a guest of its family: 0509's restrictive guard, `not is_family_guest(family_id)`, on the two tables behind guest-withheld pages that 0509's list left out. Needs 0509 first. Follows the account holder's decision on ROLE-SCOPE-001; requested on #771 (comment 6402247950), not yet confirmed. |
+| 0521 proposed, held | `0521_a_call_in_the_front_desk_history_is_written_by_no_member.sql` | `call_logs` is written by no member: 0092's member insert and update policies dropped, INSERT and UPDATE revoked from anon and authenticated; the members' read and the managers' delete unchanged. Requested on #771 (comment 6402247950), not yet confirmed. |
+| 0522 proposed, held | `0522_a_guest_does_not_change_the_households_tasks_and_reminders.sql` | 0464's guest guard (`household_write_is_not_a_guests()`, BEFORE INSERT, UPDATE and DELETE) on `todo_lists`, `todo_items`, `reminder_lists` and `family_reminders`. Follows ROLE-M03; KIDS-O01's two triggers and Support's reminder DB half. Requested on #771 (comment 6402500834), not yet confirmed. |
+| 0523 proposed, held | `0523_a_member_changes_only_the_rows_they_can_read.sql` | `a_row_you_cannot_read_is_not_yours_to_change()` (SECURITY INVOKER) BEFORE UPDATE OR DELETE and AFTER UPDATE on `home_warranties`, `vehicle_registrations`, `vacation_documents`, `voice_commands`, `wallet_cards`, `wallet_passes`, `wallet_rewards`, `auto_insurance_policies`, `home_locations`, `utility_bills`, `vacation_medical_information` and `family_communications`: a signed-in caller changes only rows they read. Follows the held read rules; requested on #771 (comment 6402627160), not yet confirmed. |
+| 0524 proposed, held | `0524_a_guest_adds_nothing_to_the_areas_withheld_from_them.sql` | 0464's guest guard on `auto_insurance_policies`, `driving_trips`, `family_communications`, `home_locations`, `utility_bills`, `vacation_medical_information`, `wallet_cards`, `wallet_passes` and `wallet_rewards`. Follows ROLE-M03 and ROLE-SCOPE-001; requested on #771 (comment 6402627160), not yet confirmed. |
+| 0525 proposed, held | `0525_a_closed_vote_takes_no_more_ballots.sql` | `a_meal_ballot_is_cast_while_its_vote_is_open()` and `a_poll_vote_is_cast_while_its_poll_is_open()`, BEFORE INSERT OR UPDATE on `meal_vote_ballots` and `family_poll_votes`: a ballot is cast or changed only while its vote is open, read in the row's family FOR SHARE. Support's database half of 6137789822; requested on #771 (comment 6402862474), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4777,6 +4784,370 @@ Dropping any one table's trigger turns the probe red on that table. 184 of
 families, try to vote in one family's poll under their member id from the
 other family and confirm 42501; then vote as their own member there and
 confirm it lands.
+
+## `0525` (proposed, held) — a closed vote still took ballots
+
+`supabase/reserved/0525_a_closed_vote_takes_no_more_ballots.sql`
+— **held**: requested on #771 in comment 6402862474. Not yet confirmed.
+
+**Severity: low (a member's ballot after a meal vote or poll closed could
+change a decided result; no data crosses a household). Deploy order: any.**
+`meal_vote_ballots` and `family_poll_votes` check who votes, never whether the
+vote is open; the screens ask first, but a page left open, a second device, a
+direct request or a close racing the screen's own read goes through. Measured
+with every held file through 0524 applied, as a child: a ballot on a closed
+meal vote, a vote on a closed poll and a vote past a poll's `closes_at`, `OK 1`
+each. This is the database rule Support left for the owner in 6137789822.
+
+**Database.** `a_meal_ballot_is_cast_while_its_vote_is_open()` and
+`a_poll_vote_is_cast_while_its_poll_is_open()` (one per table, so each body
+resolves against its table), SECURITY DEFINER with a pinned search_path,
+BEFORE INSERT OR UPDATE on both tables: it reads the
+row's vote or poll, in the row's family, `FOR SHARE` (so a close in flight is
+waited for, then seen), and refuses with 42501 ("That vote is closed") unless
+`meal_votes.status = 'open'`, or for a poll `status = 'open'` and no
+`closes_at` at or before now (`isPollClosed`'s rule). A missing vote, or one in
+another family, is not open. The service role is exempt; deletes, reads and
+every other rule are unchanged; reopening takes ballots again.
+
+**Proof:** `.github/workflows/closed-vote-runtime.yml` requires the held probe
+`docs/audit/reserved/a-closed-vote-takes-no-more-ballots-check.sql` to fail on
+the released schema on the defect, with no control failing, then applies 0525
+twice and requires it to pass, then re-runs six released probes over the
+ballot tables. The passing run shows the child's ballot and ballot change on
+the closed meal vote and their votes on the closed and past-deadline polls
+refused; open votes, a poll closing tomorrow and one with no deadline taking
+ballots; the reopened meal vote taking one; the guard's wiring (a FOR SHARE
+read); **N1** (triggers disabled): the closed vote takes the ballot; **M1**
+(the poll rule on status alone): the vote past the deadline lands. The share
+lock's wait on a concurrent close needs two sessions and is not run.
+
+All 189 released probes pass with 0525 applied, and with every held file
+applied twice.
+
+**After approved release:** close a test meal vote and confirm a direct
+`meal_vote_ballots` insert for it answers 42501.
+
+## `0523` (proposed, held) — a member rewrote and deleted rows they could not read
+
+`supabase/reserved/0523_a_member_changes_only_the_rows_they_can_read.sql`
+— **held**: requested on #771 in comment 6402627160. Not yet confirmed.
+**Takes effect with the held read rules** (0509, 0514, 0515, 0517, 0520):
+without them every member reads every row and it refuses nothing.
+
+**Severity: medium (a child deleted a parent's warranties, registrations,
+travel documents and voice commands, and a teen's wallet cards; a guest
+deleted the household's bills and insurance, all without reading one). Deploy
+order: after the read rules.** Those read rules are SELECT policies. An UPDATE
+or DELETE with no WHERE and no column read, which PostgREST sends for an
+unfiltered `PATCH` or `DELETE`, is checked against its own command's policies
+only, and on these twelve tables those are still `is_family_member(family_id)`.
+Measured with every held file through 0522 applied, one unfiltered statement
+each: the child (0514, 0515, 0517 tables) and the guest (0509, 0520 tables),
+reading 0 rows, updated and deleted `OK 1` throughout (the Hub's delete is a
+manager's).
+
+**Database.** `a_row_you_cannot_read_is_not_yours_to_change()`, SECURITY
+INVOKER with a pinned search_path, asks as the caller whether they read the row
+being changed (BEFORE UPDATE OR DELETE) and the row an update leaves (AFTER
+UPDATE), and refuses a no with 42501 ("A record you cannot see is not yours to
+change"). The table's own read decides, so it follows whatever read rule is
+installed. A trigger rather than restrictive policies, for 0464's reasons: a
+raise a screen can show, and `gated-write-tables` and the client guard keep
+their inventory unchanged. The service role and session-less writers are
+exempt; a definer function or a cascade runs as the owner. Nothing widens, no
+read changes, inserts are untouched.
+
+**Proof:** `.github/workflows/blind-writes-runtime.yml` applies the five read
+rules, requires the held probe
+`docs/audit/reserved/a-member-changes-only-the-rows-they-can-read-check.sql`
+to fail on the defect with no control or precondition failing, applies 0523
+twice and requires it to pass, then re-runs the five read rules' held probes
+and five released probes over these tables. The passing run shows:
+- the child and the guest, reading none of the rows, are refused an
+  unfiltered update and delete (42501), and every row reads as written;
+- the teen's unfiltered update cannot hand their own card to the child (with a
+  WHERE the read rule already holds the new row), and the teen still renames
+  it;
+- the parent updates and deletes each row by id; the service role updates
+  every row;
+- **wiring:** 24 triggers, the guard SECURITY INVOKER, search_path pinned, not
+  executable by PUBLIC or anon;
+- **N1** (triggers disabled): the child deletes the parent's warranty;
+- **M1** (the guard SECURITY DEFINER): the child's delete lands;
+- **M2** (no AFTER UPDATE trigger): the teen hands the card on.
+
+All 189 released probes pass with the read rules and 0523, and with every held
+file applied twice.
+
+**After approved release:** as a test child, send an unfiltered `DELETE` to
+`/rest/v1/home_warranties` and confirm 42501 and that a parent's warranty
+remains.
+
+## `0524` (proposed, held) — a guest added to areas withheld from them
+
+`supabase/reserved/0524_a_guest_adds_nothing_to_the_areas_withheld_from_them.sql`
+— **held**: requested on #771 in comment 6402627160. Not yet confirmed.
+
+**Severity: low to medium (a guest who cannot see the household's bills,
+insurance or wallet could still plant rows the parents read as their own).
+Deploy order: any.** The held 0509 and 0520 withhold these areas from a guest;
+nine of their tables still took a guest's INSERT (`OK 1` each, measured with
+every held file through 0522 applied): `auto_insurance_policies`,
+`driving_trips`, `family_communications`, `home_locations`, `utility_bills`,
+`vacation_medical_information`, `wallet_cards`, `wallet_passes`,
+`wallet_rewards`.
+
+**Database.** 0464's `household_write_is_not_a_guests()` on the nine, as 0498
+and the held 0522 did elsewhere: `trg_<table>_not_a_guests`, BEFORE INSERT,
+UPDATE and DELETE, 42501. No new function; every other role writes as before.
+No application change: every page over these tables is withheld from a guest.
+
+**Proof:** `.github/workflows/guest-withheld-writes-runtime.yml` requires the
+held probe
+`docs/audit/reserved/a-guest-adds-nothing-to-the-areas-withheld-from-them-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0524 twice and requires it to pass, then re-runs 0464's probe and three
+released probes over these tables. The passing run shows the guest's insert
+refused by 0464's guard in all nine and no guest row landing; the parent and
+the child still adding one each; the guard wired on all nine; **N1** (guards
+disabled): the guest's insert lands in all nine; **M1** (`utility_bills`'
+guard off INSERT): the guest's bill lands.
+
+All 189 released probes pass with 0524 applied, and with every held file
+applied twice.
+
+**After approved release:** as a test guest, try to insert a `utility_bills`
+row and confirm 42501.
+
+## `0522` (proposed, held) — a guest changed the household's tasks and reminders
+
+`supabase/reserved/0522_a_guest_does_not_change_the_households_tasks_and_reminders.sql`
+— **held**: requested on #771 in comment 6402500834. Not yet confirmed.
+
+**Severity: medium (an invited guest renamed and deleted the family's to-do
+and reminder lists, added tasks and reminders, and ticked or completed other
+members'). Deploy order: any.** 0464 (ROLE-M03) refuses a guest's writes on
+the eight resources `/family/permissions` names, and the held 0498 on
+`calendar_feeds` and `grocery_lists`; every model of the product says a guest
+views ("Guest: View the shared calendar, lists and plans"). The household's
+tasks and reminders were outside both lists. Measured on a replay of main with
+every held file through 0521 applied, as an active guest: `todo_lists` and
+`reminder_lists` insert, rename and delete `OK 1`; `todo_items` and
+`family_reminders` insert and another member's tick or completion `OK 1`
+(their deletes are already filtered by 0479). This is KIDS-O01's "two
+triggers" and the database half of Support's 6370895638 (a).
+
+**Database.** 0464's own function on the four tables, as 0498 did:
+`trg_<table>_not_a_guests`, BEFORE INSERT, UPDATE and DELETE, raising 42501
+("A guest can see the household but not change it"). No new function. Every
+other role writes as before under the policies already there; the service role
+and session-less writers stay exempt. `ensure_default_todo_list` (0443) is
+SECURITY INVOKER, so a guest's first capture is refused at the insert.
+
+**App:** `app/(app)/dashboard/todos/actions.ts` already refuses a guest; a
+guest's reminder write answers 42501 ("You don't have permission") until
+Support's reminder app half lands.
+
+**Proof:** `.github/workflows/guest-tasks-runtime.yml` requires the held probe
+`docs/audit/reserved/a-guest-does-not-change-the-households-tasks-and-reminders-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0522 twice and requires it to pass, then re-runs 0464's
+`a-guest-views-the-household` probe and the seven released probes over these
+tables. The passing run shows:
+- as an active guest, inserting and changing each of the four are refused by
+  0464's guard (42501, its own sentence), deleting the two lists too (the task
+  and the reminder are filtered by 0479 first), and nothing changes;
+- the guest still reads all four;
+- the parent inserts, updates and deletes a row of their own in each; the teen,
+  the child and the caregiver each insert and update one;
+- **wiring:** each table carries the guard before insert, update and delete;
+- **N1** (the four guards disabled): the guest's insert lands in all four;
+- **M1** (`todo_items`' guard on INSERT alone): the guest ticks the task.
+
+All 189 released probes pass with 0522 applied, and with every held file
+applied twice.
+
+**After approved release:** sign a test guest in and try to add a task and a
+reminder, and to rename a list; confirm each is refused with "You don't have
+permission" and nothing changes.
+
+## `0520` (proposed, held) — a guest read the front desk's call history and the Hub
+
+`supabase/reserved/0520_a_guest_does_not_read_the_front_desks_call_history_or_the_hub.sql`
+— **held**: requested on #771 in comment 6402247950. Not yet confirmed.
+**Needs the held 0509 first** (its `is_family_guest()`); the file refuses to
+run without it.
+
+**Severity: medium (a guest read the household's call transcripts, voicemail
+links and AI call summaries, and the Communications Hub's messages). Deploy
+order: after 0509; the screens ship first.** The owner's decision on
+ROLE-SCOPE-001 withholds the household inbox from a guest on three pages
+(`lib/auth/guest-scope.ts`: the inbox, the Contact Center and the AI Front
+Desk). 0509 guards the Contact Center's table, `family_inbox_messages`, but not
+the other two those pages read: `call_logs` (the front desk's history) and
+`family_communications` (the Hub on `/dashboard/inbox`). Both read with any
+active membership and are in the realtime publication. Measured on a replay of
+main with every held file through 0518 applied: a guest read the household's
+row in both.
+
+**Database.** Each table gets 0509's guard by 0509's name: "A guest does not
+read <table>", RESTRICTIVE SELECT to authenticated, USING
+`not is_family_guest(family_id)` (neither table has a `member_id`). It narrows
+the members' read and widens nothing; every other role reads as before, and a
+guest here who is a parent elsewhere reads that household's rows.
+`paperwork_items`, the inbox's third source, is already narrowed by 0514.
+
+**App, shipping with the source:** the three pages already send a guest away;
+the home dashboard stops offering a guest its Front Desk and Inbox tiles,
+which linked to two of them and showed the household's unread counts.
+
+**Proof:** `.github/workflows/front-desk-guest-runtime.yml` requires the held
+probe `docs/audit/reserved/a-guest-does-not-read-the-front-desks-call-history-check.sql`
+to fail on the released schema on the defect, with no control failing; applies
+0509 and requires the same failure (0509 alone leaves both tables open); applies
+0520 twice and requires a pass; then re-runs 0509's held probe and the released
+`gated-write-tables`, `realtime-anon-stream` and `member-scope-crossing`
+probes. The passing run shows:
+- the guest reads neither Front Desk House row;
+- the parent, the adult, the teen, the child and the caregiver read both;
+- the guest reads both rows of the household they are a parent of;
+- the removed adult and a stranger read neither; the service role, with and
+  without a user id, reads both;
+- **wiring:** 0520's guard with its exact predicate and no other restrictive
+  read; `is_family_guest` SECURITY DEFINER with a pinned search_path, not
+  executable by PUBLIC or anon;
+- **N1** (both guards dropped): the guest reads both;
+- **M1** (each guard made permissive): the guest reads both.
+
+All 189 released probes pass with 0509 and 0520 applied, and with every held
+file applied twice.
+
+**After approved release:** sign a test guest in and confirm that the Front
+Desk and Inbox tiles are gone from their home dashboard, and that a direct
+read of `call_logs` or `family_communications` for that household returns no
+rows.
+
+## `0521` (proposed, held) — any member could add a call or rewrite a transcript
+
+`supabase/reserved/0521_a_call_in_the_front_desk_history_is_written_by_no_member.sql`
+— **held**: requested on #771 in comment 6402247950. Not yet confirmed.
+
+**Severity: medium (a child, a caregiver or a guest could plant a call that
+looks like telephony, or rewrite the transcript or AI summary of a call the
+parents read). Deploy order: any.** `call_logs` is the front desk's history
+from before the Contact Center; the application reads it and writes nothing
+to it ("No mark-read, no delete, no hand-entered call: `call_logs` is frozen
+history now", `components/modules/front-desk-module.tsx`), and no SQL
+function writes it. 0092's `call_logs_insert` and `call_logs_update` still
+admitted any active member. Measured on a replay of main with every held file
+through 0518 applied: the parent, the adult, the teen, the child, the
+caregiver and the guest each added a call and rewrote a doctor's voicemail
+transcript (`OK 1`).
+
+**Database.** Drops `call_logs_insert` and `call_logs_update`, and revokes
+INSERT and UPDATE on `call_logs` from anon and authenticated. The members'
+read, the managers' `call_logs_delete` (`can_manage_family`) with its DELETE
+privilege, and the service role are unchanged. No application change: nothing
+writes the table.
+
+**Proof:** `.github/workflows/call-history-writes-runtime.yml` requires the
+held probe `docs/audit/reserved/a-call-in-the-front-desk-history-is-written-by-no-member-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0521 twice and requires it to pass, then re-runs the released
+`gated-write-tables` and `realtime-anon-stream` probes. The passing run shows:
+- none of the six members adds a call or rewrites the transcript, which reads
+  as filed;
+- the parent, the teen, the child and the caregiver still read it;
+- the child's delete removes nothing and the parent's removes the call
+  (`OK 1`);
+- the service role adds and rewrites a call (`OK 1` each);
+- **wiring:** no permissive insert or update policy and no INSERT or UPDATE
+  privilege for a client role; the read and the managers' delete in place;
+- **N1** (0092's insert put back): the child adds a call;
+- **M1** (0092's update alone put back): the child rewrites the transcript.
+
+All 189 released probes pass with 0521 applied, and with every held file
+applied twice.
+
+**After approved release:** as a test child, try to insert a `call_logs` row
+and to update one's transcript and confirm 42501; as a test parent, confirm the
+front desk's history still lists the calls.
+
+## `0515` (proposed, held) — every member read every child's money
+
+`supabase/reserved/0515_a_childs_money_is_read_by_managers_and_that_child.sql`
+— **held**: requested on #771 in comment 6109587749. Not yet confirmed.
+
+**Severity: medium (a sibling, a caregiver or a guest read every child's
+balance, ledger, goals, allowance, cards, investments, gift links and
+Pay-IDs). Deploy order: any; the screens ship first.** Sixteen tables of a
+child's money read with `is_family_member(family_id)`. Measured on a replay of
+main through 0486, in Piggy House: the teen, the child, the caregiver and the
+guest each read other members' rows in **all 16 tables**.
+
+**Database.** One read per table, "A child's money is read by a manager or
+that child", inside `is_family_member(family_id)`:
+- `child_wallets`, `wallet_cards`, `wallet_passes`, `wallet_rewards`,
+  `stripe_cardholders`: `can_manage_family(family_id) or is_self_member(member_id)`;
+- the eleven wallet tables: `can_manage_family(family_id) or
+  is_own_child_wallet_in_family(child_wallet_id, family_id)`. The helper reads
+  `child_wallets` as its owner (SECURITY DEFINER, pinned search_path, not
+  executable by PUBLIC or anon) and is pinned to the row's family, so a row
+  naming a child's wallet in another household is not theirs.
+
+A row on no member or no wallet is a manager's. `allowance_rules`' FOR ALL
+policy is split per command with its own expressions first, and every other
+write policy is untouched (the migration raises if a table's count changes).
+The held 0509's guest guards and the 0254/0275 manager guards are kept.
+`gift_payments` is left alone (0483 §9).
+
+**App, shipping with the source** (`lib/wallet/own-wallets.ts`, the same
+rule):
+- activity, allowance, cards, gift and Pay-ID, goals, send and settings read a
+  non-manager's own wallet, narrowed in the query before any range, and say so
+  in seven locales;
+- a sibling's wallet page, child coach and invest mentor answer a child as a
+  wallet that is not there;
+- the treasury (every child's total) and the family coach are a parent's or
+  adult's;
+- the wallet hub reads a member's own cards, passes and rewards, and what a
+  teen or child adds is filed on them.
+
+**Released probes made rule-aware** (each passes with and without 0515):
+- `money-decision-rows-check.sql`: under 0515 the brother reads no sibling
+  goal, and the same forgery tried on a goal of his own is refused by the write
+  rule;
+- `pay-id-and-goal-write-check.sql`: a child reads no sibling goal or Pay-ID.
+
+The held 0509 probe counts the fifteen guest-guarded tables as already closed
+under 0515. `wallet-write-rls-check.sql`'s 0275 re-run leaves the reads as it
+found them (0514's change).
+
+**Proof:** `.github/workflows/child-money-runtime.yml` requires the held probe
+`docs/audit/reserved/a-childs-money-is-read-by-managers-and-that-child-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0515 twice and requires it to pass, then re-runs the thirty released
+probes over these tables and the held probe once more. The passing run shows:
+- the teen and the child read their own rows and no other (counted), and the
+  child not the Piggy House row naming their wallet in another household; the
+  caregiver and the guest read only their own cards, passes and rewards;
+- the parent and the adult read every row; the teen reads the household they
+  manage;
+- the removed adult and a stranger read nothing;
+- the service role, with and without a user id, reads every row;
+- the teen's own wallet card and a parent's goal for the child come back from
+  `insert … returning` (`OK 1`);
+- **wiring:** the exact predicate for each rule, the helper's definer and
+  grants, and `allowance_rules`' member-wide writes;
+- **N1** (the family-wide read put back): the child reads the ward's row in all
+  sixteen;
+- **M1** (the helper unpinned from the row's family): the child reads the row
+  naming their other household's wallet.
+
+**After approved release:** sign a test child in and confirm the wallet
+activity, goals and gift pages show only their own wallet, and that a
+sibling's wallet link answers "not here".
 
 ## `0514` (proposed, held) — every member read the household's money
 

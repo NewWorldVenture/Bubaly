@@ -91,11 +91,20 @@ test.describe('the country picker', () => {
 
   test('choosing a country by keyboard closes it and focus returns to its button', async ({ page }) => {
     const trigger = await phonePicker(page);
+    // The page's clock stands still, so a focus on a timer cannot land in time. Opening once
+    // focused the search field 40 ms later: when that tick came after the person had moved to
+    // an option, it pulled focus back to the search field and their Enter did nothing.
+    await page.clock.install();
+    await page.clock.pauseAt(Date.now() + 60_000);
     await trigger.focus();
     await page.keyboard.press('Enter');
-    await page.getByRole('textbox', { name: 'Search country or code…' }).fill('Germany');
+    const search = page.getByRole('textbox', { name: 'Search country or code…' });
+    await expect(search).toBeFocused();
+    await search.fill('Germany');
     const germany = page.getByRole('option', { name: /Germany/ });
     await germany.focus();
+    await page.clock.runFor(1_000);
+    await expect(germany).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(page.getByRole('listbox')).toHaveCount(0);
     const chosen = page.getByRole('button', { name: 'Country: Germany' });
@@ -112,6 +121,63 @@ test.describe('the country picker', () => {
     await trigger.click();
     await expect(page.getByRole('textbox', { name: 'Search country or code…' })).toHaveCount(0);
     await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+});
+
+// The phone sign-in form replaces the button that opens it. With a screen
+// reader (Orca on Chromium) "Continue with phone" left focus on the page
+// itself ("Log in · Bubaly document web"), and Back did the same. Focus now
+// goes to the number field, and Back returns it to the button that opened the
+// form (on sign-up, to "Continue without email" when that opened it).
+test.describe('the phone sign-in form', () => {
+  test('on log-in, opening it focuses the number field and Back returns focus to its button', async ({ page }) => {
+    await page.goto('/login', { waitUntil: 'networkidle' });
+    const open = page.getByRole('button', { name: 'Continue with phone' });
+    await expect(open).toBeEnabled();
+    await open.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('textbox', { name: 'Phone number' })).toBeFocused();
+    await page.getByRole('button', { name: 'Back', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('textbox', { name: 'Phone number' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Continue with phone' })).toBeFocused();
+  });
+
+  test('on sign-up, Back returns focus to whichever button opened it', async ({ page }) => {
+    await page.goto('/signup', { waitUntil: 'networkidle' });
+    for (const name of ['Continue with phone', 'Continue without email']) {
+      const open = page.getByRole('button', { name, exact: true });
+      await expect(open).toBeEnabled();
+      await open.focus();
+      await page.keyboard.press('Enter');
+      await expect(page.getByRole('textbox', { name: 'Phone number' }), name).toBeFocused();
+      await page.getByRole('button', { name: 'Back', exact: true }).focus();
+      await page.keyboard.press('Enter');
+      await expect(page.getByRole('button', { name, exact: true }), name).toBeFocused();
+    }
+  });
+
+  // It faded in over 0.4 s while its number field already had focus: 100 ms
+  // in, its heading, hint, dial code, number field and Back read 2.0 to
+  // 3.25:1. It is drawn at full strength from the first frame now. The hold
+  // is on the animations of the elements holding the field, not on the card's
+  // own page-load fade, which has finished by now.
+  test('reads at full contrast while it appears', async ({ page }) => {
+    await page.goto('/login', { waitUntil: 'networkidle' });
+    await page.getByRole('button', { name: 'Continue with phone' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('textbox', { name: 'Phone number' })).toBeFocused();
+    await page.evaluate(() => {
+      const field = document.querySelector('input[type="tel"]')!;
+      for (const a of document.getAnimations()) {
+        const target = (a.effect as KeyframeEffect | null)?.target;
+        if (!target?.contains(field) || target.classList.contains('glass-card')) continue;
+        a.pause();
+        a.currentTime = 100;
+      }
+    });
+    const axe = await new AxeBuilder({ page }).include('main').withRules(['color-contrast']).analyze();
+    expect(axe.violations.flatMap((v) => v.nodes.map((n) => n.target.join(' ')))).toEqual([]);
   });
 });
 

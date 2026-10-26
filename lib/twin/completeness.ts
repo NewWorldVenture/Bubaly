@@ -81,6 +81,25 @@ const HOUSEHOLD_SLOTS: { key: string; label: string; labelKey: string; href: str
   { key: 'accounts', label: 'Where the money sits', labelKey: 'graphCompleteness.whereTheMoneySits', href: '/dashboard/family-cfo', has: (s) => s.accounts.length > 0 },
 ];
 
+/**
+ * The household slots left out of a viewer's score, by role.
+ *
+ * The score is read on the viewer's session, so a table RLS returns empty to
+ * them reads as "missing". For a guest, two slots go:
+ * - "Where home is": 0481's family_places_select returns a guest no places,
+ *   so a family with a saved home was asked for one, linking to
+ *   /dashboard/locator, a page a guest is sent away from.
+ * - "Where the money sits": the guest's session does read financial_accounts
+ *   on the released schema (financial_accounts_select is membership only;
+ *   the held 0509 closes it). But the slot links to /dashboard/family-cfo,
+ *   which a guest is also sent away from (GUEST_WITHHELD_PREFIXES,
+ *   lib/auth/guest-scope.ts), so a guest is not asked to fill it.
+ * Both are left out of a guest's score instead of scored as gaps.
+ */
+export function slotsUnreadBy(role: string | null | undefined): readonly string[] {
+  return role === 'guest' ? ['home_place', 'accounts'] : [];
+}
+
 /** Per-member slots. Three, so one missing member fact never dominates a score. */
 const MEMBER_SLOTS: { key: string; label: string; labelKey: string; href: (m: CompletenessMember) => string; has: (m: CompletenessMember, s: CompletenessSnapshot) => boolean }[] = [
   {
@@ -117,10 +136,16 @@ const MEMBER_SLOTS: { key: string; label: string; labelKey: string; href: (m: Co
  * everything about a family of nobody" is the kind of vacuous 100% that makes a
  * metric useless the moment somebody checks it.
  */
-export function graphCompleteness(snapshot: CompletenessSnapshot): GraphCompleteness {
+export function graphCompleteness(
+  snapshot: CompletenessSnapshot,
+  options: { omit?: readonly string[] } = {},
+): GraphCompleteness {
   const slots: CompletenessSlot[] = [];
 
   for (const slot of HOUSEHOLD_SLOTS) {
+    // Not scored at all, rather than scored as filled: the viewer cannot see
+    // whether it is (slotsUnreadBy).
+    if (options.omit?.includes(slot.key)) continue;
     slots.push({
       key: `household:${slot.key}`, scope: 'household',
       label: slot.label, labelKey: slot.labelKey, href: slot.href,

@@ -19,6 +19,8 @@ interface PhoneInputProps {
   defaultLocalNumber?: string;
   /** Called whenever the E.164 value or dial code changes */
   onChange?: (e164: string, dialCode: string, countryCode: string) => void;
+  /** Focus the number field on mount, for a form the person just asked for. */
+  autoFocus?: boolean;
   className?: string;
 }
 
@@ -27,6 +29,7 @@ export function PhoneInput({
   defaultDialCode,
   defaultLocalNumber = '',
   onChange,
+  autoFocus,
   className,
 }: PhoneInputProps) {
   const tr = useTranslations();
@@ -83,12 +86,10 @@ export function PhoneInput({
     return () => document.removeEventListener('mousedown', handle);
   }, [open]);
 
-  // Auto-focus the search field when the dropdown opens
+  // Focus the search field as soon as the dropdown opens. Not after a delay: a late focus pulled
+  // focus back from an option the person had already moved to, and their Enter then did nothing.
   useEffect(() => {
-    if (open) {
-      const t = setTimeout(() => searchRef.current?.focus(), 40);
-      return () => clearTimeout(t);
-    }
+    if (open) searchRef.current?.focus();
   }, [open]);
 
   /** Close the list and hand focus back to the button that opened it, so a keyboard user is not left on <body>. */
@@ -145,6 +146,7 @@ export function PhoneInput({
           placeholder={country.format}
           className="flex-1 bg-transparent px-3 text-sm text-fg placeholder:text-muted outline-none"
           aria-label={tr('phoneInput.phoneNumber')}
+          autoFocus={autoFocus}
         />
       </div>
 
