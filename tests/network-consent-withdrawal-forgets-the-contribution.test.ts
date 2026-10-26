@@ -15,7 +15,7 @@
 // Driven through the real IntelligenceModule on hook slots, against the
 // in-memory database, as tests/network-consent-is-written-from-the-row-on-screen.test.ts.
 import { createElement } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { byName, click, nodes, render, text } from './helpers/module-harness';
 import { resetHookSlots } from './helpers/hook-slots';
@@ -80,6 +80,23 @@ describe('leaving the network forgets what the family contributed, at once', () 
     expect(contributionsOf(FAMILY)).toEqual([]);
   });
 
+  // N8 (round 2): `timing` and `recommendations` have no metric, so switching
+  // one off forgets nothing — and the delete cost the family its weekly-digest
+  // compare line (which reads this row) until the next nightly run rebuilt it.
+  it('switching off a scope that contributes nothing keeps the stored contribution', async () => {
+    Object.assign(db.table('network_consent')[0], { scopes: { timing: true, benchmarks: true, recommendations: true } });
+    let tree = screen();
+    await click(byName(tree, TIMING));
+    tree = screen();
+    await click(byName(tree, 'Crowd-rated suggestions'));
+    expect(db.table('network_consent')[0].scopes).toEqual({ timing: false, benchmarks: true, recommendations: false });
+    expect(h.toasts.success).toEqual(['Preferences saved', 'Preferences saved']);
+    expect(contributionsOf(FAMILY)).toHaveLength(1);
+    // … while the scope that does contribute still takes it with it.
+    await click(byName(screen(), BENCHMARKS));
+    expect(contributionsOf(FAMILY)).toEqual([]);
+  });
+
   it('switching a scope ON shares nothing new now and forgets nothing', async () => {
     await click(byName(screen(), TIMING));
     expect(db.table('network_consent')[0].scopes).toMatchObject({ timing: true, benchmarks: true });
@@ -93,6 +110,47 @@ describe('leaving the network forgets what the family contributed, at once', () 
     expect(h.toasts.error).toHaveLength(1);
     expect(h.toasts.error[0]).not.toContain('permission denied for table'); // no raw database message
     expect(contributionsOf(FAMILY)).toHaveLength(1);
+  });
+});
+
+// N7 (round 2): the nightly aggregation drops a consent whose author is an
+// active member who may not give it (consentsByNonManagers) — a consent a teen
+// switched on before 0353, or one a parent gave before being made a caregiver.
+// The module still told the family "You're contributing", and a manager's
+// later scope switch wrote only `scopes`, so nothing short of leaving and
+// rejoining ever made the consent count.
+describe('a consent its author may not give is said, and a manager\'s switch takes it over', () => {
+  const CONTRIBUTING = 'You’re contributing anonymized patterns and can see network insights.';
+  const NEEDS_A_MANAGER = 'Sharing was switched on by a family member who can’t give consent for the household, so nothing is shared yet. A parent or adult confirms it by changing any option below, or by leaving and joining again.';
+  const roster = h.app.members;
+  beforeEach(() => {
+    h.app.members = [
+      { id: 'member-1', user_id: 'user-1', display_name: 'Ada', role: 'parent', is_active: true, color: null, birthday: null },
+      { id: 'member-2', user_id: 'teen-user', display_name: 'Sam', role: 'teen', is_active: true, color: null, birthday: null },
+    ];
+  });
+  afterEach(() => { h.app.members = roster; });
+
+  it('tells the family a manager must confirm a consent a teen gave, instead of "you\'re contributing"', () => {
+    Object.assign(db.table('network_consent')[0], { consented_by: 'teen-user' });
+    const shown = text(screen());
+    expect(shown).toContain(NEEDS_A_MANAGER);
+    expect(shown).not.toContain(CONTRIBUTING);
+  });
+
+  it('control: a consent a parent gave reads as contributing', () => {
+    expect(text(screen())).toContain(CONTRIBUTING);
+    expect(text(screen())).not.toContain(NEEDS_A_MANAGER);
+  });
+
+  it('a manager\'s scope switch records the manager as the consent\'s author, and the notice goes', async () => {
+    Object.assign(db.table('network_consent')[0], { consented_by: 'teen-user' });
+    await click(byName(screen(), TIMING));
+    const stored = db.table('network_consent')[0];
+    expect(stored).toMatchObject({ enabled: true, consented_by: 'user-1', scopes: { timing: true, benchmarks: true } });
+    expect(stored.consented_at).not.toBe('2026-10-01T00:00:00.000Z');
+    expect(Number.isNaN(Date.parse(stored.consented_at as string))).toBe(false);
+    expect(text(screen())).toContain(CONTRIBUTING);
   });
 });
 

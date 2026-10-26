@@ -34,9 +34,16 @@ it provably safe, we don't ship it.
    is a per-family **feature vector of coarse bands** (see §4), written to a
    family-owned row. Aggregation reads those, never the source tables.
 6. **Differential-privacy-lite.** Published aggregate counts get small calibrated
-   noise (±) so that adding/removing one family can't be inferred from a delta.
+   noise (±), and are published on a fixed epoch (a UTC calendar month by
+   default, `PUBLICATION_EPOCH`): inside an epoch no published figure changes,
+   so two nights have no delta to read a family from, and each epoch draws
+   every band's noise afresh. That is one fresh sample per band per epoch: a
+   watcher who averages many epochs still converges on the true counts, slowly
+   (the measured rate is pinned in `tests/network-noise-is-drawn-once-per-epoch.test.ts`),
+   so the guarantee is a bounded budget, not "can never be inferred".
 7. **Reversible + forgettable.** Turning off consent deletes the family's
-   contribution row immediately; the next aggregation run recomputes without it.
+   contribution row immediately; the published figures are rebuilt without it
+   at the next epoch's snapshot (up to a month at the default epoch).
 
 ## 3. What we do NOT do
 
@@ -80,9 +87,12 @@ Runs daily, service role:
 1. **Contribute.** For each family with `consent.enabled`, recompute the coarse
    feature vector (reuse `computeContribution` + the banding helpers) and upsert
    `network_contributions`. Families that opted out have their row deleted.
-2. **Aggregate.** Group contributions by `(scope, cohort_key, metric)`. For each
-   group: if `count(distinct family) < K` → **skip** (never written). Else compute
-   the statistic, add DP noise, write/replace the `network_aggregates` row.
+2. **Aggregate — once per publication epoch.** Group contributions by
+   `(scope, cohort_key, metric)`. For each group: if `count(distinct family) < K`
+   → **skip** (never written). Else compute the statistic, add DP noise (keyed on
+   the epoch), write/replace the `network_aggregates` row. Every other night of
+   the epoch holds that snapshot unchanged and only re-stamps `computed_at`, so
+   readers' 36-hour freshness rule still sees a live cron.
 3. **Serve.** `visibleInsights()` maps `network_aggregates` rows a family is
    entitled to (opted-in scope) into `InsightCandidate`s; the k-floor is re-checked
    at read time as defense-in-depth.
@@ -95,9 +105,9 @@ Everything flows through the gate that already exists — the cron cannot bypass
 | Threat | Mitigation |
 |---|---|
 | Re-identify a family from a small cohort | K-floor (≥20) + DP noise; cohorts keyed on coarse bands only |
-| Differencing attack (compare runs to isolate one family) | DP noise on published counts; replace-in-place, no per-run deltas exposed |
+| Differencing attack (compare runs to isolate one family) | DP noise on published counts, published on a fixed epoch (a calendar month): within it no figure changes, and each epoch draws every band afresh — one sample per band per epoch, so long-run averaging is bounded by that budget, not ruled out (`lib/network/aggregate-server.ts`, `stickyNoise`) |
 | Malicious writer smuggles PII into `features` | Server-side allowlist validation of banded keys; no free text |
-| Consent revoked but data lingers | Opt-out deletes the contribution row; aggregates recomputed without it |
+| Consent revoked but data lingers | Opt-out deletes the contribution row; aggregates recomputed without it at the next epoch's snapshot |
 | Insider/DB dump | `network_aggregates` holds only ≥K aggregates; `network_contributions` holds only coarse bands, no identifiers |
 
 ## 7. Open decisions for you

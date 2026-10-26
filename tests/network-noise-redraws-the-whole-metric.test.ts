@@ -8,8 +8,17 @@
 // T leaving, 2000 keys) saw only T's cells change in every trial, all three of
 // T's bands in 1261. The draw is now keyed on the state of the whole
 // (cohort, metric) — every band's true count, withheld bands included — so any
-// change inside a metric redraws all of its bands together, and an unchanged
-// metric still republishes its figures exactly (N11's averaging protection).
+// change inside a metric redraws all of its bands together, and, within one
+// epoch, a metric whose state did not change draws exactly as before.
+//
+// That is not, on its own, a defence against averaging: a band whose own count
+// never moves still draws afresh whenever a sibling band changes, and in
+// production some sibling changes almost every night (round 2,
+// N11-vector-key-reopens-averaging). What bounds the averaging is the
+// publication epoch — the cron holds each epoch's snapshot, and the epoch is in
+// the key — so a watcher gets one sample per band per epoch; that budget and
+// what it still leaks are pinned in tests/network-noise-is-drawn-once-per-epoch.test.ts.
+// Every run below is in one epoch.
 import { describe, expect, it } from 'vitest';
 import { aggregateContributions, type Contribution, type NetworkAggregate, type NoiseFn } from '@/lib/network/aggregate';
 import { stickyNoise } from '@/lib/network/aggregate-server';
@@ -58,9 +67,11 @@ const T_METRICS = ['dinner_habit', 'activities', 'reminders_per_week'];
 const cellOf = (a: { cohortKey: string; metric: string; value: string }) => `${a.cohortKey}|${a.metric}|${a.value}`;
 const published = (rows: NetworkAggregate[]) => new Map(rows.map((a) => [cellOf(a), a.count]));
 
-/** The real aggregation with the real sticky sampler, every raw draw recorded by cell. */
+const EPOCH = '2026-10';
+
+/** The real aggregation with the real sticky sampler (one epoch), every raw draw recorded by cell. */
 function run(contributions: Contribution[], key: string): { rows: NetworkAggregate[]; counts: Map<string, number>; draws: Map<string, number> } {
-  const sticky = stickyNoise(key);
+  const sticky = stickyNoise(key, EPOCH);
   const draws = new Map<string, number>();
   const noise: NoiseFn = (scale, cell) => {
     const drawn = sticky(scale, cell);
@@ -147,7 +158,7 @@ describe('the diff of two nights does not single out the leaver\'s bands (the re
     expect(exactlyTsBands / keys.length).toBeLessThan(0.01);
   });
 
-  it('and nothing outside T\'s metrics ever moves: an unchanged metric still republishes its figures', () => {
+  it('and nothing outside T\'s metrics ever moves: in one epoch, an unchanged metric draws its figures again', () => {
     expect(untouchedChanged).toBe(0);
   });
 });

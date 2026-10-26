@@ -32,6 +32,7 @@ vi.mock('@/lib/auth/super-admin-assurance', () => ({ superAdminAssurance: async 
 vi.mock('@/lib/server/audit', () => ({ recordAudit: async () => ({ ok: true }) }));
 
 const { default: BenchmarksPage } = await import('@/app/(marketing)/resources/benchmarks/page');
+const { default: AdminBenchmarksPage } = await import('@/app/(app)/admin/benchmarks/page');
 const { GET: exportCsv } = await import('@/app/api/admin/benchmarks/export/route');
 const { loadCompareLine } = await import('@/lib/network/compare-line-server');
 
@@ -86,6 +87,24 @@ describe('/resources/benchmarks publishes the noised count, and only that', () =
     const text = strings(await BenchmarksPage()).join(' ');
     expect(text).toContain('No benchmarks published yet');
     expect(text).not.toContain('About 44 families');
+  });
+});
+
+describe('the admin report shows what the export holds, and no true size (N6, admin table)', () => {
+  // The CSV dropped cohort_n because it is quoted; the same super-admin could
+  // quote it from this table instead, under a hint saying the file holds "the
+  // rows below".
+  it('lists each band\'s noised count and never the true number behind it', async () => {
+    db.seed('network_aggregates', [aggregate('dinner_habit', 'often (4–5)', 44, 47), aggregate('bedtime_band', '8–9pm', 63, 61)]);
+    const text = strings(await AdminBenchmarksPage());
+    expect(text).toContain('44');
+    expect(text).toContain('63');
+    expect(text).not.toContain('47');
+    expect(text).not.toContain('61');
+    expect(text).not.toContain('n (distinct families)');
+    expect(text).toContain('Families (noised)');
+    // The hint is true of the page again: the rows below, same noised counts.
+    expect(text).toContain('Downloads the rows below as CSV for content and research. Same floor, same noised counts — no per-family data exists to export.');
   });
 });
 

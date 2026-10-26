@@ -10,7 +10,9 @@
 // N8  — the prune of withdrawn families ran after the source reads and the
 //   upserts, so a run failing in either kept the withdrawn family's row.
 // N11 / N12 — fresh Laplace noise on every run: averaging nights recovered the
-//   true counts.
+//   true counts. Now the figures are published once per epoch and held on
+//   every other night of it, so nights inside an epoch add no sample; the
+//   per-epoch budget is pinned in tests/network-noise-is-drawn-once-per-epoch.test.ts.
 // N13 — reminders were counted from the legacy table only.
 // N15 — dinners over eight days and spend over twenty-nine, on Greenwich's day.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -178,6 +180,9 @@ describe('the withdrawn are forgotten first, whatever fails after (N8)', () => {
 });
 
 describe('the noise is sticky: a night that changed nothing publishes the same figures (N11, N12)', () => {
+  // Every night below is in September 2026, one publication epoch, except
+  // where a test steps into October on purpose.
+  const OCTOBER = new Date('2026-10-01T12:00:00Z');
   beforeEach(() => {
     for (let i = 0; i < 120; i++) household(`f-${i}`);
     // A "random" source that never repeats, for any code that still reaches for it.
@@ -185,7 +190,7 @@ describe('the noise is sticky: a night that changed nothing publishes the same f
     vi.spyOn(Math, 'random').mockImplementation(() => 0.05 + 0.9 * ((i++ * 0.618033) % 1));
   });
 
-  it('republishes every count unchanged on unchanged data — averaging nights recovers nothing', async () => {
+  it('republishes every count unchanged on unchanged data — a night inside the epoch adds no sample', async () => {
     expect((await runNetworkAggregation(db as unknown as DB, NOW)).ok).toBe(true);
     const first = publishedCounts();
     expect(first.size).toBeGreaterThan(0);
@@ -210,10 +215,12 @@ describe('the noise is sticky: a night that changed nothing publishes the same f
   it('is keyed: the same cell and true count draw the same, another key or count draws anew', () => {
     const bandVector = JSON.stringify([['often (4–5)', 120], ['rarely (0–1)', 40]]);
     const cell = { scope: 'benchmarks' as const, cohortKey: 'kids:6–9|size:1–2', metric: 'dinner_habit', value: 'often (4–5)', cohortSize: 120, bandVector };
-    const draw = stickyNoise('key-a');
+    const draw = stickyNoise('key-a', '2026-09');
     expect(draw(1.5, cell)).toBe(draw(1.5, { ...cell }));
     expect(draw(1.5, { ...cell, cohortSize: 121 })).not.toBe(draw(1.5, cell));
-    expect(stickyNoise('key-b')(1.5, cell)).not.toBe(draw(1.5, cell));
+    expect(stickyNoise('key-b', '2026-09')(1.5, cell)).not.toBe(draw(1.5, cell));
+    // and keyed on the epoch: the next one draws the same cell afresh
+    expect(stickyNoise('key-a', '2026-10')(1.5, cell)).not.toBe(draw(1.5, cell));
     expect(Number.isFinite(draw(1.5, cell))).toBe(true);
     // and keyed on the whole metric: ANOTHER band's count moving redraws this one
     expect(draw(1.5, { ...cell, bandVector: JSON.stringify([['often (4–5)', 120], ['rarely (0–1)', 39]]) })).not.toBe(draw(1.5, cell));
@@ -222,13 +229,16 @@ describe('the noise is sticky: a night that changed nothing publishes the same f
   // The re-fix of N1/N6 (sticky-diff): keyed on each cell's own count, one
   // household leaving moved only the figures of the bands it was in, so two
   // nights compared named them. The other bands of its metrics must move too.
+  // Inside the epoch nothing moves at all (the snapshot is held); the leaver
+  // reaches the figures at the next epoch, where the other bands redraw.
   it('one family leaving redraws the other bands of its metrics, so the diff cannot say which band it was in', async () => {
-    // 25 more households in the same cohort plan four dinners ("often"), so
-    // dinner has a band the leaver (an f-* household, "rarely") is not in;
-    // 25 childless ones form a cohort the leaver is not in at all.
+    // 25 more households in the same cohort plan four dinners ("often") in
+    // both months, so dinner has a band the leaver (an f-* household,
+    // "rarely") is not in; 25 childless ones form a cohort the leaver is not
+    // in at all.
     for (let i = 0; i < 25; i++) {
       household(`often-${i}`);
-      db.seed('meal_plans', [1, 2, 3, 4].map((d) => ({ family_id: `often-${i}`, meal_type: 'dinner', plan_date: dayKey(d) })));
+      db.seed('meal_plans', [NOW, OCTOBER].flatMap((from) => [1, 2, 3, 4].map((d) => ({ family_id: `often-${i}`, meal_type: 'dinner', plan_date: dayKey(d, from) }))));
     }
     for (let i = 0; i < 25; i++) household(`nokid-${i}`, { kid: false });
     const consents = db.table('network_consent').map((r) => ({ ...r }));
@@ -239,6 +249,7 @@ describe('the noise is sticky: a night that changed nothing publishes the same f
     try {
       for (const key of keys) {
         vi.stubEnv('INTERNAL_SECRET', key);
+        db.replace('network_aggregates', []);
         db.replace('network_consent', consents.map((r) => ({ ...r })));
         expect((await runNetworkAggregation(db as unknown as DB, NOW)).ok).toBe(true);
         const before = publishedCounts();
@@ -252,15 +263,41 @@ describe('the noise is sticky: a night that changed nothing publishes the same f
         expect(contribution('f-0')).toBeUndefined();
         // a cohort the leaver was not in republishes its figures exactly …
         expect(otherCohort(after)).toEqual(otherCohort(before));
-        // … and a band of its metric it was not in redraws (rounded, a redraw
-        // lands on the same whole number about one time in six)
-        if (after.get(often) !== before.get(often)) oftenMoved++;
+        // … as does every other figure inside the epoch: the snapshot is held …
+        expect(after).toEqual(before);
+        // … and at the next epoch a band of its metric it was not in redraws
+        // (rounded, a redraw lands on the same whole number about one time in six)
+        expect((await runNetworkAggregation(db as unknown as DB, OCTOBER)).ok).toBe(true);
+        const next = publishedCounts();
+        expect(next.has(often)).toBe(true);
+        if (next.get(often) !== before.get(often)) oftenMoved++;
       }
     } finally {
       vi.unstubAllEnvs();
     }
     // Keyed per cell, "often" never moved: its true count did not change.
     expect(oftenMoved).toBeGreaterThanOrEqual(keys.length / 2);
+  });
+});
+
+describe('the write order knows nothing of the true sizes (N1, write order)', () => {
+  // The cron upserted biggest band first, and a read with no order clause —
+  // any consenting member's, through RLS — returns rows much as they were last
+  // written: the table itself ranked the bands by their TRUE size.
+  it('upserts the aggregates by cohort, metric and band, never biggest first', async () => {
+    for (let i = 0; i < 25; i++) household(`kid-${i}`);
+    for (let i = 0; i < 120; i++) household(`nokid-${i}`, { kid: false });
+    expect((await runNetworkAggregation(db as unknown as DB, NOW)).ok).toBe(true);
+    const written = db.table('network_aggregates').map((r) => ({ cohort: r.cohort_key as string, metric: r.metric as string, value: r.value as string, size: r.cohort_size as number }));
+    // non-vacuity: two sizes, and the small cohort sorts first by key
+    expect(new Set(written.map((r) => r.size))).toEqual(new Set([25, 120]));
+    const byKey = (a: typeof written[number], b: typeof written[number]) => {
+      const cmp = (x: string, y: string) => (x < y ? -1 : x > y ? 1 : 0);
+      return cmp(a.cohort, b.cohort) || cmp(a.metric, b.metric) || cmp(a.value, b.value);
+    };
+    expect(written).toEqual([...written].sort(byKey));
+    expect(written.map((r) => r.size)).not.toEqual([...written].map((r) => r.size).sort((a, b) => b - a));
+    expect(written[0]).toMatchObject({ cohort: 'kids:6–9|size:1–2', size: 25 });
   });
 });
 

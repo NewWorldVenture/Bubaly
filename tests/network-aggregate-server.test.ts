@@ -221,7 +221,10 @@ describe('AGGREGATE — the launch gate and the k-floor, on real tables', () => 
 
   it('republishes on the natural key and prunes rows the run did not touch', async () => {
     for (let i = 0; i < 120; i++) seedFamily(`f-${i}`);
-    db.seed('network_aggregates', [{ scope: 'benchmarks', cohort_key: 'kids:none|size:1–2', metric: 'dinner_habit', value: 'rarely (0–1)', count: 30, cohort_size: 30, computed_at: iso(-1) }]);
+    // Left by the previous publication epoch (August): a row from earlier in
+    // September would be this epoch's snapshot, which the run holds, not prunes
+    // (tests/network-noise-is-drawn-once-per-epoch.test.ts).
+    db.seed('network_aggregates', [{ scope: 'benchmarks', cohort_key: 'kids:none|size:1–2', metric: 'dinner_habit', value: 'rarely (0–1)', count: 30, cohort_size: 30, computed_at: iso(-10) }]);
     const first = await runNetworkAggregation(db, NOW);
     expect(first.ok).toBe(true);
     expect(db.table('network_aggregates').some((r) => r.cohort_key === 'kids:none|size:1–2')).toBe(false);

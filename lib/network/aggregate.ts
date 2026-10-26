@@ -9,14 +9,17 @@
 //     in its (cohort, metric) never add up to fewer than K families either
 //     (complementary suppression), so a withheld band's size cannot be read
 //     off as "everyone minus the rest".
-//   • Differential-privacy-lite: published counts get calibrated noise so       [#2]
-//     comparing runs can't reveal which band a family that joined, left or
-//     moved is in. The cron's noise is STICKY — one draw per band per STATE of
-//     its whole (cohort, metric), not one per run — so a night that changed
-//     nothing publishes the same numbers and averaging many nights recovers
-//     nothing, while any change inside a (cohort, metric) redraws every band of
-//     it at once, so the diff of two nights never singles out the band that
-//     moved (see aggregate-server.ts).
+//   • Differential-privacy-lite: published counts get calibrated noise, and   [#2]
+//     the figures are published on a fixed EPOCH (PUBLICATION_EPOCH, a UTC
+//     calendar month): the cron runs nightly, but inside an epoch the
+//     published figures do not change at all, so two nights of one epoch
+//     differ in nothing. Each epoch's snapshot draws its noise once per band,
+//     keyed on the epoch, so a watcher gets ONE fresh sample per band per
+//     epoch — a bounded budget, not "averaging recovers nothing": the mean of
+//     many epochs' figures does converge on the true count, slowly, and the
+//     probe measuring how slowly is pinned in
+//     tests/network-noise-is-drawn-once-per-epoch.test.ts (see
+//     aggregate-server.ts, stickyNoise).
 //   • Global launch gate: nothing is published until ≥ N families contribute.   [#5]
 // The cron feeds it real consenting-family contributions; every rule is here so
 // it can't be bypassed downstream.
@@ -99,16 +102,56 @@ export function contributesToNetwork(scopes: Partial<Record<ConsentScope, boolea
 
 /**
  * How long a published aggregate may be read without a newer run behind it:
- * the nightly cron plus a day's margin. A family that withdrew is still inside
- * the aggregates until a run gets all the way to republishing, so a run that
- * keeps failing must not keep publishing them — past this age every reader
- * treats the rows as absent (its existing empty state), never as current.
+ * the nightly cron plus a day's margin. A run that keeps failing must not keep
+ * publishing — past this age every reader treats the rows as absent (its
+ * existing empty state), never as current.
+ *
+ * Unchanged by the epoch: inside one, a run that completes does not change
+ * the snapshot but stands behind it again (it re-stamps `computed_at`, and
+ * nothing else), so `computed_at` still says when a run last vouched for the
+ * figures and this rule still says the cron is alive. What bounds how long a
+ * family that withdrew stays inside the published figures is the epoch: they
+ * are rebuilt without it when the next epoch's snapshot is published.
  */
 export const AGGREGATE_MAX_AGE_MS = 36 * 3_600_000;
 
 /** The oldest `computed_at` a reader may still show, as of `now`. */
 export function freshAggregatesSince(now: Date = new Date()): string {
   return new Date(now.getTime() - AGGREGATE_MAX_AGE_MS).toISOString();
+}
+
+/**
+ * How often the published figures may change at all — a product decision. A
+ * calendar MONTH is the protective default: twelve samples a year per band,
+ * and a family that withdrew leaves the figures with the next month's
+ * snapshot. An ISO week is supported for when fresher benchmarks are worth
+ * about four times the samples (and a withdrawal reflected by the next
+ * Monday).
+ */
+export type PublicationEpochLength = 'month' | 'iso-week';
+export const PUBLICATION_EPOCH: PublicationEpochLength = 'month';
+
+/** One publication epoch: its key (part of every noise draw) and the instant it starts. */
+export type PublicationEpoch = { key: string; start: Date };
+
+/**
+ * The epoch `at` falls in, in UTC — the network's figures are one platform-wide
+ * publication, not any family's calendar. A month is '2026-10' from the 1st at
+ * 00:00Z; an ISO week is '2026-W43' from its Monday at 00:00Z, numbered in the
+ * year its Thursday falls in.
+ */
+export function publicationEpoch(at: Date, length: PublicationEpochLength = PUBLICATION_EPOCH): PublicationEpoch {
+  const year = at.getUTCFullYear();
+  const month = at.getUTCMonth();
+  if (length === 'month') {
+    return { key: `${year}-${String(month + 1).padStart(2, '0')}`, start: new Date(Date.UTC(year, month, 1)) };
+  }
+  const sinceMonday = (at.getUTCDay() + 6) % 7;
+  const start = new Date(Date.UTC(year, month, at.getUTCDate() - sinceMonday));
+  const thursday = new Date(start.getTime() + 3 * 86_400_000);
+  const isoYear = thursday.getUTCFullYear();
+  const week = 1 + Math.floor((thursday.getTime() - Date.UTC(isoYear, 0, 1)) / (7 * 86_400_000));
+  return { key: `${isoYear}-W${String(week).padStart(2, '0')}`, start };
 }
 
 /** English label for a metric (the catalogue key is `metricLabelKey`). */
@@ -159,7 +202,9 @@ export function filterMetricsByScopes(
  * count moved, so two nights compared name the bands a joining or leaving
  * family occupies; keyed on the vector, any change anywhere in the metric
  * redraws all of its bands together. Like `cohortSize`, it never leaves the
- * server: it is the input to the draw, never part of what is published.
+ * server: it is the input to the draw, never part of what is published. The
+ * epoch is not part of the cell: the cron binds it into the sampler
+ * (stickyNoise(key, epoch)), so every epoch draws afresh.
  */
 export type NoiseCell = {
   scope: ConsentScope;
@@ -173,10 +218,10 @@ export type NoiseCell = {
 /**
  * Deterministic-by-default noise; the cron injects a real Laplace sampler. The
  * cell is handed over so the sampler can be STICKY — the same draw for the same
- * band while its (cohort, metric) holds the same true counts. A sampler that
- * ignores it draws afresh on every call, and a fresh draw every night on
- * unchanged data is a new sample of the same number: the mean of a month of
- * them is the true count.
+ * band, in one epoch, while its (cohort, metric) holds the same true counts. A
+ * sampler that ignores it draws afresh on every call, and a fresh draw every
+ * night on unchanged data is a new sample of the same number: the mean of a
+ * month of them is the true count.
  */
 export type NoiseFn = (scale: number, cell: NoiseCell) => number;
 const NO_NOISE: NoiseFn = () => 0;
@@ -285,8 +330,13 @@ export function aggregateContributions(
       out.push({ scope, cohortKey: g.cohort, metric: g.metric, value: g.value, count: noised, cohortSize });
     }
   }
-  // stable order: biggest cohorts first (the cron's write order; nothing renders it)
-  return out.sort((a, b) => b.cohortSize - a.cohortSize);
+  // A stable order that knows nothing of the sizes. This is the cron's write
+  // order, and a read with no order clause (any consenting member's, through
+  // RLS) returns rows much as they were last written: sorted biggest first, the
+  // table itself ranked the bands by their TRUE size, the comparison the noise
+  // is there to blur. Code-unit order, so no locale decides it.
+  const byKey = (x: string, y: string) => (x < y ? -1 : x > y ? 1 : 0);
+  return out.sort((a, b) => byKey(a.cohortKey, b.cohortKey) || byKey(a.metric, b.metric) || byKey(a.value, b.value));
 }
 
 /**

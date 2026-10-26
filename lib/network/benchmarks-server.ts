@@ -68,7 +68,10 @@ export type AggregatesRead = { ok: true; aggregates: NetworkAggregate[]; compute
  * it — for as long as the cron keeps failing. Past the age limit the page, the
  * export and the report fall to their empty state instead. `computedAt` is
  * still the newest row's, stale or not, so the report can say when the
- * aggregation last wrote anything.
+ * aggregation last wrote anything. Inside a publication epoch every run that
+ * completes re-stamps the snapshot it holds without changing a figure
+ * (aggregate-server.ts), so `computedAt` is when a run last stood behind the
+ * figures, not when they last changed.
  */
 export async function readBenchmarkAggregates(sb: DB, now: Date = new Date()): Promise<AggregatesRead> {
   // `.limit(2000)` never was 2,000 — PostgREST caps at db-max-rows — and

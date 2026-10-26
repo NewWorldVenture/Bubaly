@@ -174,11 +174,16 @@ describe('/resources/benchmarks — the public page', () => {
 });
 
 describe('/admin/benchmarks — the report behind the admin gate', () => {
-  it('reads with the service role, shows n and the floor, and fails closed', () => {
+  it('reads with the service role, shows the noised count and the floor (never the true n), and fails closed', () => {
     expect(adminPage).toContain('createServiceClient()');
     expect(adminPage).toContain('readBenchmarkAggregates(supabase)');
     expect(adminPage).toContain('K_ANONYMITY_FLOOR');
-    expectSays(adminPage, 'adminBenchmarks.cohortN', 'n (distinct families)');
+    // N6 (admin table): the true band size beside the noised count is the
+    // number the noise hides, and this page is quoted like the CSV is; the
+    // rendered page is driven in tests/network-benchmarks-publish-only-noised-counts.test.ts.
+    expectSays(adminPage, 'adminBenchmarks.familiesReported', 'Families (noised)');
+    expect(adminPage).not.toContain('adminBenchmarks.cohortN');
+    expect(adminPage).not.toContain('r.cohortSize');
     expectSays(adminPage, 'adminBenchmarks.kAnonymityFloor', 'k-anonymity floor');
     expect(adminPage).toContain("console.error('[admin-benchmarks] contributor count read failed'");
     expect(adminPage).toContain('return <AdminBenchmarksReadError />;');

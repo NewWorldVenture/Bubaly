@@ -22,6 +22,7 @@ import {
   type ConsentScope, type ConsentState, type NetworkInsight,
 } from '@/lib/network/insights';
 import type { ContributionBucket } from '@/lib/network/contribution';
+import { contributesToNetwork } from '@/lib/network/aggregate';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -40,7 +41,7 @@ export function IntelligenceModule({
   benchmarksPublished?: boolean;
 }) {
   const t = useTranslations();
-  const { familyId, userId, role } = useApp();
+  const { familyId, userId, role, members } = useApp();
   // Joining the network shares the family's (anonymised) data, so it is the
   // family managers' decision — a minor's toggle is not consent. The database
   // enforces the same since 0353; other members see the setting read-only.
@@ -64,6 +65,13 @@ export function IntelligenceModule({
   // band size stays; consent is re-checked here against the row on screen.
   const insights = useMemo(() => consentedInsights(candidates, consent), [candidates, consent]);
   const contributing = isContributing(consent);
+  // A consent switched on by an ACTIVE member who may not give it (a teen,
+  // child, guest or caregiver — before 0353 anyone could) is not honoured: the
+  // nightly aggregation drops it (consentsByNonManagers). "You're
+  // contributing" over it was false, so the family is told that a manager
+  // needs to confirm it — which any manager's switch below does.
+  const consentNeedsAManager = !!row?.consented_by
+    && (members ?? []).some((m) => m.user_id === row.consented_by && !isManager(m.role));
 
   // `network_consent` is not in REALTIME_TABLES, so no channel ever moves this
   // screen. Each toggle builds the NEXT state from `consent`, so after a write
@@ -106,12 +114,22 @@ export function IntelligenceModule({
       consented_at: next.enabled ? new Date().toISOString() : null,
     }, { onConflict: 'family_id' }).select('*'), next.enabled ? t('intelligence.preferencesSaved') : t('intelligence.leftTheNetwork'), !next.enabled);
   };
-  // A scope switch changes the scopes and nothing else. Joining or leaving is
-  // the master switch's decision alone, so this never writes `enabled`.
+  // A scope switch changes the scopes, and records the manager who made it as
+  // the consent's author: the nightly aggregation honours a consent only when
+  // its author may give it, so a manager's choice here takes over one that a
+  // member who may not give it wrote. Joining or leaving is the master
+  // switch's decision alone, so this never writes `enabled`, and it writes
+  // nothing to a row that is no longer in the network.
+  //
+  // Only a scope that contributes takes the stored contribution with it:
+  // `timing` and `recommendations` have no metric, so switching one of them
+  // off forgets nothing, and deleting the row then only cost the family its
+  // digest compare line until the next nightly run.
   const toggleScope = (k: ConsentScope) =>
     save(() => createClient().from('network_consent')
-      .update({ scopes: { ...consent.scopes, [k]: !consent.scopes[k] } })
-      .eq('family_id', familyId).select('*'), t('intelligence.preferencesSaved'), consent.scopes[k] === true);
+      .update({ scopes: { ...consent.scopes, [k]: !consent.scopes[k] }, consented_by: userId, consented_at: new Date().toISOString() })
+      .eq('family_id', familyId).eq('enabled', true).select('*'), t('intelligence.preferencesSaved'),
+    consent.scopes[k] === true && contributesToNetwork({ [k]: true }));
 
   if (loading) return <div className="rounded-xl border border-border bg-surface/40 p-4 text-sm text-muted">{t('intelligence.loadingIntelligencePreferences')}</div>;
   if (error) return <ErrorState message={t('intelligenceModule.couldNotLoadIntelligencePreferences')} onRetry={refresh} />;
@@ -159,7 +177,10 @@ export function IntelligenceModule({
       <div className="flex items-center justify-between rounded-xl border border-border bg-surface/40 p-4">
         <div>
           <h3 className="font-semibold">{t('intelligence.joinTheIntelligenceNetwork')}</h3>
-          <p className="text-sm text-muted">{contributing ? t('intelligence.contributingStatus') : t('intelligence.privateStatus')}</p>
+          <p className="text-sm text-muted">
+            {!contributing ? t('intelligence.privateStatus')
+              : consentNeedsAManager ? t('intelligence.consentNeedsAManager') : t('intelligence.contributingStatus')}
+          </p>
         </div>
         <Toggle on={consent.enabled} disabled={saving || !canConsent} onClick={toggleMaster} label={t('intelligence.joinTheNetwork')} />
       </div>

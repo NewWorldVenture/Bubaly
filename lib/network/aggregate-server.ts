@@ -7,8 +7,10 @@
 //   2. CONTRIBUTE — for every contributing family, recompute its coarse row
 //      from its OWN data and upsert network_contributions. This is the only
 //      place raw family data is read, and only bands leave the family row.
-//   3. AGGREGATE — run the pure k-anonymity + DP + gating core over the
-//      contributions, and replace network_aggregates with the publish-safe rows.
+//   3. AGGREGATE — once per publication epoch (aggregate.ts, PUBLICATION_EPOCH):
+//      run the pure k-anonymity + DP + gating core over the contributions and
+//      replace network_aggregates with the publish-safe rows. Every other night
+//      of the epoch holds that snapshot unchanged.
 // Nothing here can bypass aggregate.ts's guarantees.
 
 import { createHmac } from 'node:crypto';
@@ -23,7 +25,7 @@ import {
   contributionFeatures, bedtimeToMinutes, typicalWeeklySpend, type ContributionInput,
 } from './contribution';
 import {
-  aggregateContributions, cohortKey, contributesToNetwork, laplaceNoise, filterMetricsByScopes,
+  aggregateContributions, cohortKey, contributesToNetwork, laplaceNoise, filterMetricsByScopes, publicationEpoch,
   AGG_DEFAULTS, type Contribution, type NoiseCell, type NoiseFn,
 } from './aggregate';
 import type { ConsentScope } from './insights';
@@ -31,7 +33,15 @@ import { describeActionError } from '@/lib/supabase/errors';
 
 type DB = SupabaseClient<Database>;
 
-export type AggregateResult = { ok: boolean; error?: string; contributors: number; aggregates: number };
+export type AggregateResult = {
+  ok: boolean; error?: string; contributors: number;
+  /** Rows published by this run, or standing from earlier in its epoch when `held`. */
+  aggregates: number;
+  /** The publication epoch the run published or held (on success). */
+  epoch?: string;
+  /** True when the epoch's snapshot was already published and the run left it unchanged. */
+  held?: boolean;
+};
 
 /** Roles whose members count as children for chores-per-child and bedtime. */
 export const CHILD_ROLES = new Set(['child', 'teen']);
@@ -269,34 +279,64 @@ function noiseKey(): string | null {
 }
 
 /**
- * STICKY Laplace noise: the draw is a keyed hash of the band and the TRUE
- * counts of its whole (cohort, metric) — `cell.bandVector`, every band of the
- * metric withheld ones included.
+ * STICKY Laplace noise, drawn once per band per publication EPOCH: the draw is
+ * a keyed hash of the epoch, the band, and the TRUE counts of its whole
+ * (cohort, metric) — `cell.bandVector`, every band of the metric withheld ones
+ * included.
  *
- * `Math.random()` drew afresh for every cell on every nightly run, so an
- * unchanged band published a new sample of the same number each night; at
- * scale 1.5 (sd ≈ 2.1) the mean of a month of /resources/benchmarks scrapes is
- * within 0.4 of the true count, and one family joining shows as a step of 1 in
- * it. Keyed on the metric's state, a night that changed nothing republishes the
- * same figures, and a metric that returns to an earlier state returns to that
- * state's figures: repetition adds nothing.
+ * Two attacks pull opposite ways, and neither key alone answers both.
+ *  - Averaging. `Math.random()` drew afresh for every cell on every nightly
+ *    run, so an unchanged band published a new sample of the same number each
+ *    night; at scale 1.5 (sd ≈ 2.1) the mean of a month of scrapes is within
+ *    0.4 of the true count, and one family leaving shows as a step of 1.
+ *  - Differencing. Keyed on the band's OWN count, a figure moved only when that
+ *    band's count moved, so two nights compared named the bands a family that
+ *    joined or left occupies (a cohort of 70 and one household leaving, over
+ *    2000 keys: only its cells ever changed). Keyed on the whole metric's
+ *    vector, a diff no longer named the band — but these vectors change almost
+ *    nightly (dinners and reminders are the coming seven days; the network
+ *    grows), and every change was a fresh sample of every band, so the
+ *    averaging came back, slower: 0.955 accuracy at telling whether a known
+ *    leaver was in a stable band after 90 nights each side.
  *
- * Keyed on the band's OWN count instead, a figure moved only when that band's
- * count moved, so the diff of two nights was a change detector: every figure
- * that differed was a band the family that joined or left occupies, and every
- * one that did not was a band it is not in (the probe — a cohort of 70 and one
- * household leaving, over 2000 keys: only its cells ever changed). Now any
- * change inside a (cohort, metric) redraws all of its bands at once, each
- * independent of its last draw, so a diff says that the metric changed in that
- * cohort — and neither which band, nor by how much.
+ * The epoch bounds both, and defeats neither outright. Inside an epoch the
+ * cron does not republish at all (runNetworkAggregation holds the snapshot),
+ * so no published figure changes and two nights have nothing to difference.
+ * The epoch is in the key, so the next epoch draws every band afresh, whether
+ * or not its counts moved, and the diff across a boundary says neither which
+ * bands nor which cohorts did.
+ *
+ * The BUDGET is one fresh sample per published band per epoch: 12 a year at
+ * the default monthly epoch, 52 at a weekly one. Each sample is a new draw of
+ * the same noise, so averaging epochs still converges on the true count; the
+ * budget only sets how fast. The reviewer's averaging probe, run per epoch on
+ * this sampler over 400 keys (a stable band of 25 whose siblings change every
+ * epoch, a household that left at a known boundary, the mean of E epochs
+ * before against the mean of E after), tells whether that household was in
+ * the band with accuracy 0.581 after 1 epoch each side, 0.613 after 4, 0.710
+ * after 12 and 0.889 after 52 (tests/network-noise-is-drawn-once-per-epoch.test.ts
+ * pins these). That is close to Φ(0.5·√E / 3.0), 3.0 being the spread of the
+ * difference of two rounded Laplace(1.5) draws. At the monthly epoch, 12 a
+ * side means watching for a year before and a year after, with the band's
+ * true count moved by nothing else in those two years; 52 a side is more than
+ * eight years. Republished nightly on the whole-metric key, the reviewer's
+ * nightly version of the probe reached 0.955 after 90 nights a side. Going
+ * further takes a larger scale, coarser rounding or a longer epoch, and that
+ * is the owner's call, not this function's.
+ *
+ * The vector stays in the key for the one case the hold cannot rule out: two
+ * publishes in one epoch (overlapping runs). With the same state they publish
+ * the same figures. With a changed state every band of the metric draws
+ * afresh (one extra sample), never the same noise on a different count, which
+ * would subtract to the exact change.
  */
-export function stickyNoise(key: string): NoiseFn {
-  return (scale, cell) => laplaceNoise(scale, () => cellUniform(key, cell));
+export function stickyNoise(key: string, epoch: string): NoiseFn {
+  return (scale, cell) => laplaceNoise(scale, () => cellUniform(key, epoch, cell));
 }
 
-function cellUniform(key: string, cell: NoiseCell): number {
+function cellUniform(key: string, epoch: string, cell: NoiseCell): number {
   const digest = createHmac('sha256', key).update(NOISE_DOMAIN)
-    .update(JSON.stringify([cell.scope, cell.cohortKey, cell.metric, cell.value, cell.cohortSize, cell.bandVector]))
+    .update(JSON.stringify([epoch, cell.scope, cell.cohortKey, cell.metric, cell.value, cell.cohortSize, cell.bandVector]))
     .digest();
   // 48 bits, strictly inside (0, 1): the Laplace inverse never meets log(0).
   return (digest.readUIntBE(0, 6) + 0.5) / 2 ** 48;
@@ -425,17 +465,39 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
   }
   if (contributionFailures > 0) return { ok: false, error: 'failed to persist family contributions', contributors: contributions.length, aggregates: 0 };
 
-  // 4. AGGREGATE — pure k-anonymity + sticky DP noise (one draw per band per
-  //    state of its whole cohort-metric) + launch gate.
-  const aggregates = aggregateContributions(contributions, {
+  // 4. HOLD — inside a publication epoch the published figures do not change.
+  //    If this epoch's snapshot is already published, the run stands behind it
+  //    again — `computed_at` re-stamped, so readers' 36-hour freshness rule
+  //    still says the cron is alive — and changes nothing a reader can see:
+  //    no join, leave or band change inside the epoch reaches a figure, so
+  //    two nights of one epoch have nothing to difference. The contributions
+  //    above are still refreshed nightly (the prune, and each family's own
+  //    compare line, depend on them); they reach the figures at the next
+  //    epoch. A network that published nothing yet this epoch (the launch
+  //    gate not met) has no snapshot to hold, and publishes when it first can.
+  const epoch = publicationEpoch(now);
+  // `computed_at` is a real column (0135, timestamptz); the hand-kept Update
+  // type in lib/database.types.ts lists only what the republish used to change.
+  const restamp = { computed_at: now.toISOString() } as never;
+  const { data: standing, error: holdError } = await sb.from('network_aggregates')
+    .update(restamp)
+    .gte('computed_at', epoch.start.toISOString())
+    .select('id');
+  if (holdError) return { ok: false, error: describeActionError(holdError), contributors: contributions.length, aggregates: 0 };
+  const held = (standing ?? []).length;
+
+  // 5. AGGREGATE (once per epoch) — pure k-anonymity + sticky DP noise (one
+  //    draw per band per epoch, see stickyNoise) + launch gate.
+  const aggregates = held > 0 ? [] : aggregateContributions(contributions, {
     minCohort: AGG_DEFAULTS.minCohort,
     globalMinFamilies: AGG_DEFAULTS.globalMinFamilies,
-    noise: stickyNoise(key),
+    noise: stickyNoise(key, epoch.key),
   });
 
-  // 5. Republish: upsert the new set on the natural key, THEN prune rows this run
-  //    didn't touch (stale computed_at). Avoids the delete-all-then-insert window
-  //    where a failed insert would leave the table silently empty.
+  // 6. Publish: upsert the new set on the natural key, THEN prune rows this run
+  //    didn't touch (stale computed_at) — after a hold, the leftovers of an
+  //    earlier epoch whose own prune failed. Avoids the delete-all-then-insert
+  //    window where a failed insert would leave the table silently empty.
   if (aggregates.length) {
     const { error: upsertErr } = await sb.from('network_aggregates').upsert(
       aggregates.map((a) => ({
@@ -449,7 +511,7 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
   // Rows deliberately not checked: zero is the ordinary "nothing older" run.
   // Audit C1-S9-69.
   const { error: pruneErr } = await sb.from('network_aggregates').delete().lt('computed_at', now.toISOString());
-  if (pruneErr) return { ok: false, error: describeActionError(pruneErr), contributors: contributions.length, aggregates: aggregates.length };
+  if (pruneErr) return { ok: false, error: describeActionError(pruneErr), contributors: contributions.length, aggregates: held || aggregates.length };
 
-  return { ok: true, contributors: contributions.length, aggregates: aggregates.length };
+  return { ok: true, contributors: contributions.length, aggregates: held || aggregates.length, epoch: epoch.key, held: held > 0 };
 }
