@@ -14,6 +14,10 @@ import { sourceFiles } from './helpers/hover-reveals';
 // and the children wrap or truncate inside it.
 // The rest were rows: a flex row that never wraps, or a flex-1 input whose
 // min-width is its intrinsic size.
+//
+// The admin console was swept the same way later: 5 of its 79 routes scrolled
+// sideways at 320 px (/admin, /admin/admins, /admin/feedback,
+// /admin/marketing/settings and /admin/subscriptions), from the same two shapes.
 
 /** Each class string in a file that makes a grid with breakpoint columns and no base column count. */
 function unboundedGrids(src: string): string[] {
@@ -42,6 +46,9 @@ describe('a page reflows at 320 px', () => {
       ['components/moments/moments-view.tsx', 'grid grid-cols-1 gap-4 lg:grid-cols-2'],
       ['components/modules/school-module.tsx', 'grid grid-cols-1 gap-5 lg:grid-cols-2'],
       ['components/modules/settings-module.tsx', 'grid grid-cols-1 gap-4 sm:grid-cols-2'],
+      ['app/(app)/admin/page.tsx', 'grid grid-cols-1 gap-4 lg:grid-cols-3'],
+      ['app/(app)/admin/subscriptions/page.tsx', 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]'],
+      ['app/(app)/admin/marketing/settings/page.tsx', 'grid grid-cols-1 gap-5 lg:grid-cols-2'],
     ];
     for (const [file, cls] of fixed) {
       const src = readFileSync(file, 'utf8');
@@ -53,9 +60,9 @@ describe('a page reflows at 320 px', () => {
   it('the count of grids with no base column only goes down', () => {
     // 330 on main c95b118; the nine files above held 11 of them. Most fit
     // their content at 320 px, as the sweep showed; this keeps new ones from
-    // being added without a base column.
+    // being added without a base column. 319 to 316 with the three admin grids.
     const count = files.reduce((n, f) => n + unboundedGrids(readFileSync(f, 'utf8')).length, 0);
-    expect(count).toBeLessThanOrEqual(319);
+    expect(count).toBeLessThanOrEqual(316);
     expect(count).toBeGreaterThan(100); // non-vacuity: the scanner finds them
   });
 
@@ -83,6 +90,25 @@ describe('a page reflows at 320 px', () => {
     expect(src('components/modules/timetable-module.tsx')).toContain('className="h-9 w-auto min-w-0 max-w-full">');
     // A full URL is one word: it breaks anywhere rather than push the card past the screen.
     expect(src('app/(app)/dashboard/assistants/page.tsx').match(/<code className="break-all text-xs">https:\/\//g)).toHaveLength(2);
+  });
+
+  it('the admin rows the sweep found wrap, and their search can shrink', () => {
+    const src = (f: string) => readFileSync(f, 'utf8');
+    // A donut's legend goes under the 112 px donut when the card cannot hold both.
+    for (const f of ['components/admin/role-donut.tsx', 'components/admin/status-donut.tsx', 'app/(app)/admin/subscriptions/page.tsx']) {
+      expect(src(f), f).toContain('<div className="flex flex-wrap items-center gap-5">\n      <div className="relative h-28 w-28 shrink-0">');
+    }
+    // The feedback board's category and search wrap below lg, where the search
+    // takes the row; from lg they sit side by side as before.
+    const feedback = src('components/admin/feedback-admin.tsx');
+    expect(feedback).toContain('<div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">');
+    expect(feedback).toContain('<div className="relative min-w-[10rem] flex-1 sm:flex-none">');
+    expect(feedback).toContain('className="h-9 w-full rounded-lg border border-border bg-bg pl-8 pr-2 text-sm outline-none focus:border-brand sm:w-40"');
+    // A provider's status goes under its name, and an environment variable's
+    // name (one word, such as GOOGLE_SEARCH_CONSOLE_KEY) breaks anywhere.
+    const settings = src('app/(app)/admin/marketing/settings/page.tsx');
+    expect(settings).toContain('className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-border px-3 py-2 text-sm"');
+    expect(settings).toContain('<span className="inline-flex min-w-0 items-center gap-1 text-muted [overflow-wrap:anywhere]"><XCircle className="h-4 w-4 shrink-0" /> Set {p.env}</span>');
   });
 
   it('the scanner: breakpoint columns without a base count; a base count or no breakpoint is fine', () => {
