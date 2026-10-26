@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { isRealtimePublished } from '@/lib/realtime/published-tables';
 import type { Tables } from '@/lib/database.types';
 import { ownChannel } from '@/lib/realtime/own-channel';
+import { readFamilySubscription } from '@/lib/billing/subscription-row';
 
 type Subscription = Tables<'subscriptions'>;
 type Owner = { familyId: string; userId: string };
@@ -33,8 +34,13 @@ export function useBillingSubscription(familyId: string, userId: string) {
     const isCurrent = () => renderedOwner.current === owner && active.current === lifetime && lifetime.generation === generation;
     try {
       if (!familyId || !userId) throw new Error('Missing subscription owner');
-      const { data, error } = await createClient()
-        .from('subscriptions').select('*').eq('family_id', familyId).maybeSingle();
+      const db = createClient();
+      // A family may hold more than one row (0285 could not enforce one);
+      // maybeSingle alone made that family's billing "unavailable" forever,
+      // with no portal, cancel or plan change to reach. The routes pick the
+      // same row through the same reader.
+      const { data, error } = await readFamilySubscription<Subscription>(() => db
+        .from('subscriptions').select('*').eq('family_id', familyId));
       if (!isCurrent()) return;
       if (error || (data && data.family_id !== familyId)) {
         setRead({ owner, status: 'unavailable', subscription: null });

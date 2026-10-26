@@ -107,6 +107,10 @@ export function parseAssistantResponse(status: number, body: unknown, t: MobileT
   }
   const code = typeof obj.code === 'string' ? obj.code : undefined;
   const serverError = typeof obj.error === 'string' ? obj.error : undefined;
+  // The monthly AI allowance (F19) is also a 429, but it is not a rate limit:
+  // "try again in a moment" would invite pointless retries until next month.
+  // The server's own text names the allowance and the upgrade path.
+  if (status === 429 && code === 'allowance_exceeded') return { ok: false, status, code, error: serverError ?? t('mobileAssistant.failed') };
   if (code && FRIENDLY[code]) return { ok: false, status, code, error: t(FRIENDLY[code]) };
   if (status === 429) return { ok: false, status, code: 'rate_limited', error: t('mobileAssistant.rateLimited') };
   // A 4xx body's message was written for the caller ("Message is required"); a

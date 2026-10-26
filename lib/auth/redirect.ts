@@ -63,6 +63,32 @@ export function safeInternalRedirect(
 }
 
 /**
+ * A stored href as a link this app may render, or null when it would leave it.
+ *
+ * Several family-scoped tables carry a free-text link column that the product
+ * renders as an in-app navigation — `agent_activity.href` (0127),
+ * `daily_insights.href` (0141), `prep_plan_steps.href` (0131) and the
+ * Operating Index's stored `suggestions[].href` (0125). Their RLS is
+ * `is_family_member(family_id)` for writes, so the value is whatever any
+ * member (a child or a guest included) last wrote, and it is rendered to a
+ * parent as Bubaly's own. `https://evil.example/login`, `//evil.example` and
+ * `/\evil.example` all navigate off the app from such a link. React refuses
+ * `javascript:`; nothing refused those. (A recommendation's `cta_href` is held
+ * to the same-app rule by `sameAppHref` in lib/home/needs-sources.)
+ *
+ * Judged by the SAME rule as a sign-in redirect, raw and as normalized, not a
+ * shorter local regex: `/^\/(?!\/)/` accepts `/\evil.example`, which a
+ * browser resolves to https://evil.example/. The raw value is returned so an
+ * ordinary path renders exactly as stored.
+ */
+export function inAppHref(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const href = value.trim();
+  if (!href || !isSameOriginPath(href) || !safeInternalRedirect(href, '')) return null;
+  return href;
+}
+
+/**
  * The same same-origin rule, for callers that keep the value the person gave
  * rather than a normalized one. Exported so no second copy of the rule can
  * drift away from this one — the two implementations of "is this path safe?"

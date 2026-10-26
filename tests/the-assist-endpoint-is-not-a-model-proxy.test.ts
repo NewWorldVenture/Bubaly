@@ -17,6 +17,12 @@ import { extractFencedBlocks, stripFencedBlocks, UNTRUSTED_CONTENT_RULE } from '
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 
 const h = vi.hoisted(() => ({ db: null as unknown, complete: vi.fn(), role: 'parent' }));
+// The monthly allowance (F19) is its own suite (every-ai-route-counts-against-the-allowance); it admits here.
+vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
+  refuseOverAIAllowance: async () => null,
+  withinAIAllowance: async () => true,
+}));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/supabase/auth', () => ({
   requireUserContext: async () => ({

@@ -863,7 +863,8 @@ export async function executeTool(
     const activity = await recordActivity(callScope, {
       agent: tool.domain,
       action: trailActionFor(tool),
-      title: summary,
+      // The feed is every member's; the summary above is the requester's.
+      title: tool.activityTitle ? tool.activityTitle(input, output) : summary,
       detail: verificationDetail,
       href: DOMAIN_HREF[tool.domain] ?? null,
     });

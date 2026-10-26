@@ -1549,7 +1549,7 @@ function MessagesWorkspace() {
                     <Smile className="h-4 w-4" />
                   </button>
                   {showPicker && (
-                    <div className="absolute bottom-11 left-0 z-20 rounded-xl border border-border bg-elevated p-2 shadow-xl">
+                    <div className="absolute bottom-11 left-0 z-20 w-max rounded-xl border border-border bg-elevated p-2 shadow-xl">
                       <div className="grid grid-cols-4 gap-1">
                         {QUICK_EMOJIS.map((e) => (
                           <button key={e} type="button" onClick={() => { const next = draftRef.current.text + e; draftRef.current = { ...draftRef.current, text: next }; setText(next); setShowPicker(false); inputRef.current?.focus(); }}

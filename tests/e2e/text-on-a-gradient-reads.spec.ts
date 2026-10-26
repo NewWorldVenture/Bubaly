@@ -13,14 +13,22 @@ import { expect, test, type Page } from '@playwright/test';
 // filter applied to text and fill alike.
 test.use({ locale: 'en-US', trace: 'off', screenshot: 'off', video: 'off', serviceWorkers: 'block', viewport: { width: 1280, height: 900 } });
 
-// Two things a marketing page does that are not failures: it registers its
-// service worker, which this spec blocks, and it prefetches the routes its
-// links point to, which the next page.goto cancels.
+// Three things a marketing page does that are not failures: it registers its
+// service worker, which this spec blocks; it prefetches the routes its links
+// point to; and it sends a keepalive analytics beacon. The next page.goto
+// cancels the last two.
 const EXPECTED = (line: string) => line === 'console warning: Service Worker registration blocked by Playwright'
-  || /^request failed: \S+[?&]_rsc=\S+: net::ERR_ABORTED$/.test(line);
+  || /^request failed: \S+[?&]_rsc=\S+: net::ERR_ABORTED$/.test(line)
+  || /^request failed: \S+\/api\/mkt\/track: net::ERR_ABORTED$/.test(line);
 
 const browserFailures = new WeakMap<Page, string[]>();
-test.beforeEach(({ page }) => {
+test.beforeEach(async ({ page }) => {
+  // The pages' analytics and exit-intent beacons are not under test, and they
+  // are rate-limited per address: a run on a server that has already served
+  // many page loads would read their 429s as browser failures. Answer them as
+  // an idle visitor would get answered: tracked, and no offer.
+  await page.route('**/api/mkt/track', (route) => route.fulfill({ status: 204 }));
+  await page.route('**/api/exit-intent/resolve', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"offer":null}' }));
   const failures: string[] = [];
   browserFailures.set(page, failures);
   const fail = (line: string) => { if (!EXPECTED(line)) failures.push(line); };
@@ -92,6 +100,7 @@ async function open(page: Page, theme: 'light' | 'dark', path: string) {
 test.describe('text on a gradient reads at 4.5:1', () => {
   for (const theme of ['light', 'dark'] as const) {
     test(`${theme}: each CTA's words read at 4.5:1 on every stop, at rest and hovered`, async ({ page }) => {
+      test.setTimeout(90_000); // four pages, and a hover on every CTA on each
       let total = 0;
       for (const path of PAGES) {
         await open(page, theme, path);
