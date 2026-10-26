@@ -122,6 +122,7 @@ export function PhoneInput({
           ref={triggerRef}
           type="button"
           onClick={() => setOpen((o) => !o)}
+          onKeyDown={(e) => { if (open) onEscape(e); }}
           aria-expanded={open}
           aria-haspopup="listbox"
           aria-controls={open ? listId : undefined}

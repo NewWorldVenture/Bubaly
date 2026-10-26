@@ -69,15 +69,24 @@ test.describe('the country picker', () => {
     expect(axe.violations.map((v) => `${v.id}: ${v.nodes.length}`)).toEqual([]);
   });
 
-  test('Escape closes it and focus returns to its button', async ({ page }) => {
+  test('Escape closes it and focus returns to its button, from the search field or from the button itself', async ({ page }) => {
     const trigger = await phonePicker(page);
+    const search = page.getByRole('textbox', { name: 'Search country or code…' });
+    // From the search field, once the panel has taken focus.
     await trigger.focus();
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('listbox')).toBeVisible();
+    await expect(search).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('listbox')).toHaveCount(0);
     await expect(trigger).toBeFocused();
     await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    // From the button, before focus has moved into the panel.
+    await trigger.click();
+    await trigger.focus();
+    await expect(page.getByRole('listbox')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('listbox')).toHaveCount(0);
+    await expect(trigger).toBeFocused();
   });
 
   test('choosing a country by keyboard closes it and focus returns to its button', async ({ page }) => {

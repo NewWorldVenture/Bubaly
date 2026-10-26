@@ -15,6 +15,7 @@ describe('a popup is what it says it is', () => {
     expect(src).toContain('<li key={c.code} role="none">');
     expect(src).toMatch(/function onEscape\(e: React\.KeyboardEvent\) \{\s*if \(e\.key === 'Escape'\) \{ e\.stopPropagation\(\); close\(\); \}/);
     expect(src.match(/onKeyDown=\{onEscape\}/g)).toHaveLength(2); // the search field and each option: wherever focus is in the panel
+    expect(src).toContain('onKeyDown={(e) => { if (open) onEscape(e); }}'); // and its button, before focus has moved into the panel
     expect(src).toMatch(/function close\(\) \{[^}]*triggerRef\.current\?\.focus\(\);/);
     expect(src).toContain('!triggerRef.current?.contains(e.target as Node)');
   });
