@@ -53,16 +53,27 @@
 // shares; this bounds the damage, and dropping the policy (and throttling the
 // trigger, both owner actions) is what ends it.
 //
+// A drop whose listing is not found (deleted since: 0154 lets its owner delete
+// it, and its drops stay, related_id being text with no foreign key; or the
+// lookup failed) has no known seller. It is not counted against the family it
+// landed in, which is a watcher's as often as the seller's own: the drops not
+// found that landed in one family share one recipient's share of their own,
+// which no seller's drops share, and all the drops not found together take no
+// more than one family's share, so a seller whose listings are gone does not
+// get one share back for each family its drops landed in.
+//
 // A seller is not a column of the notification, so a read cannot leave a full
 // seller's drops out by seller. It names the narrowest thing it can: the
 // family a drop landed in when that is the seller's own (a member's own
 // listings saved in their own family, which needs nobody else), else the
 // listing. So that the names stay bounded, a full seller's listings landing in
-// other families are named one by one up to `size / perRecipient` of them,
-// then the families they land in up to as many again; past both, a further
-// listing of that seller counts against its own share alone. Reaching that
-// takes more listings than a batch has shares, saved by as many other
-// families, all with drops waiting at once.
+// other families, and full drops not found, are named one by one up to
+// `size / perRecipient` of them, then the families they land in up to as many
+// again; past both, a further listing counts against its own share alone. A
+// family named so has every price drop into it wait, other sellers' too, until
+// the room left after everyone else's: one family that saved more of a full
+// seller's listings than a batch has shares is enough for that, whether those
+// listings are still there or not.
 //
 // Rows dated after now (beyond a clock-skew allowance) are not read at all, by
 // either dispatcher: no writer sets created_at, which defaults to now(), so
@@ -122,13 +133,13 @@ export function isMarketplaceNotice(row: FairRow): boolean {
 
 /**
  * The family a price drop counts against inside the marketplace: the family
- * whose listing it is, as the reader resolved it, or the family it landed in
- * when the listing was not found (deleted since, or the lookup failed). Those
- * are a member's own drops whenever they land in their own family, which is
- * what a member can flood without anyone else saving a thing.
+ * whose listing it is, as the reader resolved it, or null when the listing was
+ * not found (deleted since, or the lookup failed). A drop not found is not
+ * counted against the family it landed in (readFairBatch: it shares the drops
+ * not found of that family, and of every family together, instead).
  */
-export function sellerOf(row: FairRow): string {
-  return row.seller_family_id || row.family_id;
+export function sellerOf(row: FairRow): string | null {
+  return row.seller_family_id || null;
 }
 
 /** What one read of a range leaves out. */
@@ -193,7 +204,9 @@ function within(narrower: FairExclusion, wider: FairExclusion): boolean {
  * Read one batch of up to `size` rows, fairly by family and, inside a family,
  * by recipient (its whole-family rows counting as one recipient). The
  * marketplace notices are one family more, shared inside it by seller and by
- * listing, a drop counting against both.
+ * listing, a drop counting against both; a drop whose listing was not found
+ * counts against the drops not found of the family it landed in, and of every
+ * family together, in place of a seller.
  *
  * Rows are taken in the order the reads return them and never given back. In
  * the first pass a row is taken only while its family is under `perFamily`
@@ -230,6 +243,8 @@ export async function readFairBatch<T extends FairRow>(read: FairRead<T>, size: 
   const fullListings = new Set<string>();
   const fullLanding = new Set<string>();
   const bySeller = new Map<string, number>();
+  // The drops not found taken so far, every family's together (the header).
+  let notFoundTaken = 0;
   let marketplaceFull = false;
   let unlistedFull = false;
   // How many of full sellers' listings, and then landing families, a read
@@ -243,11 +258,20 @@ export async function readFairBatch<T extends FairRow>(read: FairRead<T>, size: 
   const familyOf = (row: T) => (isMarketplaceNotice(row) ? 'marketplace' : `family:${row.family_id}`);
   const recipientOf = (row: T) => (row.user_id ? `user:${row.user_id}`
     : isMarketplaceNotice(row) ? `listing:${row.related_id ?? ''}` : `family:${row.family_id}`);
+  // A drop's seller share: its seller's, or, when its listing was not found,
+  // the share of the drops not found that landed in the same family, which no
+  // seller's drops share.
+  const sellerShareOf = (row: T) => {
+    const seller = sellerOf(row);
+    return seller ? `seller:${seller}` : `not-found:${row.family_id}`;
+  };
   /**
    * Leave a full seller's drop out by the narrowest name a read can carry:
    * the family it landed in when that is the seller's own, else its listing,
    * else (past `named` listings) the family it landed in. False once those
-   * names are spent: the drop then counts against its listing alone.
+   * names are spent: the drop then counts against its listing alone. A drop
+   * not found has no seller, so the family it landed in is never taken for its
+   * seller's own: it is named only once the listing names are spent.
    */
   const leaveOutSeller = (row: T): boolean => {
     if (row.family_id === sellerOf(row)) { fullLanding.add(row.family_id); return true; }
@@ -298,10 +322,13 @@ export async function readFairBatch<T extends FairRow>(read: FairRead<T>, size: 
         const recipient = recipientOf(row);
         const familyFull = level === 'family' && (byFamily.get(family) ?? 0) >= perFamily;
         const recipientFull = level !== 'surplus' && (byRecipient.get(recipient) ?? 0) >= perRecipient;
-        // A drop whose listing (above) or seller has its share waits; a full
-        // seller's drop is left out by the name leaveOutSeller gives it.
+        // A drop whose listing (above) or seller has its share waits, as does
+        // a drop not found once the drops not found hold a family's share; it
+        // is left out by the name leaveOutSeller gives it.
+        const notFound = market && !sellerOf(row);
         const sellerFull = market && level !== 'surplus' && !familyFull && !recipientFull
-          && (bySeller.get(sellerOf(row)) ?? 0) >= perRecipient && leaveOutSeller(row);
+          && ((bySeller.get(sellerShareOf(row)) ?? 0) >= perRecipient || (notFound && notFoundTaken >= perFamily))
+          && leaveOutSeller(row);
         if (familyFull) {
           if (market) marketplaceFull = true;
           else fullFamilies.add(row.family_id);
@@ -317,7 +344,8 @@ export async function readFairBatch<T extends FairRow>(read: FairRead<T>, size: 
         added += 1;
         byFamily.set(family, (byFamily.get(family) ?? 0) + 1);
         byRecipient.set(recipient, (byRecipient.get(recipient) ?? 0) + 1);
-        if (market) bySeller.set(sellerOf(row), (bySeller.get(sellerOf(row)) ?? 0) + 1);
+        if (market) bySeller.set(sellerShareOf(row), (bySeller.get(sellerShareOf(row)) ?? 0) + 1);
+        if (notFound) notFoundTaken += 1;
       }
       if (taken.size >= size) return 'full';
       if (reached) continue;
@@ -347,9 +375,10 @@ export async function readFairBatch<T extends FairRow>(read: FairRead<T>, size: 
  * leaving out at least as much is answered from it instead of asking again.
  *
  * `behind` need not start at the oldest row: push's reads behind go on from
- * the retries' own place in its cursor, so under a flood ahead (no wrap) the
- * reserve is not spent on the same oldest rows every run. behindExhausted
- * says when they have been through every row there and start again.
+ * the retries' own place in its cursor, then go round to the oldest, so under
+ * a flood ahead (no wrap) the reserve is not spent on the same oldest rows
+ * every run. behindExhausted says when the batch took every row there, and
+ * the retries start again from the oldest.
  */
 export function aheadAndBehind<T extends FairRow>(ahead: FairRead<T>, behind: FairRead<T>, behindShare: number) {
   if (!(behindShare >= 0 && behindShare < 1)) throw new Error('The retries\' share of a read must be a fraction below one.');
