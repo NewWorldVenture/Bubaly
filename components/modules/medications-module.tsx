@@ -26,6 +26,7 @@ import {
 import type { Tables, DoseStatus } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock } from '@/components/i18n/use-format';
+import { wallFromKey } from '@/lib/time/wall-clock';
 import { useConfirm } from '@/components/ui/confirm';
 
 type Medication = Tables<'medications'>;
@@ -157,11 +158,9 @@ export function MedicationsModule() {
   }, [clock]);
 
   // Adherence window lower bound (ISO) for the dose log query.
-  const windowStart = useMemo(() => {
-    const d = new Date(`${dayKey}T00:00:00`);
-    d.setDate(d.getDate() - ADHERENCE_WINDOW_DAYS);
-    return d.toISOString();
-  }, [dayKey]);
+  const windowStart = useMemo(() => clock.toInstant(
+    clock.addDays(wallFromKey(dayKey), -ADHERENCE_WINDOW_DAYS),
+  ).toISOString(), [clock, dayKey]);
 
   // ── Data ──────────────────────────────────────────────────
   const { data: meds, loading: medsLoading, error: medsError, refreshAndConfirm: confirmMeds, stale: medsStale } = useRealtimeQuery<Medication>({
@@ -176,7 +175,7 @@ export function MedicationsModule() {
     fetcher: (sb) => sb.from('medication_schedules').select('*').eq('family_id', familyId).order('time_of_day'),
   });
   const { data: doses, loading: dosesLoading, error: dosesError, refreshAndConfirm: confirmDoses, stale: dosesStale } = useRealtimeQuery<Dose>({
-    table: 'medication_doses', familyId, deps: [familyId, dayKey, ownDosesOnly],
+    table: 'medication_doses', familyId, deps: [familyId, dayKey, windowStart, ownDosesOnly],
     fetcher: (sb) => {
       const q = sb.from('medication_doses').select('*').eq('family_id', familyId).gte('scheduled_for', windowStart);
       return ownDosesOnly ? q.eq('member_id', ownDosesOnly) : q;
