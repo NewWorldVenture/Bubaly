@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireMarketingAdmin, logMarketingAudit, isMarketingAuthError, marketingRefusalBody } from '@/lib/marketing/admin';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
-import { sendEmailCampaign, campaignAudience, CampaignSendError, finishesCappedCampaign, MAX_RECIPIENTS } from '@/lib/marketing/send';
+import { sendEmailCampaign, campaignAudience, CampaignSendError, finishesCampaign, MAX_RECIPIENTS } from '@/lib/marketing/send';
 
 export const runtime = 'nodejs';
 
@@ -27,11 +27,12 @@ export async function GET(req: NextRequest) {
     // the rest, so the preview answers both: what this send mails
     // (`recipients`) and everyone still to be reached (`audience`). It used to
     // answer the capped 1,000 as if that were the whole audience. `finishes`
-    // marks a capped campaign whose held addresses have all left the
-    // audience: Send records it sent, mailing no one (finishesCappedCampaign).
+    // marks a campaign that was capped or stopped partway and whose every
+    // address not yet reached has left the audience: Send records it sent,
+    // mailing no one (finishesCampaign).
     return NextResponse.json({
       recipients: Math.min(remaining.length, MAX_RECIPIENTS), audience: remaining.length, alreadySent,
-      ...(finishesCappedCampaign(prior, remaining) ? { finishes: true } : {}),
+      ...(finishesCampaign(prior, remaining) ? { finishes: true } : {}),
     });
   } catch (err) {
     // The status rides on the error now, rather than being recovered by reading

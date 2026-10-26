@@ -207,34 +207,52 @@ function footer(appUrl: string, email: string): string {
 /** `sent`: what this send delivered. `remaining`: the eligible addresses it held back for the next (MAX_RECIPIENTS). */
 type SendResult = { sent: number; remaining: number };
 
+/** The outcomes a send records when it stops partway and leaves the row `failed`. */
+const STOPPED_OUTCOMES: readonly CampaignDelivery['outcome'][] = ['provider_rejected', 'provider_unreachable', 'state_unrecorded'];
+
 /**
  * Whether a Send of this campaign has no one left to mail and only finishes
- * it: an earlier send was capped, and every address it held back has since
- * left the audience (unsubscribed, bounced, or its family closed or lost its
- * owner). Such a campaign used to be refused as having no recipients, so it
- * stayed `draft` for good, and the console kept saying Send reaches the rest.
- * The preview answers this too, so the console offers the finishing Send.
+ * it: an earlier send reached part of the audience, and every address it did
+ * not reach has since left the audience (unsubscribed, bounced, or its family
+ * closed or lost its owner). That earlier send either was capped, or stopped
+ * partway (the row is `failed`; R3-AW-FAILED-NO-ONE-LEFT), its unknown batch
+ * included: `remaining` holds every address not on record as delivered, so it
+ * is empty only once that batch has left the audience too. Such a campaign
+ * used to be refused as having no recipients, so it stayed `draft` or
+ * `failed` for good, and the console kept offering a Send that could not
+ * finish it. The preview answers this too, so the console offers the
+ * finishing Send. A send that stopped before anything was delivered is not
+ * finished: it reached no one, like a draft never sent, and is refused as one.
  */
-export function finishesCappedCampaign(prior: CampaignDelivery | null, remaining: readonly string[]): boolean {
-  return prior?.outcome === 'capped' && (prior.pending ?? []).length === 0 && remaining.length === 0;
+export function finishesCampaign(prior: CampaignDelivery | null, remaining: readonly string[]): boolean {
+  if (!prior || remaining.length > 0) return false;
+  if (prior.outcome === 'capped') return (prior.pending ?? []).length === 0;
+  return STOPPED_OUTCOMES.includes(prior.outcome) && prior.delivered.length > 0;
 }
 
 /**
- * Record a capped campaign with no one left as `sent` (outcome `complete`,
- * recipients the addresses it delivered), mailing no one. Fenced on the record
- * it was read with, as a send's reservation is, so a concurrent Send that
- * reserved it first leaves this one with nothing to write.
+ * Record a campaign with no one left as `sent` (outcome `complete`,
+ * recipients the addresses on record as delivered), mailing no one. Fenced on
+ * the status and the record it was read with, as a send's reservation is, so
+ * a concurrent Send that reserved it first leaves this one with nothing to
+ * write. A stopped send's unknown batch is kept as `unconfirmed`: those
+ * addresses have left the audience, and whether the provider took the batch
+ * is still not known, so they are not counted as reached.
  */
-async function finishCappedCampaign(supabase: DB, campaignId: string, metadata: unknown, prior: CampaignDelivery): Promise<SendResult> {
+async function finishCampaign(supabase: DB, campaignId: string, metadata: unknown, prior: CampaignDelivery): Promise<SendResult> {
+  const unconfirmed = prior.pending ?? [];
   const { data: finished, error } = await supabase.from('marketing_email_campaigns')
     .update({
       status: 'sent', sent_at: new Date().toISOString(), recipients: prior.delivered.length,
       metadata: {
         ...plainObject(metadata),
-        delivery: { attempt: randomUUID(), delivered: prior.delivered, pending: null, outcome: 'complete', finishedAt: new Date().toISOString() },
+        delivery: {
+          attempt: randomUUID(), delivered: prior.delivered, pending: null, outcome: 'complete', finishedAt: new Date().toISOString(),
+          ...(unconfirmed.length > 0 ? { unconfirmed } : {}),
+        },
       } as Json,
     })
-    .eq('id', campaignId).is('deleted_at', null).eq('status', 'draft')
+    .eq('id', campaignId).is('deleted_at', null).eq('status', prior.outcome === 'capped' ? 'draft' : 'failed')
     .eq('metadata->delivery->>attempt', prior.attempt)
     .select('id').maybeSingle();
   if (error) throw new Error('Could not record the email campaign as sent.');
@@ -269,7 +287,7 @@ export async function sendEmailCampaign(supabase: DB, campaignId: string, appUrl
 
   const { remaining, alreadySent, prior } = await campaignAudience(supabase, c);
   if (remaining.length === 0) {
-    if (prior && finishesCappedCampaign(prior, remaining)) return finishCappedCampaign(supabase, campaignId, c.metadata, prior);
+    if (prior && finishesCampaign(prior, remaining)) return finishCampaign(supabase, campaignId, c.metadata, prior);
     throw new Error('No eligible recipients (after suppression/consent filtering)');
   }
 

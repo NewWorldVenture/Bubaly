@@ -186,4 +186,26 @@ describe('a capped campaign whose held addresses have all left', () => {
     expect(h.toasts.success).toEqual([SOURCE_MESSAGES['sendCampaign.finishedNoOneLeft']]);
     expect(db.table('marketing_email_campaigns')[0]).toMatchObject({ status: 'sent', recipients: 2 });
   });
+
+  // R3-AW-FAILED-NO-ONE-LEFT. The same for a send that stopped partway: the
+  // batch the provider refused was the one address left, and it unsubscribed.
+  // The button said "No eligible recipients" and the campaign stayed failed.
+  it('a campaign that stopped partway is confirmed as finishing it and recorded sent, mailing no one', async () => {
+    seed();
+    vi.stubEnv('RESEND_API_KEY', 're_fixture');
+    db.seed('marketing_audit_logs', []);
+    db.replace('marketing_email_campaigns', [{
+      id: 'cmp-1', name: 'Autumn', subject: 'Autumn news', segment_id: null, status: 'failed', deleted_at: null, recipients: 2,
+      metadata: { delivery: { attempt: 'att-1', delivered: ['parent1@example.com', 'parent2@example.com'], pending: ['parent3@example.com'], outcome: 'provider_rejected' } },
+    }]);
+    db.seed('marketing_suppressions', [{ email: 'parent3@example.com', reason: 'unsubscribe' }]);
+    postTo = 'route';
+    await pressSend();
+    expect(confirms, 'the button said there is no one to send to and stopped').toEqual([SOURCE_MESSAGES['sendCampaignButton.confirmFinish']]);
+    expect(confirms[0], 'a stopped campaign held no one back').not.toMatch(/held back/);
+    expect(sends).toEqual([{ id: 'cmp-1' }]);
+    expect(h.toasts.error).toEqual([]);
+    expect(h.toasts.success).toEqual([SOURCE_MESSAGES['sendCampaign.finishedNoOneLeft']]);
+    expect(db.table('marketing_email_campaigns')[0]).toMatchObject({ status: 'sent', recipients: 2 });
+  });
 });

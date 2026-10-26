@@ -2,6 +2,8 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { hasMarketingPushConsent, MARKETING_PUSH_EXCLUDED_ROLES, selectPushRecipients } from '@/lib/marketing/push';
+import { ageOnDay } from '@/lib/members/age';
+import { isChildLoginEmail } from '@/lib/onboarding/child-login';
 
 type DB = SupabaseClient<Database>;
 const PAGE_SIZE = 200;
@@ -18,6 +20,8 @@ const MAX_READ_ROWS = 50_000;
 const MAX_READ_REQUESTS = 1_000;
 // Match the existing marketing email audience's conservative address format.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** A member whose recorded birthday says they are younger than this is a minor, whatever role the row now carries. */
+const ADULT_AGE = 18;
 type ReadBudget = { rows: number; requests: number };
 
 /** A short page can be the Data API's response cap, so only an empty page ends traversal. */
@@ -95,14 +99,19 @@ export async function loadPushCampaignAudience(supabase: DB): Promise<string[]> 
     return query;
   }, row => row.email, budget, 'suppressions');
 
-  const selected = selectPushRecipients(uniqueIds, emailByUser, suppressions.map(row => row.email));
+  // A kid login's account is a child's whatever its member row now says:
+  // removal drops the row to `guest` (REMOVED_MEMBER_PATCH), and the synthetic
+  // address it signs in with is what still says whose it is.
+  const selected = selectPushRecipients(uniqueIds, emailByUser, suppressions.map(row => row.email))
+    .filter(id => !isChildLoginEmail(emailByUser[id]));
   return consentingAdults(supabase, selected, budget);
 }
 
 /**
  * Keep only accounts that explicitly opted in to marketing push, hold no
- * child or teen membership in any family, and are not left only with families
- * that closed their account.
+ * child or teen membership in any family (by its role, or by the birthday the
+ * family recorded on it), and are not left only with families that closed
+ * their account.
  *
  * The device table says who CAN be reached, not who agreed to marketing: a
  * child with the app installed was in the audience because their family left
@@ -123,6 +132,10 @@ async function consentingAdults(supabase: DB, userIds: string[], budget: ReadBud
   /** Accounts with an active membership, and those with one in a family still open. */
   const members = new Set<string>();
   const inOpenFamily = new Set<string>();
+  // The earliest calendar day anywhere (UTC-12): an account counts as grown up
+  // only once its 18th birthday has come in every zone, so no family zone is
+  // needed, and a day late is the safe way to be wrong.
+  const earliestDay = new Date(Date.now() - 12 * 3_600_000).toISOString().slice(0, 10);
   for (let offset = 0; offset < userIds.length; offset += ID_CHUNK) {
     const chunk = userIds.slice(offset, offset + ID_CHUNK);
     const preferences = await readPages(cursor => {
@@ -134,16 +147,20 @@ async function consentingAdults(supabase: DB, userIds: string[], budget: ReadBud
     for (const row of preferences) if (hasMarketingPushConsent(row.notification_prefs)) consented.add(row.user_id);
     // Every membership, active or not: a removed child is still a child. Each
     // with its family's closure, joined on the foreign key (a membership has
-    // exactly one family).
+    // exactly one family), and the birthday the family recorded: removal
+    // writes REMOVED_MEMBER_PATCH, which drops a teen's row to `guest`, so the
+    // role alone left a teen removed through the app in the audience
+    // (R3-AW-REMOVED-MINOR-PUSH). The birthday is kept.
     const memberships = await readPages(cursor => {
-      let query = supabase.from('family_members').select('id, user_id, role, is_active, family:families!inner(closed_at)')
+      let query = supabase.from('family_members').select('id, user_id, role, birthday, is_active, family:families!inner(closed_at)')
         .in('user_id', chunk).order('id', { ascending: true }).limit(PAGE_SIZE);
       if (cursor !== null) query = query.gt('id', cursor);
       return query;
     }, row => row.id, budget, 'member roles');
     for (const row of memberships) {
       if (typeof row.user_id !== 'string') continue;
-      if (MARKETING_PUSH_EXCLUDED_ROLES.includes(String(row.role))) minors.add(row.user_id);
+      const age = ageOnDay(row.birthday, earliestDay);
+      if (MARKETING_PUSH_EXCLUDED_ROLES.includes(String(row.role)) || (age !== null && age < ADULT_AGE)) minors.add(row.user_id);
       // A family the account was removed from is not one of its families.
       if (!row.is_active) continue;
       members.add(row.user_id);

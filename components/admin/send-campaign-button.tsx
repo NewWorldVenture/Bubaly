@@ -22,9 +22,10 @@ export function SendCampaignButton({ id, disabled }: { id: string; disabled?: bo
     // Everyone still to be reached. Past the per-send cap it is more than
     // `count`, and the dialog says this send reaches only the first of them.
     let audience: number;
-    // A capped campaign whose held addresses have all left the audience: Send
-    // mails no one and records it sent. Refused as "no recipients", it stayed
-    // a draft for good while the console said Send reaches the rest.
+    // A campaign that was capped or stopped partway, and whose every address
+    // not yet reached has left the audience: Send mails no one and records it
+    // sent. Refused as "no recipients", it stayed a draft (or failed) for good
+    // while the console said Send reaches the rest.
     let finishes: boolean;
     try {
       const pre = await fetch(`/api/admin/marketing/email/send?id=${id}`);

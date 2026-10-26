@@ -240,6 +240,103 @@ describe('a resume whose audience no longer starts with the unknown batch', () =
   });
 });
 
+// R3-AW-FAILED-NO-ONE-LEFT, the sibling of R2-AW-3. A send that stopped partway
+// leaves the row `failed` with what went out; when every address it had not
+// reached (its unknown batch included) then leaves the audience, the preview
+// counted no one and Send answered 400 "No eligible recipients", so the
+// campaign stayed `failed` for good while the console kept offering Send.
+describe('a stopped campaign whose every address not yet reached has left', () => {
+  /** Every address of the audience not on record as delivered unsubscribes. */
+  function everyoneLeftLeaves() {
+    const delivered = new Set((campaign().metadata as { delivery: { delivered: string[] } }).delivery.delivered);
+    const left = db.table('profiles').map((p) => p.email as string).filter((e) => !delivered.has(e));
+    db.seed('marketing_suppressions', left.map((email) => ({ email, reason: 'unsubscribe' })));
+    return left;
+  }
+
+  it.each([
+    ['refused', 'reject', 'provider_rejected'],
+    ['never answered', 'accept-then-throw', 'provider_unreachable'],
+  ] as const)('one whose batch the provider %s is finished by the next Send, mailing no one', async (_label, answer, outcome) => {
+    h.answers = ['ok', answer];
+    expect((await send()).status).toBe(502);
+    expect(campaign()).toMatchObject({ status: 'failed', recipients: 100 });
+    const unknown = (campaign().metadata as { delivery: { pending: string[] } }).delivery.pending;
+    expect(unknown).toHaveLength(100);
+    expect(everyoneLeftLeaves()).toHaveLength(AUDIENCE - 100);
+    const deliveredBefore = h.delivered.length;
+    const keysBefore = h.keys.length;
+
+    expect(await (await preview()).json()).toEqual({ recipients: 0, audience: 0, alreadySent: 100, finishes: true });
+    const last = await send();
+    expect(last.status, 'a stopped campaign with no one left could never be completed').toBe(200);
+    expect(await last.json()).toEqual({ sent: 0, remaining: 0 });
+    expect(h.keys, 'finishing it posted to the provider').toHaveLength(keysBefore);
+    expect(h.delivered).toHaveLength(deliveredBefore);
+    // Sent, counting only what is on record as delivered; the unknown batch is
+    // kept as unconfirmed, not counted as reached.
+    expect(campaign()).toMatchObject({ status: 'sent', recipients: 100 });
+    expect((campaign().metadata as { delivery: unknown }).delivery).toMatchObject({ outcome: 'complete', pending: null, unconfirmed: unknown });
+    expect(db.table('marketing_audit_logs').map((row) => (row.metadata as { outcome: string }).outcome)).toEqual([outcome, 'complete']);
+    expect(await emailPage()).toContain('100 sent');
+    expect((await send()).status, 'a sent campaign cannot be sent again').toBe(400);
+  });
+
+  it('two Sends that finish it at once record it once', async () => {
+    h.answers = ['ok', 'reject'];
+    expect((await send()).status).toBe(502);
+    everyoneLeftLeaves();
+    const answers = await Promise.all([send(), send()]);
+    expect(answers.map((res) => res.status).sort()).toEqual([200, 400]);
+    expect(campaign()).toMatchObject({ status: 'sent', recipients: 100 });
+    expect(db.table('marketing_audit_logs').map((row) => (row.metadata as { outcome: string }).outcome)).toEqual(['provider_rejected', 'complete']);
+  });
+
+  it('a finish read from a record another attempt has since replaced writes nothing', async () => {
+    h.answers = ['ok', 'reject'];
+    expect((await send()).status).toBe(502);
+    everyoneLeftLeaves();
+    // Between this Send's read and its write, another attempt ran and stopped
+    // again: the row is still `failed`, under a newer attempt.
+    h.db = withFaults(db, (table, calls) => {
+      if (table === 'marketing_email_campaigns' && calls.some((call) => call.method === 'update' && (call.args[0] as { status?: string })?.status === 'sent')) {
+        const row = campaign();
+        const delivery = (row.metadata as { delivery: Record<string, unknown> }).delivery;
+        db.replace('marketing_email_campaigns', [{ ...row, metadata: { ...(row.metadata as object), delivery: { ...delivery, attempt: 'a-newer-attempt' } } }]);
+      }
+      return null;
+    });
+    expect((await send()).status).toBe(400);
+    expect(campaign()).toMatchObject({ status: 'failed', recipients: 100 });
+    expect(db.table('marketing_audit_logs').map((row) => (row.metadata as { outcome: string }).outcome)).toEqual(['provider_rejected']);
+  });
+
+  it('controls: one that delivered nothing is still refused, and one with an address left still sends to it', async () => {
+    h.answers = ['reject'];
+    expect((await send()).status).toBe(502);
+    expect(campaign()).toMatchObject({ status: 'failed', recipients: 0 });
+    everyoneLeftLeaves();
+    expect(await (await preview()).json()).toEqual({ recipients: 0, audience: 0, alreadySent: 0 });
+    expect((await send()).status).toBe(400);
+    expect(campaign()).toMatchObject({ status: 'failed', recipients: 0 });
+
+    // A fresh campaign that stopped after one batch, with one address left.
+    db.replace('marketing_suppressions', []);
+    db.replace('marketing_email_campaigns', [{ ...campaign(), status: 'draft', recipients: 0, metadata: {} }]);
+    h.answers = ['ok', 'reject'];
+    h.delivered = [];
+    h.acceptedKeys = new Set();
+    expect((await send()).status).toBe(502);
+    const left = everyoneLeftLeaves();
+    db.replace('marketing_suppressions', db.table('marketing_suppressions').filter((row) => row.email !== left[0]));
+    expect(await (await preview()).json()).toEqual({ recipients: 1, audience: 1, alreadySent: 100 });
+    const again = await send();
+    expect(again.status).toBe(200);
+    expect(await again.json()).toEqual({ sent: 1, remaining: 0 });
+    expect(campaign()).toMatchObject({ status: 'sent', recipients: 101 });
+  });
+});
+
 describe('a send that goes through (control)', () => {
   it('mails everyone once, in batches of a hundred, and records the total', async () => {
     const res = await send();

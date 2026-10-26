@@ -29,7 +29,7 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-type Trigger = { literal: string } | { computed: string } | { unreadable: string };
+type Trigger = { literal: string } | { computed: string } | { unreadable: string } | { unfollowed: string };
 type Call = { file: string; line: number; trigger: Trigger };
 
 function parse(file: string, source: string): ts.SourceFile {
@@ -38,7 +38,7 @@ function parse(file: string, source: string): ts.SourceFile {
 
 function unwrap(expression: ts.Expression): ts.Expression {
   let e = expression;
-  while (ts.isParenthesizedExpression(e) || ts.isAsExpression(e) || ts.isSatisfiesExpression(e)) e = e.expression;
+  while (ts.isParenthesizedExpression(e) || ts.isAsExpression(e) || ts.isSatisfiesExpression(e) || ts.isNonNullExpression(e)) e = e.expression;
   return e;
 }
 
@@ -60,16 +60,85 @@ function triggerOf(params: ts.Expression | undefined, ast: ts.SourceFile): Trigg
   return { unreadable: params.getText(ast) };
 }
 
-/** Every call of fireAutomationEvent in one source, with the trigger it passes. */
+const FIRE = 'fireAutomationEvent';
+
+/** The outermost expression a reference sits in, through parentheses, casts and `!`. */
+function outermost(node: ts.Expression): ts.Expression {
+  let e = node;
+  while (ts.isParenthesizedExpression(e.parent) || ts.isAsExpression(e.parent) || ts.isSatisfiesExpression(e.parent) || ts.isNonNullExpression(e.parent)) e = e.parent;
+  return e;
+}
+
+function inTypePosition(node: ts.Node): boolean {
+  for (let p: ts.Node | undefined = node.parent; p; p = p.parent) if (ts.isTypeNode(p)) return true;
+  return false;
+}
+
+/** Whether an identifier is a name being declared here (an import, a binding, a declaration, a key), not a use. */
+function declares(node: ts.Identifier): boolean {
+  const parent = node.parent;
+  if (ts.isPropertyAccessExpression(parent)) return parent.name === node;
+  if (ts.isImportSpecifier(parent) || ts.isImportClause(parent) || ts.isNamespaceImport(parent)) return true;
+  if (ts.isBindingElement(parent)) return parent.name === node || parent.propertyName === node;
+  return (ts.isFunctionDeclaration(parent) || ts.isVariableDeclaration(parent) || ts.isPropertyAssignment(parent)
+    || ts.isMethodDeclaration(parent) || ts.isPropertyDeclaration(parent) || ts.isPropertySignature(parent)) && parent.name === node;
+}
+
+/**
+ * Every call of fireAutomationEvent in one source, with the trigger it
+ * passes, and every other use of it, which this guard cannot follow.
+ *
+ * R3-AW-GUARD-ALIAS: a call was matched only when its callee was literally
+ * named fireAutomationEvent, so `import { fireAutomationEvent as fire }` and
+ * then `fire(admin, { trigger: 'demo_started' })` got past the guard. The
+ * names the function goes by in a file are now resolved first: an import
+ * under another name, a destructured `{ fireAutomationEvent: fire }` (from a
+ * namespace import or a dynamic import) and `const fire = <any of these>`,
+ * chained. A namespace import is read through its member, so
+ * `events.fireAutomationEvent(...)` and `events['fireAutomationEvent'](...)`
+ * are calls too. Anything else done with the function (passed as an
+ * argument, put in an object, re-exported, assigned, `.call`) is reported,
+ * because the trigger such a use ends up firing is not in this source.
+ */
 function fireCalls(file: string, source: string): Call[] {
   const ast = parse(file, source);
+  const names = new Set<string>([FIRE]);
+  const isMember = (node: ts.Node): node is ts.Expression =>
+    (ts.isPropertyAccessExpression(node) && node.name.text === FIRE)
+    || (ts.isElementAccessExpression(node) && ts.isStringLiteralLike(node.argumentExpression) && node.argumentExpression.text === FIRE);
+  const isFire = (expression: ts.Expression): boolean => {
+    const e = unwrap(expression);
+    return (ts.isIdentifier(e) && names.has(e.text)) || isMember(e);
+  };
+
+  // The names it goes by, to a fixed point (`const a = fire; const b = a;`).
+  for (let size = -1; size !== names.size;) {
+    size = names.size;
+    const collect = (node: ts.Node) => {
+      if (ts.isImportSpecifier(node) && (node.propertyName ?? node.name).text === FIRE) names.add(node.name.text);
+      if (ts.isBindingElement(node) && ts.isIdentifier(node.name) && ts.isObjectBindingPattern(node.parent)) {
+        const key = node.propertyName ?? node.name;
+        if ((ts.isIdentifier(key) || ts.isStringLiteralLike(key)) && key.text === FIRE) names.add(node.name.text);
+      }
+      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer && isFire(node.initializer)) names.add(node.name.text);
+      ts.forEachChild(node, collect);
+    };
+    collect(ast);
+  }
+
   const calls: Call[] = [];
+  const lineOf = (node: ts.Node) => ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1;
   const visit = (node: ts.Node) => {
-    if (ts.isCallExpression(node)) {
-      const callee = unwrap(node.expression);
-      const name = ts.isIdentifier(callee) ? callee.text : ts.isPropertyAccessExpression(callee) ? callee.name.text : null;
-      if (name === 'fireAutomationEvent') {
-        calls.push({ file, line: ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1, trigger: triggerOf(node.arguments[1], ast) });
+    const reference = isMember(node) ? node
+      : ts.isIdentifier(node) && names.has(node.text) && !declares(node) && !inTypePosition(node) ? node : null;
+    if (reference) {
+      const outer = outermost(reference);
+      const parent = outer.parent;
+      if (ts.isCallExpression(parent) && parent.expression === outer) {
+        calls.push({ file, line: lineOf(parent), trigger: triggerOf(parent.arguments[1], ast) });
+      } else if (!(ts.isVariableDeclaration(parent) && parent.initializer === outer && ts.isIdentifier(parent.name))) {
+        // `const fire = fireAutomationEvent` is an alias, followed above; nothing else is.
+        calls.push({ file, line: lineOf(outer), trigger: { unfollowed: parent.getText(ast) } });
       }
     }
     ts.forEachChild(node, visit);
@@ -124,6 +193,10 @@ function check(calls: Call[], sourceOf: (file: string) => string): { passed: Set
     const where = `${call.file}:${call.line}`;
     if ('unreadable' in call.trigger) {
       problems.push(`${where} passes a trigger this guard cannot read: ${call.trigger.unreadable}`);
+      continue;
+    }
+    if ('unfollowed' in call.trigger) {
+      problems.push(`${where} uses fireAutomationEvent where this guard cannot follow it: ${call.trigger.unfollowed}`);
       continue;
     }
     let triggers: string[];
@@ -195,5 +268,39 @@ describe('every trigger the app fires is one a workflow can be switched on for',
     const resend = sourceOf('app/api/webhooks/resend/route.ts').replace("'email.clicked': 'email_clicked',", "'email.clicked': 'email_clicked',\n  'email.delivered': 'demo_started',");
     expect(check(fireCalls('app/api/webhooks/resend/route.ts', resend), () => resend).problems)
       .toEqual([expect.stringMatching(/^app\/api\/webhooks\/resend\/route\.ts:\d+ fires 'demo_started', which FIRED_TRIGGERS leaves out$/)]);
+  });
+
+  // R3-AW-GUARD-ALIAS. The reviewer's probe (line 3) passed at 448bf21e8: the
+  // call was made under the name an aliased import gave it.
+  it('follows the function under another name, through a namespace import, and reports a use it cannot follow', () => {
+    const planted = [
+      "import { fireAutomationEvent as fire } from '@/lib/marketing/automation-events';",
+      "import * as events from '@/lib/marketing/automation-events';",
+      "await fire(admin, { trigger: 'demo_started', email: null, subjectKey: 'demo_started:x' });",
+      "await events.fireAutomationEvent(admin, { trigger: 'demo_started', email: null, subjectKey: 'b' });",
+      "await events['fireAutomationEvent'](admin, { trigger: 'demo_started', email: null, subjectKey: 'c' });",
+      'const { fireAutomationEvent: go } = events;',
+      'const again = go;',
+      "await again!(admin, { trigger: 'demo_started', email: null, subjectKey: 'd' });",
+      "const { fireAutomationEvent: later } = await import('@/lib/marketing/automation-events');",
+      "await later(admin, { trigger: 'payment_completed', email: null, subjectKey: 'e' });",
+      'schedule(fire);',
+      "export { fireAutomationEvent as fireIt } from '@/lib/marketing/automation-events';",
+      "await fire.call(null, admin, { trigger: 'demo_started', email: null, subjectKey: 'f' });",
+      'type Fire = typeof fire;',
+    ].join('\n');
+    const plantedCalls = fireCalls('app/planted/route.ts', planted);
+    expect(plantedCalls.filter((c) => 'literal' in c.trigger).map((c) => c.line), 'a call under another name was not found').toEqual([3, 4, 5, 8, 10]);
+    expect(check(plantedCalls, () => planted).problems).toEqual([
+      "app/planted/route.ts:3 fires 'demo_started', which FIRED_TRIGGERS leaves out",
+      "app/planted/route.ts:4 fires 'demo_started', which FIRED_TRIGGERS leaves out",
+      "app/planted/route.ts:5 fires 'demo_started', which FIRED_TRIGGERS leaves out",
+      "app/planted/route.ts:8 fires 'demo_started', which FIRED_TRIGGERS leaves out",
+      'app/planted/route.ts:11 uses fireAutomationEvent where this guard cannot follow it: schedule(fire)',
+      'app/planted/route.ts:12 uses fireAutomationEvent where this guard cannot follow it: fireAutomationEvent as fireIt',
+      'app/planted/route.ts:13 uses fireAutomationEvent where this guard cannot follow it: fire.call',
+    ]);
+    // The callers as they are import it under its own name, and use it only to call it.
+    expect(calls.filter((c) => 'unfollowed' in c.trigger)).toEqual([]);
   });
 });

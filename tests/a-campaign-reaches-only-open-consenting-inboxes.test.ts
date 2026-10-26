@@ -6,7 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { SOURCE_MESSAGES } from '@/lib/i18n/messages';
 import { translate } from '@/lib/i18n/translate';
-import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
+import { createInMemorySupabase, withFaults, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { renderServerPage, textOf } from './helpers/render-server-page';
 
 // Who an email campaign reaches (admin-writers N1/N3, N11, N6/N12). Driven
@@ -218,6 +218,11 @@ describe('an audience past the cap is sent in parts, never cut', () => {
     expect(held).toHaveLength(1);
     leave(held[0]);
 
+    // Before Send, the page no longer says Send reaches the rest of no one
+    // (the round-3 review's note): it says the next Send marks it sent.
+    const before = await emailPage();
+    expect(before, 'the page still says Send reaches the rest').not.toContain(m('adminMarketingEmail.sentOfAudienceSoFar', { n: 1000, total: 1001 }));
+    expect(before).toContain(m('adminMarketingEmail.sentNoOneLeft', { n: 1000 }));
     expect(await (await preview()).json()).toEqual({ recipients: 0, audience: 0, alreadySent: 1000, finishes: true });
     const last = await send();
     expect(last.status, 'a capped campaign with no one left could never be completed').toBe(200);
@@ -241,6 +246,17 @@ describe('an audience past the cap is sent in parts, never cut', () => {
     expect(answers.map((res) => res.status).sort()).toEqual([200, 400]);
     expect(campaign()).toMatchObject({ status: 'sent', recipients: 1000 });
     expect(db.table('marketing_audit_logs').map((row) => (row.metadata as { outcome: string }).outcome)).toEqual(['capped', 'complete']);
+  });
+
+  it('control: a capped draft whose audience cannot be read keeps its note, and the page still renders', async () => {
+    expect(await (await send()).json()).toEqual({ sent: 1000, remaining: 1 });
+    const healthy = h.db;
+    h.db = withFaults(db, (table) => (table === 'subscriptions' ? { message: 'subscriptions unavailable' } : null));
+    try {
+      expect(await emailPage()).toContain(m('adminMarketingEmail.sentOfAudienceSoFar', { n: 1000, total: 1001 }));
+    } finally {
+      h.db = healthy;
+    }
   });
 
   it('control: a campaign never sent whose audience is empty is still refused, and the preview offers no finish', async () => {
