@@ -1,5 +1,19 @@
 # Final Production Audit
 
+## Final enlarged local batch qualified for a fresh PR1133 epoch — 2026-10-26T22:54:46.468Z
+
+- Last Updated: 2026-10-26T22:54:46.468Z
+
+Tested local headb45c997871a166cba349174a4cb996b2af2bfe63/tree747a74e68a7047cdd09b48c1cefe314026eb6323 has19changed paths, and ALL18nonledger code/test blobs equal the eight reviewed donor candidates. Finalpacketb47d4e88 and independent peer2973207c bind21wholefiles/328ordinaryPASS/0FAIL/0skip,51standalonebrowserPASS (49desktop+2narrow),zero retries/flakes/skips,19pure injected-adapter portguardPASS, new medication window8PASS in each LA/Tokyo worker, full8GBnonincrementaltypes13464 actualdrained0/stable at2026-10-26T22:48:41.207Z/empty output/error, scopedlint/typegen/i18n/query0. Query warnings retain held6RPC/3table/1dynamic disclosures. All tests/checks finished on frozen source before this prose-only journal; no code or test is altered here.
+
+Count precision: the earlier326 estimate omitted two dynamic graph registrations; actual unchanged medications-fixture-module-graph contributes71ratherthan donor69, so the real21file union is328. No test source/assertion was changed to fit a number. The LA command accidentally included a nonexistent medications.test.ts argument that Vitest ignored; its actual collected result is ONLY the one new window fixture/eight cases. Tokyo likewise qualifies that same one/eight; neither77nor114is claimed. The final seal helper first refused an assumedTAPsummary, while Node actually used its specification reporter; the preserved metadata-only successor accepts the exact observed19PASS/0fail/skip/cancel/todo summary. Original raw tests/first checker refusals remain, with no rerun to erase adverse evidence.
+
+The batch repairs five concrete read failures: bounded/blog-loading recovery, caller-scoped PrivacyCenter session errors, path-scoped insurance signing failures, verified finance stale/error display, and household-calendar medication history. It additionally ships EXACTstates.loadingEllipsis in the marketing locale scope and repairs ONLYtwo synthetic signout fixture identity fields; the unchanged full16payloadguard and29signout controls are included in final328/51. Clinical/money/Auth/Storage/provider/nativeRLS/fulljourney/device acceptance is not inferred from these synthetic component and query-boundary tests. The CI-only guard preserves existing reservations/refuses occupied fixed ports before dependency traffic; actual owned GitHub runner reservation/startup remains untested until the new epoch, and the old54324owner is still unobserved. All absolute stopped lanes remain.
+
+Originala121remains irreversiblyRED:3originalruns/19jobs/all63raw,12metadataSUCCESS/7FAIL, actualfabcheckout19witnesses, collector actuallydrained0/stable22:31:56.733. The missing marketing scope, stale signout fixture and mailpit startup collision are all retained in046ca25c and their exact forensic receipts. There was no originalCI cancellation/rerun/dispatch/skip; its GREENreader stayed unexecuted. The next normal PR branch update contains genuine reviewed source fixes and needs NEWoriginal3runs/actualtestedcheckout/currentregistry/perfilevectors/complete semantic admission. No old green job will stand in for that new head.
+
+All15,708IDs/statuses remain exact through this journal:10,338 NOT STARTED;3,320 IN PROGRESS;1,804 PASS;237 FIXED + PASS;9 BLOCKED;2,041finiteclosures/12.99% rounded. No closure or newID is added. Root alone owns this canonical file; other master worktrees stay frozen. Currentmain/default remains verified22e and none of the new application repairs is claimed deployed. Normal PR1133publication is next, followed by fresh hosted CI, guarded merge and exact default identity verification. Production readiness stays NO.
+
 ## Full original epoch failed on three causes; exact integration repairs allocated — 2026-10-26T22:44:44.841Z
 
 - Last Updated: 2026-10-26T22:44:44.841Z
