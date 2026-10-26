@@ -146,7 +146,7 @@ source allocations are not evidence that production applied any migration.
 | 0522 proposed, held | `0522_a_guest_does_not_change_the_households_tasks_and_reminders.sql` | 0464's guest guard (`household_write_is_not_a_guests()`, BEFORE INSERT, UPDATE and DELETE) on `todo_lists`, `todo_items`, `reminder_lists` and `family_reminders`. Follows ROLE-M03; KIDS-O01's two triggers and Support's reminder DB half. Requested on #771 (comment 6402500834), not yet confirmed. |
 | 0523 proposed, held | `0523_a_member_changes_only_the_rows_they_can_read.sql` | `a_row_you_cannot_read_is_not_yours_to_change()` (SECURITY INVOKER) BEFORE UPDATE OR DELETE and AFTER UPDATE on `home_warranties`, `vehicle_registrations`, `vacation_documents`, `voice_commands`, `wallet_cards`, `wallet_passes`, `wallet_rewards`, `auto_insurance_policies`, `home_locations`, `utility_bills`, `vacation_medical_information` and `family_communications`: a signed-in caller changes only rows they read. Follows the held read rules; requested on #771 (comment 6402627160), not yet confirmed. |
 | 0524 proposed, held | `0524_a_guest_adds_nothing_to_the_areas_withheld_from_them.sql` | 0464's guest guard on `auto_insurance_policies`, `driving_trips`, `family_communications`, `home_locations`, `utility_bills`, `vacation_medical_information`, `wallet_cards`, `wallet_passes` and `wallet_rewards`. Follows ROLE-M03 and ROLE-SCOPE-001; requested on #771 (comment 6402627160), not yet confirmed. |
-| 0525 proposed, held | `0525_a_closed_vote_takes_no_more_ballots.sql` | `a_ballot_is_cast_while_its_vote_is_open()` BEFORE INSERT OR UPDATE on `meal_vote_ballots` and `family_poll_votes`: a ballot is cast or changed only while its vote is open, read in the row's family FOR SHARE. Support's database half of 6137789822; requested on #771 (comment 6402862474), not yet confirmed. |
+| 0525 proposed, held | `0525_a_closed_vote_takes_no_more_ballots.sql` | `a_meal_ballot_is_cast_while_its_vote_is_open()` and `a_poll_vote_is_cast_while_its_poll_is_open()`, BEFORE INSERT OR UPDATE on `meal_vote_ballots` and `family_poll_votes`: a ballot is cast or changed only while its vote is open, read in the row's family FOR SHARE. Support's database half of 6137789822; requested on #771 (comment 6402862474), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4799,8 +4799,10 @@ with every held file through 0524 applied, as a child: a ballot on a closed
 meal vote, a vote on a closed poll and a vote past a poll's `closes_at`, `OK 1`
 each. This is the database rule Support left for the owner in 6137789822.
 
-**Database.** `a_ballot_is_cast_while_its_vote_is_open()`, SECURITY DEFINER
-with a pinned search_path, BEFORE INSERT OR UPDATE on both tables: it reads the
+**Database.** `a_meal_ballot_is_cast_while_its_vote_is_open()` and
+`a_poll_vote_is_cast_while_its_poll_is_open()` (one per table, so each body
+resolves against its table), SECURITY DEFINER with a pinned search_path,
+BEFORE INSERT OR UPDATE on both tables: it reads the
 row's vote or poll, in the row's family, `FOR SHARE` (so a close in flight is
 waited for, then seen), and refuses with 42501 ("That vote is closed") unless
 `meal_votes.status = 'open'`, or for a poll `status = 'open'` and no

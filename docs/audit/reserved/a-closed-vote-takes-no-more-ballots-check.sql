@@ -24,10 +24,11 @@
 --   4. control: once the parent reopens the closed meal vote, the child's
 --      ballot on it lands;
 --   5. wiring: both tables carry trg_<table>_while_open, enabled, FOR EACH ROW,
---      BEFORE INSERT and UPDATE (not DELETE), executing
---      a_ballot_is_cast_while_its_vote_is_open(), which is SECURITY DEFINER
---      with a pinned search_path, reads FOR SHARE, and is not executable by
---      PUBLIC or anon;
+--      BEFORE INSERT and UPDATE (not DELETE), executing their own guard
+--      (a_meal_ballot_is_cast_while_its_vote_is_open(),
+--      a_poll_vote_is_cast_while_its_poll_is_open()), each SECURITY DEFINER
+--      with a pinned search_path, reading FOR SHARE, not executable by PUBLIC
+--      or anon;
 --
 -- and, only where 0525 is installed, each in a rolled-back subtransaction:
 --
@@ -127,7 +128,8 @@ declare
   pollvote constant text := 'insert into public.family_poll_votes (poll_id, option_id, family_id, member_id) values (%L, %L, ''00000000-0000-4000-8525-0000000000f1'', ''00000000-0000-4000-8525-0000000000c4'')';
 begin
   installed := (select count(*) from pg_trigger
-                 where tgfoid = to_regprocedure('public.a_ballot_is_cast_while_its_vote_is_open()')) = 2;
+                 where tgfoid in (to_regprocedure('public.a_meal_ballot_is_cast_while_its_vote_is_open()'),
+                                  to_regprocedure('public.a_poll_vote_is_cast_while_its_poll_is_open()'))) = 2;
 
   -- 1. The closed meal vote: a new ballot, and a change of the one already cast.
   got := pg_temp.c0525_as(child, format(ballot, '00000000-0000-4000-8525-0000000000b1', '00000000-0000-4000-8525-0000000000b8'));
@@ -177,26 +179,29 @@ begin
 
   -- 5. Wiring.
   bad := '{}';
-  for x in select * from (values ('meal_vote_ballots'), ('family_poll_votes')) as v(tbl) loop
+  for x in select * from (values ('meal_vote_ballots', 'a_meal_ballot_is_cast_while_its_vote_is_open'),
+                                 ('family_poll_votes', 'a_poll_vote_is_cast_while_its_poll_is_open')) as v(tbl, fn) loop
     if not exists (select 1 from pg_trigger g
                     where g.tgrelid = ('public.' || x.tbl)::regclass and g.tgname = 'trg_' || x.tbl || '_while_open'
-                      and g.tgfoid = to_regprocedure('public.a_ballot_is_cast_while_its_vote_is_open()')
+                      and g.tgfoid = to_regprocedure('public.' || x.fn || '()')
                       and g.tgenabled <> 'D' and (g.tgtype & 1) = 1 and (g.tgtype & 2) = 2
                       and (g.tgtype & 4) = 4 and (g.tgtype & 16) = 16 and (g.tgtype & 8) = 0) then
       bad := array_append(bad, x.tbl);
     end if;
   end loop;
-  if to_regprocedure('public.a_ballot_is_cast_while_its_vote_is_open()') is null then
-    bad := array_append(bad, 'a_ballot_is_cast_while_its_vote_is_open (missing)');
-  elsif not exists (select 1 from pg_proc p where p.oid = 'public.a_ballot_is_cast_while_its_vote_is_open()'::regprocedure
-                     and p.prosecdef and array_to_string(p.proconfig, ',') like '%search_path%'
-                     and pg_get_functiondef(p.oid) ~* 'for share')
-     or has_function_privilege('anon', 'public.a_ballot_is_cast_while_its_vote_is_open()', 'execute')
-     or exists (select 1 from pg_proc p, aclexplode(p.proacl) a
-                 where p.oid = 'public.a_ballot_is_cast_while_its_vote_is_open()'::regprocedure
-                   and a.grantee = 0 and a.privilege_type = 'EXECUTE') then
-    bad := array_append(bad, 'a_ballot_is_cast_while_its_vote_is_open (not SECURITY DEFINER with a pinned search_path and a FOR SHARE read, or executable by PUBLIC or anon)');
-  end if;
+  for x in select * from (values ('a_meal_ballot_is_cast_while_its_vote_is_open'), ('a_poll_vote_is_cast_while_its_poll_is_open')) as v(fn) loop
+    if to_regprocedure('public.' || x.fn || '()') is null then
+      bad := array_append(bad, x.fn || ' (missing)');
+    elsif not exists (select 1 from pg_proc p where p.oid = to_regprocedure('public.' || x.fn || '()')
+                       and p.prosecdef and array_to_string(p.proconfig, ',') like '%search_path%'
+                       and pg_get_functiondef(p.oid) ~* 'for share')
+       or has_function_privilege('anon', 'public.' || x.fn || '()', 'execute')
+       or exists (select 1 from pg_proc p, aclexplode(p.proacl) a
+                   where p.oid = to_regprocedure('public.' || x.fn || '()')
+                     and a.grantee = 0 and a.privilege_type = 'EXECUTE') then
+      bad := array_append(bad, x.fn || ' (not SECURITY DEFINER with a pinned search_path and a FOR SHARE read, or executable by PUBLIC or anon)');
+    end if;
+  end loop;
   if cardinality(bad) > 0 then
     failures := array_append(failures, format('0525''s guard is not in place on %s', array_to_string(bad, ', ')));
   end if;
@@ -216,16 +221,12 @@ begin
 
     -- M1. The poll rule on status alone.
     begin
-      create or replace function public.a_ballot_is_cast_while_its_vote_is_open()
+      create or replace function public.a_poll_vote_is_cast_while_its_poll_is_open()
       returns trigger language plpgsql security definer set search_path = public, pg_temp as $m1$
       declare vote_open boolean;
       begin
         if auth.uid() is null then return new; end if;
-        if tg_table_name = 'meal_vote_ballots' then
-          select v.status = 'open' into vote_open from public.meal_votes v where v.id = new.vote_id and v.family_id = new.family_id for share;
-        else
-          select p.status = 'open' into vote_open from public.family_polls p where p.id = new.poll_id and p.family_id = new.family_id for share;
-        end if;
+        select p.status = 'open' into vote_open from public.family_polls p where p.id = new.poll_id and p.family_id = new.family_id for share;
         if vote_open is distinct from true then raise exception 'That vote is closed' using errcode = '42501'; end if;
         return new;
       end $m1$;

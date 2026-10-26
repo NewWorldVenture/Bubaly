@@ -15,7 +15,9 @@
 -- a close racing the screen's own read lets the ballot land after it.
 --
 -- A BEFORE INSERT OR UPDATE trigger on meal_vote_ballots and family_poll_votes
--- reads the row's vote or poll, in the row's family, FOR SHARE (so a close in
+-- (a_meal_ballot_is_cast_while_its_vote_is_open() and
+-- a_poll_vote_is_cast_while_its_poll_is_open()) reads the row's vote or poll,
+-- in the row's family, FOR SHARE (so a close in
 -- flight is waited for and then seen), and refuses with 42501 ("That vote is
 -- closed") unless it is open:
 --
@@ -36,7 +38,9 @@
 -- and .github/workflows/closed-vote-runtime.yml. Not applied to production by
 -- an agent; recorded in docs/PENDING_PROD_MIGRATIONS.md.
 
-create or replace function public.a_ballot_is_cast_while_its_vote_is_open()
+-- One function per table: a body that names the other table's column would not
+-- resolve against this one (docs/audit/plpgsql-bodies-resolve-check.sql).
+create or replace function public.a_meal_ballot_is_cast_while_its_vote_is_open()
 returns trigger
 language plpgsql
 security definer
@@ -48,17 +52,10 @@ begin
   if auth.uid() is null then
     return new; -- service role / server-side jobs
   end if;
-  if tg_table_name = 'meal_vote_ballots' then
-    select v.status = 'open' into vote_open
-      from public.meal_votes v
-     where v.id = new.vote_id and v.family_id = new.family_id
-       for share;
-  else
-    select p.status = 'open' and (p.closes_at is null or p.closes_at > now()) into vote_open
-      from public.family_polls p
-     where p.id = new.poll_id and p.family_id = new.family_id
-       for share;
-  end if;
+  select v.status = 'open' into vote_open
+    from public.meal_votes v
+   where v.id = new.vote_id and v.family_id = new.family_id
+     for share;
   if vote_open is distinct from true then
     raise exception 'That vote is closed' using errcode = '42501';
   end if;
@@ -66,10 +63,36 @@ begin
 end
 $$;
 
-comment on function public.a_ballot_is_cast_while_its_vote_is_open() is
-  'Refuses (42501) a signed-in caller''s ballot cast or changed on a meal vote or family poll that is not open (0525): the vote is read in the row''s family FOR SHARE, so a close in flight is waited for. The service role and session-less writers are exempt.';
+create or replace function public.a_poll_vote_is_cast_while_its_poll_is_open()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  vote_open boolean;
+begin
+  if auth.uid() is null then
+    return new; -- service role / server-side jobs
+  end if;
+  select p.status = 'open' and (p.closes_at is null or p.closes_at > now()) into vote_open
+    from public.family_polls p
+   where p.id = new.poll_id and p.family_id = new.family_id
+     for share;
+  if vote_open is distinct from true then
+    raise exception 'That vote is closed' using errcode = '42501';
+  end if;
+  return new;
+end
+$$;
 
-revoke all on function public.a_ballot_is_cast_while_its_vote_is_open() from public, anon;
+comment on function public.a_meal_ballot_is_cast_while_its_vote_is_open() is
+  'Refuses (42501) a signed-in caller''s meal-vote ballot cast or changed while the vote is not open (0525): the vote is read in the row''s family FOR SHARE, so a close in flight is waited for. The service role and session-less writers are exempt.';
+comment on function public.a_poll_vote_is_cast_while_its_poll_is_open() is
+  'Refuses (42501) a signed-in caller''s poll vote cast or changed while the poll is not open, isPollClosed''s rule (0525): the poll is read in the row''s family FOR SHARE. The service role and session-less writers are exempt.';
+
+revoke all on function public.a_meal_ballot_is_cast_while_its_vote_is_open() from public, anon;
+revoke all on function public.a_poll_vote_is_cast_while_its_poll_is_open() from public, anon;
 
 do $$
 declare
@@ -84,12 +107,12 @@ begin
      or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'meal_votes' and column_name = 'status') then
     raise exception '0525 needs family_polls.closes_at and meal_votes.status';
   end if;
-  foreach t in array array['meal_vote_ballots', 'family_poll_votes'] loop
-    execute format('drop trigger if exists %I on public.%I', 'trg_' || t || '_while_open', t);
-    execute format('create trigger %I before insert or update on public.%I '
-                   'for each row execute function public.a_ballot_is_cast_while_its_vote_is_open()',
-                   'trg_' || t || '_while_open', t);
-  end loop;
+  drop trigger if exists trg_meal_vote_ballots_while_open on public.meal_vote_ballots;
+  create trigger trg_meal_vote_ballots_while_open before insert or update on public.meal_vote_ballots
+    for each row execute function public.a_meal_ballot_is_cast_while_its_vote_is_open();
+  drop trigger if exists trg_family_poll_votes_while_open on public.family_poll_votes;
+  create trigger trg_family_poll_votes_while_open before insert or update on public.family_poll_votes
+    for each row execute function public.a_poll_vote_is_cast_while_its_poll_is_open();
 end
 $$;
 
@@ -99,18 +122,22 @@ declare
 begin
   select count(*) into n
     from pg_trigger g
-   where g.tgfoid = 'public.a_ballot_is_cast_while_its_vote_is_open()'::regprocedure
+   where ((g.tgrelid = 'public.meal_vote_ballots'::regclass
+           and g.tgfoid = 'public.a_meal_ballot_is_cast_while_its_vote_is_open()'::regprocedure)
+          or (g.tgrelid = 'public.family_poll_votes'::regclass
+              and g.tgfoid = 'public.a_poll_vote_is_cast_while_its_poll_is_open()'::regprocedure))
      and g.tgenabled <> 'D'
-     and g.tgrelid in ('public.meal_vote_ballots'::regclass, 'public.family_poll_votes'::regclass)
      and (g.tgtype & 1) = 1 and (g.tgtype & 2) = 2      -- FOR EACH ROW, BEFORE
      and (g.tgtype & 4) = 4 and (g.tgtype & 16) = 16    -- INSERT, UPDATE
      and (g.tgtype & 8) = 0;                            -- not DELETE
   if n <> 2 then
     raise exception '0525: % of 2 ballot tables carry the open-vote guard', n;
   end if;
-  if not exists (select 1 from pg_proc p where p.oid = 'public.a_ballot_is_cast_while_its_vote_is_open()'::regprocedure
-                  and p.prosecdef and array_to_string(p.proconfig, ',') like '%search_path%') then
-    raise exception '0525: the guard must be SECURITY DEFINER with a pinned search_path';
+  if (select count(*) from pg_proc p
+       where p.oid in ('public.a_meal_ballot_is_cast_while_its_vote_is_open()'::regprocedure,
+                       'public.a_poll_vote_is_cast_while_its_poll_is_open()'::regprocedure)
+         and p.prosecdef and array_to_string(p.proconfig, ',') like '%search_path%') <> 2 then
+    raise exception '0525: both guards must be SECURITY DEFINER with a pinned search_path';
   end if;
 end
 $$;

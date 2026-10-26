@@ -28,13 +28,20 @@ describe('a closed vote takes no more ballots (0525)', () => {
 
   it('reads the vote in the row\'s family, FOR SHARE, as the owner, before an insert or update', () => {
     const sql = read(MIGRATION);
-    expect(sql).toContain('security definer\nset search_path = public, pg_temp');
-    expect(sql).toContain("where v.id = new.vote_id and v.family_id = new.family_id\n       for share;");
-    expect(sql).toContain("where p.id = new.poll_id and p.family_id = new.family_id\n       for share;");
+    for (const fn of ['a_meal_ballot_is_cast_while_its_vote_is_open', 'a_poll_vote_is_cast_while_its_poll_is_open']) {
+      const body = sql.slice(at(sql, `create or replace function public.${fn}()`));
+      expect(body, fn).toContain('security definer\nset search_path = public, pg_temp');
+      expect(at(body, 'if auth.uid() is null then')).toBeLessThan(at(body, 'for share;'));
+      expect(sql, fn).toContain(`revoke all on function public.${fn}() from public, anon;`);
+    }
+    expect(sql).toContain('   where v.id = new.vote_id and v.family_id = new.family_id\n     for share;');
+    expect(sql).toContain('   where p.id = new.poll_id and p.family_id = new.family_id\n     for share;');
     expect(sql).toContain("raise exception 'That vote is closed' using errcode = '42501';");
-    expect(sql).toContain("'create trigger %I before insert or update on public.%I '");
-    expect(sql).toContain("foreach t in array array['meal_vote_ballots', 'family_poll_votes'] loop");
-    expect(at(sql, 'if auth.uid() is null then')).toBeLessThan(at(sql, "if tg_table_name = 'meal_vote_ballots' then"));
+    expect(sql).toContain('create trigger trg_meal_vote_ballots_while_open before insert or update on public.meal_vote_ballots\n    for each row execute function public.a_meal_ballot_is_cast_while_its_vote_is_open();');
+    expect(sql).toContain('create trigger trg_family_poll_votes_while_open before insert or update on public.family_poll_votes\n    for each row execute function public.a_poll_vote_is_cast_while_its_poll_is_open();');
+    // Each body names only its own table's columns, so it resolves against it.
+    const meal = sql.slice(at(sql, 'create or replace function public.a_meal_ballot_is_cast_while_its_vote_is_open()'), at(sql, 'create or replace function public.a_poll_vote_is_cast_while_its_poll_is_open()'));
+    expect(meal).not.toContain('poll_id');
   });
 
   it('the screens still ask first', () => {
