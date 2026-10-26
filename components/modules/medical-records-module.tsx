@@ -53,37 +53,39 @@ const PROFILE_FIELDS = [
 /** Renders a private Storage image via a short-lived signed URL. */
 function CardImage({ path, label }: { path: string | null; label: string }) {
   const t = useTranslations();
-  const [url, setUrl] = useState<string | null>(null);
-  // A bare `.then()` had no rejection path: a failed signing left an unhandled
-  // rejection and the placeholder on screen forever, which reads exactly like
-  // "this card was never uploaded". For an insurance card those are very
-  // different facts, so a failure says so and is logged.
-  const [failed, setFailed] = useState(false);
+  const [image, setImage] = useState<{ path: string | null; url: string | null; failed: boolean }>({ path: null, url: null, failed: false });
+  // Signing can fail with a fulfilled { url: null, error } as well as a rejection.
+  // Bind each result to its path so a replacement never displays the old card.
   useEffect(() => {
     let active = true;
-    setFailed(false);
-    if (!path) { setUrl(null); return; }
+    setImage({ path, url: null, failed: false });
+    if (!path) return;
     const sb = createClient();
     getDocumentSignedUrl(sb, path, 600).then(
-      ({ url }) => { if (active) setUrl(url); },
-      (err: unknown) => {
-        console.error('[medical-records] card image could not be signed', err);
-        if (active) setFailed(true);
+      ({ url, error }) => {
+        const signedUrl = !error && typeof url === 'string' && url.trim() ? url : null;
+        if (!signedUrl) console.error('[medical-records] card image could not be signed');
+        if (active) setImage({ path, url: signedUrl, failed: !signedUrl });
+      },
+      () => {
+        console.error('[medical-records] card image could not be signed');
+        if (active) setImage({ path, url: null, failed: true });
       },
     );
     return () => { active = false; };
   }, [path]);
   if (!path) return null;
+  const current = image.path === path ? image : null;
   return (
     <div className="overflow-hidden rounded-lg border border-border">
-      {url
+      {current?.url
         // A short-lived signed URL for a private card photo: next/image would
         // re-host it through the optimizer, which is exactly what the signed
         // read exists to avoid. The suppression sits on the <img> it covers;
         // one line higher it silenced nothing.
         // eslint-disable-next-line @next/next/no-img-element
-        ? <img src={url} alt={label} className="h-24 w-full object-cover" />
-        : <div className="grid h-24 w-full place-items-center bg-surface/40 text-xs text-muted">{failed ? t('installButton.unavailable') : label}</div>}
+        ? <img src={current.url} alt={label} className="h-24 w-full object-cover" />
+        : <div className="grid h-24 w-full place-items-center bg-surface/40 text-xs text-muted">{current?.failed ? t('installButton.unavailable') : label}</div>}
     </div>
   );
 }
