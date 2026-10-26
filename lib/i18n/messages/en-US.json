@@ -17192,5 +17192,8 @@
   "negotiations.theOtherSideActedAtTheSameMoment": "The other side acted on this offer at the same moment. Refresh and try again.",
   "filesHubModule.sensitiveStaysInVault": "Files in the {category} folder stay in the Secure Vault, where only a parent or another adult can open them.",
   "childMoney.onlyYourOwnWallet": "You see your own wallet here. A parent or adult sees every child's.",
+  "medicationsModule.otherMembersDosesAreKeptByManagers": "Other members' doses are logged and tracked by your family's parents and adults.",
+  "nutrition.aGuestSeesSavedEstimatesOnly": "Guests can see a saved nutrition estimate but not request a new one. Ask a family member to analyze it.",
+  "mealsModule.guestsSeeTheVoteOnly": "Guests can see the family vote but not vote in it.",
   "remindersModule.completedNextUnconfirmed": "Reminder completed, but we could not confirm the next occurrence. Check your reminders before adding another."
 }
