@@ -67,13 +67,23 @@
 // family a drop landed in when that is the seller's own (a member's own
 // listings saved in their own family, which needs nobody else), else the
 // listing. So that the names stay bounded, a full seller's listings landing in
-// other families, and full drops not found, are named one by one up to
-// `size / perRecipient` of them, then the families they land in up to as many
-// again; past both, a further listing counts against its own share alone. A
-// family named so has every price drop into it wait, other sellers' too, until
-// the room left after everyone else's: one family that saved more of a full
-// seller's listings than a batch has shares is enough for that, whether those
-// listings are still there or not.
+// other families are named one by one up to `size / perRecipient` of them,
+// then the families they land in up to as many again; past both, a further
+// listing counts against its own share alone. Full drops not found are named
+// the same way from names of their own, not the known sellers': by listing
+// while the family they landed in has named fewer than `size / perRecipient`
+// listings and all of them together fewer than twice that, then by that family,
+// up to `size / perRecipient` families. A family's own deleted listings look
+// like a watcher's, so they spend none of the known sellers' names and no more
+// than half of the listing names kept for drops not found: the rest is left
+// for the families that saved some of its other listings, live or deleted. A
+// read so names at most 4 * size / perRecipient listings and 3 * size /
+// perRecipient landing families, the full listings and the sellers' own
+// families among them (the shares above hold at most size / perRecipient of
+// each). A family named so has every price drop into it wait, other sellers'
+// too, until the room left after everyone else's: one family that saved more
+// of a full seller's listings than a batch has shares is enough for that,
+// whether those listings are still there or not.
 //
 // Rows dated after now (beyond a clock-skew allowance) are not read at all, by
 // either dispatcher: no writer sets created_at, which defaults to now(), so
@@ -221,12 +231,13 @@ function within(narrower: FairExclusion, wider: FairExclusion): boolean {
  * batch nobody floods is one read. Each round leaves out at least one more
  * family or recipient (the marketplace, its listings and its sellers' landing
  * families among them), each holding a full share of the batch, or one more
- * of a full seller's listings or landing families, of which a batch names at
- * most size / perRecipient each. So the rounds are bounded (size / perFamily
- * + 4 * size / perRecipient, plus one a pass and the marketplace), and so is
- * the exclusion list. Every read happens before anything is sent. Rows come
- * back in the order they were taken, not re-sorted: a caller that needs its
- * order sorts them.
+ * listing or landing family named for a full seller or for full drops not
+ * found, of which a batch names at most 3 * size / perRecipient listings and
+ * 2 * size / perRecipient landing families (the header). So the rounds are
+ * bounded (size / perFamily + 7 * size / perRecipient, plus one a pass and the
+ * marketplace), and so is the exclusion list. Every read happens before
+ * anything is sent. Rows come back in the order they were taken, not
+ * re-sorted: a caller that needs its order sorts them.
  */
 export async function readFairBatch<T extends FairRow>(read: FairRead<T>, size: number, shares: FairShares): Promise<T[]> {
   if (!Number.isInteger(size) || size < 1) return [];
@@ -248,10 +259,16 @@ export async function readFairBatch<T extends FairRow>(read: FairRead<T>, size: 
   let marketplaceFull = false;
   let unlistedFull = false;
   // How many of full sellers' listings, and then landing families, a read
-  // has been asked to leave out by name (the header's seller paragraph).
+  // has been asked to leave out by name (the header's seller paragraph). The
+  // known sellers' drops and the drops not found count theirs apart, and the
+  // drops not found also by the family they landed in, so that neither, nor
+  // one family's own deleted listings, spends the names another needs.
   const named = Math.ceil(size / perRecipient);
-  let namedListings = 0;
-  let namedLanding = 0;
+  const names = {
+    known: { listings: 0, landing: 0, maxListings: named },
+    notFound: { listings: 0, landing: 0, maxListings: 2 * named },
+  };
+  const notFoundListingsBy = new Map<string, number>();
   // The shares a row counts against, as isExcluded leaves it out: a price
   // drop against the marketplace, its listing and its seller, whichever
   // family it landed in.
@@ -271,16 +288,25 @@ export async function readFairBatch<T extends FairRow>(read: FairRead<T>, size: 
    * else (past `named` listings) the family it landed in. False once those
    * names are spent: the drop then counts against its listing alone. A drop
    * not found has no seller, so the family it landed in is never taken for its
-   * seller's own: it is named only once the listing names are spent.
+   * seller's own: it is named once that family's drops not found have named
+   * `named` listings, or all of them together twice that, and its listing
+   * names come from their own count, not the known sellers'.
    */
   const leaveOutSeller = (row: T): boolean => {
-    if (row.family_id === sellerOf(row)) { fullLanding.add(row.family_id); return true; }
-    if (row.related_id && (fullListings.has(row.related_id) || namedListings < named)) {
-      if (!fullListings.has(row.related_id)) { fullListings.add(row.related_id); namedListings += 1; }
+    const seller = sellerOf(row);
+    if (row.family_id === seller) { fullLanding.add(row.family_id); return true; }
+    const pool = seller ? names.known : names.notFound;
+    const byLanding = seller ? 0 : notFoundListingsBy.get(row.family_id) ?? 0;
+    if (row.related_id && (fullListings.has(row.related_id) || (pool.listings < pool.maxListings && byLanding < named))) {
+      if (!fullListings.has(row.related_id)) {
+        fullListings.add(row.related_id);
+        pool.listings += 1;
+        if (!seller) notFoundListingsBy.set(row.family_id, byLanding + 1);
+      }
       return true;
     }
-    if (fullLanding.has(row.family_id) || namedLanding < named) {
-      if (!fullLanding.has(row.family_id)) { fullLanding.add(row.family_id); namedLanding += 1; }
+    if (fullLanding.has(row.family_id) || pool.landing < named) {
+      if (!fullLanding.has(row.family_id)) { fullLanding.add(row.family_id); pool.landing += 1; }
       return true;
     }
     return false;
