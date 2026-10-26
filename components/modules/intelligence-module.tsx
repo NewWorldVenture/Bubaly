@@ -25,6 +25,7 @@ import type { ContributionBucket } from '@/lib/network/contribution';
 import { contributesToNetwork } from '@/lib/network/aggregate';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { withdrawFromNetworkAction } from '@/app/(app)/dashboard/intelligence/actions';
 
 type Consent = Tables<'network_consent'>;
 
@@ -79,42 +80,62 @@ export function IntelligenceModule({
   // the page-load row instead, a tap after "Leave network" rejoined the family
   // and a second scope switched off turned the first one back on — consent the
   // nightly aggregation then honours. `saving` holds every toggle until then.
-  async function save(write: () => PromiseLike<{ data: Consent[] | null; error: unknown }>, done: string, narrows = false) {
+  async function save(write: () => PromiseLike<{ data: Consent[] | null; error: unknown }>, done: string) {
     setSaving(true);
     try {
       const { data: saved, error } = await write();
       if (error) { toastError(describeDbError(error)); return; }
       if (wroteNoRows(saved)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
       setData(saved as Consent[]);
-      // Leaving, or switching off a scope that contributes (toggleScope
-      // below), takes the family's stored contribution with it now (design
-      // doc §2.7). The nightly aggregation only re-reads consent, so until a
-      // run got all the way to its prune the row stayed. The published figures
-      // are not rebuilt by this delete or by the next night: they are held for
-      // the publication epoch, and the family's share of them goes with the
-      // next epoch's snapshot (lib/network/aggregate.ts, PUBLICATION_EPOCH).
-      // Zero rows is the ordinary answer for a family that has not
-      // contributed yet.
-      if (narrows) {
-        const { error: forgetError } = await createClient().from('network_contributions')
-          .delete().eq('family_id', familyId).select('family_id');
-        if (forgetError) { toastError(describeDbError(forgetError)); return; }
-      }
       success(done);
     } finally {
       setSaving(false);
     }
   }
 
+  // Leaving, or switching off a scope that contributes (toggleScope below),
+  // takes the family's stored contribution with it now (design doc §2.7), on
+  // the server (withdrawFromNetworkAction), under the claim the nightly
+  // aggregation publishes under: written from here, a run that had read
+  // consent before the leave stored the row again after this delete and
+  // published it after the toast said the family had left. The published
+  // figures are not rebuilt by it: they are held for the publication epoch,
+  // and the family's share of them goes with the next epoch's snapshot
+  // (lib/network/aggregate.ts, PUBLICATION_EPOCH), which the toast says.
+  // `fenced: false` is a withdrawal written without the claim (it was held
+  // past the wait, or could not be read), and the toast says what that leaves
+  // open. It names the household and member on screen: the server's active
+  // household is shared by every tab and device, so a tab left open here after
+  // another household was chosen elsewhere withdrew THAT one, and this one
+  // went on contributing. The action refuses unless both are still active.
+  async function withdraw(change: Parameters<typeof withdrawFromNetworkAction>[0], done: { fenced: string; unfenced: string }) {
+    setSaving(true);
+    try {
+      const result = await withdrawFromNetworkAction(change, { expectedFamilyId: familyId, expectedUserId: userId });
+      // The consent that was written goes on screen even when the forget
+      // failed: a screen still showing "joined" rejoins on the next tap.
+      if (result.rows) setData(result.rows);
+      if (!result.ok) { toastError(result.error); return; }
+      success(result.fenced ? done.fenced : done.unfenced);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const toggleMaster = () => {
-    const next: ConsentState = { enabled: !consent.enabled, scopes: consent.enabled ? {} : consent.scopes };
+    if (consent.enabled) {
+      return withdraw({ leave: true }, {
+        fenced: t('intelligence.leftTheNetwork', { floor: K_ANONYMITY_FLOOR }),
+        unfenced: t('intelligence.leftTheNetworkWhilePublishing', { floor: K_ANONYMITY_FLOOR }),
+      });
+    }
     return save(() => createClient().from('network_consent').upsert({
       family_id: familyId,
-      enabled: next.enabled,
-      scopes: next.scopes,
-      consented_by: next.enabled ? userId : null,
-      consented_at: next.enabled ? new Date().toISOString() : null,
-    }, { onConflict: 'family_id' }).select('*'), next.enabled ? t('intelligence.preferencesSaved') : t('intelligence.leftTheNetwork'), !next.enabled);
+      enabled: true,
+      scopes: consent.scopes,
+      consented_by: userId,
+      consented_at: new Date().toISOString(),
+    }, { onConflict: 'family_id' }).select('*'), t('intelligence.preferencesSaved'));
   };
   // A scope switch changes the scopes, and records the manager who made it as
   // the consent's author: the nightly aggregation honours a consent only when
@@ -127,11 +148,15 @@ export function IntelligenceModule({
   // `timing` and `recommendations` have no metric, so switching one of them
   // off forgets nothing, and deleting the row then only cost the family its
   // digest compare line until the next nightly run.
-  const toggleScope = (k: ConsentScope) =>
-    save(() => createClient().from('network_consent')
-      .update({ scopes: { ...consent.scopes, [k]: !consent.scopes[k] }, consented_by: userId, consented_at: new Date().toISOString() })
-      .eq('family_id', familyId).eq('enabled', true).select('*'), t('intelligence.preferencesSaved'),
-    consent.scopes[k] === true && contributesToNetwork({ [k]: true }));
+  const toggleScope = (k: ConsentScope) => {
+    const scopes = { ...consent.scopes, [k]: !consent.scopes[k] };
+    if (consent.scopes[k] === true && contributesToNetwork({ [k]: true })) {
+      return withdraw({ scopes }, { fenced: t('intelligence.preferencesSaved'), unfenced: t('intelligence.preferencesSavedWhilePublishing') });
+    }
+    return save(() => createClient().from('network_consent')
+      .update({ scopes, consented_by: userId, consented_at: new Date().toISOString() })
+      .eq('family_id', familyId).eq('enabled', true).select('*'), t('intelligence.preferencesSaved'));
+  };
 
   if (loading) return <div className="rounded-xl border border-border bg-surface/40 p-4 text-sm text-muted">{t('intelligence.loadingIntelligencePreferences')}</div>;
   if (error) return <ErrorState message={t('intelligenceModule.couldNotLoadIntelligencePreferences')} onRetry={refresh} />;

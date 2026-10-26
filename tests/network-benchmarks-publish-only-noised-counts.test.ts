@@ -90,6 +90,21 @@ describe('/resources/benchmarks publishes the noised count, and only that', () =
   });
 });
 
+// N8-leave-copy-overpromises: the methodology said "comparing two weeks can
+// never reveal that one family joined or left". The figures change once a
+// month (aggregate.ts, PUBLICATION_EPOCH), and the sticky noise bounds what a
+// month-to-month comparison gives away; it does not make it impossible
+// (aggregate-server.ts, stickyNoise, measured in
+// tests/network-noise-is-drawn-once-per-epoch.test.ts).
+describe('the methodology says how often the figures change, and that the noise makes a join or leave unlikely to read, not impossible', () => {
+  it('says monthly and "unlikely, but not impossible", never "two weeks" or "can never reveal"', async () => {
+    db.seed('network_aggregates', [aggregate('dinner_habit', 'often (4–5)', 44, 47)]);
+    const text = strings(await BenchmarksPage()).join(' ');
+    expect(text).toContain('Figures are published once a month with calibrated noise, so comparing one month with the next makes it unlikely, but not impossible, to tell that one family joined or left.');
+    expect(text).not.toMatch(/can never reveal|two weeks/);
+  });
+});
+
 describe('the admin report shows what the export holds, and no true size (N6, admin table)', () => {
   // The CSV dropped cohort_n because it is quoted; the same super-admin could
   // quote it from this table instead, under a hint saying the file holds "the

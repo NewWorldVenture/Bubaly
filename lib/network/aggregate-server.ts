@@ -11,7 +11,10 @@
 //      run the pure k-anonymity + DP + gating core over the contributions and
 //      replace network_aggregates with the publish-safe rows. Every other night
 //      of the epoch holds that snapshot unchanged. One run at a time does
-//      this (NETWORK_PUBLICATION_LEASE_KEY), however many overlap.
+//      this (NETWORK_PUBLICATION_LEASE_KEY), however many overlap, and a
+//      family's leave or scope switch-off takes the same claim
+//      (withdrawal-server.ts), so consent is re-read under it before anything
+//      is published.
 // Nothing here can bypass aggregate.ts's guarantees.
 
 import { createHmac } from 'node:crypto';
@@ -22,7 +25,7 @@ import { readAllInChunks, writeInChunks } from '@/lib/supabase/chunked-in';
 import type { Database } from '@/lib/database.types';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 import { isManager } from '@/lib/constants/roles';
-import { claimLease, releaseLease } from '@/lib/server/app-settings-lease';
+import { claimLease, releaseLease, type LeaseClaim } from '@/lib/server/app-settings-lease';
 import {
   contributionFeatures, bedtimeToMinutes, typicalWeeklySpend, type ContributionInput,
 } from './contribution';
@@ -59,6 +62,28 @@ export const NETWORK_PUBLICATION_LEASE_KEY = 'network_aggregate_publication:v1';
  * once. A holder that died frees it after this.
  */
 export const NETWORK_PUBLICATION_LEASE_MS = 10 * 60_000;
+/**
+ * How far apart a caller's tries for the publication claim are. A family's
+ * leave holds the claim for two writes, so a run that finds it taken tries a
+ * few times before it defers: deferring to a leave would leave the night's
+ * figures unwritten. Another run that keeps it past the tries is deferred to,
+ * as before. A leave waits longer (withdrawal-server.ts).
+ */
+export const PUBLICATION_CLAIM_RETRY_MS = 250;
+const RUN_CLAIM_ATTEMPTS = 6;
+
+/**
+ * Claim the publication, trying `attempts` times while another holder has it.
+ * Each try reads its own `now()`, so a wait is measured on the caller's clock.
+ * A claim that cannot be read or written is not retried: the caller decides.
+ */
+export async function claimNetworkPublication(sb: DB, opts: { attempts: number; now: () => Date }): Promise<LeaseClaim> {
+  for (let attempt = 1; ; attempt++) {
+    const claim = await claimLease(sb, NETWORK_PUBLICATION_LEASE_KEY, { ttlMs: NETWORK_PUBLICATION_LEASE_MS, now: opts.now() });
+    if (claim.claimed || claim.reason === 'error' || attempt >= opts.attempts) return claim;
+    await new Promise((resolve) => setTimeout(resolve, PUBLICATION_CLAIM_RETRY_MS));
+  }
+}
 
 /** Roles whose members count as children for chores-per-child and bedtime. */
 export const CHILD_ROLES = new Set(['child', 'teen']);
@@ -456,10 +481,13 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
   if (built === null) return { ok: false, error: 'failed to read family data', contributors: 0, aggregates: 0 };
 
   const contributions: Contribution[] = [];
+  /** Sent, then answered with an error or not at all: a lost answer can still have stored the row. */
+  const unconfirmed: Contribution[] = [];
   let contributionFailures = 0;
   for (const c of contributing) {
     // Per-family isolation: one family's bad data or a transient write error must
     // never abort the whole nightly aggregation for everyone else.
+    let unanswered: Contribution | null = null;
     try {
       const contrib = built.get(c.family_id);
       if (!contrib) continue;
@@ -468,6 +496,7 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
       // Unreachable while dinner and activities are always banded, and kept
       // that way: a family whose consent leaves it no metric contributes no row.
       if (Object.keys(contrib.metrics).length === 0) continue;
+      unanswered = contrib;
       const { error: upErr } = await sb.from('network_contributions').upsert({
         family_id: c.family_id,
         cohort_key: cohortKey(contrib.features),
@@ -482,13 +511,33 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
         console.error(`network_contributions upsert failed for ${c.family_id}:`, upErr.message);
         continue;
       }
+      unanswered = null;
       contributions.push(contrib);
     } catch (err) {
       contributionFailures++;
       console.error(`network contribution failed for family ${c.family_id}:`, err);
+    } finally {
+      if (unanswered) unconfirmed.push(unanswered);
     }
   }
-  if (contributionFailures > 0) return { ok: false, error: 'failed to persist family contributions', contributors: contributions.length, aggregates: 0 };
+  if (contributionFailures > 0) {
+    // A failed run publishes nothing, but the rows it DID write stay. One of
+    // them can be a family that left (or switched a scope off) after step 1:
+    // the leave deleted its row, an upsert above wrote it back, and returning
+    // here, before step 4's re-check, kept the row the family was told was
+    // deleted until the next good run's prune. So the same re-check runs here,
+    // over every row this run wrote or may have written. It needs no claim:
+    // it only deletes, and nothing is published after it. Its read follows
+    // every upsert above, and a leave writes consent before its delete, so it
+    // sees any leave whose delete an upsert undid. A re-check that cannot read
+    // consent takes them all back (the next good run rebuilds them).
+    const recheck = await keepStillConsenting(sb, [...contributions, ...unconfirmed]);
+    const kept = new Set(recheck.ok ? recheck.kept.map((c) => c.familyId) : []);
+    return {
+      ok: false, error: 'failed to persist family contributions',
+      contributors: contributions.filter((c) => kept.has(c.familyId)).length, aggregates: 0,
+    };
+  }
 
   // 4. CLAIM — one run at a time holds or publishes.
   //    The hold asks whether this epoch's snapshot is there, and the publish
@@ -506,17 +555,77 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
   //    cannot read or write it fails rather than guess. A publish the database
   //    itself keys on the epoch is the owner's migration; until it lands, this
   //    claim is the fence.
+  //
+  //    Then RE-CHECK consent (keepStillConsenting). A family's leave or scope
+  //    switch-off takes this same claim around its consent write and the
+  //    delete of its row (withdrawal-server.ts), and step 1's read is long
+  //    past by now. Without the re-check, a family that left while this run
+  //    was building had its row deleted by the leave, written back by the
+  //    upsert above, and counted in the publication below.
+  //    Read under the claim, the re-check either sees a withdrawal or comes
+  //    before it, and a publication that comes before it was written before
+  //    the family was told it had left. A run that finds the claim taken
+  //    re-checks too, after its own upserts, so a row it wrote back after a
+  //    leave's delete does not stay.
   const epoch = publicationEpoch(now);
-  const lease = await claimLease(sb, NETWORK_PUBLICATION_LEASE_KEY, { ttlMs: NETWORK_PUBLICATION_LEASE_MS, now });
-  if (!lease.claimed) {
-    if (lease.reason === 'held') return { ok: true, contributors: contributions.length, aggregates: 0, epoch: epoch.key, deferred: true };
-    return { ok: false, error: 'failed to claim the publication', contributors: contributions.length, aggregates: 0 };
-  }
+  const lease = await claimNetworkPublication(sb, { attempts: RUN_CLAIM_ATTEMPTS, now: () => now });
   try {
-    return await holdOrPublish(sb, contributions, key, epoch, now);
+    const recheck = await keepStillConsenting(sb, contributions);
+    if (!recheck.ok) return { ok: false, error: recheck.error, contributors: 0, aggregates: 0 };
+    if (!lease.claimed) {
+      if (lease.reason === 'held') return { ok: true, contributors: recheck.kept.length, aggregates: 0, epoch: epoch.key, deferred: true };
+      return { ok: false, error: 'failed to claim the publication', contributors: recheck.kept.length, aggregates: 0 };
+    }
+    return await holdOrPublish(sb, recheck.kept, key, epoch, now);
   } finally {
-    await releaseLease(sb, NETWORK_PUBLICATION_LEASE_KEY, lease.token);
+    if (lease.claimed) await releaseLease(sb, NETWORK_PUBLICATION_LEASE_KEY, lease.token);
   }
+}
+
+/**
+ * The contributions a run stored whose families still consent to them, read
+ * after the run's own upserts (for the run that publishes, under the
+ * publication claim; for a run that failed to store some, before it returns
+ * the failure). A family that left, closed its account, or switched off
+ * a scope one of its stored metrics belongs to is dropped from what the run
+ * publishes, and its row is deleted; one that only widened its consent keeps
+ * the row it has, which is a subset of what it now allows.
+ *
+ * A withdrawal writes consent BEFORE it deletes the row (withdrawal-server.ts),
+ * so an upsert of ours that lands after that delete is followed by this read,
+ * and this read sees the withdrawal.
+ *
+ * Chunked by the families stored rather than paged over the whole table: a
+ * consent switched off while pages are read moves every later row up one, and
+ * the row that crossed a page boundary would read as withdrawn. A chunk is a
+ * hundred rows at most, one page.
+ *
+ * A read that fails cannot vouch for any row this run wrote, so the run takes
+ * them all back (the next good run rebuilds them) and publishes nothing.
+ */
+async function keepStillConsenting(
+  sb: DB, stored: Contribution[],
+): Promise<{ ok: true; kept: Contribution[] } | { ok: false; error: string }> {
+  const ids = stored.map((c) => c.familyId);
+  const { data, error } = await readAllInChunks<Pick<ConsentRow, 'family_id' | 'scopes' | 'family'>>(ids, (chunk, from, to) => sb
+    .from('network_consent').select('family_id, scopes, family:families!inner(closed_at)').is('family.closed_at', null)
+    .in('family_id', chunk).eq('enabled', true).order('family_id').range(from, to));
+  const unread = Boolean(error) || !data;
+  if (unread) console.error('[network] consent re-check failed', error);
+  const scopesNow = new Map((data ?? []).map((c) => [c.family_id, (c.scopes ?? {}) as Partial<Record<ConsentScope, boolean>>]));
+  const withdrawn = unread ? ids : stored.filter((c) => {
+    const scopes = scopesNow.get(c.familyId);
+    return !scopes || Object.keys(filterMetricsByScopes(c.metrics, scopes)).length !== Object.keys(c.metrics).length;
+  }).map((c) => c.familyId);
+  const { error: forgetError } = await writeInChunks(withdrawn, (chunk) => sb
+    .from('network_contributions').delete().in('family_id', chunk).select('family_id'));
+  if (unread) return { ok: false, error: 'failed to re-check consent' };
+  if (forgetError) {
+    console.error('[network] withdrawn contribution delete failed', forgetError);
+    return { ok: false, error: 'failed to forget a withdrawn family' };
+  }
+  const gone = new Set(withdrawn);
+  return { ok: true, kept: stored.filter((c) => !gone.has(c.familyId)) };
 }
 
 /** Steps 5 to 7 of runNetworkAggregation, run only by the holder of the publication claim. */
