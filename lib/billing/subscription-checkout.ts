@@ -31,6 +31,40 @@ const OPEN_SESSION_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** Requests for the same family+plan inside this window share one Stripe create. */
 const IDEMPOTENCY_BUCKET_MS = 10 * 60 * 1000;
 
+export type FamilyCustomerInput = {
+  familyId: string;
+  userId: string;
+  email: string | null;
+  name: string;
+  now?: Date;
+};
+
+/**
+ * Create the Stripe customer for a family that has none recorded yet.
+ *
+ * Both routes read billing_customers, find nothing, and create. Without a key,
+ * two first purchases in flight together (the trial paywall and the upgrade
+ * modal, or a double tap) each minted a customer, and since the Checkout
+ * idempotency key below names the customer, each then got its OWN payable
+ * session: the one-session-per-family guarantee failed for exactly the
+ * families that had never paid. The same request inside the bucket now gets
+ * Stripe's first answer back. Every parameter is in the key, so a different
+ * parent or a renamed family is a different create, never an idempotency
+ * mismatch error.
+ */
+export async function createFamilyStripeCustomer(stripe: Stripe, input: FamilyCustomerInput): Promise<Stripe.Customer> {
+  const now = input.now ?? new Date();
+  const bucket = Math.floor(now.getTime() / IDEMPOTENCY_BUCKET_MS);
+  const idempotencyKey = `bubaly-customer-${createHash('sha256')
+    .update(JSON.stringify([input.familyId, input.userId, input.email ?? '', input.name, bucket]))
+    .digest('hex').slice(0, 48)}`;
+  return stripe.customers.create({
+    ...(input.email ? { email: input.email } : {}),
+    name: input.name,
+    metadata: { family_id: input.familyId, user_id: input.userId },
+  }, { idempotencyKey });
+}
+
 /**
  * The family's tracked sessions that may still be payable. 'abandoned' is
  * included: the abandoned-checkout cron marks a session so after an hour, but

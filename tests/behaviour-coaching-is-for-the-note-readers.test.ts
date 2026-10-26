@@ -27,6 +27,12 @@ vi.mock('@/lib/supabase/auth', () => ({
 }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db }));
 vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: async () => null }));
+// The monthly allowance (F19) is its own suite (every-ai-route-counts-against-the-allowance); it admits here.
+vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
+  refuseOverAIAllowance: async () => null,
+  withinAIAllowance: async () => true,
+}));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
 vi.mock('@/lib/ai/provider', () => ({ resolveProvider: async () => ({ model: 'test', complete: h.complete }) }));
 vi.mock('@/lib/ai/observability', () => ({ withAiRequest: (_s: unknown, _f: unknown, run: (o: { used: () => void; failed: () => void }) => unknown) => run({ used: () => {}, failed: () => {} }) }));

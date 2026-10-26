@@ -45,7 +45,7 @@ export function ReferralHomeCard({ give, get }: { give: string; get: string }) {
       </div>
       <Link
         href="/referrals"
-        className="hidden shrink-0 items-center gap-1 rounded-xl bg-brand px-3 py-2 text-xs font-semibold text-white hover:bg-brand/90 sm:inline-flex"
+        className="hidden shrink-0 items-center gap-1 rounded-xl bg-brand px-3 py-2 text-xs font-semibold text-white hover:brightness-95 sm:inline-flex"
       >
         {t('referralHomeCard.cta')} <ArrowRight className="h-3.5 w-3.5" />
       </Link>

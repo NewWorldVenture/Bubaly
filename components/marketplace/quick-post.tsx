@@ -182,7 +182,7 @@ export function QuickPost({ className }: { className?: string }) {
           />
           <button
             type="submit"
-            className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:opacity-90"
+            className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:brightness-95"
           >
             <Wand2 className="h-4 w-4" /> {t('quickPost.draftIt')}
           </button>
@@ -281,7 +281,7 @@ export function QuickPost({ className }: { className?: string }) {
               type="button"
               onClick={post}
               disabled={posting}
-              className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-60 sm:flex-none sm:px-6"
+              className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:brightness-95 disabled:opacity-60 sm:flex-none sm:px-6"
             >
               {posting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />} {t('quickPost.postNow')}
             </button>

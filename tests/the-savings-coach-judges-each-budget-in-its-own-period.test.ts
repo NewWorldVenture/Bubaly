@@ -19,6 +19,12 @@ import { createInMemorySupabase, withFaults, type InMemorySupabase } from './hel
 const FAMILY = 'family-1';
 const harness = vi.hoisted(() => ({ db: null as unknown, tz: 'UTC', complete: vi.fn() }));
 
+// The monthly allowance (F19) is its own suite (every-ai-route-counts-against-the-allowance); it admits here.
+vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
+  refuseOverAIAllowance: async () => null,
+  withinAIAllowance: async () => true,
+}));
 vi.mock('@/lib/supabase/auth', () => ({
   requireUserContext: async () => ({
     user: { id: 'user-parent' },

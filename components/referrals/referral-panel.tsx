@@ -95,7 +95,7 @@ export function ReferralPanel({ code, link, rewardLabel, enabled, alreadyReferre
               {copied === 'link' ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
             </button>
           </div>
-          <button onClick={share} className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white hover:bg-brand/90">
+          <button onClick={share} className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white hover:brightness-95">
             <Share2 className="h-4 w-4" /> {t('referral.share')}
           </button>
         </div>
@@ -139,7 +139,7 @@ export function ReferralPanel({ code, link, rewardLabel, enabled, alreadyReferre
               placeholder="SMITH-7K4Q"
               className="h-11 min-w-0 flex-1 rounded-xl border border-border bg-bg px-4 text-sm tracking-widest outline-none focus:border-brand"
             />
-            <button onClick={apply} disabled={pending || !entry.trim()} className="rounded-xl bg-brand px-5 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-60">
+            <button onClick={apply} disabled={pending || !entry.trim()} className="rounded-xl bg-brand px-5 text-sm font-semibold text-white hover:brightness-95 disabled:opacity-60">
               {pending ? t('referralPanel.applying') : t('referralPanel.apply')}
             </button>
           </div>

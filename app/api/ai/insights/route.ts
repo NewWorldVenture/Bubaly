@@ -113,7 +113,7 @@ export async function POST(req: Request) {
   // available is its own module's gate above, not the assistant's tier or its
   // Off switch (which turned every module's AI Assist into a 404).
   const access = await assertAIAllowance(ctx, { db: supabase });
-  if (!access.ok) return accessDeniedResponse(access);
+  if (!access.ok) return accessDeniedResponse(access, t);
   const familyId = ctx.active.familyId;
   const tz = ctx.active.family.timezone || 'America/New_York';
   // The family's day, for the kinds that ask "what is still ahead" of a DATE

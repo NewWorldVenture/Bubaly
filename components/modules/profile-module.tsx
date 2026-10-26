@@ -15,6 +15,7 @@ import { useTheme } from '@/components/theme/use-theme';
 import { roleLabel } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Member = Tables<'family_members'>;
 
@@ -30,6 +31,8 @@ interface ProfileModuleProps {
   userId: string;
   userEmail: string;
   stats?: ProfileStats;
+  /** A real store listing for "Rate the app", or null to hide the row (INT-O01). */
+  storeListing?: string | null;
 }
 
 function Row({
@@ -67,7 +70,9 @@ function Section({ children, className }: { children: React.ReactNode; className
   );
 }
 
-export function ProfileModule({ member, userEmail, stats }: ProfileModuleProps) {
+export function ProfileModule({ member, userEmail, stats, storeListing = null }: ProfileModuleProps) {
+  // Stored configuration, so it reaches window.open only as a checked web link.
+  const storeHref = safeWebLink(storeListing);
   const t = useTranslations();
   const { family, role, isSuperAdmin } = useApp();
   const { theme, setTheme } = useTheme();
@@ -164,7 +169,12 @@ export function ProfileModule({ member, userEmail, stats }: ProfileModuleProps) 
             </button>
           </div>
           <Row icon={HelpCircle} label={t('profile.helpSupport')} href="/dashboard/settings#support" />
-          <Row icon={Star} label={t('profile.rateTheApp')} onClick={() => window.open('https://apps.apple.com/', '_blank', 'noopener,noreferrer')} />
+          {/* Shown only once a real store listing is configured (INT-O01, the
+              owner's decision): it opened the App Store's front page, which
+              lists no Bubaly app. noopener, as INT-L01 requires. */}
+          {storeHref && (
+            <Row icon={Star} label={t('profile.rateTheApp')} onClick={() => window.open(storeHref, '_blank', 'noopener,noreferrer')} />
+          )}
         </Section>
       </div>
 

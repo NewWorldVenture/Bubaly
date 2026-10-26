@@ -114,7 +114,7 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
             {canManage && <button onClick={setAsFamilyDefault} disabled={saving} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted hover:bg-elevated hover:text-fg transition"><Users className="h-3.5 w-3.5" /> {t('quickActions.setFamilyDefault')}</button>}
             <button onClick={reset} disabled={saving} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted hover:bg-elevated hover:text-fg transition"><RotateCcw className="h-3.5 w-3.5" /> {t('quickActions.reset')}</button>
             <button onClick={cancel} disabled={saving} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-elevated hover:text-fg transition">{t('quickActions.cancel')}</button>
-            <button onClick={save} disabled={saving} className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1 text-xs font-semibold text-white hover:bg-brand/90 transition"><Check className="h-3.5 w-3.5" /> {t('quickActions.save')}</button>
+            <button onClick={save} disabled={saving} className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1 text-xs font-semibold text-white hover:brightness-95 transition"><Check className="h-3.5 w-3.5" /> {t('quickActions.save')}</button>
           </div>
         )}
       </div>
@@ -233,7 +233,7 @@ function FamilySettingsModal({ settings, onClose }: { settings: DashSettings; on
         </button>
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onClose} className="rounded-lg px-3 py-2 text-sm text-muted hover:text-fg">{t('quickActions.cancel')}</button>
-          <button onClick={save} disabled={saving} className="flex items-center gap-1 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 transition"><Check className="h-4 w-4" /> {t('quickActions.save')}</button>
+          <button onClick={save} disabled={saving} className="flex items-center gap-1 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:brightness-95 transition"><Check className="h-4 w-4" /> {t('quickActions.save')}</button>
         </div>
       </div>
     </Modal>
@@ -283,7 +283,7 @@ function FeaturePicker({ mode, features, onClose, onPick }: {
   return (
     <Modal open onClose={onClose} title={mode === 'replace' ? 'Replace button' : 'Add a button'}>
       <div className="space-y-3">
-        <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2">
+        <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
           <Search className="h-4 w-4 text-muted" />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('quickActions.searchFeatures')} autoFocus className="w-full bg-transparent text-sm outline-none placeholder:text-muted" />
         </div>

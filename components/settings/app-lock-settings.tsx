@@ -1,18 +1,19 @@
 'use client';
 
 // Settings card to turn the App Lock on/off and set or change the 4-digit PIN.
-// The PIN is hashed on the client (buildAppLockConfig); only { enabled, salt, hash }
-// is sent to the server action — the plaintext PIN never leaves the device.
-import { useEffect, useState } from 'react';
+// The PIN is sent only to the server action over the authenticated connection.
+// Its verifier stays in private server storage; this card reads only status.
+// Whether this browser is unlocked is an httpOnly cookie the server actions set
+// and clear; this card cannot touch it, and does not need to.
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Lock, ShieldCheck } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
-import { settle, describeReadError } from '@/lib/supabase/settle';
 import { useApp } from '@/components/app/app-context';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
-import { buildAppLockConfig, isValidPin, isAppLockConfig, unlockKey, type AppLockConfig } from '@/lib/security/app-lock';
-import { saveAppLockConfig } from '@/app/(app)/settings/app-lock-actions';
+import { isValidPin } from '@/lib/security/app-lock';
+import { getAppLockSettings, saveAppLockConfig } from '@/app/(app)/settings/app-lock-actions';
+import { notifyAppLockSettingsChanged, requestAppLock } from '@/lib/security/app-lock-browser';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -20,52 +21,41 @@ export function AppLockSettings() {
   const t = useTranslations();
   const { userId } = useApp();
   const { success, error: toastError } = useToast();
-  // undefined = loading, null = no PIN ever set, otherwise the stored config.
-  // A FAILED read is none of those three, which is why it gets its own state:
-  // the previous version dropped the error and fell through to `null`, and
-  // `null` in this component's own vocabulary means "no PIN ever set".
-  const [config, setConfig] = useState<AppLockConfig | null | undefined>(undefined);
+  const [config, setConfig] = useState<{ enabled: boolean; hasPin: boolean } | undefined>(undefined);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const mounted = useRef(false);
+  const busy = useRef(false);
+  const owner = useRef(userId);
+  owner.current = userId;
 
-  const hasPin = !!config;            // a PIN exists (may be on or off)
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
+  const hasPin = config?.hasPin ?? false;
   const enabled = config?.enabled ?? false;
 
-  // Load current config directly from the user's own preferences. The PIN may have
-  // been seeded (disabled) during onboarding, so we keep the full config — flipping
-  // it on later must not require re-entering the PIN.
   useEffect(() => {
     let active = true;
+    setConfig(undefined);
+    setLoadError(null);
     void (async () => {
-      // `settle` because a query builder REJECTS on a transport failure (DNS,
-      // TCP, TLS) and resolves with `{ error }` for everything the database
-      // answers. The bare `.then()` this replaces handled neither: a rejection
-      // left the card on its loading dash forever, and an RLS denial or a
-      // missing column set `data` to null, which read as "no PIN ever set".
-      const { data, error } = await settle(createClient()
-        .from('user_preferences').select('notification_prefs').eq('user_id', userId).maybeSingle());
-      if (!active) return;
-      if (error) {
-        // Say the read failed. Do NOT claim there is no PIN — the lock may well
-        // be on, and offering "Set up PIN" here would overwrite a real one.
-        console.error('[app-lock] settings read failed', error);
-        setLoadError(describeReadError(error));
-        return;
+      try {
+        const result = await getAppLockSettings();
+        if (!active) return;
+        if (!result.ok) { setLoadError(result.error); return; }
+        setConfig({ enabled: result.enabled, hasPin: result.hasPin });
+      } catch {
+        if (active) setLoadError(t('appLockSettings.couldNotLoad'));
       }
-      setLoadError(null);
-      const cfg = (data?.notification_prefs as Record<string, unknown> | null)?.appLock;
-      setConfig(isAppLockConfig(cfg) ? cfg : null);
     })();
     return () => { active = false; };
-  }, [userId]);
+  }, [userId, t]);
 
-  // Flip an EXISTING config on/off without re-hashing. Turning off keeps the salt +
-  // hash so the user can turn it back on with one tap (the seed-and-opt-in model).
-  // A server action REJECTS when the request never completes (offline, a
-  // deploy mid-flight); only a completed one answers { ok }. Without this the
-  // panel stayed on "saving" with every button disabled and no message.
-  async function save(cfg: AppLockConfig) {
+  async function save(cfg: { enabled: boolean; pin?: string }) {
     try {
       return await saveAppLockConfig(cfg);
     } catch (error: unknown) {
@@ -75,52 +65,43 @@ export function AppLockSettings() {
   }
 
   async function setEnabled(value: boolean) {
-    if (!config) return;
-    const next = { ...config, enabled: value };
+    if (!config?.hasPin || busy.current || !mounted.current) return;
+    busy.current = true;
+    const savedFor = userId;
     setSaving(true);
-    const res = await save(next);
+    const res = await save({ enabled: value });
+    if (!mounted.current || owner.current !== savedFor) return;
+    busy.current = false;
     setSaving(false);
     if (!res.ok) { toastError(res.error); return; }
-    try {
-      // This device is already authenticated — never lock yourself out on toggle.
-      if (value) sessionStorage.setItem(unlockKey(userId), '1');
-      else sessionStorage.removeItem(unlockKey(userId));
-    } catch { /* ignore */ }
-    setConfig(next);
+    setConfig({ enabled: value, hasPin: true });
     success(value ? t('appLockSettings.appLockIsOn') : t('appLockSettings.appLockTurnedOff'));
+    notifyAppLockSettingsChanged(savedFor);
   }
 
-  // Re-lock immediately on this device: drop the session unlock flag and reload so
-  // the gate renders the PIN screen again.
   function lockNow() {
-    try { sessionStorage.removeItem(unlockKey(userId)); } catch { /* ignore */ }
-    window.location.reload();
+    if (busy.current || !mounted.current) return;
+    busy.current = true;
+    // This synchronously retires every mounted private subtree before the
+    // network request. A failed request stays on the gate and offers retry.
+    void requestAppLock(userId);
   }
 
   async function onSet(pin: string) {
+    if (busy.current || !mounted.current) return;
+    busy.current = true;
+    const savedFor = userId;
     setSaving(true);
-    // Setting up for the first time turns the lock on; changing an existing PIN
-    // keeps its current on/off state (don't silently enable a lock that was off).
     const nextEnabled = hasPin ? enabled : true;
-    let cfg: AppLockConfig;
-    try {
-      // Web Crypto is absent on an insecure origin, and a throw here used to
-      // leave the modal on "saving" for good.
-      cfg = { ...(await buildAppLockConfig(pin)), enabled: nextEnabled };
-    } catch (error: unknown) {
-      console.error('[app-lock] PIN could not be hashed', error);
-      setSaving(false);
-      toastError(t('appLockActions.couldNotSaveAppLockSettings'));
-      return;
-    }
-    const res = await save(cfg);
+    const res = await save({ enabled: nextEnabled, pin });
+    if (!mounted.current || owner.current !== savedFor) return;
+    busy.current = false;
     setSaving(false);
     if (!res.ok) { toastError(res.error); return; }
-    // This device is already authenticated — count it as unlocked for this session.
-    try { if (nextEnabled) sessionStorage.setItem(unlockKey(userId), '1'); } catch { /* ignore */ }
-    setConfig(cfg);
+    setConfig({ enabled: nextEnabled, hasPin: true });
     setModalOpen(false);
     success(nextEnabled ? t('appLockSettings.appLockIsOn') : t('appLockSettings.pinUpdated'));
+    notifyAppLockSettingsChanged(savedFor);
   }
 
   return (
@@ -170,7 +151,7 @@ export function AppLockSettings() {
 
       {modalOpen && (
         <SetPinModal
-          onClose={() => setModalOpen(false)}
+          onClose={() => { if (!saving) setModalOpen(false); }}
           onConfirm={onSet}
           saving={saving}
           confirmLabel={hasPin && !enabled ? t('appLockSettings.savePin') : t('appLockSettings.turnOn')}
@@ -188,9 +169,11 @@ function SetPinModal({ onClose, onConfirm, saving, confirmLabel }: { onClose: ()
   const [err, setErr] = useState<string | null>(null);
 
   function next(pin: string) {
+    if (saving) return;
     if (!isValidPin(pin)) { setErr(t('appLockSettings.enterExactly4Digits')); return; }
     if (step === 'enter') { setFirst(pin); setVal(''); setErr(null); setStep('confirm'); return; }
     if (pin !== first) { setErr(t('appLockSettings.pinsDidNotMatch')); setVal(''); setStep('enter'); return; }
+    setFirst(''); setVal(''); setStep('enter');
     onConfirm(pin);
   }
 
@@ -199,14 +182,15 @@ function SetPinModal({ onClose, onConfirm, saving, confirmLabel }: { onClose: ()
       <div className="flex flex-col items-center gap-5 py-2">
         <p className="text-sm text-muted">{step === 'enter' ? t('appLockSettings.chooseAPinToLock') : t('appLockSettings.enterItAgainToConfirm')}</p>
         <input
-          autoFocus inputMode="numeric" pattern="\d*" maxLength={4} value={val}
+          autoFocus type="password" autoComplete="new-password" inputMode="numeric" pattern="\d*" maxLength={4} value={val} disabled={saving}
+          aria-label={step === 'enter' ? t('appLockSettings.setA4DigitPin') : t('appLockSettings.confirmYourPin')}
           onChange={(e) => { const v = e.target.value.replace(/\D/g, '').slice(0, 4); setVal(v); setErr(null); if (v.length === 4) next(v); }}
           className="w-40 rounded-xl border border-border bg-surface/60 py-3 text-center text-3xl tracking-[0.6em] outline-none focus:border-brand"
           placeholder="••••"
         />
         {err && <p className={cn('text-xs font-medium', 'text-rose-400')}>{err}</p>}
         <div className="flex w-full justify-end gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>{t('appLockSettings.cancel')}</Button>
+          <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={saving}>{t('appLockSettings.cancel')}</Button>
           <Button type="button" size="sm" loading={saving} disabled={saving || val.length !== 4} onClick={() => next(val)}>
             {step === 'enter' ? t('appLockSettings.next') : confirmLabel}
           </Button>

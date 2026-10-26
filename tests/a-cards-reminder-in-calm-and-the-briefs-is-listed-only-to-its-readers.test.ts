@@ -52,7 +52,11 @@ vi.mock('@/lib/supabase/auth', () => ({
   effectivePlanLevel: async (level: number) => level,
 }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db, createServiceClient: () => entitledServiceClient() }));
-vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: async () => 2 }));
+vi.mock('@/lib/server/plan', () => ({
+  resolveFamilyPlanLevel: async () => 2,
+  // The same, unlocked family as the whole entitlement the AI allowance (F19) reads.
+  resolveFamilyEntitlement: async () => ({ effectiveLevel: 2, locked: false, closed: false, inTrial: false, trialEndsAt: null }),
+}));
 vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: async () => null }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
 vi.mock('@/lib/metric/time-saved-server', () => ({ countHandledThisWeek: async () => ({ total: 0 }) }));

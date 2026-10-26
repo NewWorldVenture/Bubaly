@@ -52,7 +52,7 @@ async function PlanDonut({ counts, total }: { counts: Map<string, number>; total
   }).filter((a) => a.count > 0);
 
   return (
-    <div className="flex items-center gap-5">
+    <div className="flex flex-wrap items-center gap-5">
       <div className="relative h-28 w-28 shrink-0">
         <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
           <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="14" />
@@ -276,7 +276,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
             <StatCard icon={TrendingDown} label={tr('adminSubscriptions.churn30d')} value={`${churnRate.toFixed(1)}%`} tone="bg-danger/10 text-danger" />
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
             <Card>
               <h2 className="mb-4 text-base font-semibold">{tr('adminSubscriptions.subscriptionsOverTime')} <span className="text-muted">{tr('adminSubscriptions.last30Days')}</span></h2>
               {chartCeiling

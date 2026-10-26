@@ -290,6 +290,24 @@ async function currentSubscription(settings: StripeSettings | null, fromEvent: S
   return stripeFromKey(secretKey).subscriptions.retrieve(fromEvent.id);
 }
 
+/**
+ * The event types this endpoint handles, checked BEFORE the ledger claim.
+ * `stripe_webhook_events` is shared with /api/webhooks/money and unique on
+ * `stripe_event_id` alone, so claiming a type this route has no case for and
+ * marking it `processed` did not ignore it: it consumed it. An issuing event
+ * that also reached this endpoint (an endpoint subscribed beyond these four,
+ * or `stripe listen`, which forwards everything) was then a `duplicate` to the
+ * money route, answered 200 there and never applied — a card spend never
+ * debited. The money route already refuses to claim billing types for the
+ * same reason (Audit C1-S4-01); this is the other half.
+ */
+const HANDLED_EVENT_TYPES = new Set<string>([
+  'customer.subscription.created',
+  'customer.subscription.updated',
+  'customer.subscription.deleted',
+  'checkout.session.completed',
+]);
+
 export async function POST(req: NextRequest) {
   const t = await getTranslations();
   const boundedBody = await readBoundedRequestText(req, MAX_WEBHOOK_BODY_BYTES);
@@ -310,6 +328,14 @@ export async function POST(req: NextRequest) {
     event = constructWebhookEvent(body, sig, webhookSecret);
   } catch (err) {
     return NextResponse.json({ error: t('stripe.webhookSignatureInvalid') }, { status: 400 });
+  }
+
+  // Acknowledged, deliberately NOT claimed: a 200 stops Stripe retrying a type
+  // this endpoint does not handle, and the shared ledger is left for the
+  // endpoint that does. invoice.* lands here too: the status a paid or failed
+  // invoice causes arrives as customer.subscription.updated.
+  if (!HANDLED_EVENT_TYPES.has(event.type)) {
+    return NextResponse.json({ received: true, handled: false });
   }
 
   const supabase = createServiceClient();

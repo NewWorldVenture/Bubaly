@@ -258,7 +258,7 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
           <button
             type="button" disabled={busy || inTierHrefs.length === 0}
             onClick={() => onPinAll(inTierHrefs)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg transition hover:opacity-90 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg transition hover:brightness-95 disabled:opacity-50"
           >
             <ListPlus className="h-3.5 w-3.5" /> {t('freeTierSidebar.pinAllInMyPlan')}
           </button>
@@ -287,9 +287,9 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
           return (
             <section key={group.title} className="space-y-2">
               <div className="flex items-baseline gap-2 px-0.5">
-                <h3 className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted/80">{navLabel(t, group.title)}</h3>
+                <h3 className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{navLabel(t, group.title)}</h3>
                 <span className="h-px flex-1 bg-border/50" aria-hidden />
-                <span className="text-[10px] font-semibold tabular-nums text-muted/50">{resolved.length}</span>
+                <span className="text-[10px] font-semibold tabular-nums text-muted">{resolved.length}</span>
               </div>
               {/* Mobile-first: 2 roomy columns, 3 from sm. Labels wrap to 2 lines
                   (no more cut-off names); the pin star sits in a reserved lane so
@@ -300,10 +300,10 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
                   const isPinned = pinnable && pinned.has(item.href);
                   const inner = (
                     <>
-                      <item.icon className={cn('h-5 w-5 shrink-0', locked ? 'text-muted/45' : 'text-fg/80')} />
+                      <item.icon className={cn('h-5 w-5 shrink-0', locked ? 'text-muted' : 'text-fg/80')} />
                       <span className={cn('min-w-0 flex-1 text-left text-[13px] font-medium leading-tight line-clamp-2',
-                        locked ? 'text-muted/50' : 'text-fg')}>{navLabel(t, item.label)}</span>
-                      {locked && <Lock className="h-3.5 w-3.5 shrink-0 text-muted/45" />}
+                        locked ? 'text-muted' : 'text-fg')}>{navLabel(t, item.label)}</span>
+                      {locked && <Lock className="h-3.5 w-3.5 shrink-0 text-muted" />}
                     </>
                   );
                   return (
@@ -336,7 +336,7 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
                             aria-label={t(isPinned ? 'nav.unpinFromSidebar' : 'nav.pinToSidebar', { label: navLabel(t, item.label) })}
                             aria-pressed={isPinned}
                             title={t(isPinned ? 'nav.unpinTitle' : 'nav.pinTitle')}
-                            className="absolute right-1 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-muted/50 transition hover:bg-elevated hover:text-brand-text disabled:opacity-50"
+                            className="absolute right-1 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-muted transition hover:bg-elevated hover:text-brand-text disabled:opacity-50"
                           >
                             <Star className={cn('h-4 w-4', isPinned && 'fill-brand text-brand-text')} />
                           </button>

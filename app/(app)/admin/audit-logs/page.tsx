@@ -100,7 +100,7 @@ export default async function AuditLogsPage({ searchParams }: Params) {
           <div className="mt-6"><EmptyState icon={ClipboardList} title={t('adminAuditLogs.noAuditLogsFound')} /></div>
         ) : (
           <div className="table-responsive mt-4">
-            <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
+            <div role="region" tabIndex={0} aria-label={t('adminAuditLogs.auditLogs')} className="focus-ring overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs text-muted">
                   <th className="px-3 py-2 font-medium">{t('adminAuditLogs.action')}</th>

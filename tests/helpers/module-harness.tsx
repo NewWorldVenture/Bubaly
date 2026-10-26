@@ -319,6 +319,8 @@ function bucket(h: ModuleState, name: string) {
     createSignedUrl: async (path: string) => (objects.has(path)
       ? { data: { signedUrl: `https://signed.invalid/${name}/${path}` }, error: null }
       : { data: null, error: { message: 'Object not found' } }),
+    // What a public bucket hands out: a URL derived from the path, whether or not the object exists.
+    getPublicUrl: (path: string) => ({ data: { publicUrl: `https://project.supabase.invalid/storage/v1/object/public/${name}/${path}` } }),
     list: async (folder: string, options?: { search?: string }) => {
       const inFolder = [...objects].filter((path) => path.startsWith(`${folder}/`)).map((path) => path.slice(folder.length + 1));
       return { data: inFolder.filter((n) => !options?.search || n.startsWith(options.search)).map((n) => ({ name: n })), error: null };

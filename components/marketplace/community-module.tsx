@@ -109,7 +109,7 @@ export function CommunityModule({
             className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-bg px-3 text-sm outline-none focus:border-brand"
           />
           <button type="submit" disabled={pending || !migrated}
-            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-brand px-3.5 text-sm font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-50">
+            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-brand px-3.5 text-sm font-bold text-brand-fg transition hover:brightness-95 disabled:opacity-50">
             <Plus className="h-4 w-4" /> {t('community.create')}
           </button>
         </form>
@@ -207,7 +207,7 @@ export function CommunityModule({
               type="button"
               disabled={pending || !shareId}
               onClick={() => { run(() => shareListingAction(shareId, circle.id), 'Shared with the circle'); setShareId(''); }}
-              className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-50"
+              className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:brightness-95 disabled:opacity-50"
             >
               {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />} {t('community.share')}
             </button>

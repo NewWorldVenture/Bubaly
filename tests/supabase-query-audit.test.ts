@@ -10,6 +10,8 @@ import {
   readSchema,
   auditRpcCalls,
   RESERVED_RPC_DEPENDENCIES,
+  RESERVED_TABLE_DEPENDENCIES,
+  resolveTableReference,
 } from '../scripts/audit-supabase-queries.mjs';
 
 type Finding = { kind: string; detail: string; file: string; line: number; via?: string };
@@ -71,7 +73,8 @@ describe('supabase query audit', () => {
     };
     const describeFinding = (f: Finding) => `${f.kind} ${f.detail} at ${f.file}:${f.line}`;
     expect(findings.map(describeFinding)).toEqual([]);
-    expect(reservedDependencies).toHaveLength(6);
+    expect(reservedDependencies.filter(dependency => dependency.kind === 'reserved-function')).toHaveLength(6);
+    expect(reservedDependencies.filter(dependency => dependency.kind === 'reserved-table')).toHaveLength(3);
     for (const [name, approval] of Object.entries(RESERVED_RPC_DEPENDENCIES) as [
       string,
       { caller: string; sql: string },
@@ -87,6 +90,27 @@ describe('supabase query audit', () => {
         }),
       );
     }
+  });
+
+  it('keeps the private credential table held, with columns checked only at the service caller', () => {
+    const schema = readSchema();
+    expect(schema.columns.has('app_lock_credentials')).toBe(false);
+    const caller = RESERVED_TABLE_DEPENDENCIES.app_lock_credentials.caller;
+    const approved = resolveTableReference('app_lock_credentials', caller, 'service', schema);
+    expect(approved.columns).toEqual(new Set(['user_id', 'enabled', 'salt', 'hash', 'revision', 'updated_at']));
+    expect(approved.migration).toBe(RESERVED_TABLE_DEPENDENCIES.app_lock_credentials.sql);
+    expect(approved.columns.has('pin')).toBe(false);
+    for (const [file, client] of [[caller, 'user'], [caller, 'unknown'], ['lib/other-reader.ts', 'service']]) {
+      expect(resolveTableReference('app_lock_credentials', file, client, schema)).toEqual({ columns: null, migration: null });
+    }
+    expect(resolveTableReference('unapproved_table', caller, 'service', schema)).toEqual({ columns: null, migration: null });
+    const root = mkdtempSync(join(tmpdir(), 'bubaly-held-table-'));
+    const candidate = join(root, RESERVED_TABLE_DEPENDENCIES.app_lock_credentials.sql);
+    mkdirSync(dirname(candidate), { recursive: true });
+    expect(resolveTableReference('app_lock_credentials', caller, 'service', schema, root)).toEqual({ columns: null, migration: null });
+    writeFileSync(candidate, 'create table public.unrelated_table (id uuid);');
+    expect(resolveTableReference('app_lock_credentials', caller, 'service', schema, root)).toEqual({ columns: null, migration: null });
+    expect(schema.columns.has('app_lock_credentials')).toBe(false);
   });
 
   it('still sees a real schema, not an empty one', () => {

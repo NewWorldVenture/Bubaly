@@ -9,6 +9,9 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { familyMediaPath } from '@/lib/storage/family-media';
+import { FormUploads, type SaveOutcome } from '@/lib/storage/form-uploads';
+import { writeWasRefused } from '@/lib/supabase/write-outcome';
+import { REMINDER_IMAGE_FOLDER, releaseReminderImage } from '@/lib/reminders/image';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
@@ -671,6 +674,30 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
   const [subtaskInput, setSubtaskInput] = useState('');
   const [imageUrl, setImageUrl] = useState(reminder?.image_url ?? '');
   const [uploading, setUploading] = useState(false);
+  // Every photo this form put in the bucket. Whatever the saved row does not
+  // end up pointing at — a photo replaced or cleared before saving, all of
+  // them when the form is closed unsaved or its save refused — and the photo a
+  // saved edit replaced are removed, unless another reminder still shows them
+  // (lib/reminders/image.ts). Never while a save in flight may still point the
+  // row at one (lib/storage/form-uploads.ts).
+  const session = useRef<FormUploads | null>(null);
+  if (session.current === null) session.current = new FormUploads(reminder?.image_url || null, releaseUnreferenced);
+  const uploads = session.current;
+
+  /** Remove photos nothing points at. Logged, not shown: the save stands either way. */
+  async function releaseUnreferenced(refs: string[]) {
+    const supabase = createClient();
+    for (const ref of refs) {
+      const removal = await releaseReminderImage(supabase, familyId, ref);
+      if (removal.error) console.error('[reminders] could not remove an unreferenced photo', removal.error);
+    }
+  }
+
+  /** Close without saving — Cancel, Escape, the X or the backdrop. A save already sent decides what its photo becomes. */
+  function abandon() {
+    void uploads.dismiss();
+    onClose();
+  }
 
   function commitTags() {
     const merged = visibleReminderTags(parseTags([formatTags(tags), tagInput].filter(Boolean).join(',')));
@@ -687,11 +714,12 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
     setUploading(true);
     try {
       const supabase = createClient();
-      const path = familyMediaPath(familyId, 'reminders', file.name);
+      const path = familyMediaPath(familyId, REMINDER_IMAGE_FOLDER, file.name);
       const { data: stored, error: upErr } = await supabase.storage.from('family-media').upload(path, file, { upsert: false });
       if (upErr || !stored) { toastError(describeDbError(upErr)); return; }
       const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);
-      setImageUrl(publicUrl);
+      // False when the form closed while this was uploading: nothing will save it, so it is already gone.
+      if (uploads.landed(publicUrl)) setImageUrl(publicUrl);
     } finally {
       setUploading(false);
     }
@@ -745,6 +773,11 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
     }
 
     setLoading(true);
+    const settle = uploads.send(payload.image_url);
+    // What the photo this save carries becomes: a refused write committed
+    // nothing, a lost reply may have (so its photo stays), a confirmed one
+    // frees what the row no longer points at.
+    let outcome: SaveOutcome = 'unanswered';
     try {
       const supabase = createClient();
       const fullUpdate = { ...payload, updated_at: new Date().toISOString() };
@@ -762,19 +795,23 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
       if (error && isMissingRelationError(error)) {
         ({ data: saved, error } = await run(stripNewCols(fullUpdate), stripNewCols(fullInsert)));
       }
-      if (error) { toastError(describeDbError(error)); return; }
+      if (error) { outcome = writeWasRefused(error) ? 'refused' : 'unanswered'; toastError(describeDbError(error)); return; }
+      // An answer with no error: zero rows is a refusal, a row is the save.
+      outcome = 'refused';
       if (wroteNoRows(saved)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
+      outcome = 'saved';
       success(reminder ? 'Reminder updated' : 'Reminder created');
       onSaved();
     } catch (err) {
       toastError(describeDbError(err));
     } finally {
       setLoading(false);
+      void settle(outcome);
     }
   }
 
   return (
-    <Modal open onClose={onClose} title={reminder ? tr('dialogTitle.editReminder') : tr('dialogTitle.newReminder')}>
+    <Modal open onClose={abandon} title={reminder ? tr('dialogTitle.editReminder') : tr('dialogTitle.newReminder')}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={tr('reminders.title')} required>
           {(id) => <Input id={id} name="title" defaultValue={reminder?.title ?? ''} placeholder={tr('reminders.pickUpPrescriptionPayCreditCard')} autoFocus />}
@@ -955,7 +992,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
         </Field>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>{tr('reminders.cancel')}</Button>
+          <Button type="button" variant="ghost" onClick={abandon}>{tr('reminders.cancel')}</Button>
           <Button type="submit" loading={loading}>{reminder ? 'Save' : 'Create Reminder'}</Button>
         </div>
       </form>

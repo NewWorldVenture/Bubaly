@@ -43,15 +43,15 @@ const NOTE_COLORS = [
 ] as const;
 
 const COLOR_SWATCHES = [
-  { id: 'default', swatch: 'bg-elevated border border-border' },
-  { id: 'violet', swatch: 'bg-violet-500' },
-  { id: 'blue', swatch: 'bg-blue-500' },
-  { id: 'teal', swatch: 'bg-teal-500' },
-  { id: 'green', swatch: 'bg-green-500' },
-  { id: 'yellow', swatch: 'bg-yellow-400' },
-  { id: 'orange', swatch: 'bg-orange-500' },
-  { id: 'red', swatch: 'bg-red-500' },
-  { id: 'pink', swatch: 'bg-pink-500' },
+  { id: 'default', labelKey: 'shared.colorName.none', swatch: 'bg-elevated border border-border' },
+  { id: 'violet', labelKey: 'shared.colorName.violet', swatch: 'bg-violet-500' },
+  { id: 'blue', labelKey: 'shared.colorName.blue', swatch: 'bg-blue-500' },
+  { id: 'teal', labelKey: 'shared.colorName.teal', swatch: 'bg-teal-500' },
+  { id: 'green', labelKey: 'shared.colorName.green', swatch: 'bg-green-500' },
+  { id: 'yellow', labelKey: 'shared.colorName.yellow', swatch: 'bg-yellow-400' },
+  { id: 'orange', labelKey: 'shared.colorName.orange', swatch: 'bg-orange-500' },
+  { id: 'red', labelKey: 'shared.colorName.red', swatch: 'bg-red-500' },
+  { id: 'pink', labelKey: 'shared.colorName.pink', swatch: 'bg-pink-500' },
 ] as const;
 
 const QUICK_CATEGORIES = [
@@ -480,9 +480,9 @@ function NoteModal({ note, onClose, onSaved }: {
       <form onSubmit={onSubmit} className="space-y-4">
         {/* Color picker */}
         <div className="flex items-center gap-2">
-          <div className={cn('flex flex-1 flex-wrap gap-1.5 rounded-xl p-2', currentColor.bg)}>
+          <div role="group" aria-label={t('notes.colorLabel')} className={cn('flex flex-1 flex-wrap gap-1.5 rounded-xl p-2', currentColor.bg)}>
             {COLOR_SWATCHES.map((c) => (
-              <button key={c.id} type="button" onClick={() => setSelectedColor(c.id)}
+              <button key={c.id} type="button" onClick={() => setSelectedColor(c.id)} aria-label={t(c.labelKey)} aria-pressed={selectedColor === c.id}
                 className={cn(
                   'h-5 w-5 rounded-full transition hover:scale-110',
                   c.swatch,
@@ -551,7 +551,7 @@ function NoteModal({ note, onClose, onSaved }: {
               )}
               <div className="mt-3 flex justify-end">
                 <button type="button" onClick={applyInsights}
-                  className="rounded-lg bg-brand px-3 py-1 text-xs font-semibold text-white hover:bg-brand/90 transition">
+                  className="rounded-lg bg-brand px-3 py-1 text-xs font-semibold text-white hover:brightness-95 transition">
                   {t('notes.addToNote')}
                 </button>
               </div>

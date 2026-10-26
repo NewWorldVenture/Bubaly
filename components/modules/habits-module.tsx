@@ -36,14 +36,14 @@ type HabitLog = Tables<'habit_logs'>;
 type HabitPatch = Pick<Habit, 'title' | 'description' | 'color' | 'cadence' | 'target_per_period' | 'member_id' | 'weekdays'>;
 
 const COLORS = [
-  { id: 'violet', dot: 'bg-violet-500', soft: 'bg-violet-500/10', ring: 'border-violet-500/40', text: 'text-violet-500' },
-  { id: 'blue', dot: 'bg-blue-500', soft: 'bg-blue-500/10', ring: 'border-blue-500/40', text: 'text-blue-500' },
-  { id: 'teal', dot: 'bg-teal-500', soft: 'bg-teal-500/10', ring: 'border-teal-500/40', text: 'text-teal-500' },
-  { id: 'green', dot: 'bg-green-500', soft: 'bg-green-500/10', ring: 'border-green-500/40', text: 'text-green-500' },
-  { id: 'amber', dot: 'bg-amber-500', soft: 'bg-amber-500/10', ring: 'border-amber-500/40', text: 'text-amber-500' },
-  { id: 'orange', dot: 'bg-orange-500', soft: 'bg-orange-500/10', ring: 'border-orange-500/40', text: 'text-orange-500' },
-  { id: 'rose', dot: 'bg-rose-500', soft: 'bg-rose-500/10', ring: 'border-rose-500/40', text: 'text-rose-500' },
-  { id: 'pink', dot: 'bg-pink-500', soft: 'bg-pink-500/10', ring: 'border-pink-500/40', text: 'text-pink-500' },
+  { id: 'violet', labelKey: 'shared.colorName.violet', dot: 'bg-violet-500', soft: 'bg-violet-500/10', ring: 'border-violet-500/40', text: 'text-violet-500' },
+  { id: 'blue', labelKey: 'shared.colorName.blue', dot: 'bg-blue-500', soft: 'bg-blue-500/10', ring: 'border-blue-500/40', text: 'text-blue-500' },
+  { id: 'teal', labelKey: 'shared.colorName.teal', dot: 'bg-teal-500', soft: 'bg-teal-500/10', ring: 'border-teal-500/40', text: 'text-teal-500' },
+  { id: 'green', labelKey: 'shared.colorName.green', dot: 'bg-green-500', soft: 'bg-green-500/10', ring: 'border-green-500/40', text: 'text-green-500' },
+  { id: 'amber', labelKey: 'shared.colorName.amber', dot: 'bg-amber-500', soft: 'bg-amber-500/10', ring: 'border-amber-500/40', text: 'text-amber-500' },
+  { id: 'orange', labelKey: 'shared.colorName.orange', dot: 'bg-orange-500', soft: 'bg-orange-500/10', ring: 'border-orange-500/40', text: 'text-orange-500' },
+  { id: 'rose', labelKey: 'shared.colorName.rose', dot: 'bg-rose-500', soft: 'bg-rose-500/10', ring: 'border-rose-500/40', text: 'text-rose-500' },
+  { id: 'pink', labelKey: 'shared.colorName.pink', dot: 'bg-pink-500', soft: 'bg-pink-500/10', ring: 'border-pink-500/40', text: 'text-pink-500' },
 ] as const;
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
@@ -515,7 +515,7 @@ function HabitModal({ habit, members, defaultMemberId, onClose, onSave, blocked,
           <span id={colorGroupId} className="mb-1.5 block text-sm font-medium">{t('habits.color')}</span>
           <div {...labelledGroup(colorGroupId)} className="flex flex-wrap gap-2">
             {COLORS.map((c) => (
-              <button key={c.id} type="button" onClick={() => setColor(c.id)}
+              <button key={c.id} type="button" onClick={() => setColor(c.id)} aria-label={t(c.labelKey)} aria-pressed={color === c.id}
                 className={cn('h-7 w-7 rounded-full transition hover:scale-110', c.dot,
                   color === c.id && 'ring-2 ring-white ring-offset-2 ring-offset-bg scale-110')} />
             ))}

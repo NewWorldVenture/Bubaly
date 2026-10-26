@@ -21,7 +21,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!id) return NextResponse.json({ error: t('resume.runNotFound'), code: 'not_found' }, { status: 404 });
 
     const access = await assertAIAccess(authed.ctx, { db: authed.supabase });
-    if (!access.ok) return accessDeniedResponse(access);
+    if (!access.ok) return accessDeniedResponse(access, t);
 
     const scope = scopeFromUserContext(authed.ctx, authed.supabase);
     const result = await applyRunControl(scope, id, 'resume', {}, { startedAtMs: startedAt });
