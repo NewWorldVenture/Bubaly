@@ -149,6 +149,7 @@ source allocations are not evidence that production applied any migration.
 | 0525 proposed, held | `0525_a_closed_vote_takes_no_more_ballots.sql` | `a_meal_ballot_is_cast_while_its_vote_is_open()` and `a_poll_vote_is_cast_while_its_poll_is_open()`, BEFORE INSERT OR UPDATE on `meal_vote_ballots` and `family_poll_votes`: a ballot is cast or changed only while its vote is open, read in the row's family FOR SHARE. Support's database half of 6137789822; requested on #771 (comment 6402862474), not yet confirmed. |
 | 0526 proposed, held | `0526_what_the_library_streams_is_added_by_a_parent_or_adult.sql` | `a_library_feed_is_added_by_a_parent_or_adult()` and `a_library_items_audio_is_added_by_a_parent_or_adult()`, BEFORE INSERT OR UPDATE on `library_feeds` and `library_items`: only a parent or adult adds or changes a subscription's `feed_url` or family, or an item's `media_url`, `feed_id` or family; `created_by` names the writer. KIDS-O02; requested on #771 (comment 6420549131), not yet confirmed. |
 | 0527 proposed, held | `0527_a_post_on_the_idea_board_is_the_callers_own.sql` | `a_feedback_comment_is_the_callers_own()` and `a_feedback_idea_starts_as_the_callers_own()`, BEFORE INSERT on `feedback_comments` and `feedback_ideas`: a signed-in caller posts no team reply, a new idea starts under review with no note, pin, counts or tracker link, and `author_name` is the caller's own. CALHUB-O1; requested on #771 (comment 6421813855), not yet confirmed. |
+| 0528 proposed, held | `0528_a_budget_drift_signal_is_a_parents_or_adults.sql` | A RESTRICTIVE SELECT and `a_budget_drift_signal_is_written_by_a_parent_or_adult()` (BEFORE INSERT, UPDATE and DELETE) on `family_signals`: a budget-drift signal is read and written only by a parent or adult. OPSD-O05; requested on #771 (comment 6422105432), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4921,6 +4922,59 @@ applied twice.
 
 **After approved release:** as a test guest, try to insert a `utility_bills`
 row and confirm 42501.
+
+## `0528` (proposed, held) — a child read and rewrote the household's budget drift
+
+`supabase/reserved/0528_a_budget_drift_signal_is_a_parents_or_adults.sql`
+— **held**: requested on #771 in comment 6422105432. Not yet confirmed.
+
+**Severity: low to medium (a non-manager read the household's spend against
+each budget, and could dismiss, delete or forge the drift the parents rely
+on). Deploy order: any.** OPSD-O05, and DB-TBL-138's per-role check for
+`family_signals`. 01420 gives select, insert, update and delete to
+`is_family_member(family_id)`; a budget drift (0157) carries a budget's spend
+and limit. The app keeps it a parent's or adult's (`readsHouseholdMoney`, which
+is `isManager`): the signals page, the reasoning report and the AI context drop
+it for anyone else, and a non-manager's Refresh detects and deletes none.
+Measured on a replay of main, as the teen, the child and the caregiver, `OK n`
+each: reading both drifts, dismissing one by id, an unfiltered dismiss and
+delete, planting a drift and turning a reminder signal into one.
+
+**Database.** A RESTRICTIVE SELECT policy, "A budget drift signal is read by
+a parent or adult": `kind <> 'budget_drift' or can_manage_family(family_id)`.
+And `a_budget_drift_signal_is_written_by_a_parent_or_adult()`, SECURITY
+DEFINER with a pinned search_path, BEFORE INSERT, UPDATE and DELETE: for a
+signed-in caller, a write whose old or new row is a budget drift needs a parent
+or adult of that row's family (42501), which also covers the unfiltered write
+a restrictive read cannot filter. Every other kind stays any member's (the
+member-reach detection, Restore and Dismiss). The service role is exempt, and
+so is a member's removal emptying `member_id` once their row is gone and
+changing nothing else, which may run in that member's own session. No
+application change.
+
+**Proof:** `.github/workflows/budget-drift-signal-runtime.yml` requires the
+held probe `docs/audit/reserved/a-budget-drift-signal-is-a-parents-or-adults-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0528 twice and requires it to pass, then re-runs six released probes
+(an-erasure-actually-erases, family-delete-cascade,
+family-erasure-leaves-nothing, gated-write-tables, plpgsql-bodies-resolve,
+rls-sweep). The passing run shows the drifts reading no row for the teen, the
+child and the caregiver and every write above refused (a dismiss by id matching
+none); parents and adults reading, dismissing, planting and deleting drifts;
+everyone else still reading, dismissing, adding and refreshing other signals;
+the server filing and deleting; a child's member row removed in their session
+and the household deleted in the parent's session; the wiring; **N1** (read
+rule dropped, guard disabled): the child reads, dismisses and plants; **M1**
+(guard off DELETE): the child's unfiltered delete lands. Three hand mutants (no
+old-row clause, no member-removal exemption, the read rule without its kind
+test) are each caught.
+
+All 189 released probes pass with 0528 applied, and with every held file
+applied twice.
+
+**After approved release:** as a test child, read `family_signals` where
+`kind = 'budget_drift'` and confirm no row; as a parent, confirm the drift
+still shows on the signals page.
 
 ## `0527` (proposed, held) — anyone could post on the Idea Board as the Bubaly Team
 
