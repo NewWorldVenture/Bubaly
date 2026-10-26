@@ -71,6 +71,41 @@ export const ROLE_PERMISSIONS: Record<SocialRole, SocialPermission[]> = {
   ],
 };
 
+/**
+ * What each READ surface of the console needs: any one of the permissions
+ * listed. ROLE_PERMISSIONS decides what a role may do; this decides what it is
+ * shown. A read_only member (by default a child, caregiver or guest) holds
+ * view_feed alone, "View the unified feed only", and every page used to show
+ * them the family's drafts, its queue and failures, the calendar, each post's
+ * targets and provider errors, and the media library.
+ *
+ *   pipeline  — drafts, scheduled, failed, the calendar and a post's detail:
+ *               for those who make, schedule, publish or approve posts.
+ *   published — what went out: the pipeline, and an analyst.
+ *   analytics — the analytics page.
+ *   media     — the media library: whoever uploads, or drafts with it.
+ *   compose   — the composer and the links to it.
+ *   connect   — connecting an account.
+ *
+ * The feed, the inbox, the accounts list and the settings page need none of
+ * these. (The inbox has no permission of its own in the matrix; which one it
+ * should take is the owner's decision.)
+ */
+const PIPELINE: readonly SocialPermission[] = ['create_drafts', 'publish_posts', 'schedule_posts', 'approve_posts'];
+export const SOCIAL_SURFACES = {
+  pipeline: PIPELINE,
+  published: [...PIPELINE, 'view_analytics'],
+  analytics: ['view_analytics'],
+  media: ['upload_media', 'create_drafts'],
+  compose: ['create_drafts', 'publish_posts', 'schedule_posts'],
+  connect: ['connect_accounts'],
+} as const satisfies Record<string, readonly SocialPermission[]>;
+
+/** True when `can` holds any one of `anyOf`. */
+export function canAnySocial(can: (permission: SocialPermission) => boolean, anyOf: readonly SocialPermission[]): boolean {
+  return anyOf.some((permission) => can(permission));
+}
+
 export const SOCIAL_ROLE_LABELS: Record<SocialRole, string> = {
   owner: 'Owner',
   admin: 'Admin',

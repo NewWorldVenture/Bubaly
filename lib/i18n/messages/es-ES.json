@@ -13760,6 +13760,7 @@
   "socialSchedule.accessUnavailable": "No se han podido verificar los ajustes o el acceso. Actualiza la página e inténtalo de nuevo.",
   "socialSchedule.approvalRequired": "La publicación está en espera porque requiere una aprobación verificada.",
   "socialSchedule.awaitingConfirmation": "No se puede confirmar la publicación. Revísala antes de volver a enviarla.",
+  "socialSchedule.cameDueWhileClosed": "Esta publicación no se publicó: llegó la hora mientras la cuenta de tu familia estaba cerrada. Revísala antes de publicarla ahora.",
   "socialSchedule.changed": "La publicación o sus cuentas han cambiado desde que se programó. Revísala antes de publicarla.",
   "socialSchedule.clockChange": "Esta hora se omite o se repite con el cambio de hora. Elige otra hora.",
   "socialSchedule.instant": "Hora de publicación en UTC: {instant}",
@@ -13770,6 +13771,7 @@
   "socialSchedule.noPermissionToDraft": "No tienes permiso para crear borradores de publicaciones.",
   "socialSchedule.noPermissionToPublish": "No tienes permiso para publicar.",
   "socialSchedule.noPermissionToSchedule": "No tienes permiso para programar publicaciones.",
+  "socialSchedule.notInPlan": "Esta publicación no se publicó: cuando llegó la hora, las herramientas de redes sociales no formaban parte del plan de tu familia. Revísala antes de publicarla ahora.",
   "socialSchedule.pastTime": "Elige una hora futura.",
   "socialSchedule.permissionDenied": "No tienes permiso para publicar esta publicación programada.",
   "socialSchedule.queued": "Programada para publicarse",
@@ -17195,5 +17197,11 @@
   "medicationsModule.otherMembersDosesAreKeptByManagers": "Las tomas de los demás miembros las registran y siguen los padres y adultos de tu familia.",
   "nutrition.aGuestSeesSavedEstimatesOnly": "Los invitados pueden ver una estimación nutricional guardada, pero no pedir una nueva. Pide a un miembro de la familia que la analice.",
   "mealsModule.guestsSeeTheVoteOnly": "Los invitados pueden ver la votación familiar, pero no votar en ella.",
-  "remindersModule.completedNextUnconfirmed": "Recordatorio completado, pero no hemos podido confirmar el siguiente. Revisa tus recordatorios antes de añadir otro."
+  "remindersModule.completedNextUnconfirmed": "Recordatorio completado, pero no hemos podido confirmar el siguiente. Revisa tus recordatorios antes de añadir otro.",
+  "householdRoles.guestViewsOnly": "Los invitados pueden ver esto, pero no cambiarlo.",
+  "socialActions.notInYourPlan": "Las herramientas de redes sociales no forman parte del plan de tu familia.",
+  "socialActions.couldNotConfirmYourPlan": "Bubaly no ha podido confirmar tu plan en este momento. Inténtalo de nuevo dentro de un momento.",
+  "socialLeftConnected.title": "Las herramientas de redes sociales no están disponibles para tu familia en este momento",
+  "socialLeftConnected.body": "Estas cuentas siguen conectadas a Bubaly. Sea cual sea tu plan, puedes desconectarlas: al desconectar una, se quita y se borra el inicio de sesión que Bubaly guarda para ella.",
+  "socialLeftConnected.seePlans": "Ver planes"
 }

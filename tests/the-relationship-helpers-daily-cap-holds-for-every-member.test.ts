@@ -10,6 +10,14 @@
 // The count is now read with the service client, scoped to the family and the
 // action. Driven through the real route over the in-memory database, with the
 // member's own client hiding `audit_logs` the way RLS does.
+//
+// Since household-roles round 6 the meter's rows are the `ai_requests` rows the
+// route files for each digest (kind 'feature', feature 'relationship.digest',
+// settled 'completed'), not member-writable audit rows: see
+// tests/the-relationship-helpers-cap-counts-only-the-servers-records.test.ts.
+// The member's own client hides those from a non-manager here too (the held
+// 0493 lets one read only their own), so the count still has to be the
+// service client's.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
@@ -43,14 +51,14 @@ const NOW = new Date('2026-10-14T15:00:00Z');
 
 let db: InMemorySupabase;
 
-/** The member's own client: `audit_logs` reads only for a manager, as 0118's policy says. */
+/** The member's own client: `audit_logs` reads only for a manager (0118), and other members' `ai_requests` will (held 0493). */
 function ownClientFor(role: string): SupabaseClient<Database> {
   const hidden = createInMemorySupabase();
   const manager = role === 'parent' || role === 'adult';
   return new Proxy(db, {
     get(target, key, receiver) {
       if (key !== 'from') return Reflect.get(target, key, receiver);
-      return (table: string) => (table === 'audit_logs' && !manager ? hidden.from(table) : target.from(table));
+      return (table: string) => ((table === 'audit_logs' || table === 'ai_requests') && !manager ? hidden.from(table) : target.from(table));
     },
   }) as unknown as SupabaseClient<Database>;
 }
@@ -64,11 +72,15 @@ beforeEach(() => {
   h.complete.mockResolvedValue({ text: JSON.stringify({ headline: 'A date night idea', prompts: [], giftIdeas: [] }) });
   vi.spyOn(console, 'error').mockImplementation(() => {});
   db.seed('families', [{ id: FAMILY, name: 'Family A', timezone: 'UTC' }]);
+  // Family Basic, so the Free plan's monthly allowance (its own tests) does not
+  // refuse the control below over this month's twenty requests.
+  db.seed('subscriptions', [{ id: 'sub-a', family_id: FAMILY, plan: 'basic', status: 'active', current_period_end: '2099-01-01T00:00:00Z' }]);
   db.seed('relationship_profile', [{ id: 'profile-1', family_id: FAMILY, partner_name: 'Bea', partner_member_id: null, interests: [], love_languages: [], gift_budget_cents: null }]);
-  // Twenty digests already generated today — by the parents and anyone else.
-  db.seed('audit_logs', Array.from({ length: 20 }, (_, i) => ({
-    id: `00000000-0000-4000-8000-0000000a78${String(i).padStart(2, '0')}`, family_id: FAMILY, actor_id: `user-${i % 2 ? 'parent' : 'teen'}`,
-    action: 'relationship_ai_digest', resource: 'relationship', created_at: new Date(NOW.getTime() - (i + 1) * 60_000).toISOString(),
+  // Twenty digests already generated today — by the parents and anyone else:
+  // the request row the route filed for each.
+  db.seed('ai_requests', Array.from({ length: 20 }, (_, i) => ({
+    id: `00000000-0000-4000-8000-0000000a78${String(i).padStart(2, '0')}`, family_id: FAMILY, requested_by: `user-${i % 2 ? 'parent' : 'teen'}`,
+    kind: 'feature', feature: 'relationship.digest', status: 'completed', created_at: new Date(NOW.getTime() - (i + 1) * 60_000).toISOString(),
   })));
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
@@ -98,8 +110,8 @@ describe('the Relationship Helper’s daily cap', () => {
     h.role = 'teen';
     h.ownClient = ownClientFor('teen');
     // Yesterday's, and another family's, do not count.
-    for (const row of db.table('audit_logs').slice(0, 10)) row.created_at = '2026-10-13T12:00:00.000Z';
-    for (const row of db.table('audit_logs').slice(10, 11)) row.family_id = '00000000-0000-4000-8000-0000000a7702';
+    for (const row of db.table('ai_requests').slice(0, 10)) row.created_at = '2026-10-13T12:00:00.000Z';
+    for (const row of db.table('ai_requests').slice(10, 11)) row.family_id = '00000000-0000-4000-8000-0000000a7702';
 
     const res = await POST();
 

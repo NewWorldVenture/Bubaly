@@ -57,6 +57,16 @@ export const AI_ASSISTANT_FEATURE_KEY = 'ai-assistant';
  * assistant records its turns with the default kind `'feature'` (see
  * `withAiRequest`), so a meter that only counted concierge rows would have read
  * zero however much a family used Bubaly.
+ *
+ * One shape is left out: a concierge request still exactly as a member may file
+ * it (kind 'concierge', status 'queued'). 0255 lets a member insert that row and
+ * no other kind or status, with any created_at, and no policy lets a member
+ * update a request, so the only rows a member's own session can leave in this
+ * table have that shape and keep it. The intake moves a real request to
+ * 'planning' on the ledger client the moment it is filed (lib/ai/runs/intake.ts),
+ * before any model call, so a request still in that shape did no work either.
+ * Counting it let a child or a guest file ten queued requests dated 2100 and
+ * refuse their family's allowance every month from then on.
  */
 export { AI_MONTHLY_ALLOWANCE };
 
@@ -86,6 +96,29 @@ function monthStartIso(now: Date): string {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
 }
 
+/** The first instant of the next UTC month: the end of the window, as 0493's count bounds it. */
+function nextMonthStartIso(now: Date): string {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
+}
+
+/**
+ * Every row but a concierge request still in the shape a member's session may
+ * file (AI_MONTHLY_ALLOWANCE above): the server's records of the family's use.
+ * kind and status are NOT NULL (0250), so a PostgREST `neq` here is exact.
+ */
+const SERVER_RECORDED_REQUESTS = 'kind.neq.concierge,status.neq.queued';
+
+/**
+ * Every row but a call that failed before the model did any work: a failed
+ * call does not use up the month. withAiRequest (lib/ai/observability.ts) and
+ * the intake settle a provider error or a thrown call as status 'failed', so a
+ * Free family whose ten calls failed in an outage had lost its month. A failed
+ * row that recorded model usage (prompt_tokens, summed by recordModelCall) did
+ * cost a model call, and still counts. prompt_tokens is NULL until a call is
+ * recorded, and `gt` is not true on NULL, so such a row is left out.
+ */
+const CALLS_THAT_DID_WORK = 'status.neq.failed,prompt_tokens.gt.0';
+
 // `count_family_ai_requests_month` arrives with held migration 0493. Until a
 // database has it, the allowance is counted as the previous release counted it:
 // a direct `ai_requests` count under the caller's RLS. Recognised only from the
@@ -95,6 +128,10 @@ function monthStartIso(now: Date): string {
 // PostgREST's schema cache, so applying 0493 must be followed by a cache reload
 // (`NOTIFY pgrst, 'reload schema'`): until then this fallback keeps counting
 // directly, and under 0493's private-read RLS that count misses private rows.
+// 0493's function as held counts EVERY row of the month, a member's queued
+// concierge filing and a call that failed before any model work included; it
+// is to leave both out before it is applied, as the direct count below does
+// (an owner action: this code cannot filter what a count-only function returns).
 const MONTHLY_COUNT_RPC = 'count_family_ai_requests_month';
 const MONTHLY_COUNT_MIGRATION = 'supabase/reserved/0493_ai_copy_private_read_and_quota.sql';
 let warnedMissingMonthlyCount = false;
@@ -266,15 +303,23 @@ async function meterMonthlyAllowance(
     count = result.data;
     countError = result.error;
     if (isMissingMonthlyCountRpc(countError)) {
-      // Held migration 0493 is not on this database yet: count the way the
-      // previous release did. Only that exact missing-function answer lands
-      // here; every other RPC failure still fails closed below.
+      // Held migration 0493 is not on this database yet: count directly, as
+      // the previous release did, but only the server's records and only this
+      // month. Only that exact missing-function answer lands here; every other
+      // RPC failure still fails closed below. The month's end bounds the window
+      // as 0493's function does; with the member-filed shape left out, nothing
+      // still counted can carry a date the server did not give it (created_at
+      // defaults to now(), and only a member's insert chooses it).
       warnMissingMonthlyCountRpc();
       const legacy = await opts.db
         .from('ai_requests')
         .select('id', { count: 'exact', head: true })
         .eq('family_id', familyId)
-        .gte('created_at', monthStartIso(now));
+        .gte('created_at', monthStartIso(now))
+        .lt('created_at', nextMonthStartIso(now))
+        .or(SERVER_RECORDED_REQUESTS)
+        // A second `or` ANDs with the first: both must hold.
+        .or(CALLS_THAT_DID_WORK);
       // No `?? 0`: a head count with no error and no count (supabase-js leaves
       // `count` null when Content-Range does not come back) is an unread
       // count, not an empty month. It fails closed below, as a null RPC

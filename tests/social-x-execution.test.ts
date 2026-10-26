@@ -12,6 +12,15 @@ vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => ({ user:
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key === 'socialX.callbackInvalid' && state.copy ? state.copy : key, getLocaleContext: async () => ({ locale: { code: 'en-US' } }) }));
 vi.mock('next/headers', () => ({ cookies: async () => ({ set: (_key: string, value: string, options: Record<string, unknown>) => { state.cookie = value; state.options = options; } }) }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+// The family's plan is a controlled boundary here: these cases are about the
+// flows behind it. tests/social-is-the-familys-plan-and-the-members-role.test.ts
+// drives the real plan check for the actions and the pages, and
+// tests/social-scheduled-publish.test.ts for the drain.
+vi.mock('@/lib/server/feature-entitlement', () => ({
+  resolveFeatureEntitlement: async () => ({ allowed: true, planLevel: 1 }),
+  familyHasFeature: async () => true,
+  getFeatureTiersByHref: async () => ({}),
+}));
 import { connectAccountAction, disconnectAccountAction, createPostAction, retryPublishAction } from '@/app/(app)/dashboard/social/actions';
 import { GET } from '@/app/api/social/x/callback/route';
 import { getConnector, type ConnectorPublishInput } from '@/lib/social/connectors';

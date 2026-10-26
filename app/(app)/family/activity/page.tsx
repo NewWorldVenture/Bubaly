@@ -6,7 +6,8 @@ import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { SectionCard, MiniEmpty } from '@/components/family/shell';
 import { ErrorState } from '@/components/ui/states';
-import { describeTrail, type TrailRow } from '@/lib/activity/trail';
+import { describeTrail, type ReopenRecordRow, type TrailRow } from '@/lib/activity/trail';
+import { ACCOUNT_REOPENED_ACTION } from '@/lib/family/account-reopened';
 import { getFormat } from '@/lib/utils/format-server';
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -36,7 +37,12 @@ export default async function FamilyActivityPage() {
   // There was none here, so a failed read rendered "No activity recorded yet"
   // over the family's audit trail: the one screen whose whole purpose is to say
   // what happened, saying nothing happened.
-  const [{ data: logs, error: logsError }, { data: members }] = await settleAll([
+  //
+  // The reopen records are the server's ledger (social_audit_logs, which no
+  // member writes): the trail's reopen entry is credited to the parent it names
+  // only beside one (lib/activity/trail.ts). Unreadable, none is, and the
+  // entry reads "Someone" rather than a parent a member's row may have named.
+  const [{ data: logs, error: logsError }, { data: members }, { data: reopens, error: reopensError }] = await settleAll([
     supabase
       .from('audit_logs')
       .select('id, action, resource, resource_id, metadata, created_at, actor_id')
@@ -47,12 +53,21 @@ export default async function FamilyActivityPage() {
       .from('family_members')
       .select('user_id, display_name')
       .eq('family_id', ctx.active.familyId),
+    supabase
+      .from('social_audit_logs')
+      .select('metadata, created_at')
+      .eq('family_id', ctx.active.familyId)
+      .eq('action', ACCOUNT_REOPENED_ACTION)
+      .order('created_at', { ascending: false })
+      .order('id')
+      .limit(60),
   ]);
+  if (reopensError) console.error('[family-activity] reopen records unavailable; no reopen is credited', reopensError);
 
   const nameByUserId = new Map(
     (members ?? []).filter((m) => m.user_id && m.display_name).map((m) => [m.user_id as string, m.display_name as string]),
   );
-  const lines = describeTrail((logs ?? []) as TrailRow[], nameByUserId);
+  const lines = describeTrail((logs ?? []) as TrailRow[], nameByUserId, (reopens ?? []) as ReopenRecordRow[]);
 
   return (
     <div className="space-y-5">

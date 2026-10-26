@@ -44,8 +44,10 @@ export function CareerModule() {
   const askConfirm = useConfirm();
   // Money follows the reader; the currency stays the money's own.
   const money = (cents: number | null | undefined) => moneyIn(cents, locale.code);
-  const { familyId, userId, members, selfMember } = useApp();
+  const { familyId, userId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
+  // A guest views the household's job searches and does not keep them (0464).
+  const readOnly = role === 'guest';
 
   const profiles = useRealtimeQuery<Profile>({
     table: 'career_profiles', familyId,
@@ -189,10 +191,10 @@ export function CareerModule() {
               : a.next_step ? <p className="mt-1 text-xs text-muted">Next: {a.next_step}{a.next_step_on ? ` · ${fmtDate(a.next_step_on)}` : ''}</p> : null}
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
-            {next && OPEN_STAGES.includes(a.stage) && <Button size="sm" variant="secondary" onClick={() => moveStage(a, next.value)}><ArrowRight className="h-3.5 w-3.5" /> {next.label}</Button>}
+            {!readOnly && next && OPEN_STAGES.includes(a.stage) && <Button size="sm" variant="secondary" onClick={() => moveStage(a, next.value)}><ArrowRight className="h-3.5 w-3.5" /> {next.label}</Button>}
             {a.url && <a href={safeWebLink(a.url) ?? undefined} target="_blank" rel="noreferrer" aria-label={tr('career.openPosting')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ExternalLink className="h-4 w-4" /></a>}
-            <button onClick={() => setAppForm({ open: true, application: a })} aria-label={tr('itemAction.edit', { name: a.company })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-            <button onClick={() => deleteApplication(a)} aria-label={tr('itemAction.delete', { name: a.company })} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
+            {!readOnly && <button onClick={() => setAppForm({ open: true, application: a })} aria-label={tr('itemAction.edit', { name: a.company })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>}
+            {!readOnly && <button onClick={() => deleteApplication(a)} aria-label={tr('itemAction.delete', { name: a.company })} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>}
           </div>
         </div>
       </li>
@@ -207,15 +209,15 @@ export function CareerModule() {
         action={
           <div className="flex flex-wrap items-center gap-2">
             <AiInsight kind="career" iconOnly />
-            {profile && <Button variant="secondary" onClick={() => setResumeForm({ open: true, resume: null })}><FileText className="h-4 w-4" /> {tr('career.resume')}</Button>}
-            {profile && <Button onClick={() => setAppForm({ open: true, application: null })}><Plus className="h-4 w-4" /> {tr('career.application')}</Button>}
-            <Button variant={profile ? 'ghost' : 'primary'} onClick={() => setProfileForm({ open: true, profile: null })}><Briefcase className="h-4 w-4" /> {profile ? 'New search' : 'Start a search'}</Button>
+            {profile && !readOnly && <Button variant="secondary" onClick={() => setResumeForm({ open: true, resume: null })}><FileText className="h-4 w-4" /> {tr('career.resume')}</Button>}
+            {profile && !readOnly && <Button onClick={() => setAppForm({ open: true, application: null })}><Plus className="h-4 w-4" /> {tr('career.application')}</Button>}
+            {!readOnly && <Button variant={profile ? 'ghost' : 'primary'} onClick={() => setProfileForm({ open: true, profile: null })}><Briefcase className="h-4 w-4" /> {profile ? 'New search' : 'Start a search'}</Button>}
           </div>
         }
       />
 
       {profiles.data.length === 0 || !profile || !stats || !salary ? (
-        <EmptyState icon={Briefcase} title={tr('career.noCareerProfilesYet')} description={tr('careerModule.startWithWhoIsLooking')} action={<Button onClick={() => setProfileForm({ open: true, profile: null })}><Briefcase className="h-4 w-4" /> {tr('career.startAProfile')}</Button>} />
+        <EmptyState icon={Briefcase} title={tr('career.noCareerProfilesYet')} description={tr('careerModule.startWithWhoIsLooking')} action={readOnly ? undefined : <Button onClick={() => setProfileForm({ open: true, profile: null })}><Briefcase className="h-4 w-4" /> {tr('career.startAProfile')}</Button>} />
       ) : (
         <>
           {(profiles.data.length > 1) && (
@@ -238,11 +240,11 @@ export function CareerModule() {
                 {profile.target_roles.length > 0 && <p className="mt-1 text-xs text-muted"><Target className="mr-1 inline h-3 w-3" />{profile.target_roles.join(' · ')}</p>}
                 {profile.skills.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{profile.skills.slice(0, 14).map((s) => <span key={s} className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted">{s}</span>)}{profile.skills.length > 14 ? <span className="text-[11px] text-muted">+{profile.skills.length - 14}</span> : null}</div>}
               </div>
-              <div className="flex items-center gap-1">
+              {!readOnly && <div className="flex items-center gap-1">
                 <button onClick={() => archiveProfile(profile, !profile.is_active)} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-fg">{profile.is_active ? 'Archive search' : 'Reopen'}</button>
                 <button onClick={() => setProfileForm({ open: true, profile })} aria-label={tr('career.editProfile')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
                 <button onClick={() => deleteProfile(profile)} aria-label={tr('career.deleteProfile')} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
-              </div>
+              </div>}
             </div>
           </div>
 
@@ -278,7 +280,7 @@ export function CareerModule() {
 
           {tab === 'pipeline' && (
             myApps.length === 0 ? (
-              <EmptyState icon={Briefcase} title={tr('career.nothingInThePipeline')} description={tr('careerModule.saveTheRolesWorthApplying')} action={<Button onClick={() => setAppForm({ open: true, application: null })}><Plus className="h-4 w-4" /> {tr('career.firstApplication')}</Button>} />
+              <EmptyState icon={Briefcase} title={tr('career.nothingInThePipeline')} description={tr('careerModule.saveTheRolesWorthApplying')} action={readOnly ? undefined : <Button onClick={() => setAppForm({ open: true, application: null })}><Plus className="h-4 w-4" /> {tr('career.firstApplication')}</Button>} />
             ) : (
               <div className="space-y-5">
                 {nudges.length > 0 && (
@@ -304,7 +306,7 @@ export function CareerModule() {
 
           {tab === 'resumes' && (
             myResumes.length === 0 ? (
-              <EmptyState icon={FileText} title={tr('career.noResumeVersions')} description={tr('careerModule.pasteTheResumeTextAnd')} action={<Button onClick={() => setResumeForm({ open: true, resume: null })}><FileText className="h-4 w-4" /> {tr('career.addAResume')}</Button>} />
+              <EmptyState icon={FileText} title={tr('career.noResumeVersions')} description={tr('careerModule.pasteTheResumeTextAnd')} action={readOnly ? undefined : <Button onClick={() => setResumeForm({ open: true, resume: null })}><FileText className="h-4 w-4" /> {tr('career.addAResume')}</Button>} />
             ) : (
               <ul className="grid gap-3 md:grid-cols-2">
                 {myResumes.map((r) => {
@@ -318,11 +320,11 @@ export function CareerModule() {
                           <p className="text-xs text-muted">{r.target_role ?? 'General'} · {ats.wordCount} {tr('career.words')} {ats.matched.length}/{r.keywords.length} keywords</p>
                           {ats.hints.length > 0 && <ul className="mt-2 space-y-0.5 text-xs text-muted">{ats.hints.slice(0, 3).map((h) => <li key={h}>· {h}</li>)}</ul>}
                         </div>
-                        <div className="flex shrink-0 items-center gap-0.5">
+                        {!readOnly && <div className="flex shrink-0 items-center gap-0.5">
                           {!r.is_primary && <button onClick={() => setPrimary(r)} aria-label={tr('career.makePrimary')} title={tr('career.makePrimary')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Star className="h-4 w-4" /></button>}
                           <button onClick={() => setResumeForm({ open: true, resume: r })} aria-label={tr('itemAction.edit', { name: r.title })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
                           <button onClick={() => deleteResume(r)} aria-label={tr('itemAction.delete', { name: r.title })} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
-                        </div>
+                        </div>}
                       </div>
                     </li>
                   );

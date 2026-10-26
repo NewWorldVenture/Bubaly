@@ -19,10 +19,11 @@ import type { Database } from '@/lib/database.types';
 import { archiveStaleSuggestions } from '@/lib/autopilot/history';
 import { getTool } from '@/lib/ai/tools/registry';
 import {
-  findPolicyCandidates, policyCandidateToDraft, toolNameFromApprovalPayload,
+  findPolicyCandidates, policyCandidateToDraft, policyDedupeKey, toolNameFromApprovalPayload,
   POLICY_SUGGESTION_KIND, POLICY_WINDOW_DAYS,
   type ApprovalHistoryRow, type ExistingAiPolicy, type PolicyCandidate, type ToolCallHistoryRow,
 } from '@/lib/autopilot/policy-candidates';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
@@ -57,7 +58,8 @@ function canonicalToolName(name: string | null): string | null {
  */
 export async function loadPolicyHistory(supabase: DB, familyId: string, now: Date, windowDays = POLICY_WINDOW_DAYS): Promise<PolicyHistory> {
   const sinceIso = new Date(now.getTime() - windowDays * 86400000).toISOString();
-  const [approvalsResult, toolCallsResult, policiesResult, suggestionsResult] = await settleAll([
+  const suggestionColumns = 'id, dedupe_key, status, detail, confidence, updated_at';
+  const [approvalsResult, toolCallsResult, policiesResult, openResult] = await settleAll([
     supabase.from('approval_requests')
       .select('id, domain, capability, status, decided_at, requested_by_kind, payload, payload_kind')
       .eq('family_id', familyId).eq('requested_by_kind', 'ai')
@@ -72,29 +74,58 @@ export async function loadPolicyHistory(supabase: DB, familyId: string, now: Dat
     supabase.from('trust_policies')
       .select('id, domain, capability, effect, enabled, conditions')
       .eq('family_id', familyId).in('subject_kind', ['ai', 'everyone']).eq('enabled', true).limit(200),
+    // The OPEN offers, so one whose streak broke is withdrawn: ordered and
+    // bounded, oldest id first. Any member may file a 'policy' card (0085,
+    // 0327), so this page can be crowded by planted ones; they are withdrawn
+    // with the rest, a page a scan, and the offers this history supports are
+    // read by key below, where nobody can crowd them.
     supabase.from('autopilot_suggestions')
-      .select('id, dedupe_key, status, detail, confidence, updated_at')
-      .eq('family_id', familyId).eq('kind', POLICY_SUGGESTION_KIND).not('dedupe_key', 'like', 'archived:%').limit(200),
+      .select(suggestionColumns)
+      .eq('family_id', familyId).eq('kind', POLICY_SUGGESTION_KIND).eq('status', 'open')
+      .not('dedupe_key', 'like', 'archived:%').order('id').limit(200),
   ]);
 
-  const failed = [approvalsResult, toolCallsResult, policiesResult, suggestionsResult].find((r) => r.error);
+  const failed = [approvalsResult, toolCallsResult, policiesResult, openResult].find((r) => r.error);
   if (failed) {
     console.error('[autopilot] policy scan read failed', failed.error);
     throw new Error('Autopilot could not read the approval history');
   }
 
+  const approvals: ApprovalHistoryRow[] = (approvalsResult.data ?? []).map((r) => ({
+    id: r.id,
+    domain: r.domain,
+    capability: r.capability,
+    status: r.status,
+    decidedAt: r.decided_at,
+    requestedByKind: r.requested_by_kind,
+    // Only a row that names one tool can become a per-tool policy; plan and
+    // concierge approvals resolve to null and are ignored by the finder.
+    toolName: r.payload_kind && r.payload_kind !== 'tool' ? null : canonicalToolName(toolNameFromApprovalPayload(r.payload)),
+  }));
+
+  // Every row under a key this history could offer, whatever its status, read
+  // BY KEY: (family_id, dedupe_key) is unique (0085), so this is at most one
+  // row a key. It used to be one unordered `.limit(200)` page of every policy
+  // card, which a member's two hundred planted cards filled: the scan then
+  // missed its own open offer, inserted it again and failed on the unique key,
+  // every scan. A card a member filed under one of these keys, dismissed, is
+  // respected like any member's dismissal: every member may dismiss a card
+  // the family is shown (lib/services/autopilot resolveSuggestion), so filing
+  // it ahead does nothing a child could not do the moment it was offered.
+  const offerKeys = [...new Set(approvals.flatMap((a) => (a.toolName ? [policyDedupeKey(a.domain, a.capability, a.toolName)] : [])))];
+  const keyed = await readInChunks<NonNullable<typeof openResult.data>[number], { message: string }>(offerKeys, (chunk) => supabase
+    .from('autopilot_suggestions')
+    .select(suggestionColumns)
+    .eq('family_id', familyId).eq('kind', POLICY_SUGGESTION_KIND)
+    .in('dedupe_key', chunk), 50);
+  if (keyed.error) {
+    console.error('[autopilot] policy scan read failed', keyed.error);
+    throw new Error('Autopilot could not read the approval history');
+  }
+  const suggestions = new Map([...(openResult.data ?? []), ...keyed.data].map((s) => [s.id, s]));
+
   return {
-    approvals: (approvalsResult.data ?? []).map((r) => ({
-      id: r.id,
-      domain: r.domain,
-      capability: r.capability,
-      status: r.status,
-      decidedAt: r.decided_at,
-      requestedByKind: r.requested_by_kind,
-      // Only a row that names one tool can become a per-tool policy; plan and
-      // concierge approvals resolve to null and are ignored by the finder.
-      toolName: r.payload_kind && r.payload_kind !== 'tool' ? null : canonicalToolName(toolNameFromApprovalPayload(r.payload)),
-    })),
+    approvals,
     toolCalls: (toolCallsResult.data ?? []).map((r) => ({
       toolName: canonicalToolName(r.tool_name) ?? r.tool_name,
       state: r.state,
@@ -103,7 +134,7 @@ export async function loadPolicyHistory(supabase: DB, familyId: string, now: Dat
     existingPolicies: (policiesResult.data ?? []).map((p) => ({
       domain: p.domain, capability: p.capability, effect: p.effect, enabled: p.enabled, conditions: p.conditions,
     })),
-    existingSuggestions: (suggestionsResult.data ?? []).map((s) => ({
+    existingSuggestions: [...suggestions.values()].map((s) => ({
       id: s.id, dedupe_key: s.dedupe_key, status: s.status, detail: s.detail, confidence: s.confidence,
       updated_at: s.updated_at ?? null,
     })),

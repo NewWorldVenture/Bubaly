@@ -13758,6 +13758,7 @@
   "socialSchedule.accessUnavailable": "Die Einstellungen oder Zugriffsrechte konnten nicht geprüft werden. Aktualisieren Sie die Seite und versuchen Sie es erneut.",
   "socialSchedule.approvalRequired": "Die Veröffentlichung ist angehalten, da eine bestätigte Freigabe erforderlich ist.",
   "socialSchedule.awaitingConfirmation": "Die Veröffentlichung konnte nicht bestätigt werden. Prüfen Sie den Beitrag, bevor Sie ihn erneut senden.",
+  "socialSchedule.cameDueWhileClosed": "Dieser Beitrag wurde nicht veröffentlicht: Er war fällig, während das Konto Ihrer Familie geschlossen war. Prüfen Sie ihn, bevor Sie ihn jetzt veröffentlichen.",
   "socialSchedule.changed": "Dieser Beitrag oder seine Konten wurden nach der Planung geändert. Prüfen Sie ihn vor der Veröffentlichung.",
   "socialSchedule.clockChange": "Diese Uhrzeit wird bei der Zeitumstellung übersprungen oder tritt zweimal auf. Wählen Sie eine andere Uhrzeit.",
   "socialSchedule.instant": "Veröffentlichungszeit in UTC: {instant}",
@@ -13768,6 +13769,7 @@
   "socialSchedule.noPermissionToDraft": "Du hast keine Berechtigung, Beitragsentwürfe zu erstellen.",
   "socialSchedule.noPermissionToPublish": "Du hast keine Berechtigung, Beiträge zu veröffentlichen.",
   "socialSchedule.noPermissionToSchedule": "Du hast keine Berechtigung, Beiträge zu planen.",
+  "socialSchedule.notInPlan": "Dieser Beitrag wurde nicht veröffentlicht: Als er fällig war, gehörten die Social-Media-Tools nicht zum Tarif Ihrer Familie. Prüfen Sie ihn, bevor Sie ihn jetzt veröffentlichen.",
   "socialSchedule.pastTime": "Wählen Sie einen Zeitpunkt in der Zukunft.",
   "socialSchedule.permissionDenied": "Sie haben keine Berechtigung, diesen geplanten Beitrag zu veröffentlichen.",
   "socialSchedule.queued": "Zur Veröffentlichung eingeplant",
@@ -17195,5 +17197,11 @@
   "medicationsModule.otherMembersDosesAreKeptByManagers": "Die Einnahmen der anderen Mitglieder erfassen und verfolgen die Eltern und Erwachsenen Ihrer Familie.",
   "nutrition.aGuestSeesSavedEstimatesOnly": "Gäste sehen eine gespeicherte Nährwertschätzung, können aber keine neue anfordern. Bitten Sie ein Familienmitglied, sie zu analysieren.",
   "mealsModule.guestsSeeTheVoteOnly": "Gäste sehen die Familienabstimmung, können aber nicht mit abstimmen.",
-  "remindersModule.completedNextUnconfirmed": "Erinnerung erledigt, aber die nächste Erinnerung konnte nicht bestätigt werden. Prüfe deine Erinnerungen, bevor du eine weitere hinzufügst."
+  "remindersModule.completedNextUnconfirmed": "Erinnerung erledigt, aber die nächste Erinnerung konnte nicht bestätigt werden. Prüfe deine Erinnerungen, bevor du eine weitere hinzufügst.",
+  "householdRoles.guestViewsOnly": "Gäste können das ansehen, aber nicht ändern.",
+  "socialActions.notInYourPlan": "Die Social-Media-Tools sind nicht Teil des Tarifs Ihrer Familie.",
+  "socialActions.couldNotConfirmYourPlan": "Bubaly konnte Ihren Tarif gerade nicht bestätigen. Versuchen Sie es gleich noch einmal.",
+  "socialLeftConnected.title": "Die Social-Media-Tools sind für Ihre Familie gerade nicht verfügbar",
+  "socialLeftConnected.body": "Diese Konten sind noch mit Bubaly verbunden. Sie können sie unabhängig von Ihrem Tarif trennen: Beim Trennen wird das Konto entfernt und die Anmeldung gelöscht, die Bubaly dafür speichert.",
+  "socialLeftConnected.seePlans": "Tarife ansehen"
 }

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { labelledGroup } from '@/lib/ui/a11y';
 import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
@@ -21,7 +21,12 @@ export const dynamic = 'force-dynamic';
 
 export default async function SocialSettingsPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  // The plan, here as well as in the layout (household-roles N2-R1-payload).
+  // The layout shows a family without Social only the accounts it may still
+  // disconnect, but a page renders beside its layout, not inside it: the
+  // page's own data went out in the response all the same. A refusal here
+  // ships nothing of it; for a family with Social nothing changes.
+  const ctx = await requireFeature('/dashboard/social');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 

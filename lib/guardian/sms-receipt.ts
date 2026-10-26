@@ -238,13 +238,16 @@ async function verifyCompletion(client: Client, receipt: GuardianSmsReceipt, sig
   // notifications legitimately share the communication — an emergency
   // escalation's push, a screened call's "📞 Call from …" — and reading one of
   // them as a mismatched copy of this notice failed every completion for ever.
+  // Family-wide rows only, as notifyGuardianSms reads them: a member's session
+  // can file rows addressed only to themselves (0388), and theirs under this
+  // communication are never this notice.
   const preview = input.body.length > 100 ? `${input.body.slice(0, 100)}…` : input.body;
   const sender = decision.from_name ?? formatPhone(input.from);
   const title = (emergency ? `🚨 Emergency text from ${sender}` : `💬 Text from ${sender}`).trim();
   const related = relatedRows(await request(signal, () => client.from('notifications')
     .select('id,family_id,user_id,type,title,body,related_type,related_id', { count: 'exact' })
     .eq('family_id', input.familyId).eq('related_type', 'guardian_communications').eq('related_id', communicationId)
-    .limit(RELATED_NOTIFICATIONS).retry(false).abortSignal(signal)));
+    .is('user_id', null).limit(RELATED_NOTIFICATIONS).retry(false).abortSignal(signal)));
   const mine = related.filter(row => row.title === title);
   if (mine.length !== 1) return unavailable();
   const notification = mine[0];

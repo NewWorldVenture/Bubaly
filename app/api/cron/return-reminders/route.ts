@@ -7,7 +7,7 @@ import { needsDueReminder, needsOverdueAlert, daysUntilDue } from '@/lib/marketp
 import { deliveryTimeFor, notify } from '@/lib/services/notifications';
 import { dayKeyInTz, systemScopeForFamily } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
-import { readInChunks } from '@/lib/supabase/chunked-in';
+import { readAllInChunks, readInChunks } from '@/lib/supabase/chunked-in';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -24,6 +24,11 @@ export const maxDuration = 120;
 // and never be nudged, while the run answered 200. See lib/supabase/read-all.ts
 // for why `.limit()` is not a bound either.
 const MAX_OPEN_ORDERS = 5000;
+/**
+ * How long a stamp is taken as another run's claim whose send may still be in
+ * flight, whether or not its notice is there yet: twice a run's maxDuration.
+ */
+const CLAIM_HELD_MS = 2 * maxDuration * 1000;
 
 export async function GET(req: NextRequest) {
   const t = await getTranslations();
@@ -85,20 +90,44 @@ export async function GET(req: NextRequest) {
       readDays.set(scope.familyId, day);
       return day;
     };
-    // An overdue notice, worded for the day it is read on.
+    // An overdue notice, worded for the day it is read on. Its title is how the
+    // stamp check below knows a due nudge read late said "Overdue" too.
+    const OVERDUE_TITLE = 'Overdue: ';
     const overdueWords = (title: string, verb: string, late: number) => ({
-      title: `Overdue: "${title}"`,
+      title: `${OVERDUE_TITLE}"${title}"`,
       body: `This ${verb} was due ${late} day${late === 1 ? '' : 's'} ago. Arrange the return so it doesn't hold anyone up.`,
     });
     // The dedupe stamp is a CLAIM taken before the send, not a receipt written
     // after it: fenced on the column being unset, so of two overlapping runs
     // only one sends, and handed back if the send did not go out, so the next
     // run tries again rather than finding the order stamped and nobody told.
+    //
+    // A stamp already set is not always the cron's. Either party of an order
+    // may update it (0483's marketplace_orders_update) and 0433's trigger
+    // freezes neither stamp, so a borrower could set overdue_notified_at
+    // ahead of the due day and the lender's family was never told. A set
+    // stamp therefore counts only when the order's family holds the cron's
+    // notice for it (`told`, below), or while it may be another run's claim
+    // still being sent (dated within CLAIM_HELD_MS of now). One that is
+    // neither is taken again, fenced on the value this run read rather than
+    // on the column being unset.
     type StampColumn = 'due_reminder_sent_at' | 'overdue_notified_at';
+    type Stamped = { id: string; family_id: string; buyer_member: string | null; seller_member: string | null } & Record<StampColumn, string | null>;
+    // Until the check below has run: the stamps as written.
+    let told: (o: Stamped, column: StampColumn) => boolean = () => true;
+    const held = (stamp: string) => Math.abs(Date.parse(stamp) - now.getTime()) < CLAIM_HELD_MS;
+    /** Whether a stamp that is set stands: the cron's own, as far as anything shows. */
+    const stands = (o: Stamped, column: StampColumn) => held(o[column] ?? '') || told(o, column);
     const stampPatch = (column: StampColumn, value: string | null): Partial<Record<StampColumn, string | null>> => ({ [column]: value });
     const claimStamp = async (column: StampColumn, orderId: string): Promise<'claimed' | 'taken' | 'error'> => {
-      const { data: claimed, error } = await admin.from('marketplace_orders')
-        .update(stampPatch(column, nowIso)).eq('id', orderId).is(column, null).select('id');
+      const order = due?.find((o) => o.id === orderId);
+      const observed = order?.[column] ?? null;
+      if (order && observed !== null && stands(order, column)) return 'taken';
+      const { data: claimed, error } = await (observed === null
+        ? admin.from('marketplace_orders')
+          .update(stampPatch(column, nowIso)).eq('id', orderId).is(column, null).select('id')
+        : admin.from('marketplace_orders')
+          .update(stampPatch(column, nowIso)).eq('id', orderId).eq(column, observed).select('id'));
       if (error) {
         console.error(`Return-reminders ${column} claim failed for ${orderId}:`, error);
         return 'error';
@@ -119,7 +148,7 @@ export async function GET(req: NextRequest) {
     // two orders sharing a due date cannot skip or repeat one.
     const { rows: due, error } = await readAll((from, to) => admin
       .from('marketplace_orders')
-      .select('id, family_id, listing_id, buyer_member, kind, status, ends_on, due_reminder_sent_at, overdue_notified_at, returned_at')
+      .select('id, family_id, listing_id, buyer_member, seller_member, kind, status, ends_on, due_reminder_sent_at, overdue_notified_at, returned_at')
       .in('kind', ['rent', 'borrow']).in('status', ['confirmed', 'active'])
       .not('ends_on', 'is', null)
       .order('ends_on', { ascending: true })
@@ -149,10 +178,60 @@ export async function GET(req: NextRequest) {
     const titleOf = new Map((listings ?? []).map((l) => [l.id, l.title]));
 
     let reminded = 0, overdue = 0, failed = 0;
+
+    // Whose stamps are these? Only for orders a stamp could decide today: set,
+    // and due within the nudge window on any family's day (two days, plus one
+    // for the zones either side of UTC) or overdue. The cron's notices go to
+    // the order's family, the seller's (0483), one row per member with a
+    // login (notify()). A member can file a notice only in a family of their
+    // own and only addressed to themselves (0388's notif_insert), so a notice
+    // there that is whole-family or addressed to someone other than the two
+    // parties is the cron's. A party's own row is taken as the cron's only
+    // when the family has nobody else to tell. A due nudge read after the due
+    // day said "Overdue" (and before the alert had an identity of its own,
+    // the order's id carried it), so either counts for the overdue stamp.
+    const utcToday = dayKeyInTz(now, 'UTC');
+    const stamped = (due ?? []).filter((o) => (o.due_reminder_sent_at || o.overdue_notified_at)
+      && (daysUntilDue(o.ends_on, utcToday) ?? Infinity) <= 3);
+    if (stamped.length) {
+      const families = [...new Set(stamped.map((o) => o.family_id))];
+      const identities = stamped.flatMap((o) => [o.id, `${o.id}:due`, `${o.id}:overdue`]);
+      const { data: members, error: memberError } = await readAllInChunks<
+        { id: string; family_id: string; user_id: string | null }
+      >(families, (chunk, from, to) => admin.from('family_members')
+        .select('id, family_id, user_id').in('family_id', chunk).eq('is_active', true).order('id').range(from, to));
+      const { data: notices, error: noticeError } = await readAllInChunks<
+        { id: string; family_id: string; user_id: string | null; related_id: string | null; title: string | null }
+      >(identities, (chunk, from, to) => admin.from('notifications')
+        .select('id, family_id, user_id, related_id, title').eq('related_type', 'marketplace_orders').in('related_id', chunk)
+        .order('id').range(from, to));
+      if (memberError || noticeError || !members || !notices) {
+        // Going by the stamps as written, as before this check, and the run
+        // reports it rather than reading as a clean one.
+        console.error('Return-reminders stamp check failed:', memberError ?? noticeError);
+        failed++;
+      } else {
+        const checked = new Set(stamped.map((o) => o.id));
+        told = (o, column) => {
+          if (!checked.has(o.id)) return true;
+          const parties = new Set([o.buyer_member, o.seller_member]);
+          const others = new Set(members
+            .filter((m) => m.family_id === o.family_id && m.user_id && !parties.has(m.id)).map((m) => m.user_id));
+          const own = column === 'due_reminder_sent_at' ? `${o.id}:due` : `${o.id}:overdue`;
+          return notices.some((n) => n.family_id === o.family_id
+            && (!n.user_id || others.size === 0 || others.has(n.user_id))
+            && (n.related_id === own || (column === 'overdue_notified_at'
+              && (n.related_id === `${o.id}:due` || n.related_id === o.id) && (n.title ?? '').startsWith(OVERDUE_TITLE))));
+        };
+      }
+    }
+    /** The stamp if it stands, else null: one the family was not told about is no stamp. */
+    const spent = (o: Stamped, column: StampColumn) => (o[column] && stands(o, column) ? o[column] : null);
+
     for (const o of due ?? []) {
       const order = {
         kind: o.kind, status: o.status, endsOn: o.ends_on, returnedAt: o.returned_at,
-        dueReminderSentAt: o.due_reminder_sent_at, overdueNotifiedAt: o.overdue_notified_at,
+        dueReminderSentAt: spent(o, 'due_reminder_sent_at'), overdueNotifiedAt: spent(o, 'overdue_notified_at'),
       };
       const title = titleOf.get(o.listing_id) ?? 'a borrowed item';
       const verb = o.kind === 'rent' ? 'rental' : 'borrowed item';
@@ -214,7 +293,9 @@ export async function GET(req: NextRequest) {
             title: `Due ${d === 0 ? 'today' : `in ${d} day${d === 1 ? '' : 's'}`}: "${title}"`,
             body: `Time to return this ${verb}. Tap to see the exchange details.`,
           }),
-          relatedType: 'marketplace_orders', relatedId: `${o.id}:due`,
+          // Sent again for a stamp the family was not told about (spent):
+          // to nobody who already holds the nudge, read or not.
+          relatedType: 'marketplace_orders', relatedId: `${o.id}:due`, once: Boolean(o.due_reminder_sent_at),
         });
         if (!notified) {
           console.error(`Return-reminders due notification failed for ${o.id}`);

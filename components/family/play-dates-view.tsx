@@ -4,8 +4,7 @@ import { useMemo, useState } from 'react';
 import { Heart, Plus, Trash2, MapPin, Clock, Phone, Users } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
-import { createClient } from '@/lib/supabase/client';
-import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
+import { isManager } from '@/lib/constants/roles';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -17,6 +16,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { splitPlayDates, PLAY_DATE_STATUS, fmtDateTime as fmtDateTimeIn } from '@/lib/family/safety';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { createPlayDateAction, deletePlayDateAction, setPlayDateStatusAction } from '@/app/(app)/dashboard/family/play-dates/actions';
 
 type PlayDate = Tables<'play_dates'>;
 
@@ -27,9 +27,14 @@ export function PlayDatesView() {
   // The date and clock follow the reader.
   const locale = useLocale();
   const fmtDateTime = (iso: string) => fmtDateTimeIn(iso, locale.code);
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
+  // A guest views the family's play dates and does not arrange them (0464);
+  // calling one off or deleting it is a manager's or its author's. The server
+  // actions hold the same rules; these only stop offering what they refuse.
+  const readOnly = role === 'guest';
+  const canCallOff = (pd: PlayDate) => !readOnly && (isManager(role) || pd.created_by === userId);
 
   const { data: rows, loading, error, refresh } = useRealtimeQuery<PlayDate>({
     table: 'play_dates', familyId, deps: [familyId],
@@ -39,15 +44,21 @@ export function PlayDatesView() {
   const { upcoming, past } = useMemo(() => splitPlayDates(rows ?? []), [rows]);
   const [form, setForm] = useState(false);
 
+  // The writes are server actions (app/(app)/dashboard/family/play-dates/
+  // actions.ts). Each confirms the row it changed, so a refused or vanished
+  // play date answers "That change wasn't saved", never "Updated" (C1-S9-84).
   async function setStatus(pd: PlayDate, status: string) {
-    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-84.
-    const { data: updated2, error } = await createClient().from('play_dates').update({ status }).eq('id', pd.id).select('id');
-    if (error) toastError(describeDbError(error)); else if (wroteNoRows(updated2)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('playDatesView.updated'));
+    const res = await setPlayDateStatusAction(pd.id, status);
+    if (!res.ok) { toastError(res.error); return; }
+    success(t('playDatesView.updated'));
+    void refresh();
   }
   async function remove(id: string) {
     if (!confirm(t('playDatesView.deleteThisPlayDate'))) return;
-    const { data: removed, error } = await createClient().from('play_dates').delete().eq('id', id).select('id');
-    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('playDatesView.deleted'));
+    const res = await deletePlayDateAction(id);
+    if (!res.ok) { toastError(res.error); return; }
+    success(t('playDatesView.deleted'));
+    void refresh();
   }
 
   const Card = ({ pd }: { pd: PlayDate }) => {
@@ -73,11 +84,13 @@ export function PlayDatesView() {
           <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold', meta.tint)}>{meta.label}</span>
         </div>
         {pd.notes && <p className="mt-2 text-sm text-muted">{pd.notes}</p>}
-        <div className="mt-3 flex items-center gap-2">
-          {next && <Button size="sm" variant="outline" onClick={() => setStatus(pd, next)}>{t('playDates.mark')} {PLAY_DATE_STATUS[next].label.toLowerCase()}</Button>}
-          {pd.status !== 'cancelled' && pd.status !== 'completed' && <Button size="sm" variant="ghost" onClick={() => setStatus(pd, 'cancelled')}>{t('playDates.cancel')}</Button>}
-          <button onClick={() => remove(pd.id)} className="ml-auto rounded-lg p-1.5 text-muted transition hover:text-danger" aria-label={t('playDates.delete')}><Trash2 className="h-4 w-4" /></button>
-        </div>
+        {!readOnly && (
+          <div className="mt-3 flex items-center gap-2">
+            {next && <Button size="sm" variant="outline" onClick={() => setStatus(pd, next)}>{t('playDates.mark')} {PLAY_DATE_STATUS[next].label.toLowerCase()}</Button>}
+            {canCallOff(pd) && pd.status !== 'cancelled' && pd.status !== 'completed' && <Button size="sm" variant="ghost" onClick={() => setStatus(pd, 'cancelled')}>{t('playDates.cancel')}</Button>}
+            {canCallOff(pd) && <button onClick={() => remove(pd.id)} className="ml-auto rounded-lg p-1.5 text-muted transition hover:text-danger" aria-label={t('playDates.delete')}><Trash2 className="h-4 w-4" /></button>}
+          </div>
+        )}
       </div>
     );
   };
@@ -85,11 +98,11 @@ export function PlayDatesView() {
   return (
     <div className="module-page">
       <PageHeader title={t('playDates.playDates')} description={t('playDatesView.scheduleAndTrackTheKids')}
-        action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('playDates.schedulePlayDate')}</Button>} />
+        action={readOnly ? undefined : <Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('playDates.schedulePlayDate')}</Button>} />
 
       {loading ? <SkeletonList /> : error ? <ErrorState message={t('playDatesView.couldNotLoadPlayDates')} onRetry={refresh} /> : (rows ?? []).length === 0 ? (
         <EmptyState icon={Heart} title={t('playDates.noPlayDatesYet')} description={t('playDatesView.scheduleAPlayDateTo')}
-          action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('playDates.schedulePlayDate')}</Button>} />
+          action={readOnly ? undefined : <Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('playDates.schedulePlayDate')}</Button>} />
       ) : (
         <div className="space-y-6">
           <section>
@@ -106,12 +119,12 @@ export function PlayDatesView() {
         </div>
       )}
 
-      {form && <PlayDateModal members={members} familyId={familyId} userId={userId} onClose={() => setForm(false)} />}
+      {form && !readOnly && <PlayDateModal members={members} onClose={() => setForm(false)} onSaved={() => { void refresh(); }} />}
     </div>
   );
 }
 
-function PlayDateModal({ members, familyId, userId, onClose }: { members: Tables<'family_members'>[]; familyId: string; userId: string; onClose: () => void }) {
+function PlayDateModal({ members, onClose, onSaved }: { members: Tables<'family_members'>[]; onClose: () => void; onSaved: () => void }) {
   const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
@@ -121,15 +134,17 @@ function PlayDateModal({ members, familyId, userId, onClose }: { members: Tables
     e.preventDefault();
     if (!v.title.trim() || !v.starts_at) return toastError(t('playDatesView.addATitleAndDate'));
     setSaving(true);
-    const { error } = await createClient().from('play_dates').insert({
-      family_id: familyId, title: v.title.trim(), member_id: v.member_id || null,
+    // The family and the author are the session's, set by the action.
+    const res = await createPlayDateAction({
+      title: v.title.trim(), member_id: v.member_id || null,
       with_kids: v.with_kids.trim() || null, location: v.location.trim() || null,
       starts_at: new Date(v.starts_at).toISOString(), contact_name: v.contact_name.trim() || null,
-      contact_phone: v.contact_phone.trim() || null, notes: v.notes.trim() || null, created_by: userId,
+      contact_phone: v.contact_phone.trim() || null, notes: v.notes.trim() || null,
     });
     setSaving(false);
-    if (error) return toastError(describeDbError(error));
+    if (!res.ok) return toastError(res.error);
     success(t('playDatesView.playDateScheduled'));
+    onSaved();
     onClose();
   }
 

@@ -13956,6 +13956,7 @@
   "socialSchedule.accessUnavailable": "Could not verify social settings or access. Refresh and try again.",
   "socialSchedule.approvalRequired": "Publishing is on hold because verified approval is required.",
   "socialSchedule.awaitingConfirmation": "Publishing confirmation is unavailable. Review the post before sending it again.",
+  "socialSchedule.cameDueWhileClosed": "This post was not published: it came due while your family's account was closed. Review it before publishing it now.",
   "socialSchedule.changed": "This post or its accounts changed after scheduling. Review it before publishing.",
   "socialSchedule.clockChange": "This time is skipped or occurs twice when the clock changes. Choose another time.",
   "socialSchedule.instant": "Publishing time in UTC: {instant}",
@@ -13966,6 +13967,7 @@
   "socialSchedule.noPermissionToDraft": "You do not have permission to draft posts.",
   "socialSchedule.noPermissionToPublish": "You do not have permission to publish posts.",
   "socialSchedule.noPermissionToSchedule": "You do not have permission to schedule posts.",
+  "socialSchedule.notInPlan": "This post was not published: when it came due, social media tools weren't part of your family's plan. Review it before publishing it now.",
   "socialSchedule.pastTime": "Choose a time in the future.",
   "socialSchedule.permissionDenied": "You do not have permission to publish this scheduled post.",
   "socialSchedule.queued": "Scheduled for publishing",
@@ -17195,5 +17197,11 @@
   "medicationsModule.otherMembersDosesAreKeptByManagers": "Other members' doses are logged and tracked by your family's parents and adults.",
   "nutrition.aGuestSeesSavedEstimatesOnly": "Guests can see a saved nutrition estimate but not request a new one. Ask a family member to analyze it.",
   "mealsModule.guestsSeeTheVoteOnly": "Guests can see the family vote but not vote in it.",
-  "remindersModule.completedNextUnconfirmed": "Reminder completed, but we could not confirm the next occurrence. Check your reminders before adding another."
+  "remindersModule.completedNextUnconfirmed": "Reminder completed, but we could not confirm the next occurrence. Check your reminders before adding another.",
+  "householdRoles.guestViewsOnly": "Guests can view this, but not change it.",
+  "socialActions.notInYourPlan": "Social media tools aren't part of your family's plan.",
+  "socialActions.couldNotConfirmYourPlan": "Bubaly could not confirm your plan right now. Try again in a moment.",
+  "socialLeftConnected.title": "Social media tools aren't available to your family right now",
+  "socialLeftConnected.body": "These accounts are still connected to Bubaly. Whatever your plan, you can disconnect them: disconnecting one removes it and deletes the sign-in Bubaly keeps for it.",
+  "socialLeftConnected.seePlans": "See plans"
 }

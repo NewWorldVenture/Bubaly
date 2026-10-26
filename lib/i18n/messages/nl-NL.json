@@ -13758,6 +13758,7 @@
   "socialSchedule.accessUnavailable": "De instellingen of toegangsrechten konden niet worden gecontroleerd. Vernieuw de pagina en probeer het opnieuw.",
   "socialSchedule.approvalRequired": "Publicatie is gepauzeerd omdat gecontroleerde goedkeuring nodig is.",
   "socialSchedule.awaitingConfirmation": "Publicatie kan niet worden bevestigd. Controleer het bericht voordat je het opnieuw verstuurt.",
+  "socialSchedule.cameDueWhileClosed": "Dit bericht is niet gepubliceerd: het stond gepland terwijl het account van je gezin gesloten was. Controleer het voordat je het nu publiceert.",
   "socialSchedule.changed": "Dit bericht of de accounts zijn na het plannen gewijzigd. Controleer het voordat je het publiceert.",
   "socialSchedule.clockChange": "Dit tijdstip wordt bij de klokwijziging overgeslagen of komt twee keer voor. Kies een ander tijdstip.",
   "socialSchedule.instant": "Publicatietijd in UTC: {instant}",
@@ -13768,6 +13769,7 @@
   "socialSchedule.noPermissionToDraft": "Je hebt geen toestemming om conceptberichten te maken.",
   "socialSchedule.noPermissionToPublish": "Je hebt geen toestemming om berichten te publiceren.",
   "socialSchedule.noPermissionToSchedule": "Je hebt geen toestemming om berichten in te plannen.",
+  "socialSchedule.notInPlan": "Dit bericht is niet gepubliceerd: toen het gepland stond, hoorden de socialemediatools niet bij het abonnement van je gezin. Controleer het voordat je het nu publiceert.",
   "socialSchedule.pastTime": "Kies een tijdstip in de toekomst.",
   "socialSchedule.permissionDenied": "Je hebt geen toestemming om dit geplande bericht te publiceren.",
   "socialSchedule.queued": "Gepland voor publicatie",
@@ -17195,5 +17197,11 @@
   "medicationsModule.otherMembersDosesAreKeptByManagers": "De innames van andere leden worden vastgelegd en bijgehouden door de ouders en volwassenen van je gezin.",
   "nutrition.aGuestSeesSavedEstimatesOnly": "Gasten kunnen een opgeslagen voedingsschatting zien, maar geen nieuwe aanvragen. Vraag een gezinslid om deze te analyseren.",
   "mealsModule.guestsSeeTheVoteOnly": "Gasten kunnen de gezinsstemming zien, maar niet meestemmen.",
-  "remindersModule.completedNextUnconfirmed": "Herinnering voltooid, maar we konden de volgende niet bevestigen. Controleer je herinneringen voordat je er nog een toevoegt."
+  "remindersModule.completedNextUnconfirmed": "Herinnering voltooid, maar we konden de volgende niet bevestigen. Controleer je herinneringen voordat je er nog een toevoegt.",
+  "householdRoles.guestViewsOnly": "Gasten kunnen dit bekijken, maar niet wijzigen.",
+  "socialActions.notInYourPlan": "De socialemediatools horen niet bij het abonnement van je gezin.",
+  "socialActions.couldNotConfirmYourPlan": "Bubaly kon je abonnement nu niet bevestigen. Probeer het zo meteen opnieuw.",
+  "socialLeftConnected.title": "De socialemediatools zijn op dit moment niet beschikbaar voor je gezin",
+  "socialLeftConnected.body": "Deze accounts zijn nog met Bubaly verbonden. Wat je abonnement ook is, je kunt ze loskoppelen: als je er een loskoppelt, wordt het verwijderd en wist Bubaly de aanmelding die het ervoor bewaart.",
+  "socialLeftConnected.seePlans": "Abonnementen bekijken"
 }

@@ -13760,6 +13760,7 @@
   "socialSchedule.accessUnavailable": "Impossible de vérifier les paramètres ou les droits d’accès. Actualisez la page et réessayez.",
   "socialSchedule.approvalRequired": "La publication est en attente, car une approbation vérifiée est nécessaire.",
   "socialSchedule.awaitingConfirmation": "La publication ne peut pas être confirmée. Consultez-la avant de l’envoyer à nouveau.",
+  "socialSchedule.cameDueWhileClosed": "Cette publication n’a pas été publiée : l’heure prévue est arrivée alors que le compte de votre famille était fermé. Vérifiez-la avant de la publier maintenant.",
   "socialSchedule.changed": "Cette publication ou ses comptes ont changé depuis la programmation. Vérifiez-la avant de la publier.",
   "socialSchedule.clockChange": "Cette heure est supprimée ou se produit deux fois lors du changement d’heure. Choisissez une autre heure.",
   "socialSchedule.instant": "Heure de publication en UTC : {instant}",
@@ -13770,6 +13771,7 @@
   "socialSchedule.noPermissionToDraft": "Vous n’avez pas l’autorisation de rédiger des publications.",
   "socialSchedule.noPermissionToPublish": "Vous n’avez pas l’autorisation de publier.",
   "socialSchedule.noPermissionToSchedule": "Vous n’avez pas l’autorisation de programmer des publications.",
+  "socialSchedule.notInPlan": "Cette publication n’a pas été publiée : à l’heure prévue, les outils de réseaux sociaux ne faisaient pas partie du forfait de votre famille. Vérifiez-la avant de la publier maintenant.",
   "socialSchedule.pastTime": "Choisissez une heure future.",
   "socialSchedule.permissionDenied": "Vous n’avez pas l’autorisation de publier cette publication programmée.",
   "socialSchedule.queued": "Publication programmée",
@@ -17195,5 +17197,11 @@
   "medicationsModule.otherMembersDosesAreKeptByManagers": "Les prises des autres membres sont enregistrées et suivies par les parents et les adultes de votre famille.",
   "nutrition.aGuestSeesSavedEstimatesOnly": "Les invités peuvent voir une estimation nutritionnelle enregistrée, mais pas en demander une nouvelle. Demandez à un membre de la famille de l’analyser.",
   "mealsModule.guestsSeeTheVoteOnly": "Les invités peuvent voir le vote familial, mais pas y participer.",
-  "remindersModule.completedNextUnconfirmed": "Rappel terminé, mais nous n’avons pas pu confirmer la prochaine occurrence. Vérifiez vos rappels avant d’en ajouter un autre."
+  "remindersModule.completedNextUnconfirmed": "Rappel terminé, mais nous n’avons pas pu confirmer la prochaine occurrence. Vérifiez vos rappels avant d’en ajouter un autre.",
+  "householdRoles.guestViewsOnly": "Les invités peuvent consulter ceci, mais pas le modifier.",
+  "socialActions.notInYourPlan": "Les outils de réseaux sociaux ne font pas partie du forfait de votre famille.",
+  "socialActions.couldNotConfirmYourPlan": "Bubaly n'a pas pu confirmer votre forfait pour le moment. Réessayez dans un instant.",
+  "socialLeftConnected.title": "Les outils de réseaux sociaux ne sont pas disponibles pour votre famille pour le moment",
+  "socialLeftConnected.body": "Ces comptes sont toujours connectés à Bubaly. Quel que soit votre forfait, vous pouvez les déconnecter : déconnecter un compte le retire et efface la connexion que Bubaly conserve pour lui.",
+  "socialLeftConnected.seePlans": "Voir les forfaits"
 }
