@@ -559,6 +559,13 @@ export async function listOpenMaintenance(
  * one-tap action, so the assistant and the button produce identical rows.
  */
 export async function scheduleRecommendedTasks(scope: ServiceScope, assetId: string): Promise<ServiceResult<{ created: MaintenanceTaskRow[]; skipped: string[] }>> {
+  // The Home page's "Add task" rule, as `scheduleRecommendedTasksAction` applies
+  // it: a parent, an adult or the system. `maintenance_tasks` takes any
+  // member's insert, so this is the only thing between a child and a year of
+  // recurring tasks.
+  if (scope.role !== 'system' && !isManager(scope.role)) {
+    return fail('Only a parent or adult can schedule home maintenance.', { code: SERVICE_CODES.denied });
+  }
   const { data: asset, error: assetError } = await scope.db
     .from('home_assets')
     .select('id, name, category, last_serviced_on')
