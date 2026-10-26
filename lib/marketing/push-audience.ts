@@ -185,11 +185,16 @@ async function consentingAdults(supabase: DB, userIds: string[], budget: ReadBud
     // does not say so: removal writes it, and accept_invite brings a removed
     // member back at it, whatever the new invite's role. Read only for the
     // accounts still in, so the read costs the shared budget nothing for a
-    // chunk no one in it consented.
+    // chunk no one in it consented. R5-AW-REVOKED-ACCEPTED-INVITE: by who
+    // accepted it, whatever its status says now. Only accept_invite writes
+    // accepted_by, and 0482 keeps a client from changing it; the super
+    // admin's Revoke overwrote an accepted invite's status to 'revoked' with
+    // accepted_by kept (now refused, but rows it wrote stand), and a read by
+    // status let that teen back in.
     const undecided = chunk.filter(id => consented.has(id) && !minors.has(id));
     const joinedAsMinors = undecided.length === 0 ? [] : await readPages(cursor => {
       let query = supabase.from('invites').select('id, family_id, accepted_by')
-        .in('accepted_by', undecided).eq('status', 'accepted').in('role', MINOR_ROLES)
+        .in('accepted_by', undecided).in('role', MINOR_ROLES)
         .order('id', { ascending: true }).limit(PAGE_SIZE);
       if (cursor !== null) query = query.gt('id', cursor);
       return query;

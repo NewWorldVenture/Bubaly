@@ -28,7 +28,11 @@ vi.mock('@/lib/supabase/auth', () => ({
     memberships: [{ familyId: 'fam-open', role: 'parent' }],
     active: { familyId: 'fam-open', role: 'parent', member: { id: 'm-u-parent-fam-open' } },
   }),
+  // And the super admin's invite Revoke (R5-AW-REVOKED-ACCEPTED-INVITE).
+  getUser: async () => ({ id: 'admin-1', email: 'root@example.com' }),
+  isSuperAdmin: async () => true,
 }));
+vi.mock('@/lib/auth/super-admin-assurance', () => ({ superAdminAssurance: async () => ({ ok: true }) }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db, createServiceClient: () => h.db }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
@@ -38,6 +42,7 @@ const { loadPushCampaignAudience } = await import('@/lib/marketing/push-audience
 const { getMarketingCustomersWithError } = await import('@/lib/marketing/customers');
 const { resolveRecipients } = await import('@/lib/marketing/send');
 const { removeFamilyMemberAction } = await import('@/app/(app)/family/member-actions');
+const { adminRevokeInviteAction } = await import('@/app/(app)/admin/actions');
 const { REMOVED_MEMBER_PATCH } = await import('@/lib/constants/roles');
 type DB = SupabaseClient<Database>;
 
@@ -192,6 +197,40 @@ describe('a marketing push campaign', () => {
       Object.assign(db.table('family_members').find((row) => row.id === 'm-u-back-fam-open')!, { is_active: true });
       joinedBy('u-back', 'teen', 'fam-open', 2);
       expect(await audience(), 'a teen back in the family as a guest was pushed to').toEqual([]);
+    });
+
+    // R5-AW-REVOKED-ACCEPTED-INVITE. The invite is read by who accepted it.
+    // The super admin's Revoke, from a page rendered while it was pending,
+    // overwrote an accepted invite's status to 'revoked' and kept accepted_by,
+    // and the read asked for status 'accepted' too, so the teen was back in.
+    it('a removed teen whose accepted invite a super admin then tried to revoke from a stale page is still not pushed to', async () => {
+      account('u-teen-own');
+      memberBorn('u-teen-own', 'teen', null);
+      joinedBy('u-teen-own', 'teen');
+      await remove('u-teen-own');
+      expect(await adminRevokeInviteAction('inv-u-teen-own-fam-open-1')).toEqual({ ok: false, error: 'actions.inviteIsNoLongerPending' });
+      expect(db.table('invites').find((row) => row.id === 'inv-u-teen-own-fam-open-1')).toMatchObject({ status: 'accepted', accepted_by: 'u-teen-own' });
+      expect(await audience(), 'a removed teen whose invite was revoked after acceptance was pushed to').toEqual([]);
+    });
+
+    it('a removed teen whose accepted invite already reads revoked (the old Revoke kept accepted_by) is still not pushed to', async () => {
+      account('u-teen-own');
+      memberBorn('u-teen-own', 'teen', null);
+      joinedBy('u-teen-own', 'teen');
+      await remove('u-teen-own');
+      // What the Revoke left before it was held to a pending invite.
+      Object.assign(db.table('invites').find((row) => row.id === 'inv-u-teen-own-fam-open-1')!, { status: 'revoked' });
+      expect(await audience(), 'a removed teen whose invite reads revoked was pushed to').toEqual([]);
+    });
+
+    it('controls: a teen invite revoked while pending, never accepted, keeps no one out', async () => {
+      account('u-adult-later');
+      memberBorn('u-adult-later', 'adult', null);
+      db.seed('invites', [{ id: 'inv-pending-teen', family_id: 'fam-open', email: 'u-adult-later@example.com', role: 'teen', status: 'pending', accepted_by: null }]);
+      expect(await adminRevokeInviteAction('inv-pending-teen')).toEqual({ ok: true });
+      joinedBy('u-adult-later', 'adult');
+      await remove('u-adult-later');
+      expect(await audience()).toEqual(['u-adult-later']);
     });
 
     it('a teen invite in one family is not undone by a family of their own', async () => {

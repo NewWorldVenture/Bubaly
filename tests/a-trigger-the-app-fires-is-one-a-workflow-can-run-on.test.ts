@@ -30,7 +30,7 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-type Trigger = { literal: string } | { computed: string } | { unreadable: string } | { unfollowed: string };
+type Trigger = { literal: string } | { computed: string } | { unreadable: string } | { unfollowed: string } | { unresolved: string };
 type Call = { file: string; line: number; trigger: Trigger };
 
 function parse(file: string, source: string): ts.SourceFile {
@@ -62,6 +62,12 @@ function triggerOf(params: ts.Expression | undefined, ast: ts.SourceFile): Trigg
 }
 
 const FIRE = 'fireAutomationEvent';
+/**
+ * The module that defines it, always one this guard knows: it exports the
+ * function under its own name, which is followed wherever it goes. A planted
+ * program that imports it without carrying its source still resolves it.
+ */
+const DEFINER = 'lib/marketing/automation-events.ts';
 
 /** The outermost expression a reference sits in, through parentheses, casts and `!`. */
 function outermost(node: ts.Expression): ts.Expression {
@@ -92,17 +98,31 @@ type FireExports = ReadonlyMap<string, ReadonlyMap<string, Site>>;
 /** One source read: its calls, the names it exports the function under, and the `<module>#<name>` it takes from another (`#*`, all of them). */
 type Analysis = { calls: Call[]; exports: Map<string, Site>; imports: Set<string> };
 
+/** The path an import of the app's own names, from the root: `@/x` (tsconfig `paths`) or a relative path. A package has none. */
+function localPath(from: string, specifier: string): string | null {
+  if (specifier.startsWith('@/')) return specifier.slice(2);
+  if (specifier === '.' || specifier === '..' || specifier.startsWith('./') || specifier.startsWith('../')) return posix.join(posix.dirname(from), specifier);
+  return null;
+}
+
 /**
- * The source an import names, among those read: `@/x` from the root
- * (tsconfig `paths`) or a relative path, tried as the bundler does, bare,
- * with `.ts` or `.tsx`, or as a folder's index. A package is none of them.
+ * The source an import names, among those read, tried as the bundler does:
+ * bare, with `.ts` or `.tsx`, or as a folder's index; `x.js` (or `.jsx`) as
+ * the `x.ts` it is built from, and `x/` as the folder's index only.
+ * R5-AW-GUARD-NAMESPACE-PASSED-ON: the last two were no source before, so a
+ * file that took an exported name by either was not read as taking it.
  */
 function resolveModule(from: string, specifier: string, known: ReadonlySet<string>): string | null {
-  const base = specifier.startsWith('@/') ? specifier.slice(2)
-    : specifier.startsWith('./') || specifier.startsWith('../') ? posix.join(posix.dirname(from), specifier) : null;
-  if (base === null) return null;
-  return [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}/index.tsx`].find((candidate) => known.has(candidate)) ?? null;
+  const path = localPath(from, specifier);
+  if (path === null) return null;
+  const candidates = path.endsWith('/') ? [`${path}index.ts`, `${path}index.tsx`]
+    : /\.jsx?$/.test(path) ? [path.replace(/\.jsx?$/, '.ts'), path.replace(/\.jsx?$/, '.tsx')]
+      : [path, `${path}.ts`, `${path}.tsx`, `${path}/index.ts`, `${path}/index.tsx`];
+  return candidates.find((candidate) => known.has(candidate)) ?? null;
 }
+
+/** Data, a stylesheet or an asset: an import of one cannot carry the function. */
+const NOT_A_MODULE = /\.(?:json|css|scss|sass|less|svg|png|jpe?g|gif|webp|avif|ico|txt|md|html?|wasm|woff2?|ttf|otf|mp[34]|webm|wav|pdf|csv|ya?ml)$/i;
 
 /** Whether a declaration or binding sits in an `export const` (`let`, `var`) statement. */
 function inExportedStatement(node: ts.Node): boolean {
@@ -138,11 +158,28 @@ function inExportedStatement(node: ts.Node): boolean {
  * under (`exported`, worked out by programCalls), and a source that imports
  * that name, or reads that module as a namespace or a dynamic import, knows
  * the function by it.
+ *
+ * R5-AW-GUARD-NAMESPACE-PASSED-ON: such a namespace counted as taking every
+ * name, and was followed only through its members in the file that read it.
+ * Passed on (`export { a }`, `export default a`, `export const ns = a`, an
+ * argument, an object, a computed member, a rest) it took the function where
+ * the guard does not follow it, unreported, as `export * as ns from` is. A
+ * namespace, or the module a dynamic import resolves to, is now followed
+ * through a member, a destructure naming its keys, another local name for it
+ * and a `.then` callback's parameter, and reported anywhere else. And an
+ * import by a path that names no source read here (a file it does not read,
+ * a computed path) is reported when it may take a name some module exports
+ * the function under.
  */
 function analyse(file: string, ast: ts.SourceFile, exported: FireExports, known: ReadonlySet<string>): Analysis {
   const names = new Set<string>([FIRE]);
   /** The member names the function goes by on a namespace this source reads. */
   const members = new Set<string>([FIRE]);
+  /** The local names of a namespace of a module that exports the function under a name, and the dynamic imports of one. */
+  const namespaces = new Set<string>();
+  const namespaceImports = new Set<ts.CallExpression>();
+  /** Every name a module exports the function under. */
+  const aliases = new Set([...exported.values()].flatMap((their) => [...their.keys()]));
   const imports = new Set<string>();
   const exports = new Map<string, Site>();
   const calls: Call[] = [];
@@ -151,6 +188,20 @@ function analyse(file: string, ast: ts.SourceFile, exported: FireExports, known:
   const theirs = (specifier: ts.Expression | undefined) => {
     const target = specifier && ts.isStringLiteralLike(specifier) ? resolveModule(file, specifier.text, known) : null;
     return { target, names: target ? exported.get(target) : undefined };
+  };
+  /**
+   * Report an import by a path no source here answers when what it takes
+   * (`*` for every name) may be the function under a name a module exports
+   * it by. Its own name is followed wherever it comes from.
+   */
+  const unresolved = (specifier: ts.Expression | undefined, takes: readonly string[], at: ts.Node) => {
+    if (!specifier) return;
+    if (ts.isStringLiteralLike(specifier)) {
+      if (localPath(file, specifier.text) === null || NOT_A_MODULE.test(specifier.text) || resolveModule(file, specifier.text, known)) return;
+    }
+    if (takes.some((name) => (name === '*' ? aliases.size > 0 : name !== FIRE && aliases.has(name)))) {
+      calls.push({ file, line: lineOf(at), trigger: { unresolved: specifier.getText(ast) } });
+    }
   };
   const isMember = (node: ts.Node): node is ts.Expression =>
     (ts.isPropertyAccessExpression(node) && members.has(node.name.text))
@@ -174,7 +225,11 @@ function analyse(file: string, ast: ts.SourceFile, exported: FireExports, known:
       const clause = node.importClause;
       if (clause?.name && their?.has('default')) { names.add(clause.name.text); imports.add(`${target}#default`); }
       const bindings = clause?.namedBindings;
-      if (bindings && ts.isNamespaceImport(bindings) && their) { for (const name of their.keys()) members.add(name); imports.add(`${target}#*`); }
+      if (bindings && ts.isNamespaceImport(bindings) && their) {
+        for (const name of their.keys()) members.add(name);
+        imports.add(`${target}#*`);
+        namespaces.add(bindings.name.text);
+      }
       if (bindings && ts.isNamedImports(bindings)) {
         for (const specifier of bindings.elements) {
           const imported = (specifier.propertyName ?? specifier.name).text;
@@ -182,14 +237,22 @@ function analyse(file: string, ast: ts.SourceFile, exported: FireExports, known:
           if (their?.has(imported)) imports.add(`${target}#${imported}`);
         }
       }
+      unresolved(node.moduleSpecifier, [
+        ...(clause?.name ? ['default'] : []),
+        ...(bindings && ts.isNamespaceImport(bindings) ? ['*'] : []),
+        ...(bindings && ts.isNamedImports(bindings) ? bindings.elements.filter((s) => !s.isTypeOnly).map((s) => (s.propertyName ?? s.name).text) : []),
+      ], node);
     }
     if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
       const { target, names: their } = theirs(node.arguments[0]);
-      if (their) { for (const name of their.keys()) members.add(name); imports.add(`${target}#*`); }
+      if (their) { for (const name of their.keys()) members.add(name); imports.add(`${target}#*`); namespaceImports.add(node); }
+      unresolved(node.arguments[0], ['*'], node);
     }
     if (ts.isExportDeclaration(node) && node.moduleSpecifier && !node.isTypeOnly) {
       const { target, names: their } = theirs(node.moduleSpecifier);
       const clause = node.exportClause;
+      unresolved(node.moduleSpecifier, clause && ts.isNamedExports(clause)
+        ? clause.elements.filter((s) => !s.isTypeOnly).map((s) => (s.propertyName ?? s.name).text) : ['*'], node);
       if (!clause) {
         // `export * from`: every name it exports the function under but the default.
         for (const name of their?.keys() ?? []) {
@@ -224,7 +287,66 @@ function analyse(file: string, ast: ts.SourceFile, exported: FireExports, known:
     collect(ast);
   }
 
+  /** Whether a node is such a namespace here: a dynamic import of the module, or a use of a name it goes by. */
+  const isNamespace = (node: ts.Node): node is ts.Expression => {
+    if (ts.isCallExpression(node)) return namespaceImports.has(node);
+    if (!ts.isIdentifier(node) || !namespaces.has(node.text) || declares(node) || inTypePosition(node)) return false;
+    const parent = node.parent;
+    // A parameter or an attribute of that name, or another module's export of it, is not this namespace.
+    return !((ts.isParameter(parent) || ts.isJsxAttribute(parent) || ts.isGetAccessor(parent) || ts.isSetAccessor(parent) || ts.isEnumMember(parent)) && parent.name === node)
+      && !(ts.isExportSpecifier(parent) && parent.parent.parent.moduleSpecifier);
+  };
+  /** A destructure that takes only the keys it names, binding the function's own to a name. */
+  const namesItsKeys = (pattern: ts.BindingName) => ts.isObjectBindingPattern(pattern) && pattern.elements.every((element) => {
+    const key = element.propertyName ?? element.name;
+    return !element.dotDotDotToken && (ts.isIdentifier(key) || ts.isStringLiteralLike(key)) && (ts.isIdentifier(element.name) || !members.has(key.text));
+  });
+  /** What is done with a namespace: read through a member or a destructure (null), given another local name, or taken where this guard does not follow it. */
+  const namespaceUse = (node: ts.Expression): { alias: string } | { unfollowed: ts.Node } | null => {
+    let outer = node;
+    while (ts.isParenthesizedExpression(outer.parent) || ts.isAsExpression(outer.parent) || ts.isSatisfiesExpression(outer.parent)
+      || ts.isNonNullExpression(outer.parent) || ts.isAwaitExpression(outer.parent)) outer = outer.parent;
+    const parent = outer.parent;
+    if (ts.isPropertyAccessExpression(parent) && parent.expression === outer) {
+      // `import(...).then((m) => ...)`: the module is the callback's first parameter.
+      const call = parent.parent;
+      if (parent.name.text !== 'then' || !ts.isCallExpression(call) || call.expression !== parent || call.arguments.length === 0) return null;
+      const callback = call.arguments[0];
+      if (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) return { unfollowed: call };
+      const param = callback.parameters[0];
+      if (!param) return null;
+      if (param.dotDotDotToken) return { unfollowed: call };
+      if (ts.isIdentifier(param.name)) return { alias: param.name.text };
+      return namesItsKeys(param.name) ? null : { unfollowed: call };
+    }
+    if (ts.isElementAccessExpression(parent) && parent.expression === outer) {
+      return ts.isStringLiteralLike(parent.argumentExpression) ? null : { unfollowed: parent };
+    }
+    if (ts.isVariableDeclaration(parent) && parent.initializer === outer) {
+      if (ts.isIdentifier(parent.name)) return inExportedStatement(parent) ? { unfollowed: parent } : { alias: parent.name.text };
+      return namesItsKeys(parent.name) ? null : { unfollowed: parent };
+    }
+    // Passed, returned, stored or exported: an export or an object it sits in is read whole.
+    if (ts.isExportSpecifier(parent)) return { unfollowed: parent.parent.parent };
+    if (ts.isShorthandPropertyAssignment(parent) || ts.isSpreadAssignment(parent)) return { unfollowed: parent.parent };
+    return { unfollowed: parent };
+  };
+  // The names a namespace goes by, to a fixed point (`const b = a;`, `.then((m) => ...)`).
+  for (let size = -1; size !== namespaces.size;) {
+    size = namespaces.size;
+    const collect = (node: ts.Node) => {
+      const use = isNamespace(node) ? namespaceUse(node) : null;
+      if (use && 'alias' in use) namespaces.add(use.alias);
+      ts.forEachChild(node, collect);
+    };
+    collect(ast);
+  }
+
   const visit = (node: ts.Node) => {
+    if (isNamespace(node)) {
+      const use = namespaceUse(node);
+      if (use && 'unfollowed' in use) calls.push({ file, line: lineOf(node), trigger: { unfollowed: use.unfollowed.getText(ast) } });
+    }
     // `export const { fireAutomationEvent: fire } = events;`
     if (ts.isBindingElement(node) && bindsFire(node) && inExportedStatement(node)) exports.set(node.name.text, site(node));
     const reference = isMember(node) ? node
@@ -263,7 +385,7 @@ function analyse(file: string, ast: ts.SourceFile, exported: FireExports, known:
  * reported: whatever calls it is somewhere this guard does not read.
  */
 function programCalls(sources: ReadonlyMap<string, string>): Call[] {
-  const known = new Set(sources.keys());
+  const known = new Set([...sources.keys(), DEFINER]);
   const asts = [...sources].map(([file, source]) => [file, parse(file, source)] as const);
   let exported: FireExports = new Map();
   let analyses: [string, Analysis][];
@@ -337,6 +459,10 @@ function check(calls: Call[], sourceOf: (file: string) => string): { passed: Set
     }
     if ('unfollowed' in call.trigger) {
       problems.push(`${where} uses fireAutomationEvent where this guard cannot follow it: ${call.trigger.unfollowed}`);
+      continue;
+    }
+    if ('unresolved' in call.trigger) {
+      problems.push(`${where} may take fireAutomationEvent by ${call.trigger.unresolved}, which names no source this guard reads`);
       continue;
     }
     let triggers: string[];
@@ -502,6 +628,114 @@ describe('every trigger the app fires is one a workflow can be switched on for',
       'lib/zz-unused.ts:2 uses fireAutomationEvent where this guard cannot follow it: unused = fire',
       "app/zz-reviewer-probe2.ts:2 fires 'demo_started', which FIRED_TRIGGERS leaves out",
       ...[4, 5, 6, 7, 8, 9].map((line) => `app/zz-probe3/route.ts:${line} fires 'demo_started', which FIRED_TRIGGERS leaves out`),
+    ]);
+  });
+
+  /** The reviewer's module that exports the function under another name. */
+  const ALIAS_MODULE = [
+    "import { fireAutomationEvent } from '@/lib/marketing/automation-events';",
+    'export const fireIt = fireAutomationEvent;',
+  ].join('\n');
+  const cannotFollow = (where: string, text: string) => `${where} uses fireAutomationEvent where this guard cannot follow it: ${text}`;
+
+  // R5-AW-GUARD-NAMESPACE-PASSED-ON. The reviewer's three probes (zz-b with
+  // zz-c, zz-d with zz-e, zz-f with zz-g) passed at a8a1d832c with no call and
+  // no problem: a namespace of a module that exports the function under a
+  // name counted as taking all of them, and was followed only through its
+  // members in the file that imported it. Passed on, re-exported, defaulted or
+  // stored, it took the function where the guard does not follow it, as
+  // `export * as ns from` already reports.
+  it('reports a namespace of a module that exports the function under a name wherever it is passed on, and follows it where it is only read', () => {
+    const program = new Map<string, string>([
+      ['lib/zz-a.ts', ALIAS_MODULE],
+      ['lib/zz-b.ts', ["import * as a from '@/lib/zz-a';", 'export { a };'].join('\n')],
+      ['app/zz-c.ts', ["import { a } from '@/lib/zz-b';", "await a.fireIt(admin, { trigger: 'demo_started', email: null, subjectKey: 'c' });"].join('\n')],
+      ['lib/zz-d.ts', ["import * as a from '@/lib/zz-a';", 'export default a;'].join('\n')],
+      ['app/zz-e.ts', ["import d from '@/lib/zz-d';", "await d.fireIt(admin, { trigger: 'demo_started', email: null, subjectKey: 'e' });"].join('\n')],
+      ['lib/zz-f.ts', ["import * as a from '@/lib/zz-a';", 'export const ns = a;'].join('\n')],
+      ['app/zz-g.ts', ["import { ns } from '@/lib/zz-f';", "await ns.fireIt(admin, { trigger: 'demo_started', email: null, subjectKey: 'g' });"].join('\n')],
+      // Passed on within a file, and a dynamic import's module passed on.
+      ['app/zz-h.ts', [
+        "import * as a from '@/lib/zz-a';",
+        'schedule(a);',
+        'const holder = { a };',
+        "await a[pick()](admin, { trigger: 'demo_started', email: null, subjectKey: 'h' });",
+        'const { other, ...rest } = a;',
+        "const mod = await import('@/lib/zz-a');",
+        'register(mod);',
+        "import('@/lib/zz-a').then((m) => register(m));",
+        "import('@/lib/zz-a').then(register);",
+        "export const load = () => import('@/lib/zz-a');",
+      ].join('\n')],
+      // Only read through its members, under any local name: followed, nothing to report.
+      ['app/zz-i.ts', [
+        "import * as a from '@/lib/zz-a';",
+        "await a.fireIt(admin, { trigger: 'payment_completed', email: null, subjectKey: 'i1' });",
+        'const b = a;',
+        "await b.fireIt(admin, { trigger: 'payment_completed', email: null, subjectKey: 'i2' });",
+        "await (await import('@/lib/zz-a')).fireIt(admin, { trigger: 'payment_completed', email: null, subjectKey: 'i3' });",
+        "await import('@/lib/zz-a').then((m) => m.fireIt(admin, { trigger: 'payment_completed', email: null, subjectKey: 'i4' }));",
+        "await import('@/lib/zz-a').then(({ fireIt: go }) => go(admin, { trigger: 'payment_completed', email: null, subjectKey: 'i5' }));",
+        'const { fireIt: named } = a;',
+        "await named(admin, { trigger: 'payment_completed', email: null, subjectKey: 'i6' });",
+        'type A = typeof a;',
+      ].join('\n')],
+    ]);
+    const plantedCalls = programCalls(program);
+    expect(plantedCalls.filter((c) => 'literal' in c.trigger).map((c) => `${c.file}:${c.line}`), 'a call through a namespace read in place was not found')
+      .toEqual([2, 4, 5, 6, 7, 9].map((line) => `app/zz-i.ts:${line}`));
+    expect(check(plantedCalls, (file) => program.get(file) ?? '').problems, 'a namespace passed on was neither followed nor reported').toEqual([
+      cannotFollow('lib/zz-b.ts:2', 'export { a };'),
+      cannotFollow('lib/zz-d.ts:2', 'export default a;'),
+      cannotFollow('lib/zz-f.ts:2', 'ns = a'),
+      cannotFollow('app/zz-h.ts:2', 'schedule(a)'),
+      cannotFollow('app/zz-h.ts:3', '{ a }'),
+      cannotFollow('app/zz-h.ts:4', 'a[pick()]'),
+      cannotFollow('app/zz-h.ts:5', '{ other, ...rest } = a'),
+      cannotFollow('app/zz-h.ts:7', 'register(mod)'),
+      cannotFollow('app/zz-h.ts:8', 'register(m)'),
+      cannotFollow('app/zz-h.ts:9', "import('@/lib/zz-a').then(register)"),
+      cannotFollow('app/zz-h.ts:10', "() => import('@/lib/zz-a')"),
+    ]);
+  });
+
+  // R5-AW-GUARD-NAMESPACE-PASSED-ON, the smaller limit. A file that imported
+  // the reviewer's alias by a path resolveModule did not resolve (`.js`, a
+  // folder with a trailing slash) was not read as taking it, and with another
+  // file importing it normally the export was not reported either: the call
+  // was missed with nothing said.
+  it('resolves an import as the bundler does, and reports one that may take the function by a path it reads no source for', () => {
+    const program = new Map<string, string>([
+      ['lib/zz-a.ts', ALIAS_MODULE],
+      ['lib/zz-bar/index.ts', "export { fireIt as barFire } from '../zz-a';"],
+      ['app/zz-c.ts', ["import { fireIt } from '@/lib/zz-a';", "await fireIt(admin, { trigger: 'payment_completed', email: null, subjectKey: 'c' });"].join('\n')],
+      ['app/zz-js.ts', ["import { fireIt } from '@/lib/zz-a.js';", "await fireIt(admin, { trigger: 'demo_started', email: null, subjectKey: 'js' });"].join('\n')],
+      ['app/zz-slash.ts', ["import * as bar from '@/lib/zz-bar/';", "await bar.barFire(admin, { trigger: 'demo_started', email: null, subjectKey: 'slash' });"].join('\n')],
+      ['app/zz-index/route.ts', ["import { barFire } from '../../lib/zz-bar/index.js';", "await barFire(admin, { trigger: 'demo_started', email: null, subjectKey: 'index' });"].join('\n')],
+      ['app/zz-gone.ts', [
+        "import { fireIt as lost } from '@/lib/zz-gone';",
+        "import * as elsewhere from '../lib/zz-elsewhere.mjs';",
+        'const later = await import(`@/lib/${name}`);',
+        "export * from './zz-gone-too';",
+        // Not a name any module exports the function under, or not a module: nothing to say.
+        "import { parseBuildRevision } from '@/lib/build-identity.mjs';",
+        "import messages from '@/lib/i18n/messages/en-US.json';",
+        "import { createSessionRefreshFetch } from '@/shared/auth/refresh-fetch';",
+        "await lost(admin, { trigger: 'demo_started', email: null, subjectKey: 'gone' });",
+      ].join('\n')],
+    ]);
+    const plantedCalls = programCalls(program);
+    expect(plantedCalls.filter((c) => 'literal' in c.trigger).map((c) => `${c.file}:${c.line}`), 'a call by an import path the bundler resolves was not found').toEqual([
+      'app/zz-c.ts:2', 'app/zz-js.ts:2', 'app/zz-slash.ts:2', 'app/zz-index/route.ts:2',
+    ]);
+    expect(check(plantedCalls, (file) => program.get(file) ?? '').problems).toEqual([
+      "app/zz-js.ts:2 fires 'demo_started', which FIRED_TRIGGERS leaves out",
+      "app/zz-slash.ts:2 fires 'demo_started', which FIRED_TRIGGERS leaves out",
+      "app/zz-index/route.ts:2 fires 'demo_started', which FIRED_TRIGGERS leaves out",
+      "app/zz-gone.ts:1 may take fireAutomationEvent by '@/lib/zz-gone', which names no source this guard reads",
+      "app/zz-gone.ts:2 may take fireAutomationEvent by '../lib/zz-elsewhere.mjs', which names no source this guard reads",
+      'app/zz-gone.ts:3 may take fireAutomationEvent by `@/lib/${name}`, which names no source this guard reads',
+      "app/zz-gone.ts:4 may take fireAutomationEvent by './zz-gone-too', which names no source this guard reads",
     ]);
   });
 });
