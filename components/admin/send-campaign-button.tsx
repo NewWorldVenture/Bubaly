@@ -19,21 +19,26 @@ export function SendCampaignButton({ id, disabled }: { id: string; disabled?: bo
     // route's own answer is shown and nothing is asked (review
     // R9-SEND-CAMPAIGN-FAILED-PREFLIGHT-IS-NO-RECIPIENTS).
     let count: number;
+    // Everyone still to be reached. Past the per-send cap it is more than
+    // `count`, and the dialog says this send reaches only the first of them.
+    let audience: number;
     try {
       const pre = await fetch(`/api/admin/marketing/email/send?id=${id}`);
-      const pj = await pre.json().catch(() => ({})) as { recipients?: unknown; error?: unknown };
+      const pj = await pre.json().catch(() => ({})) as { recipients?: unknown; audience?: unknown; error?: unknown };
       if (!pre.ok || pj.error || typeof pj.recipients !== 'number') {
         toastError(typeof pj.error === 'string' && pj.error ? pj.error : t('send.couldNotLoadCampaignRecipients'));
         return;
       }
       count = pj.recipients;
+      audience = typeof pj.audience === 'number' ? pj.audience : count;
     } catch {
       toastError(t('send.couldNotLoadCampaignRecipients'));
       return;
     }
 
     const ok = window.confirm(count > 0
-      ? (count === 1 ? t('sendCampaignButton.confirmOne') : t('sendCampaignButton.confirmMany', { n: count }))
+      ? (audience > count ? t('sendCampaignButton.confirmFirstOf', { n: count, total: audience })
+        : count === 1 ? t('sendCampaignButton.confirmOne') : t('sendCampaignButton.confirmMany', { n: count }))
       : t('sendCampaignButton.noRecipientsSendAnyway'));
     if (!ok || count === 0) { if (count === 0) toastError(t('sendCampaignButton.noEligibleRecipients')); return; }
 
@@ -44,7 +49,9 @@ export function SendCampaignButton({ id, disabled }: { id: string; disabled?: bo
       });
       const json = await res.json();
       if (!res.ok) { toastError(json.error ?? 'Send failed.'); return; }
-      success(json.sent === 1 ? t('sendCampaign.sentToRecipientOne', { count: json.sent }) : t('sendCampaign.sentToRecipientsMany', { count: json.sent ?? 0 }));
+      success(typeof json.remaining === 'number' && json.remaining > 0
+        ? t('sendCampaign.sentSomeRestRemain', { count: json.sent ?? 0, remaining: json.remaining })
+        : json.sent === 1 ? t('sendCampaign.sentToRecipientOne', { count: json.sent }) : t('sendCampaign.sentToRecipientsMany', { count: json.sent ?? 0 }));
       router.refresh();
     } catch {
       toastError(t('sendCampaignButton.networkErrorPleaseTryAgain'));

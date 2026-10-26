@@ -23,12 +23,11 @@ export async function GET(req: NextRequest) {
     // The count a send would mail NOW: the audience less whoever an earlier,
     // stopped attempt already reached — the number the confirm dialog asks about.
     const { remaining, alreadySent } = await campaignAudience(supabase, c);
-    // Past the cap the send refuses, so the preview says so instead of a count:
-    // it used to answer the capped 1,000 as if that were the whole audience.
-    if (remaining.length > MAX_RECIPIENTS) {
-      return NextResponse.json({ error: t('send.audienceOverCap', { n: remaining.length, cap: MAX_RECIPIENTS }), recipients: remaining.length }, { status: 409 });
-    }
-    return NextResponse.json({ recipients: remaining.length, alreadySent });
+    // Past the cap a send reaches the first MAX_RECIPIENTS and the next Send
+    // the rest, so the preview answers both: what this send mails
+    // (`recipients`) and everyone still to be reached (`audience`). It used to
+    // answer the capped 1,000 as if that were the whole audience.
+    return NextResponse.json({ recipients: Math.min(remaining.length, MAX_RECIPIENTS), audience: remaining.length, alreadySent });
   } catch (err) {
     // The status rides on the error now, rather than being recovered by reading
     // the refusal's own sentence back — reword the sentence and this kept
@@ -51,16 +50,16 @@ export async function POST(req: NextRequest) {
     ({ id } = (boundedBody.value ?? {}) as { id?: string });
     if (!id) return NextResponse.json({ error: t('send.missingId') }, { status: 400 });
 
-    const { sent } = await sendEmailCampaign(supabase, id);
-    await logMarketingAudit(supabase, { actorId, actorEmail, action: 'send', resource: 'marketing_email_campaign', resourceId: id, metadata: { sent, outcome: 'complete' } });
-    return NextResponse.json({ sent });
+    const { sent, remaining } = await sendEmailCampaign(supabase, id);
+    await logMarketingAudit(supabase, {
+      actorId, actorEmail, action: 'send', resource: 'marketing_email_campaign', resourceId: id,
+      metadata: { sent, remaining, outcome: remaining > 0 ? 'capped' : 'complete' },
+    });
+    return NextResponse.json({ sent, remaining });
   } catch (err) {
     if (isMarketingAuthError(err)) return NextResponse.json({ error: marketingRefusalBody(err) }, { status: err.status });
     console.error('Marketing email send failed:', err);
     if (err instanceof CampaignSendError) {
-      if (err.code === 'over_cap') {
-        return NextResponse.json({ error: t('send.audienceOverCap', { n: err.audience, cap: MAX_RECIPIENTS }) }, { status: 409 });
-      }
       // A send that stopped after it began is on the audit log too, with what
       // went out: it used to reach the log only when every batch was accepted.
       if (admin && id) {
@@ -71,11 +70,18 @@ export async function POST(req: NextRequest) {
       }
       // Part of the audience has it: say how much, and that sending again
       // resumes (sendEmailCampaign skips every address already delivered).
-      if (err.total > 0 && err.code !== 'state_unrecorded') {
+      // The provider took the mail, and its record did not land: the row is
+      // left `sending` on purpose (or `failed` with the stop recorded), and it
+      // was reported as a provider rejection — the one answer that invites
+      // sending it again.
+      if (err.code === 'state_unrecorded') {
+        return NextResponse.json({ error: t('send.sentButNotRecorded'), sent: err.sent }, { status: 502 });
+      }
+      if (err.total > 0) {
         const audience = err.total - err.sent + err.audience;
         return NextResponse.json({ error: t('send.stoppedPartway', { sent: err.total, total: audience }), sent: err.sent }, { status: 502 });
       }
-      return NextResponse.json({ error: 'The email provider rejected the campaign.' }, { status: 502 });
+      return NextResponse.json({ error: t('send.providerRejectedCampaign') }, { status: 502 });
     }
     // The provider branch still reads the message for the errors that are not
     // a CampaignSendError (no provider key configured): it decides a status and
@@ -83,7 +89,7 @@ export async function POST(req: NextRequest) {
     const message = err instanceof Error ? err.message : '';
     const providerFailure = message.includes('Provider') || message.includes('provider') || message.includes('delivery state');
     return NextResponse.json({
-      error: providerFailure ? 'The email provider rejected the campaign.' : 'Could not send campaign.',
+      error: providerFailure ? t('send.providerRejectedCampaign') : t('send.couldNotSendCampaign'),
     }, { status: providerFailure ? 502 : 400 });
   }
 }

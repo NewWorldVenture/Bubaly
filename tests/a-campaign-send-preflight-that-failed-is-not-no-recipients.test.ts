@@ -43,6 +43,7 @@ let faulted = 0;
 let confirms: string[] = [];
 let sends: unknown[] = [];
 let network: 'route' | 'down' = 'route';
+let postAnswer: Record<string, unknown> = { sent: 3 };
 
 function seed() {
   db.seed('marketing_email_campaigns', [{ id: 'cmp-1', name: 'Autumn', segment_id: null, status: 'draft', deleted_at: null }]);
@@ -72,13 +73,14 @@ beforeEach(() => {
   confirms = [];
   sends = [];
   network = 'route';
+  postAnswer = { sent: 3 };
   vi.stubGlobal('window', { confirm: (message: string) => { confirms.push(message); return true; } });
   // The preflight goes to the real route handler; the send is only recorded.
   vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
     if (network === 'down') throw new TypeError('Failed to fetch');
     if (init?.method === 'POST') {
       sends.push(JSON.parse(String(init.body)));
-      return Response.json({ sent: 3 });
+      return Response.json(postAnswer);
     }
     return GET(new NextRequest(new URL(url, 'https://www.bubaly.com')));
   });
@@ -126,5 +128,27 @@ describe('a recipient count that could not be read is not "no recipients"', () =
     expect(confirms).toEqual([SOURCE_MESSAGES['sendCampaignButton.noRecipientsSendAnyway']]);
     expect(h.toasts.error).toEqual([SOURCE_MESSAGES['sendCampaignButton.noEligibleRecipients']]);
     expect(sends).toEqual([]);
+  });
+});
+
+// admin-writers N6-S1. Past the per-send cap (lib/marketing/send.ts
+// MAX_RECIPIENTS) the preflight used to answer 409 "narrow it with a segment",
+// which an audience no segment rule can split could never get past. A send now
+// reaches the first part and Send resumes for the rest, so the dialog asks
+// about the part this send reaches out of the whole, and the toast says how
+// many are left.
+describe('an audience past the per-send cap', () => {
+  it('is confirmed as the first part of the whole, and the toast says how many remain', async () => {
+    seed();
+    const more = Array.from({ length: 998 }, (_, i) => i + 4);
+    db.seed('families', more.map((k) => ({ id: `fam-${k}`, name: `Family ${k}`, created_at: '2026-04-01T00:00:00.000Z', updated_at: null, closed_at: null })));
+    db.seed('family_members', more.map((k) => ({ id: `mem-${k}`, family_id: `fam-${k}`, user_id: `user-${k}`, role: 'parent', is_active: true })));
+    db.seed('profiles', more.map((k) => ({ id: `user-${k}`, email: `parent${k}@example.com` })));
+    postAnswer = { sent: 1000, remaining: 1 };
+    await pressSend();
+    expect(h.toasts.error, 'the preflight refused an audience past the cap').toEqual([]);
+    expect(confirms).toEqual([translate(SOURCE_MESSAGES, 'sendCampaignButton.confirmFirstOf', { n: 1000, total: 1001 })]);
+    expect(sends).toEqual([{ id: 'cmp-1' }]);
+    expect(h.toasts.success).toEqual([translate(SOURCE_MESSAGES, 'sendCampaign.sentSomeRestRemain', { count: 1000, remaining: 1 })]);
   });
 });

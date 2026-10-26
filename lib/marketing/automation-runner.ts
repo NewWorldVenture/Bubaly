@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { automationSendKey, emailsSent, failedAttempt, recordedActionsJson, retryableShortfall, retryOf, stepsRecorded, runSteps, unsupportedStep, worthRetrying, type Step } from '@/lib/marketing/automation-steps';
+import { automationSendKey, emailsSent, failedAttempt, recordedActionsJson, retryableShortfall, retryOf, stepsRecorded, runSteps, fellShort, worthRetrying, type Step } from '@/lib/marketing/automation-steps';
 import { hasRunnableStep, stepsAreRunnable } from '@/lib/marketing/automation-triggers';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 import { getMarketingCustomersWithError, type MarketingCustomer } from '@/lib/marketing/customers';
@@ -174,7 +174,7 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
     // the next pass reaches them.
     const settled = (c: MarketingCustomer) => {
       const run = priorBySubject.get(c.familyId);
-      return run?.status === 'completed' || (run?.status === 'failed' && !worthRetrying(run.metadata));
+      return run?.status === 'completed' || (run?.status === 'failed' && !worthRetrying(run.metadata, c.ownerEmail));
     };
     const owed = matching.filter((c) => !settled(c));
     const subjects = owed.slice(0, cap);
@@ -215,8 +215,9 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
         if (!reclaimed) return;
         runId = reclaimed.id;
       } else if (existing?.status === 'failed') {
-        // A run that can only fail again is not re-claimed (worthRetrying).
-        if (!worthRetrying(existing.metadata)) return;
+        // A run that can only fail again is not re-claimed (worthRetrying):
+        // an unsupported step, or a send to an owner who still has no address.
+        if (!worthRetrying(existing.metadata, c.ownerEmail)) return;
         // Claimed only while its receipts are the ones read above: another
         // pass may have claimed it, delivered an email and recorded that in
         // between (recordedActionsJson).
@@ -254,13 +255,14 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
         actions = failedAttempt(steps, previous);
       }
       summary.emails += emailsSent(actions, previous);
-      // Recorded `failed` for any shortfall, an unsupported step included, so
-      // the row is honest about what it could not do (and worthRetrying leaves
-      // it alone). Counted a FAILURE only for one a retry could change: a step
-      // no runner executes fails the same way for every subject on every day,
-      // and counted, a legacy workflow kept the cron at 502 for good.
+      // Recorded `failed` for any shortfall, an unsupported step and a send
+      // with no address to go to included, so the row is honest about what it
+      // could not do (and worthRetrying leaves it alone until a retry could do
+      // better). Counted a FAILURE only for one a retry could change: a step no
+      // runner executes, or an owner with no email, fails the same way on
+      // every day, and counted, it kept the cron at 502 for good.
       const retryable = retryableShortfall(actions);
-      const failed = retryable || unsupportedStep(actions);
+      const failed = fellShort(actions);
       // The steps beside their results, so a retry matches each result to the step that produced it (retryOf).
       const outcome = { trigger: flow.trigger, actions, steps } as unknown as RunMetadata;
       // Status-guarded, so zero rows means the run was moved on (a reaper marked

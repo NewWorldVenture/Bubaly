@@ -33,7 +33,7 @@ import { renderServerPage, textOf } from './helpers/render-server-page';
 //    sending nothing. It is reported as `unrunnable` and never fails the pass;
 //    one with nothing to run is not run.
 
-const h = vi.hoisted(() => ({ db: null as unknown, sent: [] as { to: string; subject: string }[] }));
+const h = vi.hoisted(() => ({ db: null as unknown, sent: [] as { to: string; subject: string }[], refuse: 0 }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => h.db, createServer: async () => h.db }));
 vi.mock('@/lib/supabase/auth', () => ({
   getUser: async () => ({ id: 'admin-1', email: 'root@example.com' }),
@@ -63,6 +63,8 @@ vi.mock('@/lib/email', () => ({
   getResend: () => ({
     emails: {
       send: async (message: { to: string; subject: string }) => {
+        // The next `refuse` sends are refused by the provider and deliver nothing.
+        if (h.refuse > 0) { h.refuse--; return { data: null, error: { name: 'rate_limit_exceeded', message: 'Too many requests' } }; }
         h.sent.push({ to: message.to, subject: message.subject });
         return { data: { id: `re_${h.sent.length}` }, error: null };
       },
@@ -115,6 +117,7 @@ beforeEach(() => {
   db = createInMemorySupabase({ maxRows: 1000, rpc: { rate_limit_prune: () => null } });
   h.db = db;
   h.sent = [];
+  h.refuse = 0;
   for (const table of ['marketing_suppressions', 'marketing_automation_runs', 'marketing_audit_logs', 'marketing_segments', 'child_login_throttle']) db.seed(table, []);
   vi.stubEnv('INTERNAL_SECRET', 'automation-fixture');
   vi.stubEnv('CRON_SECRET', 'cron-fixture-secret');
@@ -165,7 +168,9 @@ describe('the console builds only workflows a runner runs', () => {
   });
 
   it('the builder offers only what runs, and a workflow that cannot run says so', async () => {
-    workflow('customer_created', [{ action: 'send_email' }, { action: 'send_sms' }]);
+    // Not active: the "cannot be turned on" note is for a workflow that is not
+    // on. An active one says what the runners do with it (the case below).
+    workflow('customer_created', [{ action: 'send_email' }, { action: 'send_sms' }], 'draft');
     const { default: AutomationPage } = await import('@/app/(app)/admin/marketing/automation/page');
     const html = await renderServerPage(await AutomationPage());
     for (const offered of ['value="send_sms"', 'value="apply_tag"', 'value="notify_admin"', 'value="joins_segment"', 'value="customer_inactive"']) {
@@ -174,6 +179,30 @@ describe('the console builds only workflows a runner runs', () => {
     expect(html).toContain('value="send_email"');
     expect(html).toContain('value="customer_created"');
     expect(textOf(html)).toContain(m('adminMarketingAutomation.notRunnable'));
+  });
+
+  it('an ACTIVE workflow that cannot fully run says what the runners do with it, not that it cannot be turned on', async () => {
+    db.seed('marketing_automation_workflows', [
+      { id: 'wf-mixed', name: 'Mixed', trigger: 'customer_created', status: 'active', deleted_at: null, run_count: 0, created_at: iso(1), steps: [{ action: 'send_email' }, { action: 'apply_tag' }, { action: 'send_sms' }] },
+      { id: 'wf-sms', name: 'Sms', trigger: 'customer_created', status: 'active', deleted_at: null, run_count: 0, created_at: iso(2), steps: [{ action: 'send_sms' }] },
+      { id: 'wf-never', name: 'Never', trigger: 'joins_segment', status: 'active', deleted_at: null, run_count: 0, created_at: iso(3), steps: [{ action: 'send_email' }] },
+    ]);
+    const { default: AutomationPage } = await import('@/app/(app)/admin/marketing/automation/page');
+    // Newest first: Mixed, Sms, Never.
+    const text = textOf(await renderServerPage(await AutomationPage()));
+    const start = (name: string) => {
+      const index = text.indexOf(`${name} active`);
+      if (index < 0) throw new Error(`no card for ${name}`);
+      return index;
+    };
+    const card = (name: string, next?: string) => text.slice(start(name), next ? start(next) : undefined);
+    // Its email still goes to every new family; the other two steps are recorded unsupported.
+    expect(card('Mixed', 'Sms')).toContain(m('adminMarketingAutomation.activeOnlyEmailRuns', { steps: 'apply tag, send sms' }));
+    // Nothing in it runs: the runners skip it whole.
+    expect(card('Sms', 'Never')).toContain(m('adminMarketingAutomation.activeNothingRuns'));
+    // A trigger nothing fires: nothing runs, whatever its steps.
+    expect(card('Never')).toContain(m('adminMarketingAutomation.activeNothingRuns'));
+    expect(text, 'an Active workflow told the admin it cannot be turned on').not.toContain(m('adminMarketingAutomation.notRunnable'));
   });
 });
 
@@ -197,6 +226,38 @@ describe('a workflow with a step no runner executes', () => {
     expect(third).toMatchObject({ runs: 0, failures: 0 });
     expect(h.sent.map((s) => s.subject)).toEqual(['Welcome']);
     expect(flow().run_count, 'each daily retry was counted as another run').toBe(1);
+  });
+});
+
+describe('run_count counts subjects run, not attempts', () => {
+  // A failed send is retried on the next pass (or the next delivery of the
+  // event) under the same run row. Counting every attempt made "N runs" read
+  // the number of tries, not the number of families the workflow reached.
+  it('a scheduled run that failed and is retried still counts once', async () => {
+    family('fam-new', { subscribedDaysAgo: 5 });
+    workflow('customer_created', [{ action: 'send_email', subject: 'Welcome' }]);
+    h.refuse = 1;
+    expect(await runAutomations(db as unknown as DB)).toMatchObject({ runs: 1, emails: 0, failures: 1 });
+    expect(runs()[0].status).toBe('failed');
+    expect(flow().run_count).toBe(1);
+
+    expect(await runAutomations(db as unknown as DB)).toMatchObject({ runs: 1, emails: 1, failures: 0 });
+    expect(runs()).toEqual([expect.objectContaining({ status: 'completed' })]);
+    expect(flow().run_count, 'the retry of one family\'s run was counted as a second run').toBe(1);
+    expect(h.sent).toEqual([{ to: 'fam-new@example.com', subject: 'Welcome' }]);
+  });
+
+  it('an event-driven run that failed and is retried still counts once', async () => {
+    workflow('form_submitted', [{ action: 'send_email', subject: 'Thanks' }]);
+    const fire = () => fireAutomationEvent(db as unknown as DB, {
+      trigger: 'form_submitted', email: 'lead@example.com', name: 'Lead', subjectKey: 'form_submitted:submission-1',
+    });
+    h.refuse = 1;
+    expect(await fire()).toMatchObject({ workflows: 1, emails: 0, failures: 1 });
+    expect(flow().run_count).toBe(1);
+    expect(await fire()).toMatchObject({ workflows: 1, emails: 1, failures: 0 });
+    expect(runs()).toEqual([expect.objectContaining({ status: 'completed' })]);
+    expect(flow().run_count, 'the retried event was counted as a second run').toBe(1);
   });
 });
 
@@ -337,8 +398,11 @@ describe('a workflow switched on before the console refused unrunnable ones', ()
 
     it('control: a send that failed is still a failure', async () => {
       workflow('form_submitted', [{ action: 'send_email' }, { action: 'notify_admin' }]);
+      // The provider refuses it. (A send with no address at all is settled,
+      // not a failure: tests/an-automation-send-with-no-address-is-settled-not-retried.test.ts.)
+      h.refuse = 1;
       const result = await fireAutomationEvent(db as unknown as DB, {
-        trigger: 'form_submitted', email: null, name: 'Lead', subjectKey: 'form_submitted:anon',
+        trigger: 'form_submitted', email: 'lead@example.com', name: 'Lead', subjectKey: 'form_submitted:lead@example.com',
       });
       expect(result).toMatchObject({ workflows: 1, emails: 0, failures: 1, unrunnable: 1 });
     });

@@ -40,6 +40,15 @@ export type MarketingCustomer = {
 };
 
 const DAY = 86_400_000;
+/**
+ * Who a family's campaign and automation mail goes to, in order: an active
+ * parent, else an active adult (the roles that manage the household). The
+ * owner used to fall back to ANY member with an account, inactive rows
+ * included, so a family with no parent login mailed its teen, its caregiver
+ * or a guest it had removed. No such member, no owner: `ownerEmail` is null
+ * and the family is not mailed.
+ */
+const OWNER_ROLES = ['parent', 'adult'] as const;
 /** The families and subscriptions the view reads before it reports a prefix; the smallest of its ceilings. */
 export const CUSTOMER_FAMILY_CEILING = 2000;
 /** The members and profiles it joins on before it reports a prefix. */
@@ -122,8 +131,9 @@ export async function getMarketingCustomersWithError(supabase: DB): Promise<{
   // read was sorted by family and then id.
   const subByFamily = new Map((subs ?? []).map((s) => [s.family_id, s]));
 
-  // The owner is the first parent with an account in (user_id, id) order —
-  // the order the members were read in before they paged on the id alone.
+  // The owner is the first ACTIVE parent with an account in (user_id, id)
+  // order — the order the members were read in before they paged on the id
+  // alone — else the first active adult (OWNER_ROLES).
   const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
   const byUserThenId = [...(members ?? [])].sort((a, b) =>
     (a.user_id === null ? 1 : 0) - (b.user_id === null ? 1 : 0)
@@ -142,7 +152,7 @@ export async function getMarketingCustomersWithError(supabase: DB): Promise<{
   const customers = newestFirst.map((f) => {
     const fam = membersByFamily.get(f.id) ?? [];
     const active = fam.filter((m) => m.is_active);
-    const owner = fam.find((m) => m.role === 'parent' && m.user_id) ?? fam.find((m) => m.user_id);
+    const owner = OWNER_ROLES.map((role) => active.find((m) => m.role === role && m.user_id)).find(Boolean);
     const ownerEmail = owner?.user_id ? emailByUser.get(owner.user_id) ?? null : null;
 
     const sub = subByFamily.get(f.id);

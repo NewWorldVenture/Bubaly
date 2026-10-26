@@ -4,7 +4,7 @@ import { createElement } from 'react';
 import { NextRequest } from 'next/server';
 import { SOURCE_MESSAGES } from '@/lib/i18n/messages';
 import { translate } from '@/lib/i18n/translate';
-import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
+import { createInMemorySupabase, withFaults, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { renderServerPage, textOf } from './helpers/render-server-page';
 
 // An email campaign that stops partway (admin-writers N2/N4/N5). The sender
@@ -24,13 +24,16 @@ import { renderServerPage, textOf } from './helpers/render-server-page';
 // way Resend does, so "mailed twice" is read off the inbox, not inferred.
 
 type Message = { to: string };
-type Answer = 'ok' | 'reject' | 'accept-then-throw';
+// 'accept-then-kill': the provider takes the batch and the function is killed
+// before it can write anything again (every later campaign write is refused).
+type Answer = 'ok' | 'reject' | 'accept-then-throw' | 'accept-then-kill';
 const h = vi.hoisted(() => ({
   db: null as unknown,
   answers: [] as Answer[],
   delivered: [] as string[],
   keys: [] as string[],
   acceptedKeys: new Set<string>(),
+  killed: false,
 }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => h.db, createServer: async () => h.db }));
 vi.mock('@/lib/supabase/auth', () => ({
@@ -63,6 +66,10 @@ vi.mock('@/lib/server/fetch-with-deadline', () => ({
       h.delivered.push(...batch.map((message) => message.to));
     }
     if (answer === 'accept-then-throw') throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    if (answer === 'accept-then-kill') {
+      h.killed = true;
+      throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    }
     return new Response(JSON.stringify({ data: batch.map((_, i) => ({ id: `re_${i}` })) }), { status: 200 });
   },
 }));
@@ -101,7 +108,10 @@ async function emailPage(): Promise<string> {
 
 beforeEach(() => {
   db = createInMemorySupabase({ maxRows: 1000 });
-  h.db = db;
+  h.killed = false;
+  // Once the function is "killed" no campaign write lands; reads still answer.
+  h.db = withFaults(db, (table, calls) => (h.killed && table === 'marketing_email_campaigns' && calls.some((call) => call.method === 'update')
+    ? { message: 'the function was killed' } : null));
   h.answers = [];
   h.delivered = [];
   h.keys = [];
@@ -135,7 +145,7 @@ describe('a later batch the provider refuses', () => {
 
     const again = await send();
     expect(again.status).toBe(200);
-    expect(await again.json()).toEqual({ sent: AUDIENCE - 100 });
+    expect(await again.json()).toEqual({ sent: AUDIENCE - 100, remaining: 0 });
     expect(twice(), 'a family mailed twice').toEqual([]);
     expect(new Set(h.delivered).size).toBe(AUDIENCE);
     expect(campaign()).toMatchObject({ status: 'sent', recipients: AUDIENCE });
@@ -177,11 +187,64 @@ describe('a batch whose request throws', () => {
   });
 });
 
+describe('a send whose function is killed partway', () => {
+  it('has already recorded every batch accepted before the kill', async () => {
+    // Batch one accepted, batch two accepted, and then nothing more is written:
+    // no failed state, no final state. What the row says is what the per-batch
+    // progress write left it.
+    h.answers = ['ok', 'accept-then-kill'];
+    const first = await send();
+    expect(first.status).toBe(502);
+    // The provider took the mail: not "rejected", which invites a resend.
+    expect((await first.json()).error).toBe(m('send.sentButNotRecorded'));
+    expect(campaign().status, 'left `sending`, so the console offers no Send').toBe('sending');
+    expect(campaign().recipients, 'a batch accepted before the kill was not on record').toBe(100);
+    const delivery = (campaign().metadata as { delivery: { delivered: string[] } }).delivery;
+    expect(new Set(delivery.delivered)).toEqual(new Set(h.delivered.slice(0, 100)));
+  });
+
+  it('a send the provider accepted whose final record is refused is not reported as rejected', async () => {
+    // Every batch goes, and only the write that marks the campaign sent is refused.
+    h.db = withFaults(db, (table, calls) => (table === 'marketing_email_campaigns'
+      && calls.some((call) => call.method === 'update' && (call.args[0] as { status?: string })?.status === 'sent')
+      ? { message: 'claim lost' } : null));
+    const res = await send();
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.error).toBe(m('send.sentButNotRecorded'));
+    expect(body.error).not.toBe(m('send.providerRejectedCampaign'));
+    expect(new Set(h.delivered).size).toBe(AUDIENCE);
+    expect(campaign()).toMatchObject({ status: 'sending', recipients: AUDIENCE });
+  });
+});
+
+describe('a resume whose audience no longer starts with the unknown batch', () => {
+  it('still sends the unknown batch first and whole, under its key, and mails no one twice', async () => {
+    h.answers = ['ok', 'accept-then-throw'];
+    expect((await send()).status).toBe(502);
+    const unknownKey = h.keys[1];
+    // A family joins before the resume. The audience is newest first, so it
+    // now sits AHEAD of the unknown batch: cut in hundreds from the top, the
+    // batch would be a different set under a different key, and the provider
+    // would deliver its 99 others a second time.
+    db.seed('families', [{ id: 'fam-new', name: 'New', created_at: '2026-02-01T00:00:00Z', updated_at: null, closed_at: null }]);
+    db.seed('family_members', [{ id: 'm-new', family_id: 'fam-new', user_id: 'u-new', role: 'parent', is_active: true }]);
+    db.seed('profiles', [{ id: 'u-new', email: 'newcomer@example.com' }]);
+
+    const again = await send();
+    expect(again.status).toBe(200);
+    expect(h.keys[2], 'the unknown batch was not retried first under its own key').toBe(unknownKey);
+    expect(twice(), 'a family mailed twice').toEqual([]);
+    expect(new Set(h.delivered)).toEqual(new Set([...db.table('profiles').map((p) => p.email as string)]));
+    expect(campaign()).toMatchObject({ status: 'sent', recipients: AUDIENCE + 1 });
+  });
+});
+
 describe('a send that goes through (control)', () => {
   it('mails everyone once, in batches of a hundred, and records the total', async () => {
     const res = await send();
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ sent: AUDIENCE });
+    expect(await res.json()).toEqual({ sent: AUDIENCE, remaining: 0 });
     expect(h.keys).toHaveLength(3);
     expect(new Set(h.keys).size).toBe(3);
     expect(twice()).toEqual([]);

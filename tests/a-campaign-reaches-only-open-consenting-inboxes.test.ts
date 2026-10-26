@@ -24,6 +24,9 @@ import { renderServerPage, textOf } from './helpers/render-server-page';
 //    `kim+news@gmail.com` did not stop `kim+bubaly@gmail.com`.
 //  - An audience past 1,000 was cut to its newest thousand, previewed as 1,000
 //    and recorded `sent` for good; the oldest families could never get it.
+//    Refused outright instead, an audience no segment rule can split (one
+//    lifecycle, one plan, no LTV) could never be emailed at all (N6-S1). It
+//    now goes out a thousand at a time, and Send resumes for the rest.
 
 const h = vi.hoisted(() => ({ db: null as unknown, batches: [] as { to: string }[][] }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => h.db, createServer: async () => h.db }));
@@ -58,8 +61,9 @@ vi.mock('next/link', () => ({
   default: ({ children, href, ...props }: ComponentProps<'a'>) => createElement('a', { href, ...props }, children),
 }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {}, push: () => {}, replace: () => {} }) }));
+vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ toast: () => {}, success: () => {}, error: () => {} }) }));
 vi.mock('@/app/(app)/admin/marketing/actions', () => ({
-  createSegment: async () => {}, archiveSegment: async () => {}, setCampaignStatus: async () => {},
+  createSegment: async () => {}, archiveSegment: async () => {}, setCampaignStatus: async () => {}, createEmailDraft: async () => {},
 }));
 
 const { resolveRecipients } = await import('@/lib/marketing/send');
@@ -154,33 +158,53 @@ describe('an opt-out holds for the whole inbox', () => {
   });
 });
 
-describe('an audience past the cap is refused, not cut', () => {
+describe('an audience past the cap is sent in parts, never cut', () => {
+  // 1,001 free families: one lifecycle, one plan, no LTV, so no segment rule
+  // can split them below the cap.
   beforeEach(() => {
     db.seed('families', Array.from({ length: 1001 }, (_, i) => ({ id: `fam-${pad(i)}`, name: `F${i}`, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z', closed_at: null })));
     db.seed('family_members', Array.from({ length: 1001 }, (_, i) => ({ id: `m-${pad(i)}`, family_id: `fam-${pad(i)}`, user_id: `u-${pad(i)}`, role: 'parent', is_active: true })));
     db.seed('profiles', Array.from({ length: 1001 }, (_, i) => ({ id: `u-${pad(i)}`, email: `parent${pad(i)}@example.com` })));
     draft();
   });
+  const campaign = () => db.table('marketing_email_campaigns')[0];
+  async function emailPage(): Promise<string> {
+    const { default: EmailPage } = await import('@/app/(app)/admin/marketing/email/page');
+    return textOf(await renderServerPage(await EmailPage()));
+  }
 
-  it('the preview says the audience is too large instead of answering 1,000', async () => {
+  it('the preview answers what this send reaches and how many are still to go, not 1,000 as if it were everyone', async () => {
     const res = await preview();
-    expect(res.status).toBe(409);
-    expect((await res.json()).error).toBe(m('send.audienceOverCap', { n: 1001, cap: 1000 }));
+    expect(res.status, 'an audience no segment can split was refused outright').toBe(200);
+    expect(await res.json()).toEqual({ recipients: 1000, audience: 1001, alreadySent: 0 });
   });
 
-  it('the send refuses, mails no one and leaves the campaign a draft that can still reach everyone', async () => {
-    const res = await send();
-    expect(res.status).toBe(409);
-    expect((await res.json()).error).toBe(m('send.audienceOverCap', { n: 1001, cap: 1000 }));
-    expect(h.batches).toEqual([]);
-    const [campaign] = db.table('marketing_email_campaigns');
-    expect(campaign.status).toBe('draft');
-    expect(campaign.recipients ?? 0).toBe(0);
+  it('a send reaches the first thousand and says the rest remain; the next reaches the rest and no one twice', async () => {
+    const first = await send();
+    expect(first.status).toBe(200);
+    expect(await first.json()).toEqual({ sent: 1000, remaining: 1 });
+    expect(mailed()).toHaveLength(1000);
+    // Back to draft with what went out, so Send is offered and resumes; never `sent` with the tail cut off.
+    expect(campaign()).toMatchObject({ status: 'draft', recipients: 1000 });
+    expect(await emailPage()).toContain(m('adminMarketingEmail.sentOfAudienceSoFar', { n: 1000, total: 1001 }));
+    expect(await (await preview()).json()).toEqual({ recipients: 1, audience: 1, alreadySent: 1000 });
+
+    const second = await send();
+    expect(second.status).toBe(200);
+    expect(await second.json()).toEqual({ sent: 1, remaining: 0 });
+    expect(mailed()).toHaveLength(1001);
+    expect(new Set(mailed()).size, 'a family mailed twice').toBe(1001);
+    expect(campaign()).toMatchObject({ status: 'sent', recipients: 1001 });
+    expect(await emailPage()).not.toContain(m('adminMarketingEmail.sentOfAudienceSoFar', { n: 1000, total: 1001 }));
+    expect((await send()).status, 'a sent campaign cannot be sent again').toBe(400);
+    expect(db.table('marketing_audit_logs').map((row) => (row.metadata as { outcome: string }).outcome)).toEqual(['capped', 'complete']);
   });
 
   it('an audience of exactly the cap is sent whole (control)', async () => {
     db.replace('families', db.table('families').slice(1));
-    expect((await send()).status).toBe(200);
+    const res = await send();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ sent: 1000, remaining: 0 });
     expect(mailed()).toHaveLength(1000);
     expect(db.table('marketing_email_campaigns')[0]).toMatchObject({ status: 'sent', recipients: 1000 });
   });

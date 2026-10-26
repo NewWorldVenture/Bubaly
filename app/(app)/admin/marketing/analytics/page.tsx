@@ -84,7 +84,12 @@ export default async function AnalyticsPage() {
     byChannel.set(c.channel, e);
   }
 
-  const sent = (emails ?? []).filter((e) => e.status === 'sent');
+  // Every campaign that delivered mail, not only those marked `sent`: a send
+  // that stopped partway is `failed` and one past the per-send cap is back to
+  // `draft`, each with what went out in `recipients` (lib/marketing/send.ts),
+  // and their opens and clicks are real. Counting only `sent` rows left a
+  // partial campaign that was never resumed out of every total.
+  const sent = (emails ?? []).filter((e) => e.status === 'sent' || (e.recipients ?? 0) > 0);
   const recip = sent.reduce((s, e) => s + (e.recipients ?? 0), 0);
   const opens = sent.reduce((s, e) => s + (e.opens ?? 0), 0);
   const clicks = sent.reduce((s, e) => s + (e.clicks ?? 0), 0);

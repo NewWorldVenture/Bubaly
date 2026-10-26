@@ -100,18 +100,25 @@ export async function loadPushCampaignAudience(supabase: DB): Promise<string[]> 
 }
 
 /**
- * Keep only accounts that explicitly opted in to marketing push and hold no
- * child or teen membership in any family.
+ * Keep only accounts that explicitly opted in to marketing push, hold no
+ * child or teen membership in any family, and are not left only with families
+ * that closed their account.
  *
  * The device table says who CAN be reached, not who agreed to marketing: a
  * child with the app installed was in the audience because their family left
  * push on, and the only way out was to turn off all push, including the
- * family's own notices. Read completely before dispatch, on the same budget;
- * an incomplete read throws, so a refused read sends nothing.
+ * family's own notices. Closing an account (families.closed_at) leaves its
+ * devices enabled, and the email campaign and the automation runner already
+ * leave closed families out; a member of an open family stays in. Read
+ * completely before dispatch, on the same budget; an incomplete read throws,
+ * so a refused read sends nothing.
  */
 async function consentingAdults(supabase: DB, userIds: string[], budget: ReadBudget): Promise<string[]> {
   const consented = new Set<string>();
   const minors = new Set<string>();
+  /** Accounts with any membership, and those with one in a family still open. */
+  const members = new Set<string>();
+  const inOpenFamily = new Set<string>();
   for (let offset = 0; offset < userIds.length; offset += ID_CHUNK) {
     const chunk = userIds.slice(offset, offset + ID_CHUNK);
     const preferences = await readPages(cursor => {
@@ -121,16 +128,23 @@ async function consentingAdults(supabase: DB, userIds: string[], budget: ReadBud
       return query;
     }, row => row.user_id, budget, 'consent');
     for (const row of preferences) if (hasMarketingPushConsent(row.notification_prefs)) consented.add(row.user_id);
-    // Every membership, active or not: a removed child is still a child.
+    // Every membership, active or not: a removed child is still a child. Each
+    // with its family's closure, joined on the foreign key (a membership has
+    // exactly one family).
     const memberships = await readPages(cursor => {
-      let query = supabase.from('family_members').select('id, user_id, role')
+      let query = supabase.from('family_members').select('id, user_id, role, family:families!inner(closed_at)')
         .in('user_id', chunk).order('id', { ascending: true }).limit(PAGE_SIZE);
       if (cursor !== null) query = query.gt('id', cursor);
       return query;
     }, row => row.id, budget, 'member roles');
     for (const row of memberships) {
-      if (typeof row.user_id === 'string' && MARKETING_PUSH_EXCLUDED_ROLES.includes(String(row.role))) minors.add(row.user_id);
+      if (typeof row.user_id !== 'string') continue;
+      if (MARKETING_PUSH_EXCLUDED_ROLES.includes(String(row.role))) minors.add(row.user_id);
+      members.add(row.user_id);
+      // A family that was not returned with the row is not known to be open.
+      const family = row.family as { closed_at?: unknown } | null;
+      if (family && family.closed_at === null) inOpenFamily.add(row.user_id);
     }
   }
-  return userIds.filter(id => consented.has(id) && !minors.has(id));
+  return userIds.filter(id => consented.has(id) && !minors.has(id) && (!members.has(id) || inOpenFamily.has(id)));
 }

@@ -9,6 +9,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { createEmailDraft } from '../actions';
 import { SendCampaignButton } from '@/components/admin/send-campaign-button';
+import { campaignDelivery } from '@/lib/marketing/send';
 import { getTranslations } from '@/lib/i18n/server';
 import { SubmitButton } from '@/components/ui/submit-button';
 
@@ -71,10 +72,15 @@ export default async function EmailPage() {
                     {e.status === 'failed' && e.recipients > 0 && (
                       <p className="text-xs text-muted">{t('adminMarketingEmail.sentBeforeItStopped', { n: e.recipients })}</p>
                     )}
+                    {/* A send past the per-send cap reached its first part and
+                        came back to draft with the rest held (lib/marketing/send.ts). */}
+                    {e.status === 'draft' && <CappedNote t={t} recipients={e.recipients} metadata={e.metadata} />}
                     <SendCampaignButton id={e.id} />
                   </div>
                 ) : e.status === 'failed' && e.recipients > 0 ? (
                   <p className="shrink-0 text-xs text-muted">{t('adminMarketingEmail.sentBeforeItStopped', { n: e.recipients })}</p>
+                ) : e.status === 'draft' ? (
+                  <CappedNote t={t} recipients={e.recipients} metadata={e.metadata} />
                 ) : null}
               </Card>
             ))
@@ -98,6 +104,13 @@ export default async function EmailPage() {
       </div>
     </div>
   );
+}
+
+/** "N of M sent" for a draft an earlier, capped send reached part of; nothing otherwise. */
+function CappedNote({ t, recipients, metadata }: { t: Awaited<ReturnType<typeof getTranslations>>; recipients: number; metadata: unknown }) {
+  const delivery = campaignDelivery(metadata);
+  if (delivery?.outcome !== 'capped' || recipients <= 0) return null;
+  return <p className="shrink-0 text-xs text-muted">{t('adminMarketingEmail.sentOfAudienceSoFar', { n: recipients, total: recipients + (delivery.held ?? 0) })}</p>;
 }
 
 async function AdminEmailReadError() {

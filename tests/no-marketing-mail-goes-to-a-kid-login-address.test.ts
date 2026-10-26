@@ -83,6 +83,6 @@ describe('an email campaign', () => {
     const result = await sendEmailCampaign(db as unknown as DB, 'camp-1', 'https://bubaly.test');
 
     expect(h.batches.flat().map((m) => m.to)).toEqual(['parent@example.test']);
-    expect(result).toEqual({ sent: 1 });
+    expect(result).toEqual({ sent: 1, remaining: 0 });
   });
 });

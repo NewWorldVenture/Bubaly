@@ -195,10 +195,34 @@ export function retryOf(metadata: unknown, current: Step[]): { steps: Step[]; pr
  * failed or was skipped, an attempt that recorded nothing, and a run whose
  * steps all went but whose outcome could not be recorded (the retry carries
  * the sends over and completes it).
+ *
+ * A send skipped for want of an address (`unaddressedSend`: no owner email, or
+ * a kid login's) is the same shape: a retry to the same address skips it
+ * again. Re-claimed, such a run failed on every pass, answered the cron 502,
+ * and the newest of them took the per-pass cap ahead of families never
+ * served. It is left alone while `email` — the subject's address NOW — still
+ * cannot be mailed, and retried once it can: an owner who adds an email.
  */
-export function worthRetrying(metadata: unknown): boolean {
+export function worthRetrying(metadata: unknown, email: string | null | undefined): boolean {
   const actions = recordedActions(metadata);
-  return retryableShortfall(actions) || !unsupportedStep(actions);
+  if (retryableShortfall(actions)) return true;
+  if (actions.some(unaddressedSend)) return canBeAddressed(email);
+  return !unsupportedStep(actions);
+}
+
+/**
+ * A send skipped because the recipient has no address it may be sent to:
+ * none at all, or a kid login's synthetic one (runSteps). Nothing a retry
+ * does changes that; only the address can (worthRetrying). Not a skip for a
+ * missing provider key (`skipped(no-key)`), which a configured key ends.
+ */
+export function unaddressedSend(action: string): boolean {
+  return action === 'send_email:skipped(no-recipient)' || action === 'send_email:skipped(kid-login)';
+}
+
+/** Whether runSteps would try to mail this address: one is there, and it is not a kid login's. */
+function canBeAddressed(email: string | null | undefined): boolean {
+  return !!email && !isChildLoginEmail(email);
 }
 
 /**
@@ -207,15 +231,27 @@ export function worthRetrying(metadata: unknown): boolean {
  * the pass that ran it. A run whose only shortfall is `unsupportedStep` is
  * still recorded `failed` (honest about the step it could not do, and not
  * retried), but counted as a failure it answered the cron 502 on every day a
- * new subject matched a legacy workflow, for a step no retry can ever do.
+ * new subject matched a legacy workflow, for a step no retry can ever do. A
+ * send with no address to go to (`unaddressedSend`) is not one either.
  */
 export function retryableShortfall(actions: readonly string[]): boolean {
-  return actions.some((action) => action.includes(':failed') || action.includes(':skipped'));
+  return actions.some((action) => action.includes(':failed') || (action.includes(':skipped') && !unaddressedSend(action)));
 }
 
 /** Whether an attempt recorded a step no runner executes (`<action>:unsupported`). */
 export function unsupportedStep(actions: readonly string[]): boolean {
   return actions.some((action) => action.includes(':unsupported'));
+}
+
+/**
+ * Whether an attempt fell short of its steps at all: a retryable shortfall, a
+ * step no runner executes, or a send with no address to go to. Such a run is
+ * recorded `failed`, honest about what did not happen; worthRetrying decides
+ * whether it is tried again, and retryableShortfall whether it is the pass's
+ * failure.
+ */
+export function fellShort(actions: readonly string[]): boolean {
+  return retryableShortfall(actions) || unsupportedStep(actions) || actions.some(unaddressedSend);
 }
 
 /** Emails this attempt actually sent: a send carried over from `previous` was not sent again. */

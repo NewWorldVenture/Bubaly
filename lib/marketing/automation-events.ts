@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { automationSendKey, emailsSent, failedAttempt, recordedActionsJson, retryableShortfall, retryOf, stepsRecorded, runSteps, unsupportedStep, worthRetrying, type SendAdmission, type Step } from '@/lib/marketing/automation-steps';
+import { automationSendKey, emailsSent, failedAttempt, recordedActionsJson, retryableShortfall, retryOf, stepsRecorded, runSteps, fellShort, worthRetrying, type SendAdmission, type Step } from '@/lib/marketing/automation-steps';
 import { EVENT_DEFAULT_COPY, hasRunnableStep, stepsAreRunnable, type EventTrigger } from '@/lib/marketing/automation-triggers';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
@@ -30,7 +30,8 @@ export type FireEventResult = {
   workflows: number; emails: number;
   /**
    * Workflows that ran and recorded a failed or skipped step: a nudge a retry
-   * could still deliver. A step no runner executes is not one (`unrunnable`).
+   * could still deliver. A step no runner executes is not one (`unrunnable`),
+   * and nor is a send this event gave no address to (unaddressedSend).
    */
   failures: number;
   /**
@@ -123,8 +124,9 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
         continue;
       }
       if (!existing || existing.status !== 'failed') continue;
-      // A run that can only fail again (a step no runner executes) is left as it is.
-      if (!worthRetrying(existing.metadata)) continue;
+      // A run that can only fail again (a step no runner executes, or a send
+      // to a recipient this event still gives no address) is left as it is.
+      if (!worthRetrying(existing.metadata, params.email)) continue;
       // Claimed only while its receipts are the ones just read: another sweep
       // may have claimed it, delivered an email and recorded that in between
       // (recordedActionsJson).
@@ -152,11 +154,11 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
       actions = failedAttempt(steps, previous);
     }
 
-    // Recorded `failed` for any shortfall, an unsupported step included (and
-    // worthRetrying leaves that one alone); counted a failure only for one a
-    // retry could change, as the scheduled runner counts it.
+    // Recorded `failed` for any shortfall, an unsupported step and a send with
+    // no address included (and worthRetrying leaves those alone); counted a
+    // failure only for one a retry could change, as the scheduled runner counts it.
     const retryable = retryableShortfall(actions);
-    const failed = retryable || unsupportedStep(actions);
+    const failed = fellShort(actions);
     // The run row was reserved or claimed by this path above, so zero rows is a
     // result that was not recorded — the same situation the error already
     // throws for, and it takes the same path. Audit C1-S9-67.

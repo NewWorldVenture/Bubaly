@@ -16,11 +16,16 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /**
  * The most addresses one send of a campaign may go to.
  *
- * An audience past it is REFUSED, not cut. The list used to be sliced to its
- * first thousand and the campaign recorded `sent`: the preview, the confirm
- * dialog and the console all said 1,000 as if that were everyone, and the
- * oldest families past the cut could never be reached by that campaign again,
- * because a `sent` row cannot be sent. The admin narrows the audience instead.
+ * An audience past it is sent IN PARTS, never cut. The list used to be sliced
+ * to its first thousand and the campaign recorded `sent`: the preview, the
+ * confirm dialog and the console all said 1,000 as if that were everyone, and
+ * the oldest families past the cut could never be reached by that campaign
+ * again, because a `sent` row cannot be sent. It was then refused outright,
+ * which left an audience no segment rule can split (1,200 free families: one
+ * lifecycle, one plan, no LTV) with no way to be emailed at all. A send now
+ * reaches the first MAX_RECIPIENTS, records them as delivered and puts the
+ * campaign back to `draft` with what it held back (outcome `capped`), and Send
+ * resumes for the rest, skipping every address already delivered.
  */
 export const MAX_RECIPIENTS = 1000;
 /** Resend's batch API takes up to 100 messages per request. */
@@ -69,8 +74,8 @@ async function suppressedInboxes(supabase: DB): Promise<Set<string>> {
 
 /**
  * Resolve the deduped, valid, non-suppressed recipient list for a campaign:
- * every eligible address, uncapped (sendEmailCampaign refuses an audience past
- * MAX_RECIPIENTS rather than cutting it).
+ * every eligible address, uncapped (sendEmailCampaign sends an audience past
+ * MAX_RECIPIENTS in parts rather than cutting it).
  */
 export async function resolveRecipients(
   supabase: DB,
@@ -124,7 +129,9 @@ export type CampaignDelivery = {
   attempt: string;
   delivered: string[];
   pending: string[] | null;
-  outcome?: 'complete' | 'provider_rejected' | 'provider_unreachable' | 'state_unrecorded';
+  outcome?: 'complete' | 'capped' | 'provider_rejected' | 'provider_unreachable' | 'state_unrecorded';
+  /** A `capped` send's count of eligible addresses it left for the next send. */
+  held?: number;
 };
 
 function plainObject(value: unknown): Record<string, unknown> {
@@ -144,6 +151,7 @@ export function campaignDelivery(metadata: unknown): CampaignDelivery | null {
     delivered: strings(raw.delivered),
     pending: Array.isArray(raw.pending) ? strings(raw.pending) : null,
     ...(typeof raw.outcome === 'string' ? { outcome: raw.outcome as CampaignDelivery['outcome'] } : {}),
+    ...(typeof raw.held === 'number' && Number.isFinite(raw.held) ? { held: raw.held } : {}),
   };
 }
 
@@ -169,16 +177,14 @@ export async function campaignAudience(
  */
 export class CampaignSendError extends Error {
   constructor(
-    readonly code: 'over_cap' | 'provider_rejected' | 'provider_unreachable' | 'state_unrecorded',
+    readonly code: 'provider_rejected' | 'provider_unreachable' | 'state_unrecorded',
     readonly sent: number,
     readonly total: number,
     readonly audience: number,
   ) {
-    super(code === 'over_cap'
-      ? 'The campaign audience is larger than one send may reach.'
-      : code === 'state_unrecorded'
-        ? 'Provider accepted the send, but delivery state could not be recorded. Do not retry until the campaign is checked.'
-        : 'Provider rejected the send');
+    super(code === 'state_unrecorded'
+      ? 'Provider accepted the send, but delivery state could not be recorded. Do not retry until the campaign is checked.'
+      : 'Provider rejected the send');
     this.name = 'CampaignSendError';
   }
 }
@@ -198,7 +204,8 @@ function footer(appUrl: string, email: string): string {
   return `<hr style="margin-top:32px;border:none;border-top:1px solid #e5e7eb" /><p style="color:#9ca3af;font-size:12px;line-height:18px;margin-top:16px">You're receiving this because you have a Bubaly account. <a href="${url}" style="color:#6b7280">Unsubscribe</a>.</p>`;
 }
 
-type SendResult = { sent: number };
+/** `sent`: what this send delivered. `remaining`: the eligible addresses it held back for the next (MAX_RECIPIENTS). */
+type SendResult = { sent: number; remaining: number };
 
 /**
  * Sends a marketing email campaign for real via the Resend batch API. Never
@@ -227,14 +234,16 @@ export async function sendEmailCampaign(supabase: DB, campaignId: string, appUrl
 
   const { remaining, alreadySent, prior } = await campaignAudience(supabase, c);
   if (remaining.length === 0) throw new Error('No eligible recipients (after suppression/consent filtering)');
-  if (remaining.length > MAX_RECIPIENTS) throw new CampaignSendError('over_cap', 0, alreadySent, remaining.length);
 
   // The batch an earlier attempt could not confirm goes first and whole, so it
   // carries the same idempotency key it was first sent under.
   const remainingSet = new Set(remaining);
   const unknown = (prior?.pending ?? []).filter((e) => remainingSet.has(e));
   const unknownSet = new Set(unknown);
-  const rest = remaining.filter((e) => !unknownSet.has(e));
+  // Past MAX_RECIPIENTS this send takes the first of them, the unknown batch
+  // included, and holds the rest for the next one (see MAX_RECIPIENTS).
+  const rest = remaining.filter((e) => !unknownSet.has(e)).slice(0, Math.max(0, MAX_RECIPIENTS - unknown.length));
+  const held = remaining.length - unknown.length - rest.length;
   const batches: string[][] = unknown.length > 0 ? [unknown] : [];
   for (let i = 0; i < rest.length; i += BATCH_SIZE) batches.push(rest.slice(i, i + BATCH_SIZE));
 
@@ -243,7 +252,11 @@ export async function sendEmailCampaign(supabase: DB, campaignId: string, appUrl
   let delivered = [...(prior?.delivered ?? [])];
   const state = (pending: string[] | null, outcome?: CampaignDelivery['outcome']): Json => ({
     ...base,
-    delivery: { attempt, delivered, pending, ...(outcome ? { outcome, finishedAt: new Date().toISOString() } : {}) },
+    delivery: {
+      attempt, delivered, pending,
+      ...(outcome ? { outcome, finishedAt: new Date().toISOString() } : {}),
+      ...(outcome === 'capped' ? { held } : {}),
+    },
   }) as Json;
 
   // Reserve the row atomically. A second browser tab or retried request must
@@ -270,7 +283,7 @@ export async function sendEmailCampaign(supabase: DB, campaignId: string, appUrl
       .select('id').maybeSingle();
 
   /** Stop here: the row goes to `failed` with what went out, so the next send resumes rather than repeats. */
-  const stop = async (code: Exclude<CampaignSendError['code'], 'over_cap'>, pending: string[] | null): Promise<never> => {
+  const stop = async (code: CampaignSendError['code'], pending: string[] | null): Promise<never> => {
     const { data: failed, error: failedError } = await record({ status: 'failed', recipients: delivered.length, metadata: state(pending, code) });
     if (failedError || !failed) {
       // Left `sending`: the console offers no Send for it, which is the safe
@@ -326,13 +339,16 @@ export async function sendEmailCampaign(supabase: DB, campaignId: string, appUrl
     }
   }
 
-  const { data: sentCampaign, error: sentError } = await record({
-    status: 'sent', sent_at: new Date().toISOString(), recipients: delivered.length, metadata: state(null, 'complete'),
-  });
+  // A send that held addresses back goes back to `draft` (the only other
+  // status Send takes) with what it delivered and what it held, so the next
+  // Send reaches the rest; the last one records `sent`.
+  const { data: sentCampaign, error: sentError } = await record(held > 0
+    ? { status: 'draft', recipients: delivered.length, metadata: state(null, 'capped') }
+    : { status: 'sent', sent_at: new Date().toISOString(), recipients: delivered.length, metadata: state(null, 'complete') });
   if (sentError || !sentCampaign) {
     console.error('[marketing send] delivery-state update failed', sentError ?? new Error('Campaign claim was lost after provider acceptance.'));
     throw new CampaignSendError('state_unrecorded', delivered.length - alreadySent, delivered.length, remaining.length);
   }
 
-  return { sent: delivered.length - alreadySent };
+  return { sent: delivered.length - alreadySent, remaining: held };
 }

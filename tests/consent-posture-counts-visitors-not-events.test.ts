@@ -68,6 +68,23 @@ describe('the consent posture tiles', () => {
     expect(await tile(MARKETING)).toBe('2');
   });
 
+  it('the latest decision wins whatever order the ids sort in', async () => {
+    // mkt_consent_events.id is gen_random_uuid() (0160_visitor_consent.sql):
+    // a later decision's id sorts BEFORE an earlier one's as often as after,
+    // and the read pages in id order. The fixture ids above rise with time,
+    // so "last row read wins" would pass them; these do not.
+    db.seed('mkt_consent_events', [
+      // A: granted analytics, then withdrew it. The withdrawal's id sorts first.
+      { id: 'f0a1c3e2-0000-4000-8000-000000000001', anonymous_id: 'visitor-a', category: 'analytics', decision: 'granted', created_at: at(1), policy_version: '1' },
+      { id: '0b7d9e14-0000-4000-8000-000000000002', anonymous_id: 'visitor-a', category: 'analytics', decision: 'denied', created_at: at(5), policy_version: '1' },
+      // B: refused marketing email, then opted in. The opt-in's id sorts first.
+      { id: 'e9c2a4b6-0000-4000-8000-000000000003', anonymous_id: 'visitor-b', category: 'marketing_email', decision: 'denied', created_at: at(2), policy_version: '1' },
+      { id: '1a3f5c7e-0000-4000-8000-000000000004', anonymous_id: 'visitor-b', category: 'marketing_email', decision: 'granted', created_at: at(6), policy_version: '1' },
+    ]);
+    expect(await tile(ANALYTICS), 'a withdrawn grant counted because its id sorted last').toBe('0');
+    expect(await tile(MARKETING), 'a current opt-in was lost because an older refusal sorted last').toBe('1');
+  });
+
   it('a visitor who withdrew everything is no longer counted', async () => {
     decide('visitor-a', 1, ALL);
     expect(await tile(MARKETING)).toBe('1');

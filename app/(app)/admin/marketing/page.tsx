@@ -90,7 +90,9 @@ export default async function MarketingDashboard() {
   const aeoTotal = aeoTotalResult.count ?? 0;
 
   const emailRows = emails ?? [];
-  const sent = emailRows.filter((e) => e.status === 'sent');
+  // Every campaign that delivered mail: a stopped or capped send records what
+  // went out in `recipients` on a `failed` or `draft` row (lib/marketing/send.ts).
+  const sent = emailRows.filter((e) => e.status === 'sent' || (e.recipients ?? 0) > 0);
   const totalRecipients = sent.reduce((s, e) => s + (e.recipients ?? 0), 0);
   const totalOpens = sent.reduce((s, e) => s + (e.opens ?? 0), 0);
   const openRate = totalRecipients > 0 ? Math.round((totalOpens / totalRecipients) * 100) : null;
