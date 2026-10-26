@@ -7,6 +7,7 @@ import {
   KNOWN_DUPLICATE_MIGRATIONS,
   RETIRED_HIGH_WATER,
   RETIRED_MIGRATION_VERSIONS,
+  isTimestampMigrationVersion,
 } from '../scripts/audit-migration-versions.mjs';
 
 describe('Supabase migration filename safety', () => {
@@ -21,6 +22,7 @@ describe('Supabase migration filename safety', () => {
     expect(audit.unexpectedDuplicates).toEqual([]);
     expect(audit.duplicates).toEqual([]);
     expect(KNOWN_DUPLICATE_MIGRATIONS).toEqual({});
+    expect(audit.invalidVersions).toEqual([]);
   });
 
   // Why this matters beyond tidiness: supabase_migrations.schema_migrations has
@@ -549,6 +551,12 @@ describe('Supabase migration filename safety', () => {
     const held = existsSync(reservedDir) ? readdirSync(reservedDir).filter((name) => name.endsWith('.sql')) : [];
     const released = new Set((audit.entries as { version: string }[]).map(({ version }) => version.slice(0, 4)));
     for (const name of held) {
+      const timestamp = /^(\d{14})_[a-z0-9_]+\.sql$/.exec(name)?.[1];
+      if (timestamp) {
+        expect(isTimestampMigrationVersion(timestamp)).toBe(true);
+        expect(audit.entries.some((entry: { version: string }) => entry.version === timestamp), `${name} also appears in automatic replay`).toBe(false);
+        continue;
+      }
       const version = name.slice(0, 4);
       expect(name, 'a held file is named NNNN_name.sql').toMatch(/^\d{4}_[a-z0-9_]+\.sql$/);
       expect(released.has(version), `${name} shares a number with a released migration`).toBe(false);
@@ -600,5 +608,37 @@ describe('Supabase migration filename safety', () => {
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
+  });
+
+  it('keeps CLI timestamps separate while still rejecting legacy gaps and retired numbers', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'bubaly-migrations-'));
+    try {
+      for (const name of ['0001_first.sql', '0002_retired.sql', '0004_skipped.sql', '20261025234230_private_lock.sql']) {
+        writeFileSync(join(directory, name), 'select 1;');
+      }
+      const result = auditMigrationVersions(directory, { retired: ['0002'], highWater: 2 });
+      expect(result.nextVersion).toBe('0005');
+      expect(result.filledHoles).toEqual(['0002_retired.sql']);
+      expect(result.skippedVersions).toEqual(['0003']);
+      expect(result.timestampEntries).toEqual([{ name: '20261025234230_private_lock.sql', version: '20261025234230' }]);
+      expect(result.invalidVersions).toEqual([]);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+
+  it('rejects duplicate timestamp identities and malformed timestamp versions', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'bubaly-migrations-'));
+    try {
+      for (const name of ['20261025234230_first.sql', '20261025234230_duplicate.sql', '20260230234230_bad_date.sql', '2026102523423_short.sql']) {
+        writeFileSync(join(directory, name), 'select 1;');
+      }
+      const result = auditMigrationVersions(directory, { retired: [], highWater: 0 });
+      expect(result.unexpectedDuplicates).toEqual([{
+        version: '20261025234230', names: ['20261025234230_duplicate.sql', '20261025234230_first.sql'],
+      }]);
+      expect(result.invalidVersions.map(({ name }: { name: string }) => name)).toEqual(['20260230234230_bad_date.sql', '2026102523423_short.sql']);
+      expect(isTimestampMigrationVersion('20240229235959')).toBe(true);
+      expect(isTimestampMigrationVersion('20260229235959')).toBe(false);
+      expect(isTimestampMigrationVersion('20261025246000')).toBe(false);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 });

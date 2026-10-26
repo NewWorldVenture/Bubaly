@@ -11,6 +11,14 @@ const REACT_HYDRATION_REPLAY_FIX = fileURLToPath(new URL('./scripts/react-hydrat
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Keep compilation in its own worker even with the hydration loader below,
+  // then release that heap before collecting pages. Bound the separate page
+  // pool and avoid retaining duplicate webpack source strings/buffers.
+  experimental: {
+    cpus: 2,
+    webpackBuildWorker: true,
+    webpackMemoryOptimizations: true,
+  },
   // Next 15's build re-ran the type-check and ESLint that CI already ran as
   // their own steps, in the SAME worker that held webpack's module graph.
   // That co-residency, not the type-check itself, is

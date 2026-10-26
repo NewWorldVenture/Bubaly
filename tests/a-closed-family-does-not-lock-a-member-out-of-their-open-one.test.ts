@@ -26,7 +26,7 @@ const h = await vi.hoisted(async () => (await import('./helpers/module-state')).
 const state = vi.hoisted(() => ({ db: null as unknown, setActiveFamily: vi.fn(), assign: vi.fn() }));
 
 vi.mock('react', async (original) => (await import('./helpers/hook-slots')).withHookSlots(await original<object>(), h.hooks));
-vi.mock('@/components/ui/toast', async () => (await import('./helpers/module-harness')).toastModule(h));
+vi.mock('@/components/ui/toast', async () => ({ ...(await import('./helpers/module-harness')).toastModule(h), ToastProvider: ({ children }: { children: ReactNode }) => children }));
 vi.mock('@/components/i18n/locale-provider', async () => ({
   ...(await import('./helpers/module-harness')).localeProviderModule(h),
   FamilyTimeZoneProvider: ({ children }: { children: ReactNode }) => children,
@@ -48,7 +48,8 @@ vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string)
 vi.mock('@/components/i18n/scoped-locale-provider', () => ({ ScopedLocaleProvider: ({ children }: { children: ReactNode }) => children }));
 vi.mock('@/components/ui/confirm', () => ({ ConfirmProvider: ({ children }: { children: ReactNode }) => children }));
 vi.mock('@/components/auth/session-keeper', () => ({ SessionKeeper: () => null }));
-vi.mock('@/components/app/app-lock-gate', () => ({ AppLockGate: ({ children }: { children: ReactNode }) => children }));
+vi.mock('@/components/app/app-lock-boundary', () => ({ AppLockBoundary: ({ children }: { children: ReactNode }) => children }));
+vi.mock('@/lib/security/app-lock-store', () => ({ readAppLockRecord: async () => ({ ok: true, record: null }) }));
 vi.mock('@/components/app/trial-paywall-gate', () => ({ TrialPaywallGate: (props: object) => createElement('paywall-gate', props) }));
 vi.mock('@/components/app/account-closed-gate', () => ({ AccountClosedGate: (props: object) => createElement('closed-gate', props) }));
 
