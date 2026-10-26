@@ -148,6 +148,7 @@ source allocations are not evidence that production applied any migration.
 | 0524 proposed, held | `0524_a_guest_adds_nothing_to_the_areas_withheld_from_them.sql` | 0464's guest guard on `auto_insurance_policies`, `driving_trips`, `family_communications`, `home_locations`, `utility_bills`, `vacation_medical_information`, `wallet_cards`, `wallet_passes` and `wallet_rewards`. Follows ROLE-M03 and ROLE-SCOPE-001; requested on #771 (comment 6402627160), not yet confirmed. |
 | 0525 proposed, held | `0525_a_closed_vote_takes_no_more_ballots.sql` | `a_meal_ballot_is_cast_while_its_vote_is_open()` and `a_poll_vote_is_cast_while_its_poll_is_open()`, BEFORE INSERT OR UPDATE on `meal_vote_ballots` and `family_poll_votes`: a ballot is cast or changed only while its vote is open, read in the row's family FOR SHARE. Support's database half of 6137789822; requested on #771 (comment 6402862474), not yet confirmed. |
 | 0526 proposed, held | `0526_what_the_library_streams_is_added_by_a_parent_or_adult.sql` | `a_library_feed_is_added_by_a_parent_or_adult()` and `a_library_items_audio_is_added_by_a_parent_or_adult()`, BEFORE INSERT OR UPDATE on `library_feeds` and `library_items`: only a parent or adult adds or changes a subscription's `feed_url` or family, or an item's `media_url`, `feed_id` or family; `created_by` names the writer. KIDS-O02; requested on #771 (comment 6420549131), not yet confirmed. |
+| 0527 proposed, held | `0527_a_post_on_the_idea_board_is_the_callers_own.sql` | `a_feedback_comment_is_the_callers_own()` and `a_feedback_idea_starts_as_the_callers_own()`, BEFORE INSERT on `feedback_comments` and `feedback_ideas`: a signed-in caller posts no team reply, a new idea starts under review with no note, pin, counts or tracker link, and `author_name` is the caller's own. CALHUB-O1; requested on #771 (comment 6421813855), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4920,6 +4921,58 @@ applied twice.
 
 **After approved release:** as a test guest, try to insert a `utility_bills`
 row and confirm 42501.
+
+## `0527` (proposed, held) — anyone could post on the Idea Board as the Bubaly Team
+
+`supabase/reserved/0527_a_post_on_the_idea_board_is_the_callers_own.sql`
+— **held**: requested on #771 in comment 6421813855. Not yet confirmed.
+
+**Severity: medium (a signed-in user of any household could post, to every
+family's board, a reply rendered as the team's, or a roadmap entry already
+"shipped", pinned and voted up, signed "Bubaly Team"). Deploy order: any.**
+CALHUB-O1, the database half of CALHUB-01. The board is shown to every family
+and 0197's insert policies check only `author_id = auth.uid()`. Measured on a
+replay of main, as an ordinary signed-in parent, `OK 1` each: an idea filed as
+"Bubaly Team" with status `shipped`, pinned, an `admin_note`, `vote_count`
+9999, `comment_count` 42 and a GitHub issue; a comment with `is_team = true`.
+
+**Database.** `a_feedback_comment_is_the_callers_own()` and
+`a_feedback_idea_starts_as_the_callers_own()`, SECURITY DEFINER with a pinned
+search_path, BEFORE INSERT, 42501 with their own sentences: for a signed-in
+caller, `is_team` is false; a new idea's `status` is `under_review`, its
+`admin_note` null, `pinned` false, `vote_count` and `comment_count` 0 and its
+four `github_*` columns null; and `author_name` is one of the caller's own
+names by `authorNameFor()`'s rule (a `family_members.display_name` of theirs,
+trimmed; their email's local part; or the default `A Bubaly family`), checked
+by `feedback_name_is_the_callers_own(text)`, which no client may call, and
+never the team's name. The service role is exempt, so the admin console, the
+step-up team reply, the GitHub sync and the seeds write as before. INSERT only:
+there is no client UPDATE or DELETE policy, and the counters move through
+0197's SECURITY DEFINER triggers. No application change.
+
+**Proof:** `.github/workflows/idea-board-authorship-runtime.yml` requires the
+held probe `docs/audit/reserved/a-post-on-the-idea-board-is-the-callers-own-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0527 twice and requires it to pass, then re-runs six released probes
+(an-erasure-actually-erases, definer-functions-check-their-caller,
+family-erasure-leaves-nothing, plpgsql-bodies-resolve, privileged-rpc-grants,
+rls-sweep). The passing run shows each forged column, a team reply, and posts
+signed as the team or as another person refused, the team's name refused even
+where the caller named herself that in another household; the caller still
+posting as her trimmed display name, her email's local part and the default; a
+user in no household commenting as himself; a vote moving the count; the
+server posting a team reply and shipping an idea; the wiring; **N1** (guards
+disabled): the team reply and the shipped idea land; **M1** (the name check
+answering yes): a comment signed as another person lands. Four hand mutants
+(no team-name clause, untrimmed display name, no email branch, one `github_*`
+column dropped) are each caught.
+
+All 189 released probes pass with 0527 applied, and with every held file
+applied twice.
+
+**After approved release:** as a test user, try to insert a
+`feedback_comments` row with `is_team = true` and confirm 42501; then post a
+reply as the team from the admin console and confirm it lands.
 
 ## `0526` (proposed, held) — a child could add what every child's library streams
 
