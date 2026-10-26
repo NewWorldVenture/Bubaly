@@ -86,12 +86,10 @@ export function PhoneInput({
     return () => document.removeEventListener('mousedown', handle);
   }, [open]);
 
-  // Auto-focus the search field when the dropdown opens
+  // Focus the search field as soon as the dropdown opens. Not after a delay: a late focus pulled
+  // focus back from an option the person had already moved to, and their Enter then did nothing.
   useEffect(() => {
-    if (open) {
-      const t = setTimeout(() => searchRef.current?.focus(), 40);
-      return () => clearTimeout(t);
-    }
+    if (open) searchRef.current?.focus();
   }, [open]);
 
   /** Close the list and hand focus back to the button that opened it, so a keyboard user is not left on <body>. */

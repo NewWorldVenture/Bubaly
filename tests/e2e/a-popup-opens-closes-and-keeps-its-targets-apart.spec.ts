@@ -20,7 +20,14 @@ import { expect, test, type Page } from '@playwright/test';
 // overlapped 4.5 px apart, so a tap could land on the neighbouring emoji (axe:
 // target-size, WCAG 2.5.8). It is `w-max` now. It is checked here from its own
 // class strings, placed on the sign-in page (no account needed).
-test.use({ locale: 'en-US', trace: 'off', screenshot: 'off', video: 'off', serviceWorkers: 'block' });
+//
+// Reduced motion: the phone form fades in, and a click while it moves is
+// retried with Playwright scrolling the button into view. The page scrolls
+// smoothly (`scroll-behavior: smooth`), so the press could land before the
+// scroll and the release 34 px further on, off the button. Under reduced
+// motion the app neither animates nor scrolls smoothly; nothing here is about
+// motion.
+test.use({ locale: 'en-US', trace: 'off', screenshot: 'off', video: 'off', serviceWorkers: 'block', contextOptions: { reducedMotion: 'reduce' } });
 
 const browserFailures = new WeakMap<Page, string[]>();
 test.beforeEach(({ page }) => {
@@ -91,11 +98,20 @@ test.describe('the country picker', () => {
 
   test('choosing a country by keyboard closes it and focus returns to its button', async ({ page }) => {
     const trigger = await phonePicker(page);
+    // The page's clock stands still, so a focus on a timer cannot land in time. Opening once
+    // focused the search field 40 ms later: when that tick came after the person had moved to
+    // an option, it pulled focus back to the search field and their Enter did nothing.
+    await page.clock.install();
+    await page.clock.pauseAt(Date.now() + 60_000);
     await trigger.focus();
     await page.keyboard.press('Enter');
-    await page.getByRole('textbox', { name: 'Search country or code…' }).fill('Germany');
+    const search = page.getByRole('textbox', { name: 'Search country or code…' });
+    await expect(search).toBeFocused();
+    await search.fill('Germany');
     const germany = page.getByRole('option', { name: /Germany/ });
     await germany.focus();
+    await page.clock.runFor(1_000);
+    await expect(germany).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(page.getByRole('listbox')).toHaveCount(0);
     const chosen = page.getByRole('button', { name: 'Country: Germany' });
