@@ -38,6 +38,8 @@ describe('the household\'s day is written by a parent or adult (0529)', () => {
     expect(guard).toContain("(to_jsonb(old) ->> 'member_id')");
     expect(guard).not.toMatch(/\b(new|old)\.member_id\b/);
     expect(guard).toContain('if auth.uid() is null then');
+    // Postgres runs the cascades from families in an order it does not fix.
+    expect(guard).toContain("if tg_op = 'DELETE' and not exists (select 1 from public.families f where f.id = old.family_id) then");
   });
 });
 
@@ -47,6 +49,7 @@ describe('the probe and its workflow', () => {
     for (const role of ["('teen', ", "('child', ", "('caregiver', "]) expect(probe, role).toContain(role);
     for (const tbl of ["('family_operating_index',", "('reasoning_snapshots',", "('workload_snapshots',"]) expect(probe, tbl).toContain(tbl);
     expect(probe).toContain("delete from public.family_members where id = '00000000-0000-4000-8529-0000000000d4';");
+    expect(probe).toContain("deleting the household in a session that is not its parent''s failed");
     expect(probe).toContain('-- N1. The guards disabled.');
     expect(probe).toContain('-- M1. The guard checking the new row only.');
   });

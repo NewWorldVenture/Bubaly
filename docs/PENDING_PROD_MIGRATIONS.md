@@ -4947,9 +4947,12 @@ workload row and deleting the history.
 **Database.** `a_household_day_is_written_by_a_parent_or_adult()`, SECURITY
 DEFINER with a pinned search_path, BEFORE INSERT, UPDATE and DELETE on all
 three: for a signed-in caller, a write needs `can_manage_family` of the row's
-family, old and new (42501). The service role is exempt, and so is a member's
-removal cascading into their `workload_snapshots` rows (`on delete cascade`),
-which may run in that member's own session. The body reads `member_id` through
+family, old and new (42501). The service role is exempt, and so are two
+cascades that may run in a signed-in session: the household's deletion once its
+family row is gone (Postgres runs the cascades from `families` in
+constraint-trigger-name order, which is not fixed, so its members may be gone
+first), and a member's removal cascading into their `workload_snapshots` rows
+(`on delete cascade`). The body reads `member_id` through
 `to_jsonb(old)`, so it resolves on every table. Reads are unchanged. No
 application change.
 
@@ -4962,11 +4965,13 @@ family-erasure-leaves-nothing, gated-write-tables, plpgsql-bodies-resolve,
 rls-sweep). The passing run shows every write above refused by 0529's guard
 (the two tables with no member delete policy answer OK 0); parents and adults
 rewriting, filing and deleting on all three; everyone still reading them; the
-server filing them; a child's member row removed in their session and the
-household deleted in the parent's session; the wiring; **N1** (guards
-disabled): the child's rewrites land; **M1** (the guard checking the new row
-only): the child's workload delete lands. Two hand mutants (no member-removal
-exemption, no new-row clause) are each caught.
+server filing them; a child's member row removed in their session, the
+household deleted in the parent's session, and in a session that is not its
+parent's (which forces the cascade order that leaves no parent); the wiring;
+**N1** (guards disabled): the child's rewrites land; **M1** (the guard checking
+the new row only): the child's workload delete lands. Three hand mutants (no
+household exemption, no member-removal exemption, no new-row clause) are each
+caught.
 
 All 189 released probes pass with 0529 applied, and with every held file
 applied twice.
@@ -5000,8 +5005,11 @@ signed-in caller, a write whose old or new row is a budget drift needs a parent
 or adult of that row's family (42501), which also covers the unfiltered write
 a restrictive read cannot filter. Every other kind stays any member's (the
 member-reach detection, Restore and Dismiss). The service role is exempt, and
-so is a member's removal emptying `member_id` once their row is gone and
-changing nothing else, which may run in that member's own session. No
+so are two cascades that may run in a signed-in session: the household's
+deletion once its family row is gone (Postgres runs the cascades from
+`families` in constraint-trigger-name order, which is not fixed, so its members
+may be gone first and its parent no longer its parent), and a member's removal
+emptying `member_id` once their row is gone and changing nothing else. No
 application change.
 
 **Proof:** `.github/workflows/budget-drift-signal-runtime.yml` requires the
@@ -5014,12 +5022,14 @@ rls-sweep). The passing run shows the drifts reading no row for the teen, the
 child and the caregiver and every write above refused (a dismiss by id matching
 none); parents and adults reading, dismissing, planting and deleting drifts;
 everyone else still reading, dismissing, adding and refreshing other signals;
-the server filing and deleting; a child's member row removed in their session
-and the household deleted in the parent's session; the wiring; **N1** (read
-rule dropped, guard disabled): the child reads, dismisses and plants; **M1**
-(guard off DELETE): the child's unfiltered delete lands. Three hand mutants (no
-old-row clause, no member-removal exemption, the read rule without its kind
-test) are each caught.
+the server filing and deleting; a child's member row removed in their session,
+the household deleted in the parent's session, and in a session that is not
+its parent's (which forces the cascade order that leaves no parent); the
+wiring; **N1** (read rule dropped, guard disabled): the child reads, dismisses
+and plants; **M1** (guard off DELETE): the child's unfiltered delete lands.
+Four hand mutants (no household exemption, no old-row clause, no
+member-removal exemption, the read rule without its kind test) are each
+caught.
 
 All 189 released probes pass with 0528 applied, and with every held file
 applied twice.

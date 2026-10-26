@@ -24,11 +24,13 @@
 --
 -- Every other kind stays any member's, as the member-reach detection, Restore
 -- and Dismiss need. The service role and session-less writers (the nightly
--- model refresh) are exempt. So is the cascade of a member's removal, which may
--- run in that member's own session: emptying member_id (01420's on delete set
--- null) once their row is gone, and changing nothing else. A household deleted
--- by its parent cascades while they are still its parent. SECURITY DEFINER with
--- a pinned search_path, so the member check reads the rows as they are.
+-- model refresh) are exempt. So are the two cascades that reach a drift in a
+-- signed-in session: the household's deletion, once its family row is gone
+-- (Postgres runs the cascades from families in an order it does not fix, so its
+-- members may already be gone and its parent no longer its parent), and a
+-- member's removal emptying member_id (01420's on delete set null) once their
+-- row is gone, changing nothing else. SECURITY DEFINER with a pinned
+-- search_path, so those checks read the rows as they are.
 --
 -- HELD: 0528, requested on #771 in comment 6422105432 and not yet confirmed.
 -- It stays in supabase/reserved/ until every number below it has landed.
@@ -51,6 +53,13 @@ begin
   if auth.uid() is null then
     return case when tg_op = 'DELETE' then old else new end; -- service role / server-side jobs
   end if;
+  -- The household's own deletion cascading: its family row is already gone.
+  -- Postgres runs the cascades from families in an order it does not fix (by
+  -- constraint trigger name), so family_members may already be gone and the
+  -- parent who deleted it no longer its parent.
+  if tg_op = 'DELETE' and not exists (select 1 from public.families f where f.id = old.family_id) then
+    return old;
+  end if;
   -- A member's removal emptying member_id, and nothing else.
   if tg_op = 'UPDATE' and old.member_id is not null and new.member_id is null
      and not exists (select 1 from public.family_members m where m.id = old.member_id)
@@ -66,7 +75,7 @@ end
 $$;
 
 comment on function public.a_budget_drift_signal_is_written_by_a_parent_or_adult() is
-  'Refuses (42501) a signed-in caller''s insert, update or delete of a budget_drift family_signals row unless they are a parent or adult of its family (0528). The service role, and a member''s removal emptying member_id, are exempt.';
+  'Refuses (42501) a signed-in caller''s insert, update or delete of a budget_drift family_signals row unless they are a parent or adult of its family (0528). The service role, the household''s deletion and a member''s removal emptying member_id are exempt.';
 
 revoke all on function public.a_budget_drift_signal_is_written_by_a_parent_or_adult() from public, anon;
 

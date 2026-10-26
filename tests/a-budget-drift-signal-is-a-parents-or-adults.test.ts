@@ -37,11 +37,13 @@ describe('a budget-drift signal is a parent\'s or adult\'s (0528)', () => {
     expect(sql).toContain('before insert or update or delete on public.family_signals');
   });
 
-  it('exempts the service role and a member\'s removal emptying member_id, and nothing else', () => {
+  it('exempts the service role, the household\'s deletion and a member\'s removal emptying member_id', () => {
     expect(guard).toContain('if auth.uid() is null then');
+    // Postgres runs the cascades from families in an order it does not fix, so
+    // the parent deleting the household may no longer be its parent by then.
+    expect(guard).toContain("if tg_op = 'DELETE' and not exists (select 1 from public.families f where f.id = old.family_id) then");
     expect(guard).toContain("and not exists (select 1 from public.family_members m where m.id = old.member_id)");
     expect(guard).toContain("and (to_jsonb(new) - 'member_id' - 'updated_at') = (to_jsonb(old) - 'member_id' - 'updated_at') then");
-    expect(guard).not.toContain('public.families');
   });
 });
 
@@ -51,6 +53,7 @@ describe('the probe and its workflow', () => {
     for (const role of ["('teen', ", "('child', ", "('caregiver', "]) expect(probe, role).toContain(role);
     expect(probe).toContain("delete from public.family_members where id = '00000000-0000-4000-8528-0000000000d4';");
     expect(probe).toContain("delete from public.families where id = '00000000-0000-4000-8528-0000000000f1';");
+    expect(probe).toContain("deleting the household in a session that is not its parent''s failed");
     expect(probe).toContain('-- N1. The read rule dropped and the guard disabled.');
     expect(probe).toContain('-- M1. The guard off DELETE.');
   });

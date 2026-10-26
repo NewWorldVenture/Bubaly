@@ -24,7 +24,9 @@
 --      (service_role, no user) files and deletes a drift; the child's member
 --      row removed in the child's session empties member_id on the drift that
 --      named them; the household deleted in the parent's session takes its
---      signals with it;
+--      signals with it, and so does a deletion in a session that is not its
+--      parent's (the order Postgres runs the cascades in is not fixed, so its
+--      members may be gone first);
 --   3. wiring: the read rule as written, and the guard enabled, FOR EACH ROW,
 --      BEFORE INSERT, UPDATE and DELETE, SECURITY DEFINER;
 --
@@ -223,6 +225,22 @@ begin
       end if;
     exception when others then
       bad := array_append(bad, format('deleting the household in the parent''s session failed (%s: %s)', sqlstate, sqlerrm));
+    end;
+    raise exception using errcode = 'P0R01';
+  exception when sqlstate 'P0R01' then null;
+  end;
+  -- The household, deleted where its parent is no longer its parent by the
+  -- time the cascade reaches these rows: Postgres runs the cascades from
+  -- families in constraint-trigger-name order, which is not fixed, so
+  -- family_members may go first. Forced here, on any cluster, by deleting it in
+  -- the child's session.
+  begin
+    perform set_config('request.jwt.claim.sub', child, true);
+    perform set_config('request.jwt.claims', json_build_object('sub', child, 'role', 'authenticated')::text, true);
+    begin
+      delete from public.families where id = '00000000-0000-4000-8528-0000000000f1';
+    exception when others then
+      bad := array_append(bad, format('deleting the household in a session that is not its parent''s failed (%s: %s)', sqlstate, sqlerrm));
     end;
     raise exception using errcode = 'P0R01';
   exception when sqlstate 'P0R01' then null;

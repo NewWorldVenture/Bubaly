@@ -23,9 +23,12 @@
 -- DELETE on family_operating_index, reasoning_snapshots and workload_snapshots:
 -- for a signed-in caller, a write needs can_manage_family of the row's family,
 -- old and new (42501). The service role and session-less writers (the crons)
--- are exempt, and so is a member's removal cascading into workload_snapshots
--- (its member_id is on delete cascade), which may run in that member's own
--- session: a delete whose member row is already gone. Reads are unchanged. The
+-- are exempt, and so are two cascades that may run in a signed-in session: the
+-- household's deletion, once its family row is gone (Postgres runs the cascades
+-- from families in an order it does not fix, so its members may already be gone
+-- and its parent no longer its parent), and a member's removal cascading into
+-- workload_snapshots (its member_id is on delete cascade), a delete whose
+-- member row is already gone. Reads are unchanged. The
 -- body reads member_id through to_jsonb(old), so it resolves on all three
 -- tables (docs/audit/plpgsql-bodies-resolve-check.sql).
 --
@@ -45,6 +48,13 @@ begin
   if auth.uid() is null then
     return case when tg_op = 'DELETE' then old else new end; -- service role / server-side jobs
   end if;
+  -- The household's own deletion cascading: its family row is already gone.
+  -- Postgres runs the cascades from families in an order it does not fix (by
+  -- constraint trigger name), so family_members may already be gone and the
+  -- parent who deleted it no longer its parent.
+  if tg_op = 'DELETE' and not exists (select 1 from public.families f where f.id = old.family_id) then
+    return old;
+  end if;
   -- A member's removal cascading into their workload history.
   if tg_op = 'DELETE' and (to_jsonb(old) ->> 'member_id') is not null
      and not exists (select 1 from public.family_members m where m.id = (to_jsonb(old) ->> 'member_id')::uuid) then
@@ -59,7 +69,7 @@ end
 $$;
 
 comment on function public.a_household_day_is_written_by_a_parent_or_adult() is
-  'Refuses (42501) a signed-in caller''s write to family_operating_index, reasoning_snapshots or workload_snapshots unless they are a parent or adult of the row''s family (0529). The service role, and a member''s removal cascading into workload_snapshots, are exempt.';
+  'Refuses (42501) a signed-in caller''s write to family_operating_index, reasoning_snapshots or workload_snapshots unless they are a parent or adult of the row''s family (0529). The service role, the household''s deletion and a member''s removal cascading into workload_snapshots are exempt.';
 
 revoke all on function public.a_household_day_is_written_by_a_parent_or_adult() from public, anon;
 
