@@ -17194,5 +17194,6 @@
   "childMoney.onlyYourOwnWallet": "Qui vedi il tuo portafoglio. Un genitore o un adulto vede quello di ogni figlio.",
   "medicationsModule.otherMembersDosesAreKeptByManagers": "Le assunzioni degli altri membri sono registrate e seguite dai genitori e dagli adulti della tua famiglia.",
   "nutrition.aGuestSeesSavedEstimatesOnly": "Gli ospiti possono vedere una stima nutrizionale salvata, ma non richiederne una nuova. Chiedi a un membro della famiglia di analizzarla.",
-  "mealsModule.guestsSeeTheVoteOnly": "Gli ospiti possono vedere la votazione di famiglia, ma non parteciparvi."
+  "mealsModule.guestsSeeTheVoteOnly": "Gli ospiti possono vedere la votazione di famiglia, ma non parteciparvi.",
+  "remindersModule.completedNextUnconfirmed": "Promemoria completato, ma non abbiamo potuto confermare il prossimo. Controlla i tuoi promemoria prima di aggiungerne un altro."
 }

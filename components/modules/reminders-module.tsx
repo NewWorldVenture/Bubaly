@@ -27,7 +27,8 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { datetimeLocalToInstant, instantToDatetimeLocal } from '@/lib/time/datetime-local';
 import { cn } from '@/lib/utils/cn';
 import {
   EARLY_REMINDER_OPTIONS, parseTags, formatTags, normalizeSubtasks, newSubtask, subtaskProgress, nextRemindAt,
@@ -133,6 +134,11 @@ export function RemindersModule() {
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<Reminder | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  // A guest views the family's reminders; it does not add, tick, snooze, edit
+  // or remove them. The actions and services refuse it too
+  // (app/(app)/dashboard/reminders/actions.ts, lib/services/reminders); this
+  // page offers none of those controls, as the to-dos page does.
+  const readOnly = role === 'guest';
 
   const { data: lists, loading: listsLoading, error: listsError, refresh: refreshLists } = useRealtimeQuery<Tables<'reminder_lists'>>({
     table: 'reminder_lists', familyId, deps: [familyId],
@@ -224,13 +230,17 @@ export function RemindersModule() {
       if (wroteNoRows(completedRows)) { toastError(tr('errors.thatChangeWasNotSaved')); void refresh(); return; }
 
       // Recurring reminder → spawn the next occurrence so it keeps recurring
-      // (the completed one stays as history, like iOS).
+      // (the completed one stays as history, like iOS). It is the same
+      // reminder, so it keeps its author: written as whoever ticked it, a child
+      // who ticked a parent's daily reminder once became the author of every
+      // one after it, and an author may delete their own (deleteReminderAction).
+      // None stays none — an unauthored reminder is a manager's to remove.
       let recurred = false;
       const next = reminder.remind_at && reminder.recurrence !== 'none'
         ? nextRemindAt(reminder.remind_at, reminder.recurrence, family?.timezone) : null;
       if (next) {
         const nextRow = {
-          family_id: familyId, created_by: userId, title: reminder.title, notes: reminder.notes,
+          family_id: familyId, created_by: reminder.created_by, title: reminder.title, notes: reminder.notes,
           kind: reminder.kind, priority: reminder.priority, recurrence: reminder.recurrence,
           location_name: reminder.location_name, remind_at: next, member_id: reminder.member_id,
           assigned_to_id: reminder.assigned_to_id, url: reminder.url, flagged: reminder.flagged,
@@ -239,9 +249,19 @@ export function RemindersModule() {
           subtasks: normalizeSubtasks(reminder.subtasks).map((s) => ({ ...s, done: false })) as unknown as Reminder['subtasks'],
           list_id: reminder.list_id, tags: reminder.tags, status: 'active',
         };
-        let { error: insErr } = await supabase.from('family_reminders').insert(nextRow);
-        if (insErr && isMissingRelationError(insErr)) ({ error: insErr } = await supabase.from('family_reminders').insert(stripNewCols(nextRow)));
-        recurred = !insErr;
+        // A confirmed completion remains history. One successor attempt is
+        // reported separately; a refusal does not put the parent back or retry.
+        try {
+          const { error: nextError } = await supabase.from('family_reminders').insert(nextRow);
+          recurred = !nextError;
+        } catch {
+          recurred = false;
+        }
+        if (!recurred) {
+          toastError(tr('remindersModule.completedNextUnconfirmed'));
+          void refresh();
+          return;
+        }
       }
       success(recurred ? 'Completed ✓ — next one scheduled' : 'Reminder completed ✓');
       void refresh();
@@ -322,10 +342,14 @@ export function RemindersModule() {
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="reminders" iconOnly />
-            <Button variant="outline" onClick={() => setShowSuggestions(!showSuggestions)}>
-              <Sparkles className="h-4 w-4 text-brand-text" /> {tr('reminders.quickAdd')}
-            </Button>
-            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('reminders.newReminder')}</Button>
+            {!readOnly && (
+              <>
+                <Button variant="outline" onClick={() => setShowSuggestions(!showSuggestions)}>
+                  <Sparkles className="h-4 w-4 text-brand-text" /> {tr('reminders.quickAdd')}
+                </Button>
+                <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('reminders.newReminder')}</Button>
+              </>
+            )}
           </div>
         }
       />
@@ -433,7 +457,7 @@ export function RemindersModule() {
                 {(lists ?? []).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 <option value="none">{tr('reminders.noList')}</option>
               </select>
-              {filterList !== 'all' && filterList !== 'none' && (
+              {!readOnly && filterList !== 'all' && filterList !== 'none' && (
                 <button onClick={() => deleteList(filterList)} aria-label={tr('reminders.deleteList')} className="rounded-lg p-1.5 text-muted hover:text-danger">
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -471,7 +495,7 @@ export function RemindersModule() {
         ) : (
           <EmptyState icon={Bell} title={tr('reminders.noReminders')}
             description={tr('remindersModule.setTimeBasedLocationMedication')}
-            action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('reminders.addReminder')}</Button>} />
+            action={readOnly ? undefined : <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('reminders.addReminder')}</Button>} />
         )
       ) : (
         <div className="space-y-2">
@@ -490,7 +514,13 @@ export function RemindersModule() {
                   overdue && !completed ? 'border-danger/30 bg-danger/5' : 'border-border bg-surface/30 hover:bg-surface/50',
                   snoozed && 'border-warning/30 bg-warning/5',
                 )}>
-                {/* Complete button */}
+                {/* Complete button (a plain status mark for a guest) */}
+                {readOnly ? (
+                  <span aria-hidden className={cn('mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2',
+                    completed ? 'border-success bg-success text-success-fg' : 'border-border')}>
+                    {completed && <Check className="h-3.5 w-3.5" />}
+                  </span>
+                ) : (
                 <button onClick={() => !completed && complete(reminder)} disabled={completed || isPending(`complete:${reminder.id}`)}
                   aria-label={completed ? tr('remindersModule.stat.completed') : tr('remindersModule.markComplete')}
                   className={cn(
@@ -503,6 +533,7 @@ export function RemindersModule() {
                     ? <Loader2 className="h-3.5 w-3.5 animate-spin text-success" />
                     : completed && <Check className="h-3.5 w-3.5" />}
                 </button>
+                )}
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
@@ -585,7 +616,7 @@ export function RemindersModule() {
                       {normalizeSubtasks(reminder.subtasks).map((s) => {
                         const busy = isPending(`subtask:${reminder.id}:${s.id}`);
                         return (
-                          <button key={s.id} type="button" onClick={() => toggleSubtask(reminder, s.id)} disabled={busy}
+                          <button key={s.id} type="button" onClick={() => toggleSubtask(reminder, s.id)} disabled={busy || readOnly}
                             className="flex w-full items-center gap-2 text-left text-xs disabled:opacity-50">
                             <span className={cn('grid h-4 w-4 shrink-0 place-items-center rounded-full border', s.done ? 'border-success bg-success text-success-fg' : 'border-border')}>
                               {busy ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : s.done && <Check className="h-2.5 w-2.5" />}
@@ -603,7 +634,7 @@ export function RemindersModule() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-1 opacity-100 sm:opacity-0 transition-opacity sm:group-hover:opacity-100 focus-within:opacity-100 coarse:opacity-100">
+                {!readOnly && <div className="flex items-center gap-1 opacity-100 sm:opacity-0 transition-opacity sm:group-hover:opacity-100 focus-within:opacity-100 coarse:opacity-100">
                   {!completed && (
                     <div className="relative">
                       <details className="group/snooze">
@@ -629,7 +660,7 @@ export function RemindersModule() {
                     className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-danger disabled:opacity-50">
                     {isPending(`delete:${reminder.id}`) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                   </button>
-                </div>
+                </div>}
               </div>
             );
           })}
@@ -660,6 +691,11 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
 }) {
   const tr = useTranslations();
   const plural = usePlural();
+  // The time box is a reading on the FAMILY's clock, the one the list shows
+  // (TIME-003). It was filled with the stored UTC reading and saved on the
+  // device's clock, so a New York 9:00 AM opened as 13:00 and an untouched
+  // time came back four hours late from every edit.
+  const clock = useFamilyClock();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [kind, setKind] = useState(reminder?.kind ?? 'time');
@@ -739,6 +775,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
     const form = new FormData(e.currentTarget);
     const g = (k: string) => String(form.get(k) ?? '').trim() || null;
     const remindAtRaw = g('remind_at');
+    const remindAt = remindAtRaw ? datetimeLocalToInstant(remindAtRaw, clock.timeZone) : null;
     const finalTags = commitTags();
     const payload = {
       title: g('title') ?? '',
@@ -747,7 +784,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
       priority: g('priority') ?? 'medium',
       recurrence,
       location_name: kind === 'location' ? g('location_name') : null,
-      remind_at: remindAtRaw ? new Date(remindAtRaw).toISOString() : null,
+      remind_at: remindAt,
       member_id: g('member_id'),
       assigned_to_id: g('assigned_to_id'),
       url: g('url'),
@@ -761,10 +798,13 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
     // ── Validation ──
     if (!payload.title) return toastError(tr('remindersModule.titleIsRequired'));
     if (payload.title.length > 200) return toastError(tr('validation.titleTooLong', { max: 200 }));
+    // A reading the family's clock does not hold (30 February) is refused, not
+    // rolled into March.
+    if (remindAtRaw && !remindAt) return toastError(tr('errors.thatTimeIsNotOnTheFamilysClock'));
     // A brand-new time-based reminder in the past would never fire — block it.
     const timeBased = kind === 'time' || kind === 'medication' || kind === 'bill' || kind === 'school' || kind === 'chore';
-    if (!reminder && timeBased && remindAtRaw) {
-      if (new Date(remindAtRaw).getTime() < Date.now() - 60_000) {
+    if (!reminder && timeBased && remindAt) {
+      if (Date.parse(remindAt) < Date.now() - 60_000) {
         return toastError(tr('remindersModule.pickATimeInThe'));
       }
     }
@@ -854,7 +894,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
         {(kind === 'time' || kind === 'medication' || kind === 'bill' || kind === 'school' || kind === 'chore') && (
           <Field label={tr('reminders.dateTime')}>
             {(id) => <Input id={id} name="remind_at" type="datetime-local"
-              defaultValue={reminder?.remind_at ? reminder.remind_at.slice(0, 16) : ''} />}
+              defaultValue={instantToDatetimeLocal(reminder?.remind_at, clock.timeZone)} />}
           </Field>
         )}
 

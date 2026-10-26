@@ -17194,5 +17194,6 @@
   "childMoney.onlyYourOwnWallet": "Aqui vês a tua própria carteira. Um pai ou mãe ou um adulto vê a de cada criança.",
   "medicationsModule.otherMembersDosesAreKeptByManagers": "As tomas dos outros membros são registadas e acompanhadas pelos pais e adultos da sua família.",
   "nutrition.aGuestSeesSavedEstimatesOnly": "Os convidados podem ver uma estimativa nutricional guardada, mas não pedir uma nova. Peça a um membro da família que a analise.",
-  "mealsModule.guestsSeeTheVoteOnly": "Os convidados podem ver a votação da família, mas não votar nela."
+  "mealsModule.guestsSeeTheVoteOnly": "Os convidados podem ver a votação da família, mas não votar nela.",
+  "remindersModule.completedNextUnconfirmed": "Lembrete concluído, mas não foi possível confirmar o próximo. Verifica os teus lembretes antes de adicionares outro."
 }

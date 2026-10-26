@@ -166,14 +166,23 @@ export async function GET(req: NextRequest) {
 
     if (!members?.length) { skipped++; return; }
 
-    const { data: adminMember, error: adminMemberError } = await supabase
+    // The one parent or adult the digest goes to: the earliest to join who has
+    // a login and an email on file. It was `.limit(1)` with no order, and a
+    // family was skipped whenever that row had no login — a parent or adult
+    // added as a managed profile — while the parent who DOES have one got
+    // nothing. Unordered, the row also moved whenever a member row was
+    // rewritten (a profile save updates `display_name`), so a family's digest
+    // could stop, or change parent, from one Monday to the next. Ordered and
+    // read whole (a family has a handful of managers), it is the same person
+    // every week.
+    const { data: managers, error: adminMemberError } = await supabase
       .from('family_members')
       .select('user_id, display_name')
       .eq('family_id', family.id)
       .eq('is_active', true)
       .in('role', ['parent', 'adult'])
-      .limit(1)
-      .maybeSingle();
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
 
     if (adminMemberError) {
       console.error(`[weekly-digest] Admin member read failed for ${family.id}:`, adminMemberError);
@@ -181,6 +190,9 @@ export async function GET(req: NextRequest) {
       return;
     }
 
+    // Only the choice of WHO. Once chosen, that person's own opt-out below
+    // withholds the digest; it does not pass it to another parent.
+    const adminMember = (managers ?? []).find((m) => m.user_id && emailByUserId.get(m.user_id));
     if (!adminMember?.user_id) { skipped++; return; }
     const adminEmail = emailByUserId.get(adminMember.user_id);
     if (!adminEmail) { skipped++; return; }

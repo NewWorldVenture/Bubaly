@@ -130,17 +130,16 @@ describe('the reminders module, converted only where it can be', () => {
     expect(writesIn(PARTIALLY_CONVERTED)).not.toContain('delete');
   });
 
-  it('leaves exactly the six writes that are actually blocked', () => {
-    // Pinned at six so a NEW direct write cannot hide among the blocked ones,
-    // and so converting any of them has to edit this number deliberately:
-    //
-    //   editor insert + update ....... need the six columns 0100 added
-    //   respawn insert x2 ............ same, plus the stripNewCols tolerance
-    //   toggleSubtask update ......... writes `subtasks`, a 0100 column
-    //   complete update .............. the recurrence question: this spawns a
-    //                                  history row, completeReminder rolls the
-    //                                  same row forward in place
-    expect(writesIn(PARTIALLY_CONVERTED)).toHaveLength(6);
+  it('keeps only the five direct writes the rich editor and history still require', () => {
+    // Editor insert/update, one recurrence insert, subtask update and completion.
+    // Completion is retained when its successor is refused; no restore or retry.
+    expect(writesIn(PARTIALLY_CONVERTED)).toHaveLength(5);
+    const completion = code(PARTIALLY_CONVERTED).split('function complete(')[1]!.split('function toggleSubtask(')[0]!;
+    expect([...completion.matchAll(REMINDER_WRITE)].map((m) => m[1])).toEqual(['update', 'insert']);
+    expect(completion).toContain("tr('remindersModule.completedNextUnconfirmed')");
+    expect(completion).not.toContain('stripNewCols');
+    expect(completion).not.toMatch(/.rpc\(/);
+
   });
 
   it('keeps its tolerance for an unapplied 0100', () => {
