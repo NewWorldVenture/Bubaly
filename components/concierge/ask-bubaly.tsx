@@ -168,7 +168,7 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
           type="submit"
           disabled={!text.trim() || busy}
           aria-label={t('askBubaly.askBubaly')}
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-brand text-brand-fg transition hover:opacity-90 focus-ring disabled:opacity-40 coarse:min-h-11 coarse:min-w-11 sm:h-9 sm:w-9"
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-brand text-brand-fg transition hover:brightness-95 focus-ring disabled:opacity-40 coarse:min-h-11 coarse:min-w-11 sm:h-9 sm:w-9"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <ArrowRight className="h-4 w-4" aria-hidden />}
         </button>
@@ -205,7 +205,7 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
             <button
               type="submit"
               disabled={!answer.trim() || busy}
-              className="inline-flex h-11 items-center justify-center rounded-lg bg-brand px-4 text-sm font-medium text-brand-fg transition hover:opacity-90 focus-ring disabled:opacity-40 coarse:min-h-11"
+              className="inline-flex h-11 items-center justify-center rounded-lg bg-brand px-4 text-sm font-medium text-brand-fg transition hover:brightness-95 focus-ring disabled:opacity-40 coarse:min-h-11"
             >
               {t('askBubaly.answer')}
             </button>

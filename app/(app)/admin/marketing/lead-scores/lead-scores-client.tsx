@@ -19,7 +19,7 @@ export function RecomputeButton() {
         catch { error(t('leadScoresClient.couldNotRecomputeScores')); }
       })}
       disabled={pending}
-      className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-60"
+      className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:brightness-95 disabled:opacity-60"
     >
       <RefreshCw className={cn('h-4 w-4', pending && 'animate-spin')} /> {pending ? 'Recomputing…' : 'Recompute'}
     </button>

@@ -71,6 +71,21 @@ export function isProofPathFor(path: unknown, familyId: string, memberId: string
     && !path.slice(prefix.length).includes('..');
 }
 
+/**
+ * True when `path` is one object directly in that member's proof folder: the
+ * only proof a review may show as theirs. Looser than isProofPathFor about the
+ * object's NAME (a proof stored before proofFileName collapsed dots is still
+ * shown), never about the folder. A child can insert their own submission
+ * without submitProofAction, naming any path, and the parent reviewing it can
+ * read every member's proof (SEC-002).
+ */
+export function isMemberProofPath(path: unknown, familyId: string, memberId: string): path is string {
+  if (typeof path !== 'string' || path.length > 400 || !familyId || !memberId) return false;
+  const parts = path.split('/');
+  return parts.length === 3 && parts[0] === familyId && parts[1] === memberId
+    && parts[2] !== '' && parts[2] !== '.' && parts[2] !== '..' && !parts[2].includes('\\');
+}
+
 /** Why a chosen file cannot be proof, or null when it can. */
 export function proofFileProblem(file: { type: string; size: number }): 'type' | 'size' | null {
   if (!PROOF_MEDIA_TYPES.has(file.type)) return 'type';

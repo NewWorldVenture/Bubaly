@@ -163,7 +163,7 @@ export function TripIntelModule({ upcoming, memberOptions, tripPlans, departureP
                       stored UTC midnight, it wrote a head-out for the evening before. */}
                   {!e.allDay && (
                     <button onClick={() => setDepartureEvent(e)}
-                      className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 transition">
+                      className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:brightness-95 transition">
                       <Car className="h-3.5 w-3.5" /> {tr('tripIntel.planDeparture')}
                     </button>
                   )}

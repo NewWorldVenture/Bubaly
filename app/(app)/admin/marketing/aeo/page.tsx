@@ -95,7 +95,7 @@ export default async function AeoPage() {
                       <select aria-label={t('fieldName.status')} name="status" defaultValue={q.status} className={inputCls}>{STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
                       <input name="clarity_score" type="number" min="0" max="100" defaultValue={q.clarity_score ?? ''} placeholder={t('aeo.clarityScore0100')} className={inputCls} />
                       <input name="source_path" defaultValue={q.source_path ?? ''} placeholder="Source path (/faq)" className={inputCls} />
-                      <SubmitButton className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90 sm:col-span-2">{t('aeo.saveQuestion')}</SubmitButton>
+                      <SubmitButton className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:brightness-95 sm:col-span-2">{t('aeo.saveQuestion')}</SubmitButton>
                     </form>
                     <form action={deleteAeoQuestion} className="mt-2">
                       <input type="hidden" name="id" value={q.id} />
@@ -117,7 +117,7 @@ export default async function AeoPage() {
             <input name="entity" placeholder={t('adminMarketingAeo.entityEGBubaly')} className={inputCls} />
             <input name="source_path" placeholder={t('adminMarketingAeo.sourcePathFeatures')} className={inputCls} />
             <textarea name="answer" rows={4} placeholder={t('adminMarketingAeo.structuredAnswerDraft')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
-            <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingAeo.addQuestion')}</SubmitButton>
+            <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:brightness-95">{t('adminMarketingAeo.addQuestion')}</SubmitButton>
           </form>
         </Card>
       </div>

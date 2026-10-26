@@ -11,6 +11,7 @@ import { familyDetailsSchema, finalizeOnboardingSchema, previewCalendarImportSch
 import { saveUserProfile } from '@/lib/server/profiles';
 import { isValidPin, normalizeAge } from '@/lib/onboarding/pin';
 import { buildAppLockConfig } from '@/lib/security/app-lock';
+import { readAppLockRecord, replaceAppLockRecord } from '@/lib/security/app-lock-store';
 import { cleanGoals, cleanReferralSource, DEFAULT_OWNER_DISPLAY_NAME } from '@/lib/onboarding/family';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
@@ -908,13 +909,28 @@ export async function finalizeOnboardingAction(input: {
   //     silently undone. The merge compare-and-sets on updated_at and re-runs
   //     the change on the newer row; a read it cannot make writes nothing.
   const age = normalizeAge(appearance.age);
-  const seededAppLock = appearance.pin && isValidPin(appearance.pin)
-    ? { ...(await buildAppLockConfig(appearance.pin)), enabled: false } : null;
+  // Onboarding may run again after an explicit reset or a partial finish. It
+  // can prepare a first PIN, but it cannot replace or disable a lock the user
+  // subsequently chose. PIN material belongs only in the private server store;
+  // the public preferences blob is readable and writable by the signed-in user.
+  if (appearance.pin && isValidPin(appearance.pin)) {
+    const currentLock = await readAppLockRecord(auth.user.id);
+    if (!currentLock.ok) return onboardingFailure('onboarding App Lock read', 'private store unavailable', t('actions.couldNotFinishSettingUp2'));
+    if (currentLock.record === null) {
+      const seededLock = await replaceAppLockRecord(auth.user.id, null, {
+        ...(await buildAppLockConfig(appearance.pin)), enabled: false,
+      });
+      // Another request setting up its lock wins. Never retry onto that new
+      // revision: doing so would turn a genuine enabled lock into our seed.
+      if (!seededLock.ok && seededLock.reason !== 'conflict') {
+        return onboardingFailure('onboarding App Lock seed', 'private store unavailable', t('actions.couldNotFinishSettingUp2'));
+      }
+    }
+  }
   const savedPrefs = await mergeNotificationPrefs(admin, auth.user.id, (prefs) => ({
     ...prefs,
     onboardingComplete: true,
     ...(age !== null ? { age } : {}),
-    ...(seededAppLock ? { appLock: seededAppLock } : {}),
   }));
   const prefReadError = !savedPrefs.ok && savedPrefs.reason === 'read_failed' ? savedPrefs.error ?? new Error('read_failed') : null;
   if (prefReadError) return onboardingFailure('onboarding preferences read', prefReadError, t('actions.couldNotFinishSettingUp2'));

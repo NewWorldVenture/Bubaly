@@ -49,7 +49,7 @@ export async function POST() {
     // The allowance alone: whether the coach is available is the Habits
     // page's gate above, not the assistant's tier or its Off switch.
     const access = await assertAIAllowance(ctx, { db: supabase });
-    if (!access.ok) return accessDeniedResponse(access);
+    if (!access.ok) return accessDeniedResponse(access, t);
     // The FAMILY's day, the one the module writes `habit_logs.log_date` in.
     // Greenwich's day told a Los Angeles evening that today's check-ins had not
     // happened, and a Tokyo morning that yesterday's were today's.

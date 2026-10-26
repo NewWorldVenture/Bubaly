@@ -112,7 +112,7 @@ export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, 
               <button
                 type="button" disabled={pending || !isValidEmailLocal(local) || local === channel?.email_local}
                 onClick={() => run(() => assignEmailAction(local))}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand/90 disabled:opacity-50">
+                className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:brightness-95 disabled:opacity-50">
                 {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                 {email ? 'Update' : 'Assign'}
               </button>
@@ -139,7 +139,7 @@ export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, 
               <button
                 type="button" disabled={pending}
                 onClick={() => run(() => provisionNumberAction(areaCode))}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand/90 disabled:opacity-50">
+                className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:brightness-95 disabled:opacity-50">
                 {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Phone className="h-4 w-4" />}
                 {t('contactCenter.getANumber')}
               </button>

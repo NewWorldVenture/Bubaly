@@ -12,12 +12,15 @@
 //
 // Each word is matched with its plural ("2 documents expiring soon", "3
 // accounts", "Renew both passports"), and the financ- stem with any ending
-// ("financial", "finances").
+// ("financial", "finances"). The past tense counts ("You spent $40 more",
+// "taxed"), and so do the money words a budget drift or an autopilot card
+// uses without any of the above: a bank, a loan, a debt, a mortgage, an
+// investment (AI-001). Tax is matched exactly, so a taxi is not money.
 //
 // The rule is ENGLISH: whatever it is asked about must be worded in en-US
 // first (see MODEL_LOCALE in ./slices/proactive.ts).
 
-export const MANAGER_ONLY_RE = /\b(budgets?|bills?|spend(?:s|ing)?|money|financ\w*|transactions?|accounts?|salary|salaries|incomes?|documents?|passports?|insurances?|tax(?:es)?|vaults?|subscriptions?)\b/i;
+export const MANAGER_ONLY_RE = /\b(budgets?|bills?|spend(?:s|ing)?|spent|money|financ\w*|transactions?|accounts?|salary|salaries|incomes?|documents?|passports?|insurances?|tax(?:es|ed)?|vaults?|subscriptions?|banks?|banking|loans?|debts?|mortgages?|invest(?:s|ed|ing|ments?)?)\b/i;
 
 /** True when any of `parts` touches a manager-only area. */
 export function managerOnlyText(...parts: (string | null | undefined)[]): boolean {

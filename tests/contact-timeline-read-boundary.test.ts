@@ -1,6 +1,16 @@
 import { createElement, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// F19: these user-requested AI actions now check the family's monthly allowance
+// before the model. This file is about other behaviour, so the family is on
+// Basic, whose allowance is unlimited: the real check runs and passes.
+vi.mock('@/lib/server/plan', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/plan')>()),
+  resolveFamilyPlanLevel: async () => 1,
+  // The same, unlocked family as the whole entitlement the AI gates read.
+  resolveFamilyEntitlement: async () => ({ effectiveLevel: 1, locked: false, closed: false, inTrial: false, trialEndsAt: null }),
+}));
 import ContactTimelinePage from '@/app/(app)/dashboard/contacts/[id]/page';
 import { draftReconnectMessageAction } from '@/app/(app)/dashboard/contacts/[id]/actions';
 import { ContactTimelineReadError } from '@/components/modules/contact-timeline-module';

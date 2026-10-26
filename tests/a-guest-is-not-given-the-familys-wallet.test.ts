@@ -43,7 +43,11 @@ vi.mock('@/lib/i18n/server', async () => {
     getLocaleContext: async () => ({ locale: { code: 'en-US' } }),
   };
 });
-vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: async () => 3 }));
+vi.mock('@/lib/server/plan', () => ({
+  resolveFamilyPlanLevel: async () => 3,
+  // The same, unlocked family as the whole entitlement the AI allowance (F19) reads.
+  resolveFamilyEntitlement: async () => ({ effectiveLevel: 3, locked: false, closed: false, inTrial: false, trialEndsAt: null }),
+}));
 vi.mock('@/lib/ai/provider', () => ({ isAIConfigured: async () => true, resolveProvider: async () => ({ complete: harness.complete }) }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
 vi.mock('@/lib/ai/observability', () => ({

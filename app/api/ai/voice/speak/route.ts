@@ -4,6 +4,7 @@ import { assertAIRequestFamily, getAIRequestTranslations } from '@/lib/server/ai
 import { AI_ASSISTANT_FEATURE_KEY, accessDeniedResponse, assertAIAccess, authenticateAI } from '@/lib/server/ai-access';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
+import { isCountedExchange } from '@/lib/ai/voice-exchange';
 import { getOpenAIKey } from '@/lib/ai/settings';
 import { prepareSpeechText, normalizeTtsVoice } from '@/lib/ai/voice';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -37,10 +38,26 @@ export async function POST(req: NextRequest) {
       { error: t('speak.tooManyVoiceRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
-    // A paid model call: the plan, the assistant's switch and the Free plan's
-    // allowance apply, and the call is recorded where that allowance counts it.
-    const access = await assertAIAccess(ctx, { db: supabase, featureKey: AI_ASSISTANT_FEATURE_KEY });
-    if (!access.ok) return accessDeniedResponse(access);
+    const boundedBody = await readBoundedRequestJson(req, MAX_SMALL_JSON_BYTES);
+    if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Invalid request body' }, { status: 400 });
+    const { text, voice, exchangeId } = (boundedBody.value ?? {}) as { text?: string; voice?: string; exchangeId?: unknown };
+    const speech = prepareSpeechText(text ?? '');
+    if (!speech) return NextResponse.json({ error: t('speak.nothingToSay') }, { status: 400 });
+
+    // F19, the owner's decision of 2026-10-02: one spoken exchange counts as
+    // ONE request, the assistant turn, which files its own row and passed the
+    // assistant's gate. Speaking that turn's own answer (`exchangeId`, the
+    // turn's row) is part of an exchange already counted, so it is neither
+    // checked nor recorded again: an exchange admitted at 9 of 10 must be able
+    // to finish speaking after its own turn took the count to 10. Speech that
+    // names no such turn is a paid model call of its own: the plan, the
+    // assistant's switch and the Free plan's allowance apply, and it is
+    // recorded where that allowance counts it.
+    const counted = await isCountedExchange(supabase, { familyId: ctx.active.familyId, userId: ctx.user.id }, exchangeId, text ?? '');
+    if (!counted) {
+      const access = await assertAIAccess(ctx, { db: supabase, featureKey: AI_ASSISTANT_FEATURE_KEY });
+      if (!access.ok) return accessDeniedResponse(access, t);
+    }
     const apiKey = await getOpenAIKey(supabase);
     if (!apiKey) {
       return NextResponse.json(
@@ -49,27 +66,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const boundedBody = await readBoundedRequestJson(req, MAX_SMALL_JSON_BYTES);
-    if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Invalid request body' }, { status: 400 });
-    const { text, voice } = (boundedBody.value ?? {}) as { text?: string; voice?: string };
-    const speech = prepareSpeechText(text ?? '');
-    if (!speech) return NextResponse.json({ error: t('speak.nothingToSay') }, { status: 400 });
-
     const model = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
-    const res = await withAiRequest(
+    const speak = () => fetchWithDeadline('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model,
+        input: speech,
+        voice: normalizeTtsVoice(voice ?? process.env.OPENAI_TTS_VOICE),
+        response_format: 'mp3',
+      }),
+    }, 60_000);
+    const res = counted ? await speak() : await withAiRequest(
       scopeFromUserContext(ctx, supabase),
       { feature: 'voice.speak', text: 'Speak an answer aloud' },
       async (obs) => {
-        const answer = await fetchWithDeadline('https://api.openai.com/v1/audio/speech', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({
-            model,
-            input: speech,
-            voice: normalizeTtsVoice(voice ?? process.env.OPENAI_TTS_VOICE),
-            response_format: 'mp3',
-          }),
-        }, 60_000);
+        const answer = await speak();
         obs.used(model);
         if (!answer.ok || !answer.body) obs.failed(new Error(`The speech provider answered ${answer.status}.`));
         return answer;

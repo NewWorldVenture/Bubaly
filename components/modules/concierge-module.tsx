@@ -231,7 +231,7 @@ export function ConciergeModule() {
                 />
                 <button aria-label={tr('a11y.send')} onClick={() => void sendMessage()} disabled={!input.trim() || sending}
                   className={cn('flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl transition',
-                    input.trim() && !sending ? 'bg-brand text-white hover:bg-brand/90' : 'bg-surface text-muted')}>
+                    input.trim() && !sending ? 'bg-brand text-white hover:brightness-95' : 'bg-surface text-muted')}>
                   <Send className="h-4 w-4" />
                 </button>
               </div>

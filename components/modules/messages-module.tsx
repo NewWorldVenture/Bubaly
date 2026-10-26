@@ -1549,7 +1549,7 @@ function MessagesWorkspace() {
                     <Smile className="h-4 w-4" />
                   </button>
                   {showPicker && (
-                    <div className="absolute bottom-11 left-0 z-20 rounded-xl border border-border bg-elevated p-2 shadow-xl">
+                    <div className="absolute bottom-11 left-0 z-20 w-max rounded-xl border border-border bg-elevated p-2 shadow-xl">
                       <div className="grid grid-cols-4 gap-1">
                         {QUICK_EMOJIS.map((e) => (
                           <button key={e} type="button" onClick={() => { const next = draftRef.current.text + e; draftRef.current = { ...draftRef.current, text: next }; setText(next); setShowPicker(false); inputRef.current?.focus(); }}
@@ -1571,7 +1571,7 @@ function MessagesWorkspace() {
               {/* Send when typing · recording controls while recording · mic when empty */}
               {text.trim() && !recording ? (
                 <button type="submit" disabled={sending} aria-label={tr('messages.sendMessage')}
-                  className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-brand-fg transition hover:opacity-90 disabled:opacity-50">
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-brand-fg transition hover:brightness-95 disabled:opacity-50">
                   {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                 </button>
               ) : recording ? (
@@ -1585,13 +1585,13 @@ function MessagesWorkspace() {
                     {Math.floor(recSeconds / 60)}:{String(recSeconds % 60).padStart(2, '0')}
                   </span>
                   <button type="button" onClick={() => stopRecording(false)} aria-label={tr('messages.stopAndSendVoiceMessage')}
-                    className="grid h-11 w-11 place-items-center rounded-full bg-brand text-brand-fg transition hover:opacity-90">
+                    className="grid h-11 w-11 place-items-center rounded-full bg-brand text-brand-fg transition hover:brightness-95">
                     <Send className="h-5 w-5" />
                   </button>
                 </div>
               ) : (
                 <button type="button" onClick={startRecording} disabled={uploadingFile || micPending || sending || Boolean(failedAttachment)} aria-label={tr('messages.recordVoiceMessage')}
-                  className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-brand-fg transition hover:opacity-90 disabled:opacity-50">
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-brand-fg transition hover:brightness-95 disabled:opacity-50">
                   {uploadingFile || micPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Mic className="h-5 w-5" />}
                 </button>
               )}

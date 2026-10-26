@@ -18,6 +18,8 @@ vi.mock('@/lib/supabase/server', () => ({
   createServer: () => { throw new Error('Callback admission must not publish ambient cookies'); },
   createServiceClient: () => { throw new Error('Unexpected service client'); },
 }));
+// This fixture isolates callback/session admission; no private App Lock is configured.
+vi.mock('@/lib/security/app-lock-store', () => ({ readAppLockRecord: async () => ({ ok: true, record: null }) }));
 vi.mock('@/lib/constants/super-admins', () => ({ isSuperAdminEmail: () => mock.allowlisted }));
 vi.mock('next/headers', () => ({ headers: async () => new Headers({ cookie: mock.cookieHeader }) }));
 vi.mock('@/lib/marketing/identity', () => ({ stitchVisitorIdentity: mock.stitch }));
@@ -220,13 +222,15 @@ describe('protected review link middleware', () => {
     expect(response.headers.get('expires')).toBe('0');
     expect(response.headers.get('pragma')).toBe('no-cache');
   });
-  it('keeps a stored session during an outage instead of redirecting away from review', async () => {
+  it('keeps the session and review destination behind the privacy gate during an outage', async () => {
     mock.middlewareError = { name: 'AuthRetryableFetchError', status: 503 };
     const response = await middleware(new NextRequest('https://bubaly.test/dashboard/billing?view=manage&reviewPlan=basic_annual', {
       headers: { cookie: 'sb-fixture-auth-token=synthetic-old' },
     }));
-    expect(response.status).toBe(200);
-    expect(response.headers.get('location')).toBeNull();
+    expect(response.status).toBe(307);
+    const gate = location(response);
+    expect(gate.pathname).toBe('/app-lock');
+    expect(gate.searchParams.get('next')).toBe('/dashboard/billing?view=manage&reviewPlan=basic_annual');
     expect(response.cookies.getAll()).toEqual([]);
   });
   it('forwards wrong-path OAuth codes with their flat choice to the existing callback', async () => {

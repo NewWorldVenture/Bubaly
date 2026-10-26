@@ -13,7 +13,10 @@ describe('account and device-security action boundaries', () => {
     for (const path of sources) {
       const source = readFileSync(path, 'utf8');
       expect(source).not.toMatch(/return\s*\{[^\n]*error:\s*(?:error|memberError|prefsError)\??\.message/);
-      expect(source).toContain('describeActionError(');
+      if (path.includes('app-lock-actions')) {
+        expect(source).toContain("t('appLockActions.couldNotSaveAppLockSettings')");
+        expect(source).not.toMatch(/error:\s*(?:saved|current)\.error/);
+      } else expect(source).toContain('describeActionError(');
     }
   });
 
@@ -24,11 +27,11 @@ describe('account and device-security action boundaries', () => {
 
     expect(actions).toContain("if (error) return actionFailure('switch active family', t('App.couldNotSwitchActiveFamily'), error);");
     expect(actions).toContain("if (error) return actionFailure('set the default dashboard', t('App.couldNotSetTheDefaultDashboard'), error);");
-    // Both halves now go through mergeNotificationPrefs (SRV-001 l7): a failed
-    // read is still the LOAD sentence and a failed or lost write the SAVE one.
-    expect(appLock).toContain("? actionFailure('load App Lock settings', t('appLockActions.couldNotLoadAppLockSettings'), saved.error)");
-    expect(appLock).toContain(": actionFailure('save App Lock settings', t('appLockActions.couldNotSaveAppLockSettings'), saved.error ?? saved.reason);");
-    expect(appLock).toContain("saved.reason === 'read_failed'");
+    // Private-store failures stay generic and writes are acknowledged only
+    // after the revision compare-and-set succeeds.
+    expect(appLock).toContain("if (!current.ok) return { ok: false, error: t('appLockActions.couldNotLoadAppLockSettings') }");
+    expect(appLock).toContain("if (!saved.ok) return { ok: false, error: t('appLockActions.couldNotSaveAppLockSettings') }");
+    expect(appLock).toContain('replaceAppLockRecord(ctx.user.id, record?.revision ?? null, config)');
     expect(profiles).toContain('if (memberError)');
   });
 });

@@ -135,6 +135,7 @@ describe('a sanitizer returns what it checked (SEC-014)', () => {
     // Keyed by file and variable rather than by line, so an edit above does not
     // fail it and a new sink does.
     const TRUSTED: Record<string, string> = {
+      'app/app-lock/page.tsx|returnTo': "safeInternalRedirect(typeof next === 'string' ? next : undefined, '/dashboard'), then the /app-lock self-route falls back to the trusted /dashboard path",
       'app/(app)/auth/step-up/page.tsx|next': 'isSafeReturnPath(rawNext) ? rawNext : \'/dashboard\'',
       'components/auth/callback-completion.tsx|target': "safeInternalRedirect(receipt.destination, '')",
       'components/auth/callback-completion.tsx|destination': "safeInternalRedirect(next, '/home') — a second pass over an already-sanitized prop, which is what saved this sink from SEC-014",

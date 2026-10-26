@@ -1293,6 +1293,12 @@ export interface Database {
         { id?: string; family_id: string; team_id: string; opponent: string; our_score?: number; their_score?: number; date?: string; result: GameResult; notes?: string | null; created_by?: string | null },
         Partial<{ opponent: string; our_score: number; their_score: number; date: string; result: GameResult; notes: string | null }>
       >;
+      // App Lock credentials are service-only; no browser table privileges or RLS policies.
+      app_lock_credentials: T<
+        { user_id: string; enabled: boolean; salt: string | null; hash: string | null; revision: string; updated_at: string },
+        { user_id: string; enabled: boolean; salt: string | null; hash: string | null; revision?: string; updated_at?: string },
+        Partial<{ enabled: boolean; salt: string | null; hash: string | null; revision: string; updated_at: string }>
+      >;
       user_preferences: T<
         { user_id: string; theme: ThemePref; push_enabled: boolean; email_enabled: boolean; expo_push_token: string | null; active_family_id: string | null; default_dashboard: DashboardView; notification_prefs: Json } & Stamps,
         { user_id: string; theme?: ThemePref; push_enabled?: boolean; email_enabled?: boolean; expo_push_token?: string | null; active_family_id?: string | null; default_dashboard?: DashboardView; notification_prefs?: Json },
