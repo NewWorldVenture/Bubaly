@@ -22,7 +22,7 @@ import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import {
-  availableWriteBackKinds, matchesPlanSnapshot, planSnapshot, readPlanSnapshot, type WriteBackKind,
+  availableWriteBackKinds, conciergeRunKey, matchesPlanSnapshot, planSnapshot, readPlanSnapshot, type WriteBackKind,
 } from '@/lib/concierge/apply';
 import { decide, materializeConciergePlan, type MaterializeResult } from '@/lib/services/approvals';
 import { classifyPayload } from '@/lib/approvals/card-data';
@@ -242,7 +242,7 @@ export async function planAcceptedAction(
         plan_id: planId, kinds: pendingKinds, approval_id: approvalId ?? null,
         basis: decision.basis, reason: decision.reason, plan: filedPlan,
       } as never,
-      idempotency_key: approvalId ? `concierge_plan:${planId}:${approvalId}` : null,
+      idempotency_key: approvalId ? conciergeRunKey(planId, approvalId) : null,
       created_by: ctx.user.id,
     });
     if (queueErr?.code === '23505') {
@@ -437,8 +437,17 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
     // this approval in their metadata; THIS row is closed here as well, so a
     // run whose metadata was scrubbed does not sit on the panel as pending
     // after its plan has been done. Idempotent on `status = 'pending'`.
+    //
+    // One yes is one completed run. decide() completed the run the server
+    // queued for this approval (`closedRunId`) and cancelled the rest naming
+    // it; the row clicked here completes only when it is that run or no run
+    // took the yes. Otherwise it is a row a manager filed beside the queue —
+    // naming the plan and not the approval — and it closes as having applied
+    // nothing, not as a second plan Bubaly ran.
     const applied = decided.data.applied ?? [];
-    const { error: closeErr } = await markRunExecuted(runId, familyId, ctx.user.id, decided.data.summary, applied);
+    const closedRunId = decided.data.closedRunId ?? null;
+    const tookTheYes = closedRunId === null || closedRunId === runId;
+    const { error: closeErr } = await markRunExecuted(runId, familyId, ctx.user.id, decided.data.summary, tookTheYes ? applied : []);
     if (closeErr) {
       console.error('[concierge] executed-run status update failed after decide', { runId, familyId, error: closeErr });
       return { ok: false, error: describeActionError(closeErr, t('actions.appliedThePlanButCould')) };

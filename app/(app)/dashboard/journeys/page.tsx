@@ -40,12 +40,20 @@ export default async function JourneysPage() {
   // A fixed window, not the family's lifetime: past 5,000 lifetime rows the
   // ceiling below refused the whole page for good, through ordinary use or
   // through any member (any role may insert, 0124) filing rows in a loop.
-  const since = new Date(Date.now() - JOURNEY_WINDOW_DAYS * 86_400_000).toISOString();
+  //
+  // Closed at now as well. `created_at` is the writer's to choose (0124 pins
+  // nothing), so a row dated 2099 — or 'infinity' — sat inside an open-ended
+  // window on every load, and 5,001 of them refused the page for good. A row
+  // from the future counts nowhere until its date comes.
+  const nowMs = Date.now();
+  const until = new Date(nowMs).toISOString();
+  const since = new Date(nowMs - JOURNEY_WINDOW_DAYS * 86_400_000).toISOString();
   const { rows: data, error } = await readAll((from, to) => supabase
     .from('journey_events')
     .select('journey, phase, step, duration_ms, session_id, created_at')
     .eq('family_id', ctx.active.familyId)
     .gte('created_at', since)
+    .lte('created_at', until)
     .order('created_at', { ascending: false })
     .order('id')
     .range(from, to), { max: 5000 });

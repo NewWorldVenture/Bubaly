@@ -5,8 +5,8 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { SectionCard, MiniEmpty, MiniError, StatTile } from '@/components/family/shell';
 import {
-  summarizeOnboardingFunnel, formatRate, formatDuration, ONBOARDING_STEPS,
-  type OnboardingEventLike,
+  summarizeOnboardingFunnel, oneRunPerAccount, formatRate, formatDuration, ONBOARDING_STEPS,
+  type AccountOnboardingEvent,
 } from '@/lib/analytics/onboarding';
 import { summarizeActivation, type ActivationEventLike } from '@/lib/analytics/activation';
 import { loadActivationTelemetry, loadOnboardingEvents } from '@/lib/analytics/onboarding-server';
@@ -37,7 +37,9 @@ export default async function OnboardingFunnelPage() {
     loadOnboardingEvents(supabase, cutoff), loadActivationTelemetry(supabase, cutoff),
   ]);
 
-  const funnel = summarizeOnboardingFunnel((data ?? []) as OnboardingEventLike[]);
+  // One run per account (oneRunPerAccount): 0133 lets any signed-in account
+  // file sessions under its own id in a loop, and the funnel counts sessions.
+  const funnel = summarizeOnboardingFunnel(oneRunPerAccount((data ?? []) as AccountOnboardingEvent[]));
   const stepLabel = (key: string | null) =>
     ONBOARDING_STEPS.find((s) => s.key === key)?.label ?? key ?? '—';
 

@@ -13,6 +13,10 @@
 //        which the member UPDATE policy cannot be narrowed under while they
 //        are — so they go through the server's writer. The session client
 //        here refuses a completion, as the owner's pinned policy will.
+//        And the server's writer completed whatever named the approval: a
+//        manager's own client may INSERT rows naming it (0255/0329), so one
+//        yes completed every planted row too. One yes completes the run the
+//        server queued (by its idempotency key) and cancels the rest.
 //
 // Driven through the real concierge actions, the real decide() and the real
 // value metric over the in-memory database.
@@ -161,6 +165,80 @@ describe('one plan, accepted more than once, is one completed plan (N12)', () =>
       ? { message: 'pre-check raced' } : null));
     expect(await planAcceptedAction(PLAN, 'draft', 'confirmed')).toMatchObject({ ok: true, applied: [] });
     expect(await completedPlans()).toBe(1);
+  });
+});
+
+describe('one yes completes only the run the server queued for it (N10/N12)', () => {
+  // What a manager's own client may INSERT under 0255/0329: state 'queued',
+  // status defaulting to 'pending', free metadata, no idempotency key — and
+  // what 0251's UPDATE then lets them reshape into a server-looking row.
+  const planted = (id: string, extra: Row = {}): Row => ({
+    id, family_id: FAMILY, trigger_type: 'plan_accepted', run_type: 'concierge_plan', status: 'pending',
+    state: 'queued', requested_by_member_id: null, idempotency_key: null, summary: 'planted', result: {},
+    metadata: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'], approval_id: APPROVAL, plan: FILED_PLAN },
+    created_by: 'auth-mum', created_at: '2026-01-01T00:00:00.000Z', completed_at: null, ...extra,
+  });
+  const keyed = () => runs().find((run) => run.idempotency_key === `concierge_plan:${PLAN}:${APPROVAL}`);
+
+  it('a yes from the inbox completes the queued run and cancels runs a manager planted naming the approval', async () => {
+    h.trust = { effect: 'require_approval', approvalId: APPROVAL };
+    expect(await planAcceptedAction(PLAN, 'draft', 'confirmed')).toMatchObject({ ok: true, mode: 'ask' });
+    expect(keyed()).toBeDefined();
+    store.seed('family_automation_runs', [
+      planted('planted-1'), planted('planted-2'),
+      // Reshaped to look exactly like the server's own queued row.
+      planted('planted-3', { state: 'awaiting_approval', requested_by_member_id: MUM }),
+    ]);
+    seedApproval();
+    expect(await decide(scope(), APPROVAL, 'approved')).toMatchObject({ ok: true, data: { status: 'approved' } });
+    expect(await completedPlans()).toBe(1);
+    expect(keyed()).toMatchObject({ state: 'completed', status: 'executed' });
+    for (const id of ['planted-1', 'planted-2', 'planted-3']) {
+      expect(runs().find((run) => run.id === id)).toMatchObject({ state: 'cancelled', status: 'skipped' });
+    }
+  });
+
+  it('the panel’s approve on a planted row completes the queued run, not the row that was clicked', async () => {
+    h.trust = { effect: 'require_approval', approvalId: APPROVAL };
+    expect(await planAcceptedAction(PLAN, 'draft', 'confirmed')).toMatchObject({ ok: true, mode: 'ask' });
+    // Names the plan only, so decide() has no reason to find it.
+    store.seed('family_automation_runs', [planted('clicked', {
+      state: 'awaiting_approval', metadata: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'], plan: FILED_PLAN },
+    })]);
+    seedApproval();
+    expect(await executeQueuedRunAction('clicked')).toMatchObject({ ok: true, mode: 'auto' });
+    expect(store.table('calendar_events')).toHaveLength(1);
+    expect(await completedPlans()).toBe(1);
+    expect(keyed()).toMatchObject({ state: 'completed' });
+    expect(runs().find((run) => run.id === 'clicked')).toMatchObject({ state: 'cancelled', status: 'skipped' });
+  });
+
+  it('a close that failed leaves the queued run pending instead of cancelling it with the rest', async () => {
+    h.trust = { effect: 'require_approval', approvalId: APPROVAL };
+    expect(await planAcceptedAction(PLAN, 'draft', 'confirmed')).toMatchObject({ ok: true, mode: 'ask' });
+    store.seed('family_automation_runs', [planted('planted-1')]);
+    seedApproval();
+    h.service = withFaults(store, (table, calls) => (table === 'family_automation_runs'
+      && calls.some((call) => call.method === 'update') && calls.some((call) => call.method === 'eq' && call.args[0] === 'id')
+      ? { message: 'run close refused' } : null));
+    expect(await decide(scope(), APPROVAL, 'approved')).toMatchObject({ ok: true, data: { status: 'approved', closedRunId: null } });
+    expect(keyed()).toMatchObject({ status: 'pending', state: 'awaiting_approval' });
+    expect(runs().find((run) => run.id === 'planted-1')).toMatchObject({ status: 'pending' });
+    expect(await completedPlans()).toBe(0);
+  });
+
+  it('a run queued before the key existed is completed once, and planted rows beside it are cancelled', async () => {
+    seedApproval();
+    store.seed('family_automation_runs', [
+      planted('planted-early'),
+      queuedRun(RUN, APPROVAL),
+      planted('planted-late', { created_at: '2099-01-01T00:00:00.000Z' }),
+    ]);
+    expect(await decide(scope(), APPROVAL, 'approved')).toMatchObject({ ok: true, data: { status: 'approved' } });
+    expect(await completedPlans()).toBe(1);
+    expect(runs().find((run) => run.id === RUN)).toMatchObject({ state: 'completed', status: 'executed' });
+    expect(runs().find((run) => run.id === 'planted-early')).toMatchObject({ state: 'cancelled' });
+    expect(runs().find((run) => run.id === 'planted-late')).toMatchObject({ state: 'cancelled' });
   });
 });
 

@@ -115,6 +115,39 @@ describe('/dashboard/onboarding-funnel counts what members recorded (N4, N16, N2
     expect(tile(html, 'Median time')).toBe(formatDuration(300_000));
   });
 
+  it('counts one run per account, so one signed-in account filing sessions in a loop is one session (N16)', async () => {
+    // 0133 accepts any session_id and duration from the account it names.
+    for (let i = 0; i < 20; i++) {
+      db.seed('onboarding_events', [
+        onboarding({ user_id: USER[2], session_id: `forged-${i}`, step: 'profile', phase: 'started' }),
+        onboarding({ user_id: USER[2], session_id: `forged-${i}`, step: 'done', phase: 'completed', duration_ms: 1000 }),
+      ]);
+    }
+    // A second account that gave up at Family name, in two tabs.
+    db.seed('onboarding_events', [
+      onboarding({ user_id: USER[1], session_id: 'tab-1', step: 'profile', phase: 'started' }),
+      onboarding({ user_id: USER[1], session_id: 'tab-2', step: 'profile', phase: 'started' }),
+      onboarding({ user_id: USER[1], session_id: 'tab-2', step: 'family', phase: 'step' }),
+    ]);
+    const html = await funnelHtml();
+    expect(tile(html, 'Sessions started')).toBe('3');
+    expect(tile(html, 'Completed')).toBe('2');
+    expect(tile(html, 'Completion')).toBe('67%');
+    // The median of the two completed runs (300s and 1s), not of 21.
+    expect(tile(html, 'Median time')).toBe(formatDuration(Math.round((300_000 + 1000) / 2)));
+  });
+
+  it('keeps the run an account finished over the runs it abandoned', async () => {
+    db.seed('onboarding_events', [
+      onboarding({ user_id: USER[1], session_id: 'first-try', step: 'profile', phase: 'started', created_at: '2026-08-01T00:00:00.000Z' }),
+      onboarding({ user_id: USER[1], session_id: 'second-try', step: 'profile', phase: 'started', created_at: '2026-08-02T00:00:00.000Z' }),
+      onboarding({ user_id: USER[1], session_id: 'second-try', step: 'done', phase: 'completed', duration_ms: 60_000, created_at: '2026-08-02T00:05:00.000Z' }),
+    ]);
+    const html = await funnelHtml();
+    expect(tile(html, 'Sessions started')).toBe('2');
+    expect(tile(html, 'Completed')).toBe('2');
+  });
+
   it('does not activate a household from an anonymous row or from a writer who is not its member', async () => {
     db.seed('activation_events', [
       ...[1, 2, 3, 4].map((i) => activation({ user_id: null, family_id: null, session_id: `planted-${i}`, milestone: 'first_outcome_viewed', ms_since_signup: 0 })),

@@ -64,6 +64,22 @@ describe('/dashboard/journeys (N17)', () => {
     expect(page).toContain('50%');
   });
 
+  it('counts no row dated after now, so a flood filed in the future (or at +infinity) cannot blank the page', async () => {
+    // journey_events.created_at is the writer's to choose (0124 has no
+    // trigger): every row below sits inside an open-ended window for ever.
+    db.seed('journey_events', Array.from({ length: 5001 }, () => event({ phase: 'started', created_at: '2099-01-01T00:00:00.000Z' })));
+    db.seed('journey_events', Array.from({ length: 10 }, () => event({ phase: 'started', created_at: 'infinity' })));
+    db.seed('journey_events', [
+      event({ phase: 'started', session_id: 'a' }), event({ phase: 'completed', session_id: 'a', duration_ms: 4000 }),
+      event({ phase: 'started', session_id: 'b' }),
+    ]);
+    const page = await html();
+    expect(page).not.toContain('load journey telemetry');
+    // Two real starts, one completion: the planted rows count nowhere.
+    expect(page).toContain('50%');
+    expect(page).toMatch(/>2<\/p><p[^>]*>Journeys started<\/p>/);
+  });
+
   it('does not let a duration no journey could take move the median', async () => {
     db.seed('journey_events', [
       event({ phase: 'started', session_id: 'a' }), event({ phase: 'completed', session_id: 'a', duration_ms: 4000 }),
