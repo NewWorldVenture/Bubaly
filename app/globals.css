@@ -134,11 +134,13 @@
      (bg-brand/10) behind a Badge, as on an open contact's "Emergency" chip,
      found by opening every disclosure on the member routes. Over --bg that
      read danger 4.37, warning 4.33 and accent 4.01. Each is darkened once more,
-     the same way, to the first value that clears 4.5 there (4.51 to 4.53). */
+     the same way, to the first value that clears 4.5 there as the browser
+     composites it, rounding each layer to 8 bits (4.50 to 4.52; danger takes
+     one step past the unrounded value, which the browser measured at 4.49). */
   --accent: 155 60 19; /* the status roles' rule for accent too: 3.71 on its 15% tint at 194 75 24, 4.5 at 169 66 21, now 4.52 on the selection tint */
   --success: 18 99 73;
   --warning: 119 85 15;
-  --danger: 170 38 38;
+  --danger: 169 38 38;
   --danger-fg: 255 255 255;
   --success-fg: 255 255 255;
   --info: 37 99 235;

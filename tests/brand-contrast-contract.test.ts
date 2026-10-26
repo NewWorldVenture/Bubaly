@@ -352,7 +352,9 @@ describe('muted text is readable on the brand selection tint', () => {
 // lies over the selection tint. Found by opening every disclosure on the member
 // routes: danger read 4.37 over --bg, warning 4.33 and accent 4.01. Each Badge
 // tone has to clear 4.5 on its own tint over the selection tint, over every
-// ground; the neutral Badge is an opaque fill and is judged elsewhere.
+// ground, with each layer rounded to 8 bits as the browser composites it (an
+// unrounded 4.51 measured 4.49 in the browser); the neutral Badge is an opaque
+// fill and is judged elsewhere.
 describe('a status chip is readable inside a selected row', () => {
   const css = readFileSync(resolve('app/globals.css'), 'utf8');
   const badge = readFileSync(resolve('components/ui/badge.tsx'), 'utf8');
@@ -372,8 +374,8 @@ describe('a status chip is readable inside a selected row', () => {
       const failures: string[] = [];
       for (const { tone, fill, alpha, ink } of tones) {
         for (const ground of GROUNDS) {
-          const row = tokens.brand.map((v, i) => v * selection + tokens[ground][i] * (1 - selection));
-          const chip = tokens[fill].map((v, i) => v * alpha + row[i] * (1 - alpha));
+          const row = tokens.brand.map((v, i) => Math.round(v * selection + tokens[ground][i] * (1 - selection)));
+          const chip = tokens[fill].map((v, i) => Math.round(v * alpha + row[i] * (1 - alpha)));
           const ratio = contrast(tokens[ink], chip);
           if (ratio < 4.5) failures.push(`${tone} Badge in a selected row over --${ground}: ${ratio.toFixed(2)}`);
         }
