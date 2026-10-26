@@ -41,7 +41,7 @@ import {
   replanDisruption,
   type DisruptionKind, type DisruptionPlan, type ItineraryLike, type ReservationLike,
 } from '@/lib/vacations/disruption';
-import { dateRange, tripNights } from '@/lib/vacations/dates';
+import { dateRange, tripNights, tripNotOverFilter } from '@/lib/vacations/dates';
 import { suggestPacking } from '@/lib/vacations/packing';
 import { computeReadiness as scoreReadiness, type ReadinessResult } from '@/lib/vacations/readiness';
 import { forecastDaysWithin } from '@/lib/vacations/weather';
@@ -90,10 +90,6 @@ function tripIsOver(trip: Pick<VacationRow, 'start_date' | 'end_date'>, today: s
   return lastDay !== null && lastDay < today;
 }
 
-/** `tripIsOver`, negated, as a PostgREST `or` filter. */
-function notOverFilter(today: string): string {
-  return `end_date.gte.${today},and(end_date.is.null,start_date.gte.${today}),and(end_date.is.null,start_date.is.null)`;
-}
 const BUDGET_CATEGORIES = ['flights', 'lodging', 'transportation', 'activities', 'food', 'shopping', 'insurance', 'fees', 'misc'] as const;
 const DAY_PARTS = ['morning', 'afternoon', 'evening', 'all_day'] as const;
 const ITEM_KINDS = ['activity', 'meal', 'travel', 'reservation', 'free_time', 'note', 'reminder'] as const;
@@ -197,7 +193,7 @@ export async function listTrips(scope: ServiceScope, input: { includeFinished?: 
     .order('start_date', { ascending: true, nullsFirst: false })
     .limit(Math.min(Math.max(input.limit ?? 50, 1), 200));
   if (!input.includeFinished) {
-    query = query.in('status', LIVE_STATUSES).or(notOverFilter(dayKeyInTz(scopeNow(scope), scope.tz)));
+    query = query.in('status', LIVE_STATUSES).or(tripNotOverFilter(dayKeyInTz(scopeNow(scope), scope.tz)));
   }
   const { data, error } = await query;
   if (error) {

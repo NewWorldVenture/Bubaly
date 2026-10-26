@@ -30,6 +30,7 @@ import { qualifyBriefEvents, briefEventIsOccupied } from '@/lib/onboarding/first
 import { readDisplayCalendarOccurrences, type CalendarDisplayOccurrence } from '@/lib/calendar/display-occurrences';
 import { projectCalendarDay, projectCalendarWindow } from '@/lib/calendar/consumer-spans';
 import { openGroceryListIds } from '@/lib/services/groceries';
+import { tripNotOverFilter } from '@/lib/vacations/dates';
 
 function normalizeBriefTimezone(candidate: string): string {
   try {
@@ -171,7 +172,8 @@ export async function POST(req: NextRequest) {
       supabase.from('maintenance_tasks').select('title, due_at, status, completed_at').eq('family_id', familyId).in('status', ['todo', 'in_progress']).not('due_at', 'is', null).lte('due_at', `${horizon}T23:59:59.999Z`).order('due_at').limit(20),
       // A deleted warranty is soft-deleted (`deleted_at`), like on every other reader of this table.
       supabase.from('home_warranties').select('name, expires_on').eq('family_id', familyId).is('deleted_at', null).not('expires_on', 'is', null).lte('expires_on', horizon).order('expires_on').limit(20),
-      supabase.from('vacations').select('title, destination, start_date, end_date, status').eq('family_id', familyId).not('status', 'in', '("completed","cancelled")').not('start_date', 'is', null).limit(20),
+      // Trips still to come, soonest first (lib/vacations/dates tripNotOverFilter): a trip that ended is not "overdue".
+      supabase.from('vacations').select('title, destination, start_date, end_date, status').eq('family_id', familyId).not('status', 'in', '("completed","cancelled")').not('start_date', 'is', null).or(tripNotOverFilter(today)).order('start_date').order('id').limit(20),
       supabase.from('pantry_items').select('name, expires_at').eq('family_id', familyId).not('expires_at', 'is', null).lte('expires_at', horizon).order('expires_at').limit(25),
       // What Bubaly actually finished. Not for the prompt — for the answer:
       // "Completed Today" is evidence, and evidence comes from the run rows.

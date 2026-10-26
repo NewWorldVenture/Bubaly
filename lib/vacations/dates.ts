@@ -89,6 +89,16 @@ export function isOver(start: string | null | undefined, end: string | null | un
   return d !== null && d < 0;
 }
 
+/**
+ * `isOver`, negated, as a PostgREST `or` filter on `vacations` for `today` (a
+ * family day key): the end date is today or later; or there is no end date
+ * and the start is today or later; or the trip is undated. One rule for every
+ * server read that wants the trips still to come.
+ */
+export function tripNotOverFilter(today: string): string {
+  return `end_date.gte.${today},and(end_date.is.null,start_date.gte.${today}),and(end_date.is.null,start_date.is.null)`;
+}
+
 /** True when today falls within [start, end] inclusive. */
 export function isActive(start: string | null | undefined, end: string | null | undefined, today: Date = new Date()): boolean {
   if (!start) return false;
