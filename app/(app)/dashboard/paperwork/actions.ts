@@ -1,5 +1,6 @@
 'use server';
 
+import { assertAIAllowance } from '@/lib/server/ai-access';
 import { revalidatePath } from 'next/cache';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -18,7 +19,6 @@ import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { refusalError, refusalForError } from '@/lib/actions/refusal';
 import { isPaperworkExtractionPartial } from '@/lib/paperwork/extraction';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
-import { assertAIAllowance } from '@/lib/server/ai-access';
 
 const PATH = '/dashboard/paperwork';
 

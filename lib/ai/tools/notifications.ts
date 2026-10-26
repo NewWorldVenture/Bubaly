@@ -23,6 +23,32 @@ const NOTIFICATION_TYPES = [
   'maintenance_task', 'grocery_reminder', 'document_expiry', 'family_invite', 'system',
 ] as const;
 
+type NotifyArgs = {
+  audience?: 'family' | 'managers' | 'members' | null;
+  member_names?: string[] | null;
+  member_ids?: string[] | null;
+};
+
+/**
+ * Who a call addresses, by the same rule `execute` resolves recipients with:
+ * the whole family unless the parents or named members were asked for.
+ */
+function audienceOf(input: NotifyArgs): 'family' | 'managers' | 'members' {
+  if (input.audience === 'members' || input.member_names?.length || input.member_ids?.length) return 'members';
+  return input.audience === 'managers' ? 'managers' : 'family';
+}
+
+/** What happened, naming the notice: the requester's summary, and the feed's line for a family-wide one. */
+function toldLine(title: string, output: { created: number; duplicates: number; deferred: number }): string {
+  if (output.created === 0) {
+    return output.duplicates > 0
+      ? `"${title}" was already waiting for everyone — not sent again`
+      : `Nobody to notify about "${title}"`;
+  }
+  const deferred = output.deferred > 0 ? `, ${output.deferred} held until quiet hours end` : '';
+  return `Told ${plural(output.created, 'person', 'people')}: ${title}${deferred}`;
+}
+
 export const notificationTools: ToolDefinition[] = [
   defineTool({
     name: 'notifications.notify',
@@ -51,23 +77,31 @@ export const notificationTools: ToolDefinition[] = [
       skipped_member_ids: z.array(z.string()).describe('Managed profiles with no account to notify'),
     }),
     idempotencyFrom: (input) => `notifications.notify:${input.title.trim().toLowerCase()}:${input.related_id ?? ''}`,
-    summarize: (input, output) => {
+    summarize: (input, output) => toldLine(input.title, output),
+    // The feed line. `agent_activity` is every member's (0127), while a
+    // notification row is its recipient's (notif_select, 0118): a notice for
+    // the whole family may be repeated there, one for the parents or for
+    // named members says who was told and not what — "the custody hearing
+    // moved" sent to the adults must not reach the children through the feed.
+    // The summary, which the person who asked reads, still names it.
+    activityTitle: (input, output) => {
+      const audience = audienceOf(input);
+      if (audience === 'family') return toldLine(input.title, output);
       if (output.created === 0) {
-        return output.duplicates > 0
-          ? `"${input.title}" was already waiting for everyone — not sent again`
-          : `Nobody to notify about "${input.title}"`;
+        return output.duplicates > 0 ? 'A notification was already waiting — not sent again' : 'Nobody to notify';
       }
-      const deferred = output.deferred > 0 ? `, ${output.deferred} held until quiet hours end` : '';
-      return `Told ${plural(output.created, 'person', 'people')}: ${input.title}${deferred}`;
+      return audience === 'managers'
+        ? 'Sent the parents a notification'
+        : `Sent ${plural(output.created, 'person', 'people')} a notification`;
     },
     consequences: (input) => [
       `Sends "${input.title}" to ${input.audience === 'managers' ? 'the parents' : input.audience === 'members' ? 'the people named' : 'everyone in the family'}.`,
       'A notification cannot be unsent once it lands.',
     ],
     execute: async (scope, input) => {
-      let recipients: NotifyRecipients = 'family';
-      if (input.audience === 'managers') recipients = 'managers';
-      if (input.audience === 'members' || input.member_names?.length || input.member_ids?.length) {
+      const audience = audienceOf(input);
+      let recipients: NotifyRecipients = audience === 'managers' ? 'managers' : 'family';
+      if (audience === 'members') {
         const ids = [...(input.member_ids ?? [])];
         for (const name of input.member_names ?? []) {
           const match = await resolveMemberByName(scope, name);

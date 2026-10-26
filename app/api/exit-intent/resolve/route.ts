@@ -26,15 +26,19 @@ export async function POST(req: NextRequest) {
     medium: str(body.medium) ?? null,
     campaign: str(body.campaign) ?? null,
     path: str(body.path) ?? null,
-    country: str(body.country) ?? null,
+    // Country comes from the edge (Vercel sets x-vercel-ip-country), never
+    // from the body: a body field let anyone claim any country's offer while
+    // the real client never sent one, so country targeting reached no visitor.
+    country: str(req.headers.get('x-vercel-ip-country')) ?? null,
     // Absent is UNKNOWN, not "new visitor". ExitIntent sends `returning` only
     // with personalisation consent; reading its absence as `false` chose
     // "New visitors only" offers by visit history for exactly the visitors who
     // had declined that. Unknown matches neither audience
     // (resolveExitIntent in lib/marketing/exit-intent.ts).
     returning: typeof body.returning === 'boolean' ? body.returning : undefined,
-    segments: Array.isArray(body.segments) ? body.segments.map(String) : [],
-    sessions: typeof body.sessions === 'number' ? body.sessions : undefined,
+    // No trusted source for either, so a forged body cannot select by them.
+    segments: [],
+    sessions: undefined,
   };
 
   const offer = await resolveActiveExitIntent(ctx);

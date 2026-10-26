@@ -13,7 +13,7 @@ import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { refuseWithoutBillingStepUp } from '@/lib/billing/route-step-up';
 import { readFamilySubscription } from '@/lib/billing/subscription-row';
-import { createSubscriptionCheckout, stripeCustomerHasLiveSubscription } from '@/lib/billing/subscription-checkout';
+import { createFamilyStripeCustomer, createSubscriptionCheckout, stripeCustomerHasLiveSubscription } from '@/lib/billing/subscription-checkout';
 
 const MAX_BILLING_REQUEST_BYTES = 4_096;
 
@@ -28,6 +28,12 @@ export async function POST(req: NextRequest) {
     }
     const stepUp = await refuseWithoutBillingStepUp(ctx, t);
     if (stepUp) return stepUp;
+    // A closed account is locked whatever it pays (computeEntitlement), so a
+    // subscription started here bills a family that cannot use it. Reopening
+    // is the way back; a billing tab left open, or a second parent, is not.
+    if (ctx.active.family.closed_at) {
+      return NextResponse.json({ error: t('accountClosedGate.yourAccountIsClosed'), code: 'account_closed' }, { status: 403 });
+    }
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
 
@@ -100,10 +106,8 @@ export async function POST(req: NextRequest) {
     let customerId = existing?.customer_ref ?? null;
 
     if (!customerId) {
-      const customer = await stripe.customers.create({
-        ...(ctx.user.email ? { email: ctx.user.email } : {}),
-        name: ctx.active.family.name,
-        metadata: { family_id: familyId, user_id: ctx.user.id },
+      const customer = await createFamilyStripeCustomer(stripe, {
+        familyId, userId: ctx.user.id, email: ctx.user.email, name: ctx.active.family.name,
       });
       customerId = customer.id;
 

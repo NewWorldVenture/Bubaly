@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { withinAIAllowance, AIAllowanceSpent } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
@@ -172,6 +173,8 @@ export async function POST() {
   const unavailable = () => NextResponse.json({ summary: tr('savings.theAiCouldNotAnswerHereAre'), suggestions: fallback, wastedMonthlyCents: wasted, source: 'unavailable' });
 
   try {
+    // F19: past the monthly AI allowance, give the answer this route gives without AI.
+    if (!(await withinAIAllowance(ctx, supabase))) throw new AIAllowanceSpent();
     const result = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
       { feature: 'finances.savings', text: 'Savings suggestions' },
@@ -221,6 +224,12 @@ export async function POST() {
     );
     return result ? NextResponse.json(result) : unavailable();
   } catch (error) {
+    // F19: past the monthly AI allowance, the answer is the one this route
+    // gives without AI, and it says so: past the allowance is not "the AI
+    // could not answer".
+    if (error instanceof AIAllowanceSpent) {
+      return NextResponse.json({ summary: tr('aiSavings.allowanceSpentSuggestions'), suggestions: fallback, wastedMonthlyCents: wasted, source: 'fallback' });
+    }
     // Quota, rate limit, key, timeout: the AI was asked and could not answer.
     console.error('[ai/savings] provider request failed', describeReadError(error));
     return unavailable();

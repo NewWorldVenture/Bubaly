@@ -4,6 +4,7 @@
 import { createHmac } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
+import { configuredSecret } from '@/lib/server/configured-secret';
 
 // WHAT THE TABLE KEEPS. Every public route keys its limit on the caller's IP
 // (`contact:<ip>`, `form:<ip>`, `mkt:<ip>` …) and /api/blog/subscribe on an
@@ -32,7 +33,10 @@ import type { Database } from '@/lib/database.types';
 // chose failOpen), and nothing is written. Development and tests, where no
 // production secret exists, keep the constant so limiting still works there.
 // A key with no IP or address in it (a signed-in caller's own id) needs no
-// digest and is unaffected.
+// digest and is unaffected. An INTERNAL_SECRET copied from .env.example
+// (`generate_a_random_string`) is in this repository too, so it is no key
+// either: it is passed over like an unset one (lib/server/configured-secret,
+// SEC-002).
 const IPV4 = /(?<![\d.])\d{1,3}(?:\.\d{1,3}){3}(?![\d.])/g;
 const IPV6_64 = /(?<![0-9a-f])[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){3}::\/64/gi;
 const EMAIL = /[^\s:@]+@[^\s:@]+/g;
@@ -41,7 +45,7 @@ const DEV_SUBJECT_KEY = 'bubaly-dev-rate-limit-subject';
 
 function subjectKey(): string {
   const configured = [process.env.INTERNAL_SECRET, process.env.SUPABASE_SERVICE_ROLE_KEY]
-    .find((value) => typeof value === 'string' && value.trim() !== '');
+    .map(configuredSecret).find((value): value is string => value !== null);
   if (configured) return configured;
   if (process.env.NODE_ENV === 'production') {
     console.error('[rate-limit] no INTERNAL_SECRET or SUPABASE_SERVICE_ROLE_KEY: refusing to store a bucket key under the public development key');

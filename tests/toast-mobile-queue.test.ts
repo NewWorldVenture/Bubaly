@@ -211,6 +211,7 @@ describe('one notice on screen, the newest; the rest wait without a clock', () =
   it('a new notice, urgent or not, shows at once; the one it displaces waits', () => {
     const { api } = render();
     api.success('Saved');
+    render();
     vi.advanceTimersByTime(LIFETIME.plain - 200);
     api.error('Could not send');
     expect(render().shown).toEqual(['Could not send']);

@@ -11,6 +11,8 @@ vi.mock('@/lib/supabase/server',()=>({createServer:async()=>h.db}));
 vi.mock('@/lib/supabase/auth',()=>({requireUserContext:async()=>({user:{id:'60000000-0000-4000-8000-000000000001'},active:{familyId:'10000000-0000-4000-8000-000000000001',role:'parent',family:{name:'Synthetic family',timezone:h.timezone},member:{id:'50000000-0000-4000-8000-000000000001',display_name:'Synthetic parent',role:'parent'}}})}));
 vi.mock('@/lib/server/route-feature-gate',()=>({refuseUnlessEntitled:async()=>null}));
 vi.mock('@/lib/server/ai-rate-limit',()=>({enforceAIRateLimit:async()=>({ok:true})}));
+// The monthly allowance (F19) is its own suite (every-ai-route-counts-against-the-allowance); this one is the caller boundary.
+vi.mock('@/lib/server/ai-access',async original=>({...(await original<typeof import('@/lib/server/ai-access')>()),withinAIAllowance:async()=>true}));
 vi.mock('@/lib/ai/provider',()=>({isAIConfigured:async()=>h.configured,resolveProvider:h.provider}));
 vi.mock('@/lib/i18n/server',async()=>{const {getMessages}=await import('@/lib/i18n/messages');return{getLocaleContext:async()=>({locale:{code:'en-US'},messages:getMessages('en-US')})};});
 vi.mock('@/lib/ai/observability',()=>({withAiRequest:async(_scope:unknown,_details:unknown,run:(obs:{used:()=>void})=>Promise<unknown>)=>run({used:()=>{}})}));

@@ -190,7 +190,7 @@ export function InboxQueue({ items, unavailable, needsYou }: {
                     )}
                     {item.canHandle && (
                       <button type="button" onClick={() => void handleIt(item)} disabled={busyId !== null}
-                        className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-[11px] font-semibold text-white transition hover:bg-brand/90 disabled:opacity-50">
+                        className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-[11px] font-semibold text-white transition hover:brightness-95 disabled:opacity-50">
                         {busyId === item.id
                           ? <Loader2 className="h-3 w-3 animate-spin" />
                           : <Sparkles className="h-3 w-3" />}

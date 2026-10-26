@@ -15,7 +15,7 @@ export function NewExperimentForm() {
   return (
     <div>
       {!open ? (
-        <button onClick={() => setOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90">
+        <button onClick={() => setOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:brightness-95">
           <Plus className="h-4 w-4" /> {t('adminMarketingExperimentsExperimentsClient.newExperiment')}
         </button>
       ) : (

@@ -364,7 +364,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
               ))}
             </div>
           )}
-          <Link href="/dashboard/assistant" className="mt-4 flex h-10 w-full items-center justify-center rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 text-sm font-bold shadow-glow">
+          <Link href="/dashboard/assistant" className="mt-4 flex h-10 w-full items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 text-sm font-bold text-brand-fg shadow-glow">
             {tr('familyDashboard.askAnything')}
           </Link>
         </div>

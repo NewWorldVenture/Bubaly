@@ -100,7 +100,7 @@ export default async function ContentPage({ searchParams }: { searchParams: Prom
                       {isBlog && canPublish && (
                         <form action={publishContentToBlogAction} className="mt-2">
                           <input type="hidden" name="id" value={it.id} />
-                          <SubmitButton className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90">
+                          <SubmitButton className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:brightness-95">
                             <Send className="h-3.5 w-3.5" />{' '}{t('content.publishToBlog')}</SubmitButton>
                           <span className="ml-2 text-xs text-muted">{t('content.saveTheBodyFirstCreates')}</span>
                         </form>
@@ -158,7 +158,7 @@ export default async function ContentPage({ searchParams }: { searchParams: Prom
           <select name="kind" aria-label={t('adminMarketingContent.contentType')} className={inputCls}>{KINDS.map((k) => <option key={k} value={k}>{k.replace('_', ' ')}</option>)}</select>
           <input name="publish_at" type="date" aria-label={t('adminMarketingContent.publishDate')} className={inputCls} />
           <textarea name="brief" rows={4} placeholder={t('adminMarketingContent.briefNotes')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
-          <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingContent.addToPipeline')}</SubmitButton>
+          <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:brightness-95">{t('adminMarketingContent.addToPipeline')}</SubmitButton>
         </form>
         <p className="mt-3 text-xs text-muted">{t('adminMarketingContent.blogItemsWriteTheBodySet')} <code>/blog/&lt;slug&gt;</code>.</p>
       </Card>

@@ -85,7 +85,7 @@ export function AllowanceView({ rows, enabled, canManage }: { rows: AllowanceRow
             <p className="font-semibold">{t('allowance.automatedAllowancesAreABasicPlan')}</p>
             <p className="text-xs text-muted">{t('allowance.upgradeToScheduleRecurringAllowancesThat')}</p>
           </div>
-          <Link href="/pricing" className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90">{t('allowance.upgrade')}</Link>
+          <Link href="/pricing" className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:brightness-95">{t('allowance.upgrade')}</Link>
         </div>
       )}
 
@@ -115,7 +115,7 @@ export function AllowanceView({ rows, enabled, canManage }: { rows: AllowanceRow
                       {r.isActive ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                     </button>
                   )}
-                  <button onClick={() => setEditing(r)} className={cn('rounded-lg px-2.5 py-1.5 text-xs font-semibold', r.ruleId ? 'text-muted hover:bg-elevated hover:text-fg' : 'bg-brand text-white hover:bg-brand/90')}>
+                  <button onClick={() => setEditing(r)} className={cn('rounded-lg px-2.5 py-1.5 text-xs font-semibold', r.ruleId ? 'text-muted hover:bg-elevated hover:text-fg' : 'bg-brand text-white hover:brightness-95')}>
                     {r.ruleId ? <Pencil className="h-3.5 w-3.5" /> : 'Set'}
                   </button>
                 </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useId, useMemo, useRef, useState, useTransition } from 'react';
+import { unstable_rethrow } from 'next/navigation';
 import { ChevronUp, MessageCircle, Send, Loader2, Sparkles, Filter, Shield, Lightbulb, Bug, Search, X } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
@@ -47,9 +48,11 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
   const [audience, setAudience] = useState('me');
   const [imageUrl, setImageUrl] = useState('');
   const [pending, start] = useTransition();
+  const [submitUncertain, setSubmitUncertain] = useState(false);
   const isBug = kind === 'bug';
 
   function reset() {
+    setSubmitUncertain(false);
     setKind('idea'); setTitle(''); setProblem(''); setBody('');
     setCategory('other'); setImpact('helpful'); setAudience('me'); setImageUrl('');
   }
@@ -57,7 +60,15 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
   function submit(e: React.FormEvent) {
     e.preventDefault();
     start(async () => {
-      const res = await submitIdeaAction({ title, problem, body, category, impact, audience, kind, imageUrl });
+      let res: Awaited<ReturnType<typeof submitIdeaAction>>;
+      try {
+        res = await submitIdeaAction({ title, problem, body, category, impact, audience, kind, imageUrl });
+      } catch (cause) {
+        unstable_rethrow(cause);
+        // A missing acknowledgement cannot tell us whether the write committed.
+        setSubmitUncertain(true);
+        return;
+      }
       if (!res.ok || !res.id) { error(res.error ?? (isBug ? t('feedback.couldNotSubmitBug') : t('feedback.couldNotSubmitIdea'))); return; }
       onCreated({
         id: res.id, title: title.trim(), problem: problem.trim() || null, body: body.trim() || null,
@@ -88,6 +99,7 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
 
   return (
     <form onSubmit={submit} className="space-y-4">
+      {submitUncertain && <p role="alert" className="text-sm text-muted">{t('quickCapture.saveUncertain')}</p>}
       {/* Idea vs Bug — routes to the right list on the tracker + tunes the copy */}
       <div>
         {/* A <span>, not a <label>: this names a PAIR of buttons, and a label
@@ -157,7 +169,7 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
         <div className="flex gap-2">
           <button type="button" onClick={reset} disabled={pending} className="rounded-xl border border-border px-4 py-2 text-sm font-semibold hover:bg-elevated disabled:opacity-50">{t('feedbackFeedbackBoard.cancel')}</button>
           <button type="submit" disabled={pending || !title.trim()}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
+            className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:brightness-95 disabled:opacity-50">
             {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : isBug ? <Bug className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />} {isBug ? 'Submit bug report' : 'Submit idea'}
           </button>
         </div>
@@ -245,7 +257,7 @@ function CommentThread({ ideaId }: { ideaId: string }) {
         <input value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={2000}
           placeholder={t('feedbackFeedbackBoard.addAComment')} className="h-9 flex-1 rounded-lg border border-border bg-bg px-3 text-sm outline-none focus:border-brand" />
         <button type="submit" disabled={pending || !draft.trim()} aria-label={t('feedbackFeedbackBoard.postFeedback')}
-          className="inline-flex h-9 min-w-9 items-center justify-center gap-1 rounded-lg bg-brand px-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
+          className="inline-flex h-9 min-w-9 items-center justify-center gap-1 rounded-lg bg-brand px-3 text-sm font-semibold text-white transition hover:brightness-95 disabled:opacity-50">
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </button>
       </form>

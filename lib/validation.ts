@@ -37,7 +37,11 @@ export type ContactInput = z.infer<typeof contactSchema>;
 export const signUpSchema = z.object({
   fullName: z.string().trim().min(2, 'Please enter your name').max(120),
   email: emailSchema,
-  password: z.string().min(8, 'Use at least 8 characters').max(72),
+  // Keep signup aligned with recovery's UTF-16 password.length checks. Zod 4's
+  // string min/max count Unicode code points, which differ for astral text.
+  password: z.string()
+    .refine((password) => password.length >= 8, 'Use at least 8 characters')
+    .refine((password) => password.length <= 72, 'Use at most 72 characters'),
 });
 export type SignUpInput = z.infer<typeof signUpSchema>;
 
@@ -100,7 +104,7 @@ export const familyDetailsBaseSchema = z.object({
   referralDetail: z.string().trim().max(200).optional().default(''),
 });
 export const familyDetailsSchema = familyDetailsBaseSchema.extend({
-  familyId: z.string().uuid('Missing family'),
+  familyId: z.string().guid('Missing family'),
 });
 export type FamilyDetailsInput = z.infer<typeof familyDetailsSchema>;
 
@@ -110,11 +114,11 @@ export const inviteSchema = z.object({
 });
 
 export const inviteMemberActionSchema = inviteSchema.extend({
-  familyId: z.string().uuid('Missing family'),
+  familyId: z.string().guid('Missing family'),
 });
 
 export const localMemberActionSchema = z.object({
-  familyId: z.string().uuid('Missing family'),
+  familyId: z.string().guid('Missing family'),
   displayName: z.string().trim().min(1, 'Name is required').max(60),
   role: z.enum(['child', 'teen', 'adult']),
   color: z.string().trim().max(9).optional(),
@@ -215,7 +219,7 @@ export const finalizeOnboardingSchema = z.object({
   family: createFamilySchema,
   details: familyDetailsBaseSchema,
   members: z.array(draftMemberSchema).max(30).default([]),
-  appearance: onboardingAppearanceSchema.optional().default({}),
+  appearance: onboardingAppearanceSchema.prefault({}),
   calendarImport: onboardingCalendarImportSchema.optional().default({ source: '', events: [] }),
 });
 export type FinalizeOnboardingInput = z.infer<typeof finalizeOnboardingSchema>;
@@ -237,14 +241,14 @@ export const choreSchema = z.object({
   points: z.coerce.number().int().min(0).max(1000).default(10),
   priority: z.enum(['low', 'medium', 'high']).default('medium'),
   due_at: z.string().optional().nullable(),
-  member_id: z.string().uuid().optional().nullable(),
+  member_id: z.string().guid().optional().nullable(),
 });
 
 /** Format a ZodError into a flat { field: message } map for forms. */
 export function fieldErrors(error: z.ZodError): Record<string, string> {
   const out: Record<string, string> = {};
   for (const issue of error.issues) {
-    const key = issue.path.join('.') || '_';
+    const key = issue.path.map(String).join('.') || '_';
     if (!out[key]) out[key] = issue.message;
   }
   return out;

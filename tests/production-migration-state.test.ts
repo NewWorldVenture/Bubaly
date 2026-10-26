@@ -100,9 +100,14 @@ describe('production schema and migration history audit', () => {
         "success() && github.event_name == 'workflow_dispatch' && inputs.apply == true",
       );
     }
-    const verification = steps.filter(step => /^name: (?:Audit|Verify|Report|Link)/.test(step));
-    expect(verification).toHaveLength(10);
+    const verification = steps.filter(step => /^name: (?:Audit|Verify|Report)/.test(step));
+    expect(verification).toHaveLength(9);
     for (const step of verification) expect(step).not.toMatch(/^        if:/m);
+    const explicitCli = steps.filter(step => /^(?:uses: supabase\/setup-cli@|name: Link production project)/.test(step));
+    expect(explicitCli).toHaveLength(2);
+    for (const step of explicitCli) expect(step.match(/^        if: (.+)$/m)?.[1].trim()).toBe(
+      "success() && github.event_name == 'workflow_dispatch' && inputs.apply == true",
+    );
   });
 });
 

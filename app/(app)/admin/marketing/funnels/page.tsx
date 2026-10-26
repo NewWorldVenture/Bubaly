@@ -51,7 +51,7 @@ export default async function FunnelsPage() {
         <form action={createFunnel} className="space-y-3 text-sm">
           <input name="name" required placeholder={t('adminMarketingFunnels.funnelName')} className={inputCls} />
           <textarea name="steps" rows={5} placeholder={t('adminMarketingFunnels.oneStepPerLineEG')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
-          <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingFunnels.createFunnel')}</SubmitButton>
+          <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:brightness-95">{t('adminMarketingFunnels.createFunnel')}</SubmitButton>
         </form>
       </Card>
     </div>

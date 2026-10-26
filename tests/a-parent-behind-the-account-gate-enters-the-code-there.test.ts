@@ -46,7 +46,7 @@ const FACTOR = { id: 'factor-totp', factor_type: 'totp', status: 'verified', cre
 const CODE = '246810';
 
 vi.mock('react', async (original) => (await import('./helpers/hook-slots')).withHookSlots(await original<object>(), h.hooks));
-vi.mock('@/components/ui/toast', async () => (await import('./helpers/module-harness')).toastModule(h));
+vi.mock('@/components/ui/toast', async () => ({ ...(await import('./helpers/module-harness')).toastModule(h), ToastProvider: ({ children }: { children: ReactNode }) => children }));
 vi.mock('@/components/i18n/locale-provider', async () => ({
   ...(await import('./helpers/module-harness')).localeProviderModule(h),
   FamilyTimeZoneProvider: ({ children }: { children: ReactNode }) => children,
@@ -103,7 +103,8 @@ vi.mock('@/lib/server/family-time-zone', () => ({ activeFamilyTimeZone: async ()
 vi.mock('@/components/i18n/scoped-locale-provider', () => ({ ScopedLocaleProvider: ({ children }: { children: ReactNode }) => children }));
 vi.mock('@/components/ui/confirm', () => ({ ConfirmProvider: ({ children }: { children: ReactNode }) => children }));
 vi.mock('@/components/auth/session-keeper', () => ({ SessionKeeper: () => null }));
-vi.mock('@/components/app/app-lock-gate', () => ({ AppLockGate: ({ children }: { children: ReactNode }) => children }));
+vi.mock('@/components/app/app-lock-boundary', () => ({ AppLockBoundary: ({ children }: { children: ReactNode }) => children }));
+vi.mock('@/lib/security/app-lock-store', () => ({ readAppLockRecord: async () => ({ ok: true, record: null }) }));
 
 const { default: AppGroupLayout } = await import('@/app/(app)/layout');
 const { AccountClosedGate } = await import('@/components/app/account-closed-gate');

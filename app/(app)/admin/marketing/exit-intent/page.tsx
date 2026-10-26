@@ -28,7 +28,7 @@ const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm'
 const LISTED = 200;
 /** Offers the summary may page through before it says it is not shown. */
 const SUM_ROW_CEILING = 10_000;
-const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
+const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:brightness-95';
 
 async function ReadFailure() {
   const t = await getTranslations();
@@ -123,7 +123,7 @@ export default async function ExitIntentPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <input name="name" required placeholder={t('adminMarketingExitIntent.internalName')} className={`${inputCls} lg:col-span-2`} />
             <input name="priority" type="number" defaultValue={0} placeholder={t('adminMarketingExitIntent.priority')} className={inputCls} />
-            <select name="status" defaultValue="active" aria-label={t('adminMarketingExitIntent.status')} className={inputCls}>
+            <select name="status" defaultValue="paused" aria-label={t('adminMarketingExitIntent.status')} className={inputCls}>
               <option value="active">{t('adminMarketingExitIntent.active')}</option>
               <option value="paused">{t('adminMarketingExitIntent.paused')}</option>
             </select>
@@ -152,7 +152,6 @@ export default async function ExitIntentPage() {
               <option value="true">{t('adminMarketingExitIntent.returningOnly')}</option>
               <option value="false">{t('adminMarketingExitIntent.newVisitorsOnly')}</option>
             </select>
-            <input name="minSessions" type="number" min="0" placeholder={t('adminMarketingExitIntent.minSessions')} className={inputCls} />
             <SubmitButton className={`${btnCls} lg:col-span-2`}>{t('adminMarketingExitIntent.createOffer')}</SubmitButton>
           </div>
         </form>

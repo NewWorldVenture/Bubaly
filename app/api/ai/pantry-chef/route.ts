@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
     // A model call: it counts against the family's monthly AI allowance and is
     // recorded as an ai_requests row like every other one.
     const access = await assertAIAccess(ctx, { db: supabase, now, featureKey: FRIDGE_CHEF_FEATURE_KEY, label: t('pantryChef.fridgeChef') });
-    if (!access.ok) return accessDeniedResponse(access);
+    if (!access.ok) return accessDeniedResponse(access, t);
 
     // Read the family's allergies with the service client so the safety filter
     // works for every member (medical_profiles is manager-gated to clients); the
@@ -182,6 +182,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: t('pantryChef.fridgeChefIsUnavailableRight') }, { status: 503 });
     }
     const allergies = normalizeAllergies(...(profiles ?? []).map((p) => p.allergies as string | null));
+
 
     const aiConfig = await getAIConfig(service);
     const apiKey = aiConfig.openaiKey ?? process.env.OPENAI_API_KEY;

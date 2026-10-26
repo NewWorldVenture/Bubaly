@@ -129,7 +129,7 @@ export function MarketAssistant({ firstName }: { firstName: string }) {
           type="submit"
           disabled={pending || !input.trim()}
           aria-label={tr('marketAssistant.send')}
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand text-brand-fg transition hover:opacity-90 disabled:opacity-50"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand text-brand-fg transition hover:brightness-95 disabled:opacity-50"
         >
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
         </button>

@@ -86,7 +86,7 @@ export async function POST() {
     // whether the helper is available is the paywall above, as the page has no
     // tier of its own.
     const access = await assertAIAllowance(ctx, { db: supabase });
-    if (!access.ok) return accessDeniedResponse(access);
+    if (!access.ok) return accessDeniedResponse(access, t);
 
     const [{ data: profile, error: profileErr }, { data: dateRows, error: datesErr }] = await settleAll([
       supabase.from('relationship_profile')

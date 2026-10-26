@@ -200,7 +200,7 @@ export async function addBookAction(formData: FormData): Promise<LibraryResult> 
 }
 
 const progressSchema = z.object({
-  itemId: z.string().uuid(),
+  itemId: z.string().guid(),
   positionSeconds: z.number().int().min(0).max(24 * 60 * 60).optional(),
   saved: z.boolean().optional(),
   offline: z.boolean().optional(),

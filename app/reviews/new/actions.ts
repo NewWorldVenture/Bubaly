@@ -1,6 +1,6 @@
 'use server';
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { headers } from 'next/headers';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -14,6 +14,18 @@ const REVIEWS_PER_IP_PER_DAY = 3;
 const DAY_MS = 86_400_000;
 /** The key under which a review's text fingerprint travels in `reviews.metadata`. */
 const TEXT_FINGERPRINT = 'text_fingerprint';
+const ADMISSION_MARKER = 'submission_admission';
+const ADMITTED = 'v1:admitted';
+
+type ReviewWitness = { id?: unknown; metadata?: unknown; deleted_at?: unknown; status?: unknown };
+function admissionMarker(row: ReviewWitness): unknown {
+  return row.metadata !== null && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
+    ? (row.metadata as Record<string, unknown>)[ADMISSION_MARKER] : null;
+}
+function liveAdmitted(row: ReviewWitness | null | undefined, id?: string): boolean {
+  return Boolean(row && typeof row.id === 'string' && (!id || row.id === id)
+    && row.deleted_at === null && admissionMarker(row) === ADMITTED);
+}
 
 /**
  * Public review submission — NO auth. Writes via the service-role client (reviews
@@ -29,22 +41,16 @@ const TEXT_FINGERPRINT = 'text_fingerprint';
  * a success that writes nothing, and repeated text within a day dropped
  * silently. Audit N4.
  *
- * The repeated-text check reads the reviews that were WRITTEN, not a limiter
- * bucket. It used to charge `review:text:<sha256>` before the insert, so a
- * refused insert consumed the bucket and the same person's retry was answered
- * { ok: true } with nothing written (audit RV1-N4). The fingerprint now travels
- * with the row, so the record that this text was written exists exactly when
- * the review does. Audit RV1-N4-dedupe-order.
+ * New submissions are hidden with a versioned ownership hold until their
+ * text admission and required activation are confirmed. A repeat receipt
+ * requires a live admitted row; a spent limiter counter alone is not a review.
+ * Cleanup can remove only this attempt's exact provisional hold. Existing
+ * public/admin lists already exclude non-null deleted_at rows.
  *
- * A read cannot see a write that has not happened yet, though, and nothing in
- * the schema makes the fingerprint unique: two submissions of the same words
- * at once both read nothing and both wrote (PR #1077 review). So the read is
- * only the fast path for a repeat that is already written. Admission is the
- * atomic `review:text:<fingerprint>` counter (one a day), charged AFTER the
- * insert succeeds — the order RV1-N4 needs, since a refused insert charges
- * nothing. The first charge keeps its row; a later one deletes its own. Every
- * review is written pending and published only once admitted, so a duplicate
- * is never on the public wall for the moment before it is removed.
+ * This is a current-writer lifecycle protocol, not a rolling-upgrade repair
+ * for old unversioned in-flight writers. Failed activation can leave a spent
+ * text counter with no live row; retries must report that honestly rather
+ * than infer success. No native database uniqueness claim is made.
  */
 export async function submitReviewAction(input: {
   rating: number;
@@ -74,19 +80,20 @@ export async function submitReviewAction(input: {
 
   const title = typeof payload.title === 'string' ? payload.title.trim().slice(0, 160) || null : null;
   const body = typeof payload.body === 'string' ? payload.body.trim().slice(0, 4000) || null : null;
-  // The same words twice in a day are one review, whoever posts them. A
-  // review already written with this fingerprint is the repeat; a submission
-  // whose insert was refused left no row, so its retry is not. An unreadable
-  // ledger is reported, not absorbed into a silent success. This read answers
-  // a repeat without writing; two at once are settled after the insert.
   const fingerprint = title || body ? createHash('sha256').update(JSON.stringify([title, body])).digest('hex') : null;
+  const since = new Date(Date.now() - DAY_MS).toISOString();
+  // Neither provisional holds nor unversioned rows establish a new-protocol
+  // receipt. Old writers require a separately qualified release cutover.
+  async function admittedRepeat() {
+    return supabase.from('reviews').select('id,metadata,deleted_at')
+      .eq(`metadata->>${TEXT_FINGERPRINT}`, fingerprint!)
+      .eq(`metadata->>${ADMISSION_MARKER}`, ADMITTED)
+      .is('deleted_at', null).gte('created_at', since).order('id').limit(1);
+  }
   if (fingerprint) {
-    const repeat = await supabase.from('reviews').select('id')
-      .eq(`metadata->>${TEXT_FINGERPRINT}`, fingerprint)
-      .gte('created_at', new Date(Date.now() - DAY_MS).toISOString())
-      .order('id').limit(1);
+    const repeat = await admittedRepeat();
     if (repeat.error) return { ok: false, error: t('actions.couldNotSaveYourReview') };
-    if (repeat.data?.length) return { ok: true };
+    if (repeat.data?.some(row => liveAdmitted(row))) return { ok: true };
   }
 
   const { data: settings } = await supabase
@@ -97,39 +104,68 @@ export async function submitReviewAction(input: {
   const authorId = await signedInUserId();
   const publish = authorId !== null && autoMin != null && rating >= autoMin;
 
-  // Pending whatever it will become: it is published below, once admitted.
+  const id = randomUUID();
+  const heldAt = new Date().toISOString();
+  const hold = 'v1:staged:' + randomUUID();
+  const metadata = { ...(fingerprint ? { [TEXT_FINGERPRINT]: fingerprint } : {}), [ADMISSION_MARKER]: hold };
+  // deleted_at is a visibility hold, not a user deletion. It is cleared only
+  // by the exact owner after admission, so existing readers cannot publish it.
   const written = await supabase.from('reviews').insert({
-    rating,
-    title,
-    body,
+    id, rating, title, body,
     author_name: typeof payload.name === 'string' ? payload.name.trim().slice(0, 120) || null : null,
     author_email: typeof payload.email === 'string' ? payload.email.trim().slice(0, 200) || null : null,
-    source: 'internal',
-    status: 'pending',
-    metadata: fingerprint ? { [TEXT_FINGERPRINT]: fingerprint } : {},
-  }).select('id');
-  const id = !written.error && written.data?.length === 1 ? written.data[0].id : null;
-  if (!id) return { ok: false, error: t('actions.couldNotSaveYourReview') };
+    source: 'internal', status: 'pending', deleted_at: heldAt, metadata,
+  }).select('id,metadata,deleted_at,status');
+  const staged = written.data?.length === 1 ? written.data[0] : null;
+  if (written.error || !staged || staged.id !== id || typeof staged.deleted_at !== 'string'
+    || Date.parse(staged.deleted_at) !== Date.parse(heldAt)
+    || staged.status !== 'pending' || admissionMarker(staged) !== hold) {
+    return { ok: false, error: t('actions.couldNotSaveYourReview') };
+  }
+
+  async function removeOwnStage() {
+    const removed = await supabase.from('reviews').delete().eq('id', id)
+      .eq('deleted_at', heldAt).eq(`metadata->>${ADMISSION_MARKER}`, hold)
+      .eq('status', 'pending').select('id');
+    return !removed.error && removed.data?.length === 1 && removed.data[0].id === id;
+  }
 
   if (fingerprint) {
-    // The durable counter alone: the per-instance guard in front of it in
-    // enforceRequestRateLimit would stay spent after an outage here, and turn
-    // the same person's retry into a "repeat" with nothing written.
     const admission = await rateLimitDbVerdict(supabase, `review:text:${fingerprint}`, { limit: 1, windowMs: DAY_MS });
     if (admission.verdict !== 'allowed') {
-      const removed = await supabase.from('reviews').delete().eq('id', id).select('id');
-      const gone = !removed.error && removed.data?.length === 1;
+      const gone = await removeOwnStage();
+      if (!gone) console.error('[reviews] provisional cleanup was not confirmed; no admitted row is removed', { id });
       if (admission.verdict === 'refused') {
-        // A repeat, answered as one. A copy that could not be removed was
-        // never published; a moderator sees it pending.
-        if (!gone) console.error('[reviews] a repeated review could not be removed; it stays pending', { id, code: removed.error?.code ?? null });
-        return { ok: true };
+        // A concurrent winner may still be activating. Bounded real reads can
+        // establish a receipt; neither elapsed time nor the counter can.
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (attempt) await new Promise(resolve => setTimeout(resolve, 25));
+          const winner = await admittedRepeat();
+          if (winner.error) break;
+          if (winner.data?.some(row => liveAdmitted(row))) return { ok: true };
+        }
       }
-      // The repeat check could not be answered: fail closed, as an unreadable
-      // fingerprint read does, and leave nothing written that it did not admit.
-      if (!gone) console.error('[reviews] a review the repeat check could not admit could not be removed; it stays pending', { id, code: removed.error?.code ?? null });
       return { ok: false, error: t('actions.couldNotSaveYourReview') };
     }
+  }
+
+  const activated = await supabase.from('reviews').update({
+    deleted_at: null, metadata: { ...metadata, [ADMISSION_MARKER]: ADMITTED },
+  }).eq('id', id).eq('deleted_at', heldAt).eq(`metadata->>${ADMISSION_MARKER}`, hold)
+    .eq('status', 'pending').select('id,metadata,deleted_at').maybeSingle();
+  let confirmed = !activated.error && liveAdmitted(activated.data, id);
+  if (!confirmed) {
+    // The write may have committed despite a missing answer. Read the actual
+    // same owned row before acknowledging; never compensate by deleting it.
+    const witness = await supabase.from('reviews').select('id,metadata,deleted_at')
+      .eq('id', id).eq(`metadata->>${ADMISSION_MARKER}`, ADMITTED)
+      .is('deleted_at', null).maybeSingle();
+    confirmed = !witness.error && liveAdmitted(witness.data, id);
+  }
+  if (!confirmed) {
+    await removeOwnStage();
+    console.error('[reviews] required activation was not confirmed', { id });
+    return { ok: false, error: t('quickCapture.saveUncertain') };
   }
 
   if (publish) {

@@ -186,7 +186,7 @@ export function DisplaySelfCheck() {
           type="button"
           onClick={() => void run()}
           aria-disabled={busy || undefined}
-          className="inline-flex min-h-11 items-center gap-2 rounded-full bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:opacity-90 focus-ring aria-disabled:opacity-60"
+          className="inline-flex min-h-11 items-center gap-2 rounded-full bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:brightness-95 focus-ring aria-disabled:opacity-60"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <PlayCircle className="h-4 w-4" aria-hidden />}
           {t('displaySetup.runTheChecks')}

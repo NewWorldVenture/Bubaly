@@ -232,7 +232,7 @@ export default async function FAQPage() {
               <h2 id="faq-help-heading" className="text-balance text-3xl font-black tracking-tight sm:text-4xl">{t('faq.helpTitle')}</h2>
               <p className="mt-4 text-lg leading-8 text-white/65">{t('faq.helpBody')}</p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <Link href="/contact" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-6 py-3 text-sm font-bold text-brand-fg shadow-glow transition hover:-translate-y-0.5">
+                <Link href="/contact" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 px-6 py-3 text-sm font-bold text-brand-fg shadow-glow transition hover:-translate-y-0.5">
                   {t('faq.helpContactCta')}{' '}<ArrowRight className="h-4 w-4" aria-hidden />
                 </Link>
                 <a href="mailto:support@bubaly.com" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/15 bg-white/[0.03] px-6 py-3 text-sm font-bold transition hover:bg-white/[0.06]">

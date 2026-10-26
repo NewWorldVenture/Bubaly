@@ -33,6 +33,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
+import { auditSupabaseQueries } from '../scripts/audit-supabase-queries.mjs';
 
 const ROOT = path.resolve(__dirname, '..');
 const ROUTE = 'app/api/ai/insights/route.ts';
@@ -104,6 +105,16 @@ function everyFromCall(): { table: string; where: string }[] {
   return out;
 }
 
+type HeldTableCall = { kind: string; detail: string; file: string; line: number; runnable: boolean };
+
+// Reuse the source audit's exact reviewed call sites. That audit verifies the
+// held SQL really declares the table and this caller uses the service client.
+// A held table never becomes part of the globally runnable schema here.
+function approvedHeldCall(call: { table: string; where: string }, held: readonly HeldTableCall[]): boolean {
+  return held.some(dependency => dependency.kind === 'reserved-table' && dependency.runnable === false
+    && dependency.detail === call.table && `${dependency.file}:${dependency.line}` === call.where);
+}
+
 /**
  * Helpers that take a TABLE NAME as their second argument. Curated, not
  * inferred: a sweep that assumed every `helper(db, 'x', …)` passed a table
@@ -137,6 +148,8 @@ function promptKeys(): string[] {
 
 describe('an insight queries a table that exists', () => {
   const tables = schemaTables();
+  const heldTableCalls = auditSupabaseQueries().reservedDependencies
+    .filter(dependency => dependency.kind === 'reserved-table');
 
   it('reads a real schema and a real route', () => {
     // Either parse returning nothing would make every assertion below vacuous.
@@ -158,9 +171,22 @@ describe('an insight queries a table that exists', () => {
     // state rather than assuming it holds.
     const calls = everyFromCall();
     expect(calls.length, 'the .from() scan found nothing — it is not scanning').toBeGreaterThan(500);
-    const missing = calls.filter((c) => !tables.has(c.table))
+    const missing = calls.filter((c) => !tables.has(c.table) && !approvedHeldCall(c, heldTableCalls))
       .map((c) => `${c.where}: ${c.table}`);
     expect(missing, 'a .from() names a table the migrations never create').toEqual([]);
+  });
+
+  it('permits a held table only at its verified service call site, never globally', () => {
+    const approved = heldTableCalls.find(dependency => dependency.detail === 'app_lock_credentials');
+    expect(approved, 'the private table needs an explicit held dependency').toBeDefined();
+    if (!approved) throw new Error('Missing reviewed private-store dependency');
+    const call = { table: approved.detail, where: `${approved.file}:${approved.line}` };
+    expect(tables.has(call.table), 'held SQL must not enter the runnable table set').toBe(false);
+    expect(approvedHeldCall(call, heldTableCalls)).toBe(true);
+    expect(approvedHeldCall({ ...call, where: 'lib/unapproved-reader.ts:1' }, heldTableCalls)).toBe(false);
+    expect(approvedHeldCall({ ...call, where: `${approved.file}:${approved.line + 1}` }, heldTableCalls)).toBe(false);
+    expect(approvedHeldCall({ ...call, table: 'invented_held_table' }, heldTableCalls)).toBe(false);
+    expect(approvedHeldCall(call, [])).toBe(false);
   });
 
   it('no table-name helper names a table that does not exist', () => {

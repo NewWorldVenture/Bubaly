@@ -22,7 +22,7 @@ type Video = Tables<'marketing_videos'>;
 type Asset = Tables<'marketing_assets'>;
 
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
-const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
+const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:brightness-95';
 
 /** The newest videos the list holds, and the newest uploads the picker offers. */
 const LISTED = 300;

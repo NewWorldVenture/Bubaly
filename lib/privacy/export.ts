@@ -159,7 +159,7 @@ function familyDayWindow(scope: ServiceScope, window: { from: string; to: string
  * out, counted exactly. A count that cannot be read fails the section: the
  * file would otherwise claim to be complete on the strength of a missing number.
  */
-async function rowsBeyondWindow(scope: ServiceScope, table: 'calendar_events' | 'school_events' | 'sports_events', outside: string): Promise<ServiceResult<boolean>> {
+async function rowsBeyondWindow(scope: ServiceScope, table: 'calendar_events' | 'school_events' | 'sports_events' | 'transactions', outside: string): Promise<ServiceResult<boolean>> {
   const { count, error } = await scope.db.from(table).select('id', { count: 'exact', head: true })
     .eq('family_id', scope.familyId).or(outside);
   if (error || typeof count !== 'number') {
@@ -286,7 +286,13 @@ async function readSection(scope: ServiceScope, key: ExportSectionKey): Promise<
     }
     case 'finances': {
       const r = await listTransactions(scope, { from: dayKey(scope, -730), to: dayKey(scope, 0), limit: 5000 });
-      return r.ok ? { ok: true, data: { data: r.data, count: r.data.transactions.length } } : r;
+      if (!r.ok) return r;
+      // Transaction dates are family-local dates, so use the finance reader's
+      // actual inclusive range without converting it to UTC instants.
+      const window = r.data.range;
+      const beyond = await rowsBeyondWindow(scope, 'transactions', `date.lt.${window.from},date.gt.${window.to}`);
+      if (!beyond.ok) return beyond;
+      return { ok: true, data: { data: r.data, count: r.data.transactions.length, window, beyondWindow: beyond.data, capped: !r.data.complete } };
     }
   }
 }

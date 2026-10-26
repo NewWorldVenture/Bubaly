@@ -11,17 +11,14 @@ import { alphaText, contrast, GROUNDS, over, scanFiles, scanSource, THEMES, toke
 //     brand-text at 70% on their brand-tinted hero: 3.12:1;
 //   - the reply preview's sender, brand-text at 80%: 4.29;
 //   - the super-admin "Admin (code)" badge, brand-text at 80%: 4.16;
-//   - four in the sidebar, left as they are (see ALLOWED).
+//   - four in the sidebar: its group headings and counts, and its locked
+//     (upgrade) items, which are still buttons.
 // Those four are drawn at full strength now.
 //
 // The scanner, and what it does and does not read (same-file const aliases
 // yes; imports and functions no), is tests/helpers/faded-text.ts.
 
 const ALLOWED: { file: string; has: string; why: string }[] = [
-  { file: 'components/app/app-shell.tsx', has: 'text-muted/70', why: 'the sidebar’s group headings: the sidebar is not changed here' },
-  { file: 'components/app/free-tier-sidebar.tsx', has: 'text-muted/80', why: 'the free-tier sidebar’s group headings: not changed here' },
-  { file: 'components/app/free-tier-sidebar.tsx', has: 'text-muted/50', why: 'the free-tier sidebar’s counts and locked items: not changed here' },
-  { file: 'components/app/nav-shared.tsx', has: 'text-muted/45', why: 'a locked (upgrade) nav item: not changed here' },
   { file: 'components/concierge/plan-write-backs.tsx', has: 'disabled={disabled}', why: 'an unavailable write-back: the faint style is applied only when !o.available, which also sets disabled' },
 ];
 

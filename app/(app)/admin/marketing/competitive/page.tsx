@@ -29,7 +29,7 @@ type Keyword = Tables<'keyword_intel'>;
 type Backlink = Tables<'backlinks'>;
 
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
-const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
+const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:brightness-95';
 /** Backlinks the summary tiles, and keywords the ranking, may page through before they are reported as not shown (one round trip per 1,000). */
 const SUM_ROW_CEILING = 25_000;
 /** The keyword table lists this many of the best-ranked opportunities. */
