@@ -1,7 +1,7 @@
 // ROLE-L07: the App Lock panel's toasts, its "On" badge and the whole PIN
 // dialog (title, prompt, both validation errors, both buttons) were English in
 // every language; and a save that never completed — the server action rejects
-// when offline, and Web Crypto is absent on an insecure origin — left the panel
+// when offline — left the panel
 // on "saving" with every button disabled and no message.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -18,12 +18,15 @@ describe('App Lock settings say what happened, in the reader\'s language', () =>
     for (const key of KEYS) expect(source).toContain(`t('${key}')`);
   });
 
-  it('every save and the hashing can fail without stranding the panel', () => {
+  it('the server save can fail without stranding the panel and credentials never return to the client', () => {
     const save = source.slice(source.indexOf('async function save('), source.indexOf('async function setEnabled('));
     expect(save).toMatch(/try \{\s*return await saveAppLockConfig\(cfg\);\s*\} catch/);
     expect(source.match(/saveAppLockConfig\(/g)).toHaveLength(1);
-    const onSet = source.slice(source.indexOf('async function onSet('));
-    expect(onSet).toMatch(/try \{[\s\S]*?await buildAppLockConfig\(pin\)[\s\S]*?\} catch[\s\S]*?setSaving\(false\)/);
+    expect(source).toContain('await getAppLockSettings()');
+    expect(source).toContain('await save({ enabled: nextEnabled, pin })');
+    expect(source).not.toContain('buildAppLockConfig');
+    expect(source).not.toContain(".from('user_preferences')");
+    expect(source).toContain('type="password"');
   });
 
   it('every full catalogue says all of it', () => {

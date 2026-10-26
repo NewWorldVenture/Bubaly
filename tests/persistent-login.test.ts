@@ -168,9 +168,11 @@ describe('middleware keeps a signed-in user signed in', () => {
     });
     const { middleware } = await import('@/middleware');
     const res = await middleware(request('/home', { 'sb-example-auth-token': 'stored' }));
-    // 200, not a 307 to /login: their session is intact, the network was not.
-    expect(res.status).toBe(200);
-    expect(res.headers.get('location')).toBeNull();
+    // Preserve the auth cookies, but withhold protected page/RSC data until
+    // the user and private lock can be checked. This is not a logout.
+    expect(res.status).toBe(307);
+    expect(new URL(res.headers.get('location')!).pathname).toBe('/app-lock');
+    expect(res.cookies.getAll().filter(cookie => cookie.maxAge === 0)).toEqual([]);
   });
 
   it('still sends a genuinely signed-out visitor to /login', async () => {
@@ -316,7 +318,7 @@ describe('the app keeps the session and the server render in step', () => {
 
   it('keeps refreshing while the App Lock screen is up', () => {
     // Otherwise unlocking with the PIN after a long idle lands on /login.
-    expect(at(layout, '<SessionKeeper userId={user.id} />')).toBeLessThan(at(layout, 'AppLockGate enabled'));
+    expect(at(layout, '<SessionKeeper userId={user.id} />')).toBeLessThan(at(layout, '<AppLockBoundary '));
   });
 
   it('revives on the events that follow a long absence', () => {

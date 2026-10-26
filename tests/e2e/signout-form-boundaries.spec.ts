@@ -68,6 +68,8 @@ async function fixture(page: Page, control: Control = 'plain', locale = 'en-US')
       // account-closed-gate offers a member's other, open families through the
       // family switcher's action; no family is offered in this fixture.
       '@/app/(app)/actions': { setActiveFamilyAction: async () => { throw new Error('Unrelated action'); } },
+      // The lock screen checks a PIN through the server; none is entered here.
+      '@/app/(app)/settings/app-lock-actions': { unlockAppAction: async () => { throw new Error('Unrelated action'); } },
       '@/lib/constants/plans': { BASIC_ANNUAL_CENTS: 11988, PLUS_ANNUAL_CENTS: 23988 },
       '@/lib/utils/format': { fmtDateTime: value => value },
       // Formatting is not what this fixture is about (TIME-003 moved these
@@ -113,7 +115,7 @@ async function fixture(page: Page, control: Control = 'plain', locale = 'en-US')
       'step-up': [load('@/components/auth/step-up-form').StepUpForm, { next: '/home', serverReadFailed: false }],
       privacy: [load('@/components/settings/privacy-center').PrivacyCenter, {}],
       closed: [load('@/components/app/account-closed-gate').AccountClosedGate, {}],
-      lock: [load('@/components/app/app-lock-gate').AppLockGate, { enabled: true, salt: 'fixture-salt', hash: 'fixture-hash', userId: 'fixture-user' }],
+      lock: [load('@/components/app/app-lock-gate').AppLockGate, {}],
       trial: [load('@/components/app/trial-paywall-gate').TrialPaywallGate, {}],
     };
     const SignOutForm = load('@/components/auth/sign-out-form').SignOutForm;

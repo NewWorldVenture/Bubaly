@@ -280,7 +280,12 @@ jobs:
       # docs/audit/verify-pg.sh runs, so what CI proves is what a person
       # reproduces locally. Exits non-zero if ANY migration fails to apply.
       - name: Replay every migration
-        run: bash docs/audit/pg-bootstrap.sh
+        run: |
+          node scripts/ci-stage-app-lock-private-storage.mjs
+          trap 'node scripts/ci-stage-app-lock-private-storage.mjs --remove' EXIT
+          bash docs/audit/pg-bootstrap.sh
+        env:
+          BUBALY_DISPOSABLE_APP_LOCK_SCHEMA: '1'
 
       # Exercise the existing typed 0476 conversion and replay the unchanged
       # 0293 over its restrictive policies in disposable local databases only.
@@ -457,10 +462,14 @@ jobs:
           BUBALY_BILL_STACK_PHASE: prepare
 
       - name: Start isolated Supabase
-        run: supabase start
+        run: |
+          node scripts/ci-stage-app-lock-private-storage.mjs
+          trap 'node scripts/ci-stage-app-lock-private-storage.mjs --remove' EXIT
+          supabase start
         env:
           # Override the repository migration hold only for this owned local stack.
           SUPABASE_DB_MIGRATIONS_ENABLED: 'true'
+          BUBALY_DISPOSABLE_APP_LOCK_SCHEMA: '1'
 
       - name: Capture immutable owned bill stack identities
         run: node scripts/ci-recurring-bill-anchor-fixture.mjs
