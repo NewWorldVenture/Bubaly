@@ -536,3 +536,51 @@ it.each(['','TRANSP:OPAQUE'])('actual healthy opaque paste still previews and pe
  const preview=await previewCalendarImportAction({source:'paste',timezone:'UTC',icsText:pasted(event('safe-live',metadata))});expect(preview.ok).toBe(true);if(!preview.ok||!preview.data)throw Error('Preview unavailable');
  const result=await finalizeOnboardingAction(buildFinalizePayload({...emptyDraft({name:'Ada',familyName:'Ada family',timezone:'UTC'}),importSource:'paste',importedEvents:preview.data.events}),{userId,familyId});expect(result.ok).toBe(true);expect(db.table('calendar_events').map(row=>row.title)).toEqual(['safe-live']);
 });
+
+// N9: the funnel's "Imported a calendar" and "Calendar imported (session 1)"
+// are rates over every household, and only an ICS feed added from Settings
+// recorded the milestone. The wizard's own import — pasted, or a connected
+// provider calendar — is the household's calendar_imported too.
+describe('the wizard’s calendar import is a recorded milestone (N9)', () => {
+  const SIGNUP = '2026-09-10T11:50:00.000Z';
+  const imported = () => db.table('activation_events').filter((row) => row.milestone === 'calendar_imported');
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-10T12:00:00.000Z'));
+    db.replace('families', db.table('families').map((row) => ({ ...row, created_at: SIGNUP })));
+  });
+
+  it('records a pasted calendar once, by the member, for the household, in its first session', async () => {
+    const preview = await previewCalendarImportAction({ source: 'paste', timezone: 'UTC', icsText: pasted(event('swim-practice')) });
+    if (!preview.ok || !preview.data) throw new Error('Preview unavailable');
+    const payload = buildFinalizePayload({ ...emptyDraft({ name: 'Ada', familyName: 'Ada family', timezone: 'UTC' }), importSource: 'paste', importedEvents: preview.data.events });
+    expect(await finalizeOnboardingAction(payload, { userId, familyId })).toMatchObject({ ok: true });
+    expect(await finalizeOnboardingAction(payload, { userId, familyId })).toMatchObject({ ok: true });
+    expect(imported()).toEqual([expect.objectContaining({ user_id: userId, family_id: familyId, session_id: familyId, session_index: 1, ms_since_signup: 600_000 })]);
+
+    // And the funnel counts it: a member recorded it, about their own household.
+    const { loadActivationTelemetry } = await import('@/lib/analytics/onboarding-server');
+    const { summarizeActivation } = await import('@/lib/analytics/activation');
+    const telemetry = await loadActivationTelemetry(db as never, new Date());
+    if (!telemetry.data) throw new Error('activation telemetry unavailable');
+    const summary = summarizeActivation(telemetry.data.events, { cohorts: telemetry.data.cohorts });
+    expect(summary.session1.calendarImportRate).toBe(1);
+    expect(summary.milestoneReach.find((m) => m.key === 'calendar_imported')).toMatchObject({ cohorts: 1, rate: 1 });
+  });
+
+  it('records a connected provider calendar on Finish', async () => {
+    const { preview } = await connected();
+    const payload = buildFinalizePayload(emptyDraft({ name: 'Ada', familyName: 'Ada family', timezone: 'UTC',
+      importedEvents: preview.events, importSource: 'url', calendarReceipt: preview.receipt }));
+    expect(await finalizeOnboardingAction(payload)).toMatchObject({ ok: true, data: { familyId } });
+    expect(imported()).toEqual([expect.objectContaining({ user_id: userId, family_id: familyId, session_id: familyId, session_index: 1 })]);
+  });
+
+  it('records nothing for the sample calendar or a skipped import', async () => {
+    const sample = await previewCalendarImportAction({ source: 'demo', timezone: 'UTC' });
+    if (!sample.ok || !sample.data) throw new Error('Sample unavailable');
+    const draft = emptyDraft({ name: 'Ada', familyName: 'Ada family', timezone: 'UTC' });
+    expect(await finalizeOnboardingAction(buildFinalizePayload({ ...draft, importSource: 'demo', importedEvents: sample.data.events }), { userId, familyId })).toMatchObject({ ok: true });
+    expect(await finalizeOnboardingAction(buildFinalizePayload(draft), { userId, familyId })).toMatchObject({ ok: true });
+    expect(imported()).toEqual([]);
+  });
+});

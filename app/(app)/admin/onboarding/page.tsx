@@ -46,11 +46,14 @@ export default async function OnboardingAuditPage() {
     loadOnboardingProgress(supabase, cutoff), loadOnboardingEvents(supabase, cutoff),
   ]);
   if (progressResult.error) return <ReadFailure />;
-  // Without the wizard starts no setup can be timed; a guess would be the bug back.
-  if (wizardResult.error) return <ReadFailure />;
+  // Without the wizard starts no setup can be timed, and a guess would be the
+  // bug back. Only the timing needs them: completion, the value step, the step
+  // funnel and where runs stall come from the progress rows, so a failed read
+  // marks the timing unavailable instead of failing the whole audit.
+  const timingUnavailable = !!wizardResult.error;
   // Setup time runs from the wizard's own start, not from the progress row's
   // birth inside the finalize request (attachWizardStarts).
-  const rows = attachWizardStarts((progressResult.data ?? []) as OnboardingRow[], wizardResult.data ?? []);
+  const rows = attachWizardStarts((progressResult.data ?? []) as OnboardingRow[], timingUnavailable ? [] : wizardResult.data ?? []);
 
   const a = analyzeOnboarding(rows);
   const maxFunnel = Math.max(1, ...a.stepFunnel.map((s) => s.count));
@@ -88,10 +91,16 @@ export default async function OnboardingAuditPage() {
         ))}
       </div>
 
-      <ThirtyMinuteSummary kind="setup" rate={a.under30MinRate} within={a.under30MinCount}
-        timed={a.timedCompletions} untimed={a.untimedCompletions} t={t} />
+      {timingUnavailable ? (
+        <Card className="border-amber-400/30 p-4">
+          <p className="text-sm">{t('adminOnboarding.setupTimingUnavailable')}</p>
+        </Card>
+      ) : (
+        <ThirtyMinuteSummary kind="setup" rate={a.under30MinRate} within={a.under30MinCount}
+          timed={a.timedCompletions} untimed={a.untimedCompletions} t={t} />
+      )}
 
-      {a.total > 0 && (
+      {!timingUnavailable && a.total > 0 && (
         <Card className={cn('p-4', goalMet ? 'border-emerald-400/30' : 'border-amber-400/30')}>
           <p className="text-sm">
             {a.under90Rate === null ? t('thirtyMinute.noTiming') : <>

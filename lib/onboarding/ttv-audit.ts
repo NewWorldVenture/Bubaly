@@ -113,8 +113,12 @@ export function percentile(values: number[], p: number): number | null {
 }
 
 // A reset run is open again, whatever completion it carried before the reset:
-// counting it done kept it out of "where incomplete runs stall".
-const isCompleted = (r: OnboardingRow) => r.status === 'completed' || (!!r.completed_at && r.status !== 'reset');
+// counting it done kept it out of "where incomplete runs stall". So is a run
+// back in progress: the progress writer now clears completed_at on both, but a
+// row reset before it did, or one prepareCalendarFamily reopened (it moves the
+// status alone, through the member's session), still carries the old stamp.
+const OPEN_AGAIN = new Set(['reset', 'in_progress']);
+const isCompleted = (r: OnboardingRow) => r.status === 'completed' || (!!r.completed_at && !OPEN_AGAIN.has(r.status));
 
 /** The furthest step a run reached, in canonical order (null if none). */
 export function furthestStep(steps: string[] | null): StepKey | null {

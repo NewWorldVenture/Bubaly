@@ -233,6 +233,7 @@ export async function planAcceptedAction(
     // screens) the SAME pending approval, and one yes closed every run naming
     // it as completed — one plan counted once per acceptance. The 0250 unique
     // index on (family_id, idempotency_key) makes the repeat a 23505.
+    const runKey = approvalId ? conciergeRunKey(planId, approvalId) : null;
     const { error: queueErr } = await createServiceClient().from('family_automation_runs').insert({
       family_id: familyId, trigger_type: 'plan_accepted', status: 'pending', state: 'awaiting_approval',
       requested_by_member_id: ctx.active.member.id,
@@ -242,10 +243,23 @@ export async function planAcceptedAction(
         plan_id: planId, kinds: pendingKinds, approval_id: approvalId ?? null,
         basis: decision.basis, reason: decision.reason, plan: filedPlan,
       } as never,
-      idempotency_key: approvalId ? conciergeRunKey(planId, approvalId) : null,
+      idempotency_key: runKey,
       created_by: ctx.user.id,
     });
-    if (queueErr?.code === '23505') {
+    if (queueErr?.code === '23505' && runKey) {
+      // The key is taken, but "already queued" is only true while the row that
+      // holds it is still pending. The trust engine reuses a pending approval
+      // past its expiry until the sweep runs, and the panel's Dismiss closes
+      // that approval's run without deciding it (the approval has expired), so
+      // the key can sit on a dismissed row: answering "Waiting for approval"
+      // then pointed at a panel with nothing in it.
+      const { data: holder, error: holderErr } = await createServiceClient().from('family_automation_runs')
+        .select('id, status').eq('family_id', familyId).eq('idempotency_key', runKey).maybeSingle();
+      if (holderErr) {
+        console.error('[concierge] could not read the run holding a plan approval key', { planId, familyId, approvalId, error: holderErr });
+        return { ok: false, error: describeActionError(holderErr, t('actions.couldNotQueuePlanForApproval')) };
+      }
+      if (holder?.status !== 'pending') return { ok: false, error: t('actions.earlierPlanApprovalStillOpen') };
       // Already queued on this approval: the panel already shows it.
       revalidatePath(PATH);
       return { ok: true, mode, applied: [], summary };
@@ -480,6 +494,13 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
   const queued = readPlanSnapshot(meta.plan);
   if (!queued || !matchesPlanSnapshot(plan, queued)) return { ok: false, error: t('approval.planChangedSinceAsked') };
 
+  // The kinds and the snapshot come from the clicked row's own metadata, and a
+  // manager's own session may INSERT a 'queued' row with free metadata
+  // (0255/0329). So until the owner's N10 SQL lands (the member INSERT refused
+  // a plan_id, the trigger pinning metadata), rows a manager plants naming a
+  // never-gated plan can each take this path and complete once per kind they
+  // list — up to three completed runs for one plan, each for a record really
+  // written. Nothing here is new capability: a manager can make plans anyway.
   const kinds = (meta.kinds?.length ? meta.kinds : VALID).filter((k) => VALID.includes(k));
 
   // Claim the run before applying anything, so an approval and a dismissal (two

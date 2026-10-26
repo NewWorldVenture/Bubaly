@@ -5,7 +5,9 @@
 // `completed_at`. So the median was a few seconds and the goal was met whatever
 // the wizard took (N7). A reset run kept its `completed_at`, still counted as a
 // completed setup and never showed under "where incomplete runs stall", and its
-// next completion was timed from the first run's row (N19).
+// next completion was timed from the first run's row (N19). A failed read of
+// the wizard starts then failed the whole audit, though only the timing reads
+// them.
 //
 // Driven through the real page and the real progress writer over the
 // in-memory database.
@@ -14,7 +16,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { ReactElement } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { createInMemorySupabase, type Row } from './helpers/in-memory-supabase';
+import { createInMemorySupabase, withFaults, type Row } from './helpers/in-memory-supabase';
 
 const state = vi.hoisted(() => ({ db: null as unknown }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => state.db }));
@@ -43,7 +45,12 @@ const progress = (row: Row): Row => ({ id: uuid(1, ++seq), status: 'completed', 
 const started = (userId: string, at: string): Row => ({ id: uuid(2, ++seq), user_id: userId, session_id: `run-${seq}`, step: 'profile', phase: 'started', duration_ms: 0, created_at: at });
 
 async function auditHtml(): Promise<string> {
-  return renderToStaticMarkup(await AuditPage() as ReactElement).replace(/&#x27;|&#39;/g, "'");
+  let element = await AuditPage() as ReactElement;
+  // The read-failure card is an async component; resolve it as the server renderer would.
+  if (typeof element.type === 'function' && element.type.constructor.name === 'AsyncFunction') {
+    element = await (element.type as (props: unknown) => Promise<ReactElement>)(element.props);
+  }
+  return renderToStaticMarkup(element).replace(/&#x27;|&#39;/g, "'");
 }
 /** The figure a stat card shows above `label`. */
 function stat(html: string, label: string): string | null {
@@ -108,6 +115,18 @@ describe('a reset run on /admin/onboarding (N19)', () => {
     expect(html).not.toContain('No incomplete runs');
   });
 
+  it('a run back in progress that still carries an old completion stamp is not a completed setup', async () => {
+    // A legacy row, or one prepareCalendarFamily reopened: it moves the status
+    // to in_progress and leaves completed_at as it was.
+    db.seed('onboarding_progress', [
+      progress({ user_id: 'user-1', created_at: '2026-09-01T00:00:00.000Z', completed_at: '2026-09-01T00:05:00.000Z' }),
+      progress({ user_id: 'user-2', status: 'in_progress', steps_completed: ['profile', 'family'], created_at: '2026-09-01T00:00:00.000Z', completed_at: '2026-09-01T00:05:00.000Z' }),
+    ]);
+    const html = await auditHtml();
+    expect(stat(html, 'Completion')).toBe('50%');
+    expect(html).not.toContain('No incomplete runs');
+  });
+
   it('times a re-completion from the wizard run after the reset, not from the first run', async () => {
     db.seed('onboarding_events', [started('user-1', '2026-09-01T00:00:00.000Z'), started('user-1', '2026-09-08T12:00:00.000Z')]);
     db.seed('onboarding_progress', [
@@ -123,5 +142,29 @@ describe('a reset run on /admin/onboarding (N19)', () => {
       expect(db.table('onboarding_progress')).toHaveLength(1);
       expect(db.table('onboarding_progress')[0]).toMatchObject({ status, completed_at: null });
     }
+  });
+});
+
+describe('a failed wizard-start read on /admin/onboarding', () => {
+  it('still shows completion, the value step and where runs stall, and marks only the timing unavailable', async () => {
+    db.seed('onboarding_events', [started('user-1', '2026-09-01T10:00:00.000Z')]);
+    db.seed('onboarding_progress', [
+      progress({ user_id: 'user-1', created_at: '2026-09-01T10:10:00.000Z', completed_at: '2026-09-01T10:10:03.000Z' }),
+      progress({ user_id: 'user-2', status: 'in_progress', steps_completed: ['profile', 'family'], created_at: '2026-09-02T10:00:00.000Z', completed_at: null }),
+    ]);
+    state.db = withFaults(db, (table) => (table === 'onboarding_events' ? { message: 'onboarding_events unavailable' } : null));
+    const html = await auditHtml();
+    expect(html).not.toContain('Could not load onboarding audit data');
+    expect(stat(html, 'Completion')).toBe('50%');
+    expect(stat(html, 'Value step engaged')).toBe('100%');
+    expect(html).toContain('Where incomplete runs stall');
+    expect(html).not.toContain('No incomplete runs');
+    // Only the timing says it could not be read; it is not "no timing yet".
+    expect(stat(html, 'Median setup time')).toBe('—');
+    expect(html).toContain('Setup timing could not be loaded');
+    expect(html).not.toContain('No valid timing records yet.');
+    expect(html).not.toContain('Excluded because timing is missing');
+    expect(html).not.toContain('On target.');
+    expect(html).not.toContain('Below target.');
   });
 });

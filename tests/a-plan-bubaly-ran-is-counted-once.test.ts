@@ -6,7 +6,10 @@
 //   N12  re-accepting a plan with the dial on Ask first filed another pending
 //        run on the SAME reused approval, and one yes closed them all as
 //        completed; a close that applied nothing (every kind already in place)
-//        was still recorded as completed;
+//        was still recorded as completed; and once the one queued run was
+//        dismissed under an expired (not yet swept) approval the trust engine
+//        still reuses, a re-accept answered "Waiting for approval" with
+//        nothing queued;
 //   N11  a concierge run closed with an answer, or retired because the cron
 //        had already claimed the planner's run, has no plan and was counted;
 //   N10  the completions were written through the manager's own session,
@@ -62,7 +65,7 @@ const RUN = '77777777-7777-4777-8777-777777777777';
 const RUN_2 = '88888888-8888-4888-8888-888888888888';
 const FILED_PLAN = { title: 'Saturday swim meet', description: 'Drive + snacks', location: 'Aquatic centre', planned_for: '2026-09-12' };
 
-const { planAcceptedAction, executeQueuedRunAction } = await import('@/app/(app)/dashboard/concierge/actions');
+const { planAcceptedAction, executeQueuedRunAction, dismissQueuedRunAction } = await import('@/app/(app)/dashboard/concierge/actions');
 const { decide } = await import('@/lib/services/approvals');
 const { loadCompletedPlans } = await import('@/lib/metric/completed-plans');
 
@@ -78,7 +81,7 @@ const scope = (): ServiceScope => ({
   role: 'parent', actorKind: 'member', tz: 'America/New_York',
 });
 
-function seedApproval(): void {
+function seedApproval(extra: Row = {}): void {
   store.seed('approval_requests', [{
     id: APPROVAL, family_id: FAMILY, domain: 'scheduling', capability: 'automate',
     requested_by_kind: 'ai', requested_by_member_id: null, agent: 'Concierge',
@@ -90,6 +93,7 @@ function seedApproval(): void {
     expires_at: '2099-01-01T00:00:00Z', executed_at: null, execution_result: null,
     request_id: null, run_id: null, plan_step_id: null, plan_step_ids: [],
     consequences: [], evidence: null, edited_payload: null, reviewed_by: null, review_note: null,
+    ...extra,
   }]);
   store.seed('trust_audit_logs', [{ family_id: FAMILY, actor_kind: 'ai_agent', actor_id: 'concierge', approval_id: APPROVAL, decision: 'require_approval' }]);
 }
@@ -133,6 +137,21 @@ describe('one plan, accepted more than once, is one completed plan (N12)', () =>
     expect(await decide(scope(), APPROVAL, 'approved')).toMatchObject({ ok: true, data: { status: 'approved' } });
     expect(store.table('calendar_events')).toHaveLength(1);
     expect(await completedPlans()).toBe(1);
+  });
+
+  it('re-accepting after the queued run was dismissed under an expired approval does not claim it is queued', async () => {
+    h.trust = { effect: 'require_approval', approvalId: APPROVAL };
+    expect(await planAcceptedAction(PLAN, 'draft', 'confirmed')).toMatchObject({ ok: true, mode: 'ask' });
+    // Past its expiry and not yet swept: still 'pending', so the trust engine
+    // hands the same approval to the next acceptance, while the panel's
+    // Dismiss only clears the run.
+    seedApproval({ expires_at: '2026-01-01T00:00:00Z' });
+    const [queued] = runs();
+    expect(await dismissQueuedRunAction(String(queued.id))).toMatchObject({ ok: true });
+    expect(runs()).toEqual([expect.objectContaining({ id: queued.id, status: 'dismissed' })]);
+
+    expect(await planAcceptedAction(PLAN, 'draft', 'confirmed')).toEqual({ ok: false, error: 'actions.earlierPlanApprovalStillOpen' });
+    expect(runs().filter((run) => run.status === 'pending')).toHaveLength(0);
   });
 
   it('a second never-gated "Do it" on the same plan applies nothing and is not a second completed plan', async () => {

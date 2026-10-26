@@ -5,14 +5,18 @@
 // /dashboard/bills and /dashboard/family-cfo (N13, the bill half of N15). The
 // same page labelled an all-time chore ratio "this cycle", and its bill and
 // open-chore figures came from unbounded row reads PostgREST caps at 1,000
-// (N20). Driven through the real page and the real signals over the in-memory
-// database.
+// (N20). The assistant's proactive context read the same bundle for nobody, so
+// a guest's prompt carried a stress score the bills had raised (N13's sibling).
+// Driven through the real page, the real proactive slice and the real signals
+// over the in-memory database.
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
+import type { ServiceScope } from '@/lib/services/types';
+import type { SliceEnv } from '@/lib/ai/context/policy';
 import { createInMemorySupabase, type Row } from './helpers/in-memory-supabase';
 
 type DB = SupabaseClient<Database>;
@@ -40,6 +44,7 @@ vi.mock('next/link', () => ({ default: ({ children, ...props }: React.ComponentP
 
 const { default: FamilyReportsPage } = await import('@/app/(app)/family/reports/page');
 const { gatherSignalsResult } = await import('@/lib/family/signals');
+const { proactiveSlice } = await import('@/lib/ai/context/slices/proactive');
 
 let db: ReturnType<typeof createInMemorySupabase<DB>>;
 const bill = (n: number, extra: Row = {}): Row => ({ id: `bill-${String(n).padStart(5, '0')}`, family_id: FAMILY, status: 'paid', due_date: '2026-10-01', ...extra });
@@ -96,6 +101,37 @@ describe('a guest on /family/reports (N13, N15)', () => {
   it('every other member still sees them', async () => {
     for (const role of ['adult', 'teen', 'child', 'caregiver']) {
       expect(await reportFor(role)).toContain('2 of 9 tracked bills are paid');
+    }
+  });
+});
+
+describe('the assistant’s proactive context for a guest (N13)', () => {
+  type Built = { data: { stress: { score: number; level: string } | null; counts: Row | null }; lines: string[] };
+  async function sliceFor(role: string): Promise<Built> {
+    const built = await proactiveSlice.load(
+      { db, familyId: FAMILY } as unknown as ServiceScope,
+      { tz: 'UTC', now: new Date(NOW), viewer: { role, memberId: `m-${role}`, canManage: role === 'parent' }, members: [], pageContext: null } as unknown as SliceEnv,
+    );
+    if (!built.ok) throw new Error('the proactive slice did not build');
+    return built.data as unknown as Built;
+  }
+
+  it('scores the household’s stress without the bills, as /dashboard/family-stress does for a guest', async () => {
+    const guest = (await gatherSignalsResult(FAMILY, 'UTC', new Date(NOW), { role: 'guest' })).data!;
+    const parent = (await gatherSignalsResult(FAMILY, 'UTC', new Date(NOW), { role: 'parent' })).data!;
+    // The control: these bills raise the score on their own.
+    expect(parent.stress.score).toBeGreaterThan(guest.stress.score);
+
+    const slice = await sliceFor('guest');
+    expect(slice.data.stress).toEqual({ score: guest.stress.score, level: guest.stress.level });
+    expect(slice.data.counts).toMatchObject({ billsWithheld: true, overdueBills: 0, billsDueSoon: 0, billsTotal: 0 });
+    expect(slice.lines.join('\n')).toContain(`household stress ${guest.stress.level} (${guest.stress.score}/100)`);
+  });
+
+  it('every other member’s context keeps the score the bills raise', async () => {
+    const parent = (await gatherSignalsResult(FAMILY, 'UTC', new Date(NOW), { role: 'parent' })).data!;
+    for (const role of ['parent', 'adult', 'teen', 'child', 'caregiver']) {
+      expect((await sliceFor(role)).data.stress).toEqual({ score: parent.stress.score, level: parent.stress.level });
     }
   });
 });

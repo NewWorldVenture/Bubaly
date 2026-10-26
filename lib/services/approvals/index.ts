@@ -734,13 +734,22 @@ async function runConciergePlan(
 type RunWriter = ServiceScope['db'];
 
 /**
- * The pending run a yes on this approval closes as its own: the one the
- * server queued for it, by its key (`conciergeRunKey` — no member INSERT can
+ * The pending run a yes on this approval closes as its own. First the row
+ * holding the server's key for it (`conciergeRunKey` — no member INSERT can
  * carry a key (0255), and the (family_id, idempotency_key) unique index (0250)
- * lets one row hold it). A run queued before the key existed has none; then
- * the earliest pending row naming the approval that is not member-shaped
- * (0255 pins a member's INSERT to state 'queued') takes it. Either way one
- * yes completes at most one run. `id: null` is an approval with no such run.
+ * lets one row hold it). Failing that, the earliest pending row naming the
+ * approval that is not member-shaped (0255 pins a member's INSERT to state
+ * 'queued'). The key has been written since before this approval could have
+ * been filed, and approvals expire after 48 hours (0251), so in practice that
+ * fallback serves a run whose key was edited, not an old approval. Either way
+ * one yes completes at most one run. `id: null` is an approval with no such run.
+ *
+ * Which row that is can be steered, for any approval, keyed or not: 0251's
+ * member UPDATE pins no column and 0390 pins only metadata's approval_id and
+ * plan_id, so a manager's own session can move or strip a run's
+ * idempotency_key, or reshape a row it planted (state, created_at), and so
+ * choose which row is marked completed. The count stays one per yes. The
+ * owner's N10 trigger, which pins idempotency_key and metadata, closes this.
  */
 async function runThatTakesTheYes(
   db: RunWriter, familyId: string, approvalId: string, key: string,
