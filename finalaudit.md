@@ -1,5 +1,18 @@
 # Final Production Audit
 
+## Combined PR1133 source qualified locally; production revision mismatch investigated — 2026-10-27T14:40:18.555Z
+
+- Last Updated: 2026-10-27T14:40:18.555Z
+
+Normal integration d85655c141cfc6fc4e747e3e534be05c69981080 is now published onPR1133. Independent peer063c425a verifies exactparentsabb0+1732, all23 owned blobs unchanged and every other main source blob preserved; all15,711IDs/statuses/evidence cells and both histories survive. Historical wording/pointers are retained additively. Fresh local54wholefixtures pass1,033ordinary cases/0fail/skip on this combined source, actualPID2668drained0/stable at14:38:05.716Z. Its dynamic medication graph now has73cases, an actual two-case increase from main's dependency changes; old1031 is not copied forward. Three new original attempt1 hosted runs are CI40523078418, SQL40523078426, Messaging40523078416. Their initial81s visibility delay resolved normally without dispatch/rerun/cancellation; full current-head outcomes remain pending.
+
+Recovered ORIGINAL ca46 raw qualification now independently passes: recoveryPID7988 actuallydrained0/stable, all3originalruns/19jobs/63raw. ReaderPID7728actuallydrained0/stable; outputa5dbe0d7 and independentpeer1b0f59af bind actualc282/parents22e+ca46, eachTZ38,977ordinaryPASS+2expectedcontrols+123inheritedskip,54critical1031, primarybrowser2,869PASS/8skip of2,877, separate48RPC/8bill,462migrations/189probes/458legacyreplays/build245pages. These are bounded historical composition results; no inference for newd856 or whole product is made. Original53683observer loss remains explicitly unclosed, not retroactively called drained.
+
+The first new public default observation PRE-D856-main1732-default-20261027 at14:39:20Z finds stablemain1732 but deployedrevisiond93e089047a653cd7d082fe1e684147a84133d5d,HTTP200/no-store. Main's Vercel status is FAILURE for deploymentAmVo7qvxBdyBBrbvN2Nra9f1dykT, so production is NOT currentmain. Read-only build-error investigation is allocated in parallel; no release/default identity claim is made. The upcoming verified main merge still requires successful deployment and exact public revision confirmation. No production SQL/configuration/customer/provider/money work is undertaken.
+
+No row closure/status change is credited; totals remain15,711/2,041finiteclosures. Root is sole ledger publisher and PRODUCTION READY remains NO.
+
+
 ## PR1133 original checks passed; integrate newer main without losing either audit history — 2026-10-27T14:36:05.694Z
 
 - Last Updated: 2026-10-27T14:36:05.694Z
