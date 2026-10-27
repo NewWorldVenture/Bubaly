@@ -16,7 +16,7 @@ import {
 import type { ServiceScope } from '@/lib/services/types';
 
 type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'delete'; filters: Record<string, unknown>; payload?: unknown };
-type Reply = { data: unknown; error: unknown };
+type Reply = { data: unknown; error: unknown; count?: number };
 
 function makeDb(respond: (call: Call) => Reply) {
   const calls: Call[] = [];
@@ -24,16 +24,30 @@ function makeDb(respond: (call: Call) => Reply) {
     const call: Call = { table, kind: 'select', filters: {} };
     calls.push(call);
     const b: Record<string, unknown> = {};
+    let counted = false;
+    let ceiling: number | undefined;
+    let bounds: { from: number; to: number } | undefined;
+    const reply = (): Reply => {
+      const result = respond(call);
+      if (call.kind !== 'select' || !Array.isArray(result.data)) return result;
+      const count = result.data.length;
+      const data = bounds ? result.data.slice(bounds.from, bounds.to + 1)
+        : ceiling === undefined ? result.data : result.data.slice(0, ceiling);
+      return { ...result, data, ...(counted ? { count } : {}) };
+    };
     const chain = () => b;
     const filter = (column: string, value: unknown) => { call.filters[column] = value; return b; };
     Object.assign(b, {
-      select: chain, order: chain, limit: chain, ilike: chain, or: chain,
+      select: (_columns?: string, opts?: { count?: string }) => { counted = opts?.count === 'exact'; return b; },
+      limit: (n: number) => { ceiling = n; return b; },
+      range: (from: number, to: number) => { bounds = { from, to }; return b; },
+      order: chain, ilike: chain, or: chain,
       eq: filter, is: filter, in: filter,
       insert: (payload: unknown) => { call.kind = 'insert'; call.payload = payload; return b; },
       update: (payload: unknown) => { call.kind = 'update'; call.payload = payload; return b; },
-      single: () => Promise.resolve(respond(call)),
-      maybeSingle: () => Promise.resolve(respond(call)),
-      then: (resolve: (value: Reply) => void) => resolve(respond(call)),
+      single: () => Promise.resolve(reply()),
+      maybeSingle: () => Promise.resolve(reply()),
+      then: (resolve: (value: Reply) => void) => resolve(reply()),
     });
     return b;
   };
