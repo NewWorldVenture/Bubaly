@@ -19,7 +19,7 @@ import type { Database } from '@/lib/database.types';
 import { BENCHMARKS_PUBLICATION_KEY, isBenchmarksPublished } from './benchmarks';
 import { K_ANONYMITY_FLOOR, type ConsentScope } from './insights';
 import { freshAggregatesSince, type NetworkAggregate } from './aggregate';
-import { readAll } from '@/lib/supabase/read-all';
+import { readAllById } from '@/lib/supabase/read-all';
 import { readAllInChunks } from '@/lib/supabase/chunked-in';
 
 type DB = SupabaseClient<Database>;
@@ -60,7 +60,8 @@ export async function benchmarksPageIsPublished(): Promise<boolean> {
 export type AggregatesRead = { ok: true; aggregates: NetworkAggregate[]; computedAt: string | null } | { ok: false };
 
 /**
- * Every published benchmark row at or above the floor, newest computation first.
+ * Every published benchmark row at or above the floor, in no order a reader
+ * relies on: benchmarks.ts orders them for display (benchmarkRows).
  *
  * Only FRESH rows count as published (`freshAggregatesSince`). The table keeps
  * whatever the last successful run wrote, and every run that fails before it
@@ -76,35 +77,27 @@ export type AggregatesRead = { ok: true; aggregates: NetworkAggregate[]; compute
  * figures, not when they last changed.
  */
 export async function readBenchmarkAggregates(sb: DB, now: Date = new Date()): Promise<AggregatesRead> {
-  // `.limit(2000)` never was 2,000 — PostgREST caps at db-max-rows — and
-  // `cohort_size` is far from unique, so it also needs a tiebreak for two pages
-  // not to overlap or skip.
+  // `.limit(2000)` never was 2,000 — PostgREST caps at db-max-rows — so this
+  // read pages, to a real ceiling of 2,000.
   //
-  // `value` completes it. The tiebreak above was added for the right reason and
-  // stopped one column short of this table's own key: 0135 declares
-  // `unique (scope, cohort_key, metric, value)`, and `scope` is pinned by the
-  // `.eq` here, so (cohort_key, metric) alone leaves one tie group per metric —
-  // and a metric's value BANDS are exactly what those rows are, so every metric
-  // has several. Without `value` the order is not total, and `.range()` is a
-  // separately planned sort: the boundary can move inside a tie group and drop
-  // a band with no error. A missing band is not a shorter benchmark, it is a
-  // different one.
-  const { rows: data, error } = await readAll((from, to) => sb.from('network_aggregates')
-    .select('scope, cohort_key, metric, value, count, cohort_size, computed_at')
-    .eq('scope', 'benchmarks')
-    .gte('cohort_size', K_ANONYMITY_FLOOR)
-    // The unique key here is (scope, cohort_key, metric, value), so these three
-    // columns can tie. readAll pages this read, and a tie split across a page
-    // boundary duplicates one aggregate and drops another — in figures that get
-    // published.
-    .order('cohort_size', { ascending: false })
-    .order('cohort_key')
-    .order('metric')
-    .order('value')
-    // Total already within one scope, but the primary key is the tiebreak that
-    // does not depend on a constraint staying in place (DATA-015).
-    .order('id')
-    .range(from, to), { max: 2000 });
+  // It pages on the primary key, past the last id read, and not by offset
+  // over (cohort_size desc, cohort_key, metric, value, id). That order was
+  // made total (DATA-015: a tie split across a page boundary duplicated one
+  // band and dropped another), but an offset page is still a separate read of
+  // a table the aggregation rewrites while it is read: an epoch's publish
+  // upserts every band in place, moving any whose cohort_size changed to
+  // another position, and then deletes the earlier epoch's rows. A read whose
+  // two pages fell either side of that read a band twice or not at all, and a
+  // missing band is not a shorter benchmark, it is a different one. An id
+  // does not move, so a band present for the whole read is read exactly once.
+  const { rows: data, error } = await readAllById((cursor, limit) => {
+    const page = sb.from('network_aggregates')
+      .select('id, scope, cohort_key, metric, value, count, cohort_size, computed_at')
+      .eq('scope', 'benchmarks')
+      .gte('cohort_size', K_ANONYMITY_FLOOR)
+      .order('id').limit(limit);
+    return cursor ? page.gt('id', cursor) : page;
+  }, { max: 2000 });
   if (error) {
     console.error('[benchmarks] aggregate read failed', error);
     return { ok: false };

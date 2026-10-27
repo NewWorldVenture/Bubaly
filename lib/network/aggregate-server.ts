@@ -20,8 +20,8 @@
 import { createHmac } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
-import { readAll, readAllById } from '@/lib/supabase/read-all';
-import { readAllInChunks, writeInChunks } from '@/lib/supabase/chunked-in';
+import { readAllById } from '@/lib/supabase/read-all';
+import { readAllByIdInChunks, readAllInChunks, writeInChunks } from '@/lib/supabase/chunked-in';
 import type { Database } from '@/lib/database.types';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 import { isManager } from '@/lib/constants/roles';
@@ -197,23 +197,56 @@ async function buildContributionsBatch(sb: DB, families: FamilyDay[], now: Date)
   // aggregates with a childCount of zero, no bedtimes and no spend — wrong
   // bands, in the benchmarks every other family reads.
   //
-  // Each read orders by `id` rather than `family_id`: paging needs a unique
-  // order, and the column being filtered on is the least unique one there is.
+  // Each read pages on `id`, past the last one read, rather than by offset or
+  // by `family_id`: paging needs a unique order, and the column being filtered
+  // on is the least unique one there is. And these are counted and summed
+  // while families write to them: an offset page after a family deleted an
+  // expense (or finished a chore) started one row late, so the row at the
+  // boundary, another family's, was left out of its sum, and a row added
+  // ahead of the next offset was summed twice (chunked-in.ts,
+  // readAllByIdInChunks).
   //
   // Reminders are the Reminders module's: `family_reminders` is canonical (the
   // reminders services' D4), and a household with ten reminders due this week
   // there read as "none" while only the legacy table was counted. The legacy
   // table still has writers, so its OPEN rows count too.
   const [members, dinners, teams, classes, chores, bedtimes, spend, reminders, legacyReminders] = await settleAll([
-    readAllInChunks(familyIds, (chunk, from, to) => sb.from('family_members').select('id, family_id, birthday, role').in('family_id', chunk).eq('is_active', true).order('id').range(from, to)),
-    readAllInChunks(familyIds, (chunk, from, to) => sb.from('meal_plans').select('family_id, plan_date').in('family_id', chunk).eq('meal_type', 'dinner').gte('plan_date', earliestToday).lt('plan_date', addDaysToDayKey(latestToday, 7)).order('id').range(from, to)),
-    readAllInChunks(familyIds, (chunk, from, to) => sb.from('teams').select('family_id').in('family_id', chunk).eq('is_active', true).order('id').range(from, to)),
-    readAllInChunks(familyIds, (chunk, from, to) => sb.from('school_classes').select('family_id').in('family_id', chunk).order('id').range(from, to)),
-    readAllInChunks(familyIds, (chunk, from, to) => sb.from('chore_assignments').select('family_id, member_id').in('family_id', chunk).in('status', [...OPEN_CHORE_STATUSES]).order('id').range(from, to)),
-    readAllInChunks(familyIds, (chunk, from, to) => sb.from('bedtime_routines').select('family_id, member_id, target_bedtime').in('family_id', chunk).eq('is_active', true).order('id').range(from, to)),
-    readAllInChunks(familyIds, (chunk, from, to) => sb.from('transactions').select('family_id, amount, date').in('family_id', chunk).eq('type', 'expense').gt('date', addDaysToDayKey(earliestToday, -SPEND_WINDOW_DAYS)).lte('date', latestToday).order('id').range(from, to)),
-    readAllInChunks(familyIds, (chunk, from, to) => sb.from('family_reminders').select('family_id').in('family_id', chunk).in('status', [...OPEN_REMINDER_STATUSES]).gte('remind_at', nowIso).lte('remind_at', weekEndIso).or(remindersStillDueBy(weekEndIso)).order('id').range(from, to)),
-    readAllInChunks(familyIds, (chunk, from, to) => sb.from('reminders').select('family_id').in('family_id', chunk).eq('is_done', false).gte('remind_at', nowIso).lte('remind_at', weekEndIso).order('id').range(from, to)),
+    readAllByIdInChunks(familyIds, (chunk, cursor, limit) => {
+      const page = sb.from('family_members').select('id, family_id, birthday, role').in('family_id', chunk).eq('is_active', true).order('id').limit(limit);
+      return cursor ? page.gt('id', cursor) : page;
+    }),
+    readAllByIdInChunks(familyIds, (chunk, cursor, limit) => {
+      const page = sb.from('meal_plans').select('id, family_id, plan_date').in('family_id', chunk).eq('meal_type', 'dinner').gte('plan_date', earliestToday).lt('plan_date', addDaysToDayKey(latestToday, 7)).order('id').limit(limit);
+      return cursor ? page.gt('id', cursor) : page;
+    }),
+    readAllByIdInChunks(familyIds, (chunk, cursor, limit) => {
+      const page = sb.from('teams').select('id, family_id').in('family_id', chunk).eq('is_active', true).order('id').limit(limit);
+      return cursor ? page.gt('id', cursor) : page;
+    }),
+    readAllByIdInChunks(familyIds, (chunk, cursor, limit) => {
+      const page = sb.from('school_classes').select('id, family_id').in('family_id', chunk).order('id').limit(limit);
+      return cursor ? page.gt('id', cursor) : page;
+    }),
+    readAllByIdInChunks(familyIds, (chunk, cursor, limit) => {
+      const page = sb.from('chore_assignments').select('id, family_id, member_id').in('family_id', chunk).in('status', [...OPEN_CHORE_STATUSES]).order('id').limit(limit);
+      return cursor ? page.gt('id', cursor) : page;
+    }),
+    readAllByIdInChunks(familyIds, (chunk, cursor, limit) => {
+      const page = sb.from('bedtime_routines').select('id, family_id, member_id, target_bedtime').in('family_id', chunk).eq('is_active', true).order('id').limit(limit);
+      return cursor ? page.gt('id', cursor) : page;
+    }),
+    readAllByIdInChunks(familyIds, (chunk, cursor, limit) => {
+      const page = sb.from('transactions').select('id, family_id, amount, date').in('family_id', chunk).eq('type', 'expense').gt('date', addDaysToDayKey(earliestToday, -SPEND_WINDOW_DAYS)).lte('date', latestToday).order('id').limit(limit);
+      return cursor ? page.gt('id', cursor) : page;
+    }),
+    readAllByIdInChunks(familyIds, (chunk, cursor, limit) => {
+      const page = sb.from('family_reminders').select('id, family_id').in('family_id', chunk).in('status', [...OPEN_REMINDER_STATUSES]).gte('remind_at', nowIso).lte('remind_at', weekEndIso).or(remindersStillDueBy(weekEndIso)).order('id').limit(limit);
+      return cursor ? page.gt('id', cursor) : page;
+    }),
+    readAllByIdInChunks(familyIds, (chunk, cursor, limit) => {
+      const page = sb.from('reminders').select('id, family_id').in('family_id', chunk).eq('is_done', false).gte('remind_at', nowIso).lte('remind_at', weekEndIso).order('id').limit(limit);
+      return cursor ? page.gt('id', cursor) : page;
+    }),
   ]);
   const readError = [members, dinners, teams, classes, chores, bedtimes, spend, reminders, legacyReminders].map((r) => r.error).find(Boolean);
   if (readError) {
@@ -484,9 +517,22 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
   // remainder is also the far smaller list — the families who withdrew since
   // the last run, not the whole network — and it subsumes the old empty-keep
   // branch, since nobody opted in makes every stored row stale.
+  //
+  // That read pages on the key (family_id past the last one read), as step 1's
+  // does, and for the same reason: rows leave this table while it is read. A
+  // family's leave deletes its row (withdrawal-server.ts), and so does an
+  // overlapping run's re-check (keepStillConsenting). An offset page after
+  // such a delete started one row late, and the row at the boundary was in
+  // neither page: a family no longer in the network whose row was still
+  // stored (its leave's delete failed, or one of the two cases
+  // withdrawal-server.ts names) kept it another night, though both say the
+  // next night's run prunes it. family_id is the table's primary key (0135),
+  // named `id` here for readAllById.
   const keep = new Set(contributing.map((c) => c.family_id));
-  const { rows: stored, error: storedError } = await readAll<{ family_id: string }>((from, to) => sb
-    .from('network_contributions').select('family_id').order('family_id').range(from, to));
+  const { rows: stored, error: storedError } = await readAllById<{ id: string; family_id: string }>((cursor, limit) => {
+    const page = sb.from('network_contributions').select('id:family_id, family_id').order('family_id').limit(limit);
+    return cursor ? page.gt('family_id', cursor) : page;
+  });
   // A short read here would leave a withdrawn family's contribution in place,
   // which is the one failure this block exists to prevent, so it fails the run
   // rather than pruning what it happened to see.
