@@ -1,5 +1,16 @@
 # Final Production Audit
 
+- Last Updated: 2026-10-27T15:38:17.8701066Z
+## School draft PR1136 published with qualified source and current audit ledger
+
+Normal publication now created https://github.com/NewWorldVenture/Bubaly/pull/1136 DRAFT at33a3f9aee33b182489f07bbe5ac2c8cc9876ff29 above maina7ef9c6930af4d2008a780ea729d6e6e376d221d. Exactly3diffpaths: School module, same15-case fixture and finalaudit.md. All application blobs are EXACT qualifiedb4b/672d; the ledger is exact canonical committed blobe658dff3. First publication preflight refused different physical Markdown hashes; explicit follow-up proves the only difference is oneCRLF and normalizedtext/Gitblob are identical, with no lost content or edits. The preserved V2guard then passes freshmain and complete stable97active-ownerpaths, zeroSchooloverlap. No source/test failure was reclassified or bypassed.
+
+PR1136 body accurately separates11product317localordinarycases from2Windowsmetadata62, each13whole379passes in3zones, and leaves hostedLinux's inherited Windows-only skip explicit. FullneworiginalhostedCI, actualtestedcheckout and merge/default still required; no scoped row closes yet. Root's required appattachment attempt for1136 failed the existing100identitycap once; it was not retried and no attachment was evicted. Normal GitHub link remains available.
+
+Rootcounter38196 actuallydrained0/stable for latest main-production-failure ledger; after nextallocation, rootcounter30924actuallydrained0/stable15:34:23.490 verifies both unchanged wholecounterfixtures62ordinaryPASS with canonical1107 text. That exact committed ledger accompanies1136; allmetadata source helpers/inputtext are sourceidentical despite the separate School runtime. All15,714IDs/statuses remain; no product/production closure credit.
+
+Memory nextauthor now owns fresh G:/BubalyAIMemoryCallerProof20261027 branchcodex/ai-memory-caller-context-proof-20261027 abovea7, ONLYnewfixture; freshphysicalgraph and strictsynthetic13-case proof prepared beforeFIRST. Sourcepeer is explicitly awakened before execution; no result or leak assumed. Production remains publicd93 with latestmaina7 VercelEMCfailure; private buildcause is still inaccessible with currentteampermissions. No further audit-only publication is used as an unproven deployment fix. PRODUCTION READY: NO.
+
 ## School current-main qualification sealed; allocate stronger memory caller proof — 2026-10-27T15:33:37.354Z
 
 - Last Updated: 2026-10-27T15:33:37.354Z
