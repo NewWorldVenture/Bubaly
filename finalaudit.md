@@ -1,5 +1,20 @@
 # Final Production Audit
 
+## PR #1140 original logs pass semantic checks; final peer and main integration pending — 2026-10-27T21:00:13.9833142Z
+
+- Last Updated: 2026-10-27T21:00:13.9833142Z
+
+Original head 7ba6e1cf5dc3953a998f6ff54d2d3c0c2b57e143 tested merge b170a80f848344455483429749138e5ed646af5f, whose parents are main 97d7168 and 7ba6. All non-ledger source bytes equal qualified local c5b; the published head and tested tree are identical. The one-shot collector PID 17020 actually drained with exit 0, null signal/spawn error, stable inputs and empty stderr at 20:54:54.534Z. All three original workflows, 19 jobs and 63 raw artifacts are retained. No CI rerun, cancellation, substitute epoch or source change occurred.
+
+Before FIRST, independent and root source review refused prepared reader de1358 because three old run IDs remained. That reader stays unexecuted. The corrected V2 b90f and strict launcher af906 received source admission 27528da8. Root alone launched V2; PID 26432 actually drained with exit 0, null signal/spawn error, stable pins and empty stderr at 20:59:38.762Z. Output 64c774d119d0d4fd142459c34106ba68fbde585486e89f961be2499a5d21e2c5 binds the fresh logs and source rather than borrowing any earlier epoch.
+
+Each actual timezone vector contains 2,803 passing files plus five skipped files, and 39,833 ordinary passing cases plus two expected-failure controls and 123 skips (39,958 total). All 47 current critical whole fixtures register 700 cases without skips or expected failures. Eight primary browser groups total 2,893 registrations, 2,885 ordinary passes and eight skips, with no flaky cases or retries; auxiliary RPC and bill checks are accounted separately. Database replay reports 462 migrations, 189 passing probes and 458 no-op legacy reapplications. The build emits 245 pages. Dedicated messaging reports 120 unit and 102 browser passes within its scripted seam. Native authentication, a complete assistant journey and production acceptance are not inferred.
+
+Final independent result review and normal main integration remain pending at this journal checkpoint. No closure is applied here. The existing service-family artifact retains its additional SDK/component browser, page-sweep and default requirements; unit-only DTO controls cannot close that original obligation. The old 4d failed epoch, household HTTP 502 and unknown commit/cause state remain preserved; this genuine successor does not establish a cause or erase that failure.
+
+Parallel login proof has produced a genuine 70-case baseline: 66 pass and four fail, exactly the two unknown error shapes across web and mobile. Explicit credential rejection controls pass. The narrow candidate now passes the same 70 and a complete three-fixture/78-case related selection; full types and final independent review remain pending. No native SDK, refresh, session or storage fault lane was executed. Invite implementation remains a separate allocated task. Production still serves old d93 after main 97d's failed deployment; PRODUCTION READY: NO.
+
+
 ## PR #1140 reaches successful original CI; source and log verification remains open — 2026-10-27T20:53:42.0710153Z
 
 - Last Updated: 2026-10-27T20:53:42.0710153Z
