@@ -30,6 +30,13 @@
 // back with no name left, one digit more than a batch of 200, so the first
 // case builds its read at that size: 7,805 and 7,855 bytes. The flood's reads
 // now reach that far, so it takes fewer of them, and its longest is 4,785.
+//
+// Round 15 (R14-RV2-DROP-INTO-FULL-FAMILY-WAITS-FOR-SURPLUS) keeps the price
+// drops landing in a family left out at its share: push's read leaves the
+// families out with `or=(family_id.not.in.(...),and(user_id.is.null,
+// related_type.eq.marketplace_listings))` in place of `family_id=not.in.(...)`,
+// 75 bytes more, so the first case's reads come to 7,880 and 7,930 bytes. The
+// flood leaves no family out, and its longest is still 4,785.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
