@@ -9,6 +9,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { createEmailDraft } from '../actions';
 import { SendCampaignButton } from '@/components/admin/send-campaign-button';
+import { audienceReads, campaignAudience, campaignDelivery, finishesCampaign } from '@/lib/marketing/send';
 import { getTranslations } from '@/lib/i18n/server';
 import { SubmitButton } from '@/components/ui/submit-button';
 
@@ -31,6 +32,7 @@ export default async function EmailPage() {
   }
   const { data: emails } = emailsResult;
   const { data: segments } = segmentsResult;
+  const finishing = await cappedDraftsWithNoOneLeft(supabase, emails ?? []);
 
   const providerReady = !!process.env.RESEND_API_KEY;
 
@@ -64,7 +66,22 @@ export default async function EmailPage() {
                     <p className="mt-1">{e.opens} opens · {e.clicks} clicks</p>
                   </div>
                 ) : (e.status === 'draft' || e.status === 'failed') && providerReady ? (
-                  <SendCampaignButton id={e.id} />
+                  // A failed send that reached part of its audience says how
+                  // much: Send resumes it for the rest (lib/marketing/send.ts),
+                  // it does not mail those families again.
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    {e.status === 'failed' && e.recipients > 0 && (
+                      <p className="text-xs text-muted">{t('adminMarketingEmail.sentBeforeItStopped', { n: e.recipients })}</p>
+                    )}
+                    {/* A send past the per-send cap reached its first part and
+                        came back to draft with the rest held (lib/marketing/send.ts). */}
+                    {e.status === 'draft' && <CappedNote t={t} recipients={e.recipients} metadata={e.metadata} finishes={finishing.has(e.id)} />}
+                    <SendCampaignButton id={e.id} />
+                  </div>
+                ) : e.status === 'failed' && e.recipients > 0 ? (
+                  <p className="shrink-0 text-xs text-muted">{t('adminMarketingEmail.sentBeforeItStopped', { n: e.recipients })}</p>
+                ) : e.status === 'draft' ? (
+                  <CappedNote t={t} recipients={e.recipients} metadata={e.metadata} finishes={finishing.has(e.id)} />
                 ) : null}
               </Card>
             ))
@@ -88,6 +105,41 @@ export default async function EmailPage() {
       </div>
     </div>
   );
+}
+
+/**
+ * The capped drafts whose held addresses have all left the audience, so the
+ * next Send only marks them sent (finishesCampaign). Their note said Send
+ * reaches the rest. Read only for a capped draft, the one card whose note
+ * makes that promise; an audience that cannot be read keeps the note, and
+ * Send's own preview still answers who it reaches. The customers and the
+ * suppressions are read once for all of them (audienceReads), not once per
+ * capped draft (R4-AW-EMAIL-PAGE-AUDIENCE-READS).
+ */
+async function cappedDraftsWithNoOneLeft(
+  supabase: ReturnType<typeof createServiceClient>,
+  emails: readonly { id: string; status: string; segment_id: string | null; metadata: unknown }[],
+): Promise<Set<string>> {
+  const finishing = new Set<string>();
+  const reads = audienceReads(supabase);
+  for (const e of emails) {
+    if (e.status !== 'draft' || campaignDelivery(e.metadata)?.outcome !== 'capped') continue;
+    try {
+      const { remaining, prior } = await campaignAudience(supabase, e, reads);
+      if (finishesCampaign(prior, remaining)) finishing.add(e.id);
+    } catch (err) {
+      console.error('[admin-marketing-email] capped draft audience read failed', err);
+    }
+  }
+  return finishing;
+}
+
+/** "N of M sent" for a draft an earlier, capped send reached part of; nothing otherwise. */
+function CappedNote({ t, recipients, metadata, finishes }: { t: Awaited<ReturnType<typeof getTranslations>>; recipients: number; metadata: unknown; finishes: boolean }) {
+  const delivery = campaignDelivery(metadata);
+  if (delivery?.outcome !== 'capped' || recipients <= 0) return null;
+  if (finishes) return <p className="shrink-0 text-xs text-muted">{t('adminMarketingEmail.sentNoOneLeft', { n: recipients })}</p>;
+  return <p className="shrink-0 text-xs text-muted">{t('adminMarketingEmail.sentOfAudienceSoFar', { n: recipients, total: recipients + (delivery.held ?? 0) })}</p>;
 }
 
 async function AdminEmailReadError() {

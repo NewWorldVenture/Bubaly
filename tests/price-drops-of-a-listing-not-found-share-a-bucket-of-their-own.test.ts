@@ -172,12 +172,12 @@ describe('the drops not found, read by read', () => {
   type R = { id: string; family_id: string; user_id: string | null; related_type: string | null; related_id: string | null; seller_family_id?: string | null };
   /** What an exclusion leaves out, written out here rather than imported. */
   const leftOut = (excluded: FairExclusion, r: R) => {
-    if (excluded.families.includes(r.family_id)) return true;
-    if (r.user_id) return excluded.recipients.includes(r.user_id);
-    if (r.related_type === 'marketplace_listings') {
+    if (!r.user_id && r.related_type === 'marketplace_listings') {
       return excluded.marketplace || excluded.landing.includes(r.family_id)
         || (r.related_id ? excluded.listings.includes(r.related_id) : excluded.unlisted);
     }
+    if (excluded.families.includes(r.family_id)) return true;
+    if (r.user_id) return excluded.recipients.includes(r.user_id);
     return excluded.familyWide.includes(r.family_id);
   };
   const range = (rows: R[]) => {

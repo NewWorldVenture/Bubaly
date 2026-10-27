@@ -46,15 +46,17 @@
 // family's listings together take one recipient's share however many
 // listings it has and however many families saved them, one listing across
 // any number of watcher families takes one share, and a price drop takes none
-// of the share of the family it lands in. Only when nobody else is waiting
-// does a family's surplus, and then a recipient's, fill the room left: a lone
-// family's backlog, a lone seller's included, still goes out a full batch at
-// a time. An attacker holding several families still takes that many family
-// shares; this bounds the damage, and dropping the policy (and throttling the
-// trigger, both owner actions) is what ends it. A seller's share holds as far
-// as a read can reach past the drops it holds back (the seller paragraph
-// below): behind more of those than that, another seller's drop waits for the
-// surplus.
+// of the share of the family it lands in, nor waits with that family once it
+// holds its share: a family left out at its share is left out without the
+// price drops that land in it (isExcluded, and push's read alike). Only when
+// nobody else is waiting does a family's surplus, and then a recipient's,
+// fill the room left: a lone family's backlog, a lone seller's included,
+// still goes out a full batch at a time. An attacker holding several
+// families still takes that many family shares; this bounds the damage, and
+// dropping the policy (and throttling the trigger, both owner actions) is
+// what ends it. A seller's share holds as far as a read can reach past the
+// drops it holds back (the seller paragraph below): behind more of those than
+// that, another seller's drop waits for the surplus.
 //
 // A drop whose listing is not found (deleted since: 0154 lets its owner delete
 // it, and its drops stay, related_id being text with no foreign key; or the
@@ -66,66 +68,77 @@
 // get one share back for each family its drops landed in.
 //
 // A seller is not a column of the notification, so a read cannot leave a full
-// seller's drops out by seller. It names the narrowest thing it can: the
-// family a drop landed in when that is the seller's own (a member's own
-// listings saved in their own family, which needs nobody else), else the
-// listing. So that the names stay bounded, a full seller's listings landing in
-// other families are named one by one up to `size / perRecipient` of them,
-// then the families they land in up to as many again. Past both, a full
-// seller's further drops still wait, unnamed: the read cannot leave them out
-// and returns them again, so it is asked for FAIR_READ_MAX_ROWS rows to reach
-// past them, and once a read that far is filled by rows already taken or held
-// back, the marketplace is left out of the rest of that pass, so every
-// family's own rows behind them are still reached. Each shared pass reads that
-// far for itself before it leaves the marketplace out: the family pass leaves
-// out every row of a family at its share, the price drops landing in it too,
-// and the recipient pass, which reads those rows again, is the only shared
-// pass that can take such a drop. (Until round 14 a full seller's drop past the names counted
-// against its own listing's share alone, and one seller's drops across more
-// listings and families than the names hold filled the batch ahead of another
-// seller's. Then the recipient pass took the family pass's verdict instead of
-// reading that far itself, and another seller's drop landing in a family at
-// its share waited for the surplus behind 150 held-back drops.) The bound:
-// over one range (push's first run, with no cursor yet), a row is reached in
-// the shared passes while fewer than FAIR_READ_MAX_ROWS rows not left out come
-// before it in the family pass, or, for a row of a family at its share, which
-// the family pass leaves out, in the recipient pass; those taken (fewer than
-// `size`) are among them, so whenever at most FAIR_READ_MAX_ROWS - size
-// held-back drops come before it, 800 at push's batch of 200. Push's later
-// runs split each read between the rows behind the cursor and those ahead
-// (aheadAndBehind, a quarter for the retries behind), so while both ranges
-// fill their part, a read that far reaches 750 rows ahead of the cursor and
-// 250 behind it, the rows taken in each among them. Behind more, another
+// seller's drops out by seller. It names the narrowest thing it can: the family
+// a drop landed in when that is the seller's own (a member's own listings saved
+// in their own family, which needs nobody else), else the listing. So that the
+// names stay bounded, a full seller's listings landing in other families are
+// named one by one up to `size / perRecipient` of them, then the families they
+// land in up to as many again. Past both, a full seller's further drops still
+// wait, unnamed: the read cannot leave them out and returns them again, so it
+// is asked for FAIR_READ_MAX_ROWS rows to reach past them, and once a read that
+// far is filled by rows already taken or held back, the marketplace is left out
+// of the rest of that pass, so every family's own rows behind them are still
+// reached. A project whose db-max-rows is below FAIR_READ_MAX_ROWS
+// (lib/supabase/read-all.ts allows for 500) answers such a read cut at its cap,
+// which looks short: while it holds drops back it is taken for out of reach all
+// the same, not for the end of the range, and aheadAndBehind does not remember
+// its answer as short. Each shared pass reads that far for itself before it
+// leaves the marketplace out: the recipient pass reads again the rows of the
+// families the family pass left out at their share. (Until round 14 a full
+// seller's drop past the names counted against its own listing's share alone,
+// and one seller's drops across more listings and families than the names hold
+// filled the batch ahead of another seller's. Then the recipient pass took the
+// family pass's verdict instead of reading that far itself, and another
+// seller's drop landing in a family at its share waited for the surplus behind
+// 150 held-back drops. Until round 15 the family pass left such a drop out with
+// the family, so even with no flood it waited for the recipient pass, behind
+// other families' surplus; and at a db-max-rows of 500 a cut reach read ended
+// the pass, and an ordinary row behind one seller's 2,000 drops waited for the
+// surplus.) The bound: over one range (push's first run, with no cursor yet), a
+// price drop is reached in the shared passes while fewer than
+// FAIR_READ_MAX_ROWS rows not left out come before it in the family pass; those
+// taken (fewer than `size`) are among them, so whenever at most
+// FAIR_READ_MAX_ROWS - size held-back drops come before it, 800 at push's batch
+// of 200. Where db-max-rows is lower, read it for FAIR_READ_MAX_ROWS here
+// (owner check: the production project's API Max Rows is at least 1,000). Every
+// other row is reached past any number of held-back drops, the marketplace
+// being left out once a read is filled by them: in the family pass, or, for a
+// family's own row once that family holds its share, in the recipient pass.
+// Push's later runs split each read between the rows behind the cursor and
+// those ahead (aheadAndBehind, a quarter for the retries behind), so while both
+// ranges fill their part, a read that far reaches 750 rows ahead of the cursor
+// and 250 behind it, the rows taken in each among them. Behind more, another
 // seller's drop waits for the surplus, which takes the flood ahead of it a
-// batch at a time, in created_at order. (The email digest reads no
-// whole-family row, so no price drop.) Full drops not found are named
-// the same way from names of their own, not the known sellers': by listing
-// while the family they landed in has named fewer than `size / perRecipient`
-// listings and all of them together fewer than twice that, then by that family,
-// up to `size / perRecipient` families. A family's own deleted listings look
-// like a watcher's, so they spend none of the known sellers' names and no more
-// than half of the listing names kept for drops not found: the rest is left
-// for the families that saved some of its other listings, live or deleted. A
-// read so names at most 4 * size / perRecipient listings and 3 * size /
-// perRecipient landing families, the full listings and the sellers' own
-// families among them (the shares above hold at most size / perRecipient of
-// each). A family named so has every price drop into it wait, other sellers'
-// too, until the room left after everyone else's: one family that saved more
-// of a full seller's listings than a batch has shares is enough for that,
-// whether those listings are still there or not.
+// batch at a time, in created_at order. (The email digest reads no whole-family
+// row, so no price drop.) Full drops not found are named the same way from
+// names of their own, not the known sellers': by listing while the family they
+// landed in has named fewer than `size / perRecipient` listings and all of them
+// together fewer than twice that, then by that family, up to
+// `size / perRecipient` families. A family's own deleted listings look like a
+// watcher's, so they spend none of the known sellers' names and no more than
+// half of the listing names kept for drops not found: the rest is left for the
+// families that saved some of its other listings, live or deleted. A read so
+// names at most 4 * size / perRecipient listings and 3 * size / perRecipient
+// landing families, the full listings and the sellers' own families among them
+// (the shares above hold at most size / perRecipient of each). A family named
+// so has every price drop into it wait, other sellers' too, until the room left
+// after everyone else's: one family that saved more of a full seller's listings
+// than a batch has shares is enough for that, whether those listings are still
+// there or not.
 //
 // Push sends every id a read leaves out in the read's URL, 39 bytes an id, and
 // past the gateway's request-line limit (nginx's 8,192 bytes) the read fails
 // and no family gets a push. At push's shares the most the bound above allows,
 // counted kind by kind (5 families, 20 recipients, 80 listings, 60 landing
 // families: 165 ids, an over-count, since the listings at their own share are
-// among the 20 share holders), builds a request line of 7,855 bytes, in a
+// among the 20 share holders), builds a request line of 7,930 bytes, in a
 // family-scoped read behind the cursor asking for FAIR_READ_MAX_ROWS rows
-// (7,854 at a batch's 200: only the limit's digits differ); the names round 12
-// added cost 2,340 bytes of that. A flood that fills every pool came to 4,785.
-// tests/the-most-a-push-read-leaves-out-fits-its-request-line.test.ts measures
-// both through push and supabase-js and holds each pool at its size, so a
-// wider pool fails there first.
+// (7,929 at a batch's 200: only the limit's digits differ); the names round 12
+// added cost 2,340 bytes of that, and round 15's keeping the price drops of a
+// family left out at its share, 75. A flood that fills every pool came to
+// 4,785. tests/the-most-a-push-read-leaves-out-fits-its-request-line.test.ts
+// measures both through push and supabase-js and holds each pool at its
+// size, so a wider pool fails there first.
 //
 // Rows dated after now (beyond a clock-skew allowance) are not read at all, by
 // either dispatcher: no writer sets created_at, which defaults to now(), so
@@ -196,7 +209,7 @@ export function sellerOf(row: FairRow): string | null {
 
 /** What one read of a range leaves out. */
 export type FairExclusion = {
-  /** Every row of these families, the marketplace notices that land in them included. */
+  /** Every row of these families but the marketplace notices that land in them, which are the marketplace's. */
   readonly families: readonly string[];
   /** Rows addressed to these users. */
   readonly recipients: readonly string[];
@@ -214,10 +227,12 @@ export type FairExclusion = {
 
 /**
  * The most rows readFairBatch asks one read for: PostgREST's db-max-rows, 1,000
- * on a default project (lib/supabase/read-all.ts), so a read that asks this
- * many and gets fewer has reached the end of its range, not the server's cap.
- * A read asks for more than the room left only to reach past the price drops
- * it holds back without a name (the header's seller paragraph).
+ * on a default project (lib/supabase/read-all.ts). A read asks for more than
+ * the room left only to reach past the price drops it holds back without a
+ * name (the header's seller paragraph). A project whose db-max-rows is lower
+ * answers such a read cut at it, and the cut answer looks short: so a read
+ * this far that comes back short while it holds drops back is not taken for
+ * the end of its range, and aheadAndBehind does not remember it.
  */
 export const FAIR_READ_MAX_ROWS = 1000;
 
@@ -236,12 +251,14 @@ const NOTHING: FairExclusion = {
 
 /** Whether `excluded` leaves this row out. */
 export function isExcluded(excluded: FairExclusion, row: FairRow): boolean {
-  if (excluded.families.includes(row.family_id)) return true;
-  if (row.user_id) return excluded.recipients.includes(row.user_id);
+  // A price drop is the marketplace's, not the family's it landed in, so a
+  // family at its share does not take it out with its own rows.
   if (isMarketplaceNotice(row)) {
     return excluded.marketplace || excluded.landing.includes(row.family_id)
       || (row.related_id ? excluded.listings.includes(row.related_id) : excluded.unlisted);
   }
+  if (excluded.families.includes(row.family_id)) return true;
+  if (row.user_id) return excluded.recipients.includes(row.user_id);
   return excluded.familyWide.includes(row.family_id);
 }
 
@@ -277,11 +294,12 @@ function within(narrower: FairExclusion, wider: FairExclusion): boolean {
  * will return again; or, once a full seller's drop is held back with no name
  * left to leave it out by, for FAIR_READ_MAX_ROWS, to reach past those (the
  * header's seller paragraph). When a read comes back short, nobody but those
- * left out or held back has a row waiting, and the next pass lifts one level:
- * the family shares first (so a parent's row in a family a flood filled is
- * reached, still shared by recipient), then everything (the surplus, in
- * order). A pass whose exclusions are the ones the last short read already
- * used is skipped, so a batch nobody floods is one read. Each round leaves out
+ * left out or held back has a row waiting (but for a read that far while it
+ * holds drops back, which db-max-rows may have cut), and the next pass lifts
+ * one level: the family shares first (so a parent's row in a family a flood
+ * filled is reached, still shared by recipient), then everything (the
+ * surplus, in order). A pass whose exclusions are the ones the last short
+ * read already used is skipped, so a batch nobody floods is one read. Each round leaves out
  * at least one more family or recipient (the marketplace, its listings and its
  * sellers' landing families among them), each holding a full share of the
  * batch, or one more listing or landing family named for a full seller or for
@@ -290,9 +308,9 @@ function within(narrower: FairExclusion, wider: FairExclusion): boolean {
  * rounds are bounded (size / perFamily + 7 * size / perRecipient, plus one a
  * pass, the marketplace, and three for the drops held back with no name: the
  * first read that reaches past them, and in each shared pass the one that
- * leaves the marketplace out once a read that far is filled, the recipient
- * pass reading that far again for itself since it reads the rows of the
- * families the family pass left out), and so is the exclusion list. Every
+ * leaves the marketplace out once a read that far is filled or cut short, the
+ * recipient pass reading that far again for itself since it reads the rows of
+ * the families the family pass left out), and so is the exclusion list. Every
  * read happens before anything is sent. Rows come back in the order they were
  * taken, not re-sorted: a caller that needs its order sorts them.
  */
@@ -386,10 +404,10 @@ export async function readFairBatch<T extends FairRow>(read: FairRead<T>, size: 
    */
   const pass = async (level: 'family' | 'recipient' | 'surplus'): Promise<'full' | 'done'> => {
     // Decided on this pass's own window, never carried into the next: the
-    // family pass leaves out the families at their share, the price drops
-    // landing in them included, and the recipient pass reads those again, so
-    // it reaches past the held-back drops for itself before it leaves the
-    // marketplace out (the header's seller paragraph).
+    // family pass leaves out the families at their share (their own rows, not
+    // the price drops landing in them), and the recipient pass reads those
+    // again, so it reaches past the held-back drops for itself before it
+    // leaves the marketplace out (the header's seller paragraph).
     let marketplaceOutOfReach = false;
     for (;;) {
       const room = size - taken.size;
@@ -453,7 +471,10 @@ export async function readFairBatch<T extends FairRow>(read: FairRead<T>, size: 
       }
       if (taken.size >= size) return 'full';
       if (reached) continue;
-      if (rows.length < want) { lastShort = excluded; return 'done'; }
+      // A reach read is cut at the server's db-max-rows when that is below
+      // FAIR_READ_MAX_ROWS, and comes back looking short: while it holds drops
+      // back it is taken for out of reach, not for the end of the range.
+      if (rows.length < want && !(reach && holding)) { lastShort = excluded; return 'done'; }
       // Not short, and filled by rows this pass took or holds back: read past
       // the held ones, then, once a read that far is still filled by them,
       // leave the marketplace out.
@@ -481,7 +502,9 @@ export async function readFairBatch<T extends FairRow>(read: FairRead<T>, size: 
  * rest, and any part of the reserve the retries do not need. Rows behind come
  * first in what the read returns, so the reserve is taken before the rows
  * ahead fill the room. A read that came back short is remembered: a later read
- * leaving out at least as much is answered from it instead of asking again.
+ * leaving out at least as much is answered from it instead of asking again
+ * (but for a read reaching past held-back drops, which the server's
+ * db-max-rows may have cut: FAIR_READ_MAX_ROWS).
  *
  * `behind` need not start at the oldest row: push's reads behind go on from
  * the retries' own place in its cursor, then go round to the oldest, so under
@@ -494,13 +517,16 @@ export function aheadAndBehind<T extends FairRow>(ahead: FairRead<T>, behind: Fa
   const remembered = (range: FairRead<T>) => {
     const seen = new Set<string>();
     const short: { excluded: FairExclusion; rows: T[] }[] = [];
-    const readRange: FairRead<T> = async (size, excluded) => {
+    /** `reaching`: part of a read that reaches past held-back drops, which db-max-rows may cut (readFairBatch). */
+    const readRange = async (size: number, excluded: FairExclusion, reaching: boolean): Promise<T[]> => {
       if (size < 1) return [];
       const known = short.find((answer) => within(answer.excluded, excluded));
       if (known) return known.rows.filter((row) => !isExcluded(excluded, row)).slice(0, size);
       const rows = await range(size, excluded);
       for (const row of rows) seen.add(row.id);
-      if (rows.length < size) short.push({ excluded, rows });
+      // A cut answer looks short and is not the end of the range: a reaching
+      // read's is not remembered, so the reads after it ask again.
+      if (rows.length < size && !reaching) short.push({ excluded, rows });
       return rows;
     };
     return { read: readRange, seen, short };
@@ -513,12 +539,15 @@ export function aheadAndBehind<T extends FairRow>(ahead: FairRead<T>, behind: Fa
     return range.short.some((answer) => isNothing(answer.excluded) && answer.rows.every((row) => ids.has(row.id)));
   };
   const read: FairRead<T> = async (size, excluded) => {
+    // Only a read reaching past held-back drops asks for FAIR_READ_MAX_ROWS;
+    // every other asks for no more than its batch.
+    const reaching = size >= FAIR_READ_MAX_ROWS;
     const reserve = Math.floor(size * behindShare);
-    let first = await forward.read(size - reserve, excluded);
-    const second = await wrap.read(size - first.length, excluded);
+    let first = await forward.read(size - reserve, excluded, reaching);
+    const second = await wrap.read(size - first.length, excluded, reaching);
     // The retries left part of their reserve: give it to the rows ahead.
     if (reserve > 0 && first.length === size - reserve && second.length < size - first.length) {
-      first = await forward.read(size - second.length, excluded);
+      first = await forward.read(size - second.length, excluded, reaching);
     }
     return [...second, ...first];
   };

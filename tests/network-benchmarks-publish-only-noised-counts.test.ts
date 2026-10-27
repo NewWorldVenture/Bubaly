@@ -21,11 +21,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 
 const holder = vi.hoisted(() => ({ db: null as unknown }));
+/** The request's locale: en-US unless a case reads the page in another one. */
+const request = vi.hoisted(() => ({ locale: 'en-US' }));
 
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => holder.db, createServer: async () => holder.db }));
+// Both halves of lib/i18n/server the page reaches: its translator, and the
+// locale its formatter (lib/utils/format-server, getFormat) is bound to.
 vi.mock('@/lib/i18n/server', async () => {
-  const { SOURCE_MESSAGES: messages, translate: tr } = await import('@/lib/i18n/messages');
-  return { getTranslations: async () => (key: string, params?: Record<string, string | number>) => tr(messages, key, params) };
+  const { getMessages, translate: tr } = await import('@/lib/i18n/messages');
+  return {
+    getTranslations: async () => (key: string, params?: Record<string, string | number>) => tr(getMessages(request.locale as never), key, params),
+    getLocaleContext: async () => ({ locale: { code: request.locale }, source: 'default', messages: getMessages(request.locale as never) }),
+  };
 });
 vi.mock('@/lib/supabase/auth', () => ({ getUser: async () => ({ id: 'admin-1', email: 'admin@example.test' }), isSuperAdmin: async () => true }));
 vi.mock('@/lib/auth/super-admin-assurance', () => ({ superAdminAssurance: async () => ({ ok: true }), SUPER_ADMIN_STEP_UP_PATH: '/auth/step-up?next=%2Fadmin' }));
@@ -54,6 +61,7 @@ const aggregate = (metric: string, value: string, count: number, cohortSize: num
 });
 
 beforeEach(() => {
+  request.locale = 'en-US';
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://127.0.0.1:54321');
   vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-key');
@@ -102,6 +110,48 @@ describe('the methodology says how often the figures change, and that the noise 
     const text = strings(await BenchmarksPage()).join(' ');
     expect(text).toContain('Figures are published once a month with calibrated noise, so comparing one month with the next makes it unlikely, but not impossible, to tell that one family joined or left.');
     expect(text).not.toMatch(/can never reveal|two weeks/);
+  });
+});
+
+// N8-leave-copy-overpromises/last-updated-vs-monthly (round 5). The header
+// printed "Last updated {date}" from `computedAt`, which every night of the
+// epoch re-stamps without changing a figure (benchmarks-server.ts), so it read
+// "yesterday" beside "Figures are published once a month". It names the month
+// the figures were published in now: the epoch, a UTC calendar month.
+describe('the page dates its figures by the month they were published, not the nightly re-stamp', () => {
+  /** What each full catalogue's "Last updated" line began with. */
+  const LAST_UPDATED = {
+    'en-US': 'Last updated', 'de-DE': 'Zuletzt aktualisiert', 'es-ES': 'Última actualización', 'fr-FR': 'Dernière mise à jour',
+    'it-IT': 'Ultimo aggiornamento', 'nl-NL': 'Laatst bijgewerkt', 'pt-PT': 'Última atualização',
+  } as const;
+  const PUBLISHED = {
+    'en-US': 'Published November 2026', 'de-DE': 'Veröffentlicht im November 2026', 'es-ES': 'Publicado en noviembre de 2026',
+    'fr-FR': 'Publié en novembre 2026', 'it-IT': 'Pubblicato a novembre 2026', 'nl-NL': 'Gepubliceerd in november 2026',
+    'pt-PT': 'Publicado em novembro de 2026',
+  } as const;
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('three weeks into the month, re-stamped last night, it says the month it was published in', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-24T12:00:00Z'));
+    db.seed('network_aggregates', [aggregate('dinner_habit', 'often (4–5)', 44, 47, '2026-11-24T03:00:00.000Z')]);
+    const text = strings(await BenchmarksPage()).join(' ');
+    expect(text).toContain('Published November 2026');
+    expect(text).not.toContain('Last updated');
+    expect(text).not.toMatch(/Nov 24/);
+  });
+
+  it('names the UTC month on its first night whatever zone the server runs in, in every full catalogue', async () => {
+    // 03:00Z on the 1st is still October in Los Angeles: the epoch is not.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-01T09:00:00Z'));
+    db.seed('network_aggregates', [aggregate('dinner_habit', 'often (4–5)', 44, 47, '2026-11-01T03:00:00.000Z')]);
+    for (const [locale, published] of Object.entries(PUBLISHED)) {
+      request.locale = locale;
+      const text = strings(await BenchmarksPage()).join(' ');
+      expect(text, locale).toContain(published);
+      expect(text, locale).not.toContain(LAST_UPDATED[locale as keyof typeof LAST_UPDATED]);
+    }
   });
 });
 

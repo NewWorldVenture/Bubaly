@@ -767,10 +767,13 @@ export async function dispatchPendingPushes(
     // share of this batch, exactly as isExcluded leaves them out. 0191's price
     // drops (user_id null, related_type MARKETPLACE_RELATED_TYPE, related_id
     // the listing) count against the marketplace, their listing and their
-    // seller, not the family they land in. Each `or` ANDs with the rest; a
-    // NULL user_id passes the recipients' and is judged by the others.
+    // seller, not the family they land in, so a family left out at its share
+    // is left out without them. Each `or` ANDs with the rest; a NULL user_id
+    // passes the recipients' and is judged by the others.
     const notMarket = `user_id.not.is.null,related_type.is.null,related_type.neq.${MARKETPLACE_RELATED_TYPE}`;
-    if (excluded.families.length) q = q.not('family_id', 'in', recipientList(excluded.families));
+    if (excluded.families.length) {
+      q = q.or(`family_id.not.in.${recipientList(excluded.families)},and(user_id.is.null,related_type.eq.${MARKETPLACE_RELATED_TYPE})`);
+    }
     if (excluded.recipients.length) q = q.or(`user_id.is.null,user_id.not.in.${recipientList(excluded.recipients)}`);
     if (excluded.familyWide.length) {
       q = q.or(`user_id.not.is.null,family_id.not.in.${recipientList(excluded.familyWide)},related_type.eq.${MARKETPLACE_RELATED_TYPE}`);

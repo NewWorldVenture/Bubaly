@@ -29,6 +29,7 @@ import { addDaysToDayKey, dayKeyInTz, zonedDayBoundsMs, zonedTimeMs } from '@/li
 import { computeStress, type StressInput, type StressResult } from './stress';
 import { completionScore, nextBestActions, type NextAction } from './operations';
 import { readOnOpenGroceryLists } from '@/lib/services/groceries';
+import { isWithheldFromGuest } from '@/lib/auth/guest-scope';
 
 /**
  * The family-local window every query below is bounded by.
@@ -86,6 +87,13 @@ export type FamilySignals = {
     billsDueSoon: number;
     billsPaid: number;
     billsTotal: number;
+    /**
+     * The viewer is a guest, whom guest-scope keeps out of the household's
+     * money (ROLE-SCOPE-001): the bill counts were not read, are 0, and are
+     * left out of stress, completion and the actions. A page shows no bill
+     * figure at all for a withheld read — "0 of 0 bills paid" is a claim.
+     */
+    billsWithheld: boolean;
     homeworkDueSoon: number;
     sportsThisWeek: number;
     routinesTotal: number;
@@ -99,6 +107,11 @@ export type FamilySignalsResult = {
   error: unknown | null;
 };
 
+/** Who the counts are for. Omitted, nothing is withheld (the AI context and other server readers). */
+export type SignalsViewer = { role: string };
+
+type HeadCount = { count: number | null; error: unknown };
+
 /**
  * `tz` is the family's IANA zone — `ctx.active.family.timezone` on a page,
  * `scope.tz` in a service. It is required rather than defaulted because every
@@ -109,17 +122,34 @@ export async function gatherSignalsResult(
   familyId: string,
   tz: string,
   now: Date = new Date(),
+  viewer?: SignalsViewer,
 ): Promise<FamilySignalsResult> {
   const supabase = await createServer();
   const { todayKey, weekEndKey, startIso, endIso, in3Iso, in7Iso } = signalWindow(tz, now);
+  // A guest is not read the household's bills, as /dashboard/bills and
+  // /dashboard/family-cfo refuse them (lib/auth/guest-scope).
+  const billsWithheld = viewer?.role === 'guest' && isWithheldFromGuest('/dashboard/bills');
+  // The bill and open-chore figures are exact counts. They were row reads
+  // with no bound, so past PostgREST's 1,000-row cap "X of Y bills paid" and
+  // the open/overdue chores were an arbitrary prefix presented as totals.
+  const billsQuery = () => supabase.from('bills').select('id', { count: 'exact', head: true }).eq('family_id', familyId);
+  const billCount = (narrow: (query: ReturnType<typeof billsQuery>) => PromiseLike<HeadCount>): PromiseLike<HeadCount> =>
+    billsWithheld ? Promise.resolve({ count: 0, error: null }) : narrow(billsQuery());
+  const openChores = () => supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
+    .eq('family_id', familyId).in('status', ['todo', 'in_progress']);
 
   const [
     weekEvents,
     appts,
     openTasks,
+    overdueTaskCount,
+    dueTodayTaskCount,
     doneTasks,
     totalTasks,
-    bills,
+    billTotal,
+    overdueBillCount,
+    dueSoonBillCount,
+    paidBillCount,
     homework,
     sports,
     routines,
@@ -144,13 +174,21 @@ export async function gatherSignalsResult(
     })(),
     supabase.from('appointments').select('id, starts_at')
       .eq('family_id', familyId).gte('starts_at', startIso).lt('starts_at', endIso),
-    supabase.from('chore_assignments').select('due_at')
-      .eq('family_id', familyId).in('status', ['todo', 'in_progress']),
+    openChores(),
+    // `due_at` is a nullable timestamptz; the family's midnight bounds both
+    // (a chore with no due date is neither overdue nor due today).
+    openChores().lt('due_at', startIso),
+    openChores().gte('due_at', startIso).lt('due_at', endIso),
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).in('status', ['done', 'approved']),
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId),
-    supabase.from('bills').select('status, due_date').eq('family_id', familyId),
+    billCount((query) => query),
+    billCount((query) => query.eq('status', 'overdue')),
+    // `due_date` is a DATE column — already the family's day, so it is compared
+    // as it arrives. Converting it would be the mirror-image bug.
+    billCount((query) => query.eq('status', 'upcoming').gte('due_date', todayKey).lte('due_date', weekEndKey)),
+    billCount((query) => query.eq('status', 'paid')),
     supabase.from('school_events').select('id')
       .eq('family_id', familyId).gte('starts_at', startIso).lte('starts_at', in3Iso),
     supabase.from('sports_events').select('starts_at')
@@ -164,8 +202,10 @@ export async function gatherSignalsResult(
       .eq('family_id', familyId).in('list_id', lists).eq('is_checked', false)),
   ]);
 
-  const readError = [weekEvents, appts, openTasks, doneTasks, totalTasks, bills, homework, sports, routines, meals, grocery]
-    .find((result) => result.error)?.error;
+  const exactCounts = [openTasks, overdueTaskCount, dueTodayTaskCount, billTotal, overdueBillCount, dueSoonBillCount, paidBillCount];
+  const readError = [weekEvents, appts, ...exactCounts, doneTasks, totalTasks, homework, sports, routines, meals, grocery]
+    .find((result) => result.error)?.error
+    ?? (exactCounts.some((result) => typeof result.count !== 'number') ? new Error('Family signal counts were incomplete') : null);
   if (readError) return { data: null, error: readError };
 
   // Per-day event histogram → busiest day + back-to-back transitions.
@@ -198,22 +238,12 @@ export async function gatherSignalsResult(
     if (total > 1) sportsConflicts += count;
   }
 
-  const openRows = openTasks.data ?? [];
-  // `due_at` is a nullable timestamptz: the null check stays (a chore with no
-  // due date is neither overdue nor due today), and the instant is resolved on
-  // the family's wall before it is compared with the family's today.
-  const dueDayKey = (t: { due_at: string | null }) => (t.due_at ? dayKeyInTz(new Date(t.due_at), tz) : null);
-  const overdueTasks = openRows.filter((t) => { const key = dueDayKey(t); return key !== null && key < todayKey; }).length;
-  const dueTodayTasks = openRows.filter((t) => dueDayKey(t) === todayKey).length;
+  const overdueTasks = overdueTaskCount.count ?? 0;
+  const dueTodayTasks = dueTodayTaskCount.count ?? 0;
 
-  const billRows = bills.data ?? [];
-  const overdueBills = billRows.filter((b) => b.status === 'overdue').length;
-  const billsDueSoon = billRows.filter(
-    // `due_date` is a DATE column — already the family's day, so it is compared
-    // as it arrives. Converting it would be the mirror-image bug.
-    (b) => b.status === 'upcoming' && b.due_date >= todayKey && b.due_date <= weekEndKey,
-  ).length;
-  const billsPaid = billRows.filter((b) => b.status === 'paid').length;
+  const overdueBills = overdueBillCount.count ?? 0;
+  const billsDueSoon = dueSoonBillCount.count ?? 0;
+  const billsPaid = paidBillCount.count ?? 0;
 
   const stressInput: StressInput = {
     maxEventsPerDay,
@@ -232,13 +262,14 @@ export async function gatherSignalsResult(
     appointmentsToday: appts.data?.length ?? 0,
     overdueTasks,
     dueTodayTasks,
-    openTasks: openRows.length,
+    openTasks: openTasks.count ?? 0,
     doneTasks: doneTasks.count ?? 0,
     totalTasks: totalTasks.count ?? 0,
     overdueBills,
     billsDueSoon,
     billsPaid,
-    billsTotal: billRows.length,
+    billsTotal: billTotal.count ?? 0,
+    billsWithheld,
     homeworkDueSoon: homework.data?.length ?? 0,
     sportsThisWeek: sports.data?.length ?? 0,
     routinesTotal: routines.data?.length ?? 0,

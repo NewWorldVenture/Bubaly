@@ -8,6 +8,7 @@ import { ErrorState } from '@/components/ui/states';
 import { saveSetting } from '../actions';
 import { isTwilioConfigured } from '@/lib/guardian/twilio';
 import { getAIConfigView, type AIConfigView } from '@/lib/ai/settings';
+import { resolveStripeSecretKey, type StripeKeyResolution } from '@/lib/stripe/settings';
 import { getTranslations } from '@/lib/i18n/server';
 import { SubmitButton } from '@/components/ui/submit-button';
 
@@ -18,17 +19,23 @@ const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3
 
 /**
  * `ready: null` is a status that was not read: the AI row when the app_settings
- * read failed. It reads Unavailable, not "Set OPENAI_API_KEY", since the key the
- * app uses may well be stored in the admin console. `env` is what a row that is
- * not ready asks for, so the AI row's is the variable: it used to name the key's
- * source, which for no key at all read "Set admin console".
+ * read failed, the Stripe row when Stripe Setup could not be read. It reads
+ * Unavailable, not "Set OPENAI_API_KEY", since the key the app uses may well be
+ * stored in the admin console. `env` is what a row that is not ready asks for,
+ * so the AI row's is the variable: it used to name the key's source, which for
+ * no key at all read "Set admin console". `source`, on a ready row, says where
+ * its key came from.
+ *
+ * Stripe is ready on the key billing uses, Stripe Setup's first and the
+ * environment's second (resolveStripeSecretKey); `!!process.env.STRIPE_SECRET_KEY`
+ * read a deployment configured in Stripe Setup as "Set STRIPE_SECRET_KEY".
  */
-function providerStatus(ai: AIConfigView | null): { name: string; ready: boolean | null; env: string }[] {
+function providerStatus(ai: AIConfigView | null, stripe: StripeKeyResolution, stripeSource: string | null): { name: string; ready: boolean | null; env: string; source?: string | null }[] {
   return [
     { name: 'Email (Resend)', ready: !!process.env.RESEND_API_KEY, env: 'RESEND_API_KEY' },
     { name: 'SMS (Twilio)', ready: isTwilioConfigured(), env: 'TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN + TWILIO_PHONE_NUMBER' },
     { name: 'AI (OpenAI)', ready: ai ? ai.openaiKeySet : null, env: 'OPENAI_API_KEY' },
-    { name: 'Payments (Stripe)', ready: !!process.env.STRIPE_SECRET_KEY, env: 'STRIPE_SECRET_KEY' },
+    { name: 'Payments (Stripe)', ready: stripe.status === 'unreadable' ? null : stripe.status === 'resolved', env: 'STRIPE_SECRET_KEY', source: stripeSource },
     { name: 'Search Console', ready: !!process.env.GOOGLE_SEARCH_CONSOLE_KEY, env: 'GOOGLE_SEARCH_CONSOLE_KEY' },
   ];
 }
@@ -42,15 +49,20 @@ const KNOWN_SETTINGS = [
 export default async function MarketingSettingsPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const [{ data: settings, error: settingsError }, aiConfig] = await Promise.all([
+  const [{ data: settings, error: settingsError }, aiConfig, stripe] = await Promise.all([
     settle(supabase.from('marketing_settings').select('*')),
     getAIConfigView(supabase),
+    resolveStripeSecretKey(),
   ]);
   if (settingsError) {
     console.error('[admin-marketing-settings] settings read failed', settingsError);
     return <AdminMarketingSettingsReadError />;
   }
   if (aiConfig.error) console.error('[admin-marketing-settings] AI config read failed', aiConfig.error);
+  if (stripe.status === 'unreadable') console.error('[admin-marketing-settings] stripe settings read failed', stripe.error);
+  const stripeSource = stripe.status === 'resolved'
+    ? t(stripe.source === 'setup' ? 'adminSettings.stripeKeyFromSetup' : 'adminSettings.stripeKeyFromEnvironment')
+    : null;
   const byKey = new Map((settings ?? []).map((s) => [s.key, s.value]));
 
   return (
@@ -58,9 +70,9 @@ export default async function MarketingSettingsPage() {
       <Card>
         <h2 className="mb-3 font-semibold">{t('adminMarketingSettings.channelProviders')}</h2>
         <ul className="space-y-2">
-          {providerStatus(aiConfig.view).map((p) => (
+          {providerStatus(aiConfig.view, stripe, stripeSource).map((p) => (
             <li key={p.name} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-border px-3 py-2 text-sm">
-              <span>{p.name}</span>
+              <span>{p.name}{p.ready && p.source ? <span className="ml-2 text-xs text-muted">{p.source}</span> : null}</span>
               {p.ready === null
                 ? <span className="inline-flex items-center gap-1 text-muted"><CircleAlert className="h-4 w-4" />{' '}{t('strategyMetrics.unavailable')}</span>
                 : p.ready

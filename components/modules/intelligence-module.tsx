@@ -80,12 +80,16 @@ export function IntelligenceModule({
   // the page-load row instead, a tap after "Leave network" rejoined the family
   // and a second scope switched off turned the first one back on — consent the
   // nightly aggregation then honours. `saving` holds every toggle until then.
+  //
+  // A write that matched no row found the row changed since this screen read
+  // it (another tab or device, or RLS), so the screen reads it again before
+  // the toggles come back: the next tap then builds from the stored row.
   async function save(write: () => PromiseLike<{ data: Consent[] | null; error: unknown }>, done: string) {
     setSaving(true);
     try {
       const { data: saved, error } = await write();
       if (error) { toastError(describeDbError(error)); return; }
-      if (wroteNoRows(saved)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+      if (wroteNoRows(saved)) { toastError(t('errors.thatChangeWasNotSaved')); await refresh(); return; }
       setData(saved as Consent[]);
       success(done);
     } finally {
@@ -108,6 +112,11 @@ export function IntelligenceModule({
   // household is shared by every tab and device, so a tab left open here after
   // another household was chosen elsewhere withdrew THAT one, and this one
   // went on contributing. The action refuses unless both are still active.
+  //
+  // A call that THROWS rather than answering (offline, a deploy that retired
+  // this tab's action, the server failing to read the session) left the
+  // member with no word and the switch as it was, as if the leave had
+  // happened somewhere out of sight. It is said now, like any refusal.
   async function withdraw(change: Parameters<typeof withdrawFromNetworkAction>[0], done: { fenced: string; unfenced: string }) {
     setSaving(true);
     try {
@@ -117,6 +126,9 @@ export function IntelligenceModule({
       if (result.rows) setData(result.rows);
       if (!result.ok) { toastError(result.error); return; }
       success(result.fenced ? done.fenced : done.unfenced);
+    } catch (err) {
+      console.error('[intelligence] withdrawal failed', err);
+      toastError(t('errors.thatChangeWasNotSaved'));
     } finally {
       setSaving(false);
     }
@@ -129,13 +141,19 @@ export function IntelligenceModule({
         unfenced: t('intelligence.leftTheNetworkWhilePublishing', { floor: K_ANONYMITY_FLOOR }),
       });
     }
-    return save(() => createClient().from('network_consent').upsert({
-      family_id: familyId,
-      enabled: true,
-      scopes: consent.scopes,
-      consented_by: userId,
-      consented_at: new Date().toISOString(),
-    }, { onConflict: 'family_id' }).select('*'), t('intelligence.preferencesSaved'));
+    // Joining is written against the row this screen read, as a scope switch
+    // is (below): a second tab still showing the family out of the network
+    // wrote its old map over the one chosen in the first since. With a row, it
+    // joins only while that row is still out with the same map; with none, it
+    // inserts only while there is still none. Changed elsewhere, it writes
+    // nothing, and the screen reads the row again (save).
+    const joined = { enabled: true, scopes: consent.scopes, consented_by: userId, consented_at: new Date().toISOString() };
+    return save(() => (row
+      ? createClient().from('network_consent').update(joined)
+        .eq('family_id', familyId).eq('enabled', false).eq('scopes', JSON.stringify(row.scopes)).select('*')
+      : createClient().from('network_consent')
+        .upsert({ family_id: familyId, ...joined }, { onConflict: 'family_id', ignoreDuplicates: true }).select('*')),
+    t('intelligence.preferencesSaved'));
   };
   // A scope switch changes the scopes, and records the manager who made it as
   // the consent's author: the nightly aggregation honours a consent only when
@@ -148,14 +166,24 @@ export function IntelligenceModule({
   // `timing` and `recommendations` have no metric, so switching one of them
   // off forgets nothing, and deleting the row then only cost the family its
   // digest compare line until the next nightly run.
+  //
+  // Neither path may write a map older than the stored one. A second tab of
+  // the household keeps the map it loaded (no realtime here), and writing it
+  // whole switched back on a scope the first tab had switched off: benchmarks,
+  // confirmed off and its row deleted, contributing again the next night. So
+  // the switch-off sends only the scope it turns off, which the server applies
+  // to the stored map, and the direct write is a compare-and-set on the map
+  // this screen built from: changed elsewhere, it writes nothing, and the
+  // screen reads the row again (save).
   const toggleScope = (k: ConsentScope) => {
-    const scopes = { ...consent.scopes, [k]: !consent.scopes[k] };
     if (consent.scopes[k] === true && contributesToNetwork({ [k]: true })) {
-      return withdraw({ scopes }, { fenced: t('intelligence.preferencesSaved'), unfenced: t('intelligence.preferencesSavedWhilePublishing') });
+      return withdraw({ scopes: { [k]: false } }, { fenced: t('intelligence.preferencesSaved'), unfenced: t('intelligence.preferencesSavedWhilePublishing') });
     }
+    const scopes = { ...consent.scopes, [k]: !consent.scopes[k] };
     return save(() => createClient().from('network_consent')
       .update({ scopes, consented_by: userId, consented_at: new Date().toISOString() })
-      .eq('family_id', familyId).eq('enabled', true).select('*'), t('intelligence.preferencesSaved'));
+      .eq('family_id', familyId).eq('enabled', true).eq('scopes', JSON.stringify(row?.scopes ?? {}))
+      .select('*'), t('intelligence.preferencesSaved'));
   };
 
   if (loading) return <div className="rounded-xl border border-border bg-surface/40 p-4 text-sm text-muted">{t('intelligence.loadingIntelligencePreferences')}</div>;

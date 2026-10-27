@@ -20,9 +20,14 @@ const createServer = vi.fn();
 const materializeConciergePlan = vi.fn();
 
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: () => requireUserContext() }));
+// The completion stamp is the server's write (the service client), on the same row.
+let lastDatabase: unknown = null;
 vi.mock('@/lib/supabase/server', () => ({
   createServer: () => createServer(),
-  createServiceClient: () => { throw new Error('not used'); },
+  createServiceClient: () => {
+    if (!lastDatabase) throw new Error('no database for this case');
+    return lastDatabase;
+  },
 }));
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 vi.mock('@/lib/services/approvals', () => ({
@@ -72,6 +77,7 @@ function database(run: Row) {
       return chain;
     },
   };
+  lastDatabase = client;
   return client;
 }
 

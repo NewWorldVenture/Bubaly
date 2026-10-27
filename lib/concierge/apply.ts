@@ -117,3 +117,17 @@ export function matchesPlanSnapshot(plan: SnapshotSource, snapshot: PlanSnapshot
     && now.location === snapshot.location
     && now.planned_for === snapshot.planned_for;
 }
+
+/**
+ * The idempotency key of the one run the server queues beside a plan's
+ * approval (planAcceptedAction, Ask first). It is what tells that run apart
+ * from a row a manager filed naming the same approval: a member INSERT cannot
+ * carry a key (0255), and the (family_id, idempotency_key) unique index (0250)
+ * lets at most one row hold it. A yes completes that run and no other. A
+ * member UPDATE can still move or strip the key (0251 pins no column) until
+ * the owner's N10 trigger pins it; that steers which row completes, not how
+ * many (runThatTakesTheYes).
+ */
+export function conciergeRunKey(planId: string, approvalId: string): string {
+  return `concierge_plan:${planId}:${approvalId}`;
+}
