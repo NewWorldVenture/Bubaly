@@ -25,16 +25,36 @@ type DB = SupabaseClient<Database>;
 
 export type LeaseClaim =
   | { claimed: true; token: string }
-  /** `held`: another caller holds it within its ttl. `error`: the lease could not be read or written, so nothing may be assumed. */
-  | { claimed: false; reason: 'held' | 'error' };
+  /**
+   * `held`: another caller holds it within its ttl, and `holder` is the kind
+   * that caller recorded (`claimLease`'s `holder`): null when it recorded
+   * none, absent when this caller lost a race and did not read it. `error`:
+   * the lease could not be read or written, so nothing may be assumed.
+   */
+  | { claimed: false; reason: 'held' | 'error'; holder?: string | null };
 
 /** A stamp every real claim is newer than: what a released lease is dated. */
 const RELEASED_AT = '1970-01-01T00:00:00.000Z';
 
-export async function claimLease(db: DB, key: string, opts: { ttlMs: number; now?: Date }): Promise<LeaseClaim> {
+/**
+ * What a claim stores: its token, and the KIND of holder when the caller names
+ * one, so a caller that finds the lease held can tell whose it is. A key whose
+ * claimers name no holder stores `{ token }` exactly as before.
+ */
+function leaseValue(token: string, holder?: string): { token: string; holder?: string } {
+  return holder === undefined ? { token } : { token, holder };
+}
+
+function recordedHolder(value: unknown): string | null {
+  const holder = value && typeof value === 'object' && !Array.isArray(value) ? (value as { holder?: unknown }).holder : null;
+  return typeof holder === 'string' ? holder : null;
+}
+
+export async function claimLease(db: DB, key: string, opts: { ttlMs: number; now?: Date; holder?: string }): Promise<LeaseClaim> {
   const now = opts.now ?? new Date();
   const nowIso = now.toISOString();
   const token = randomUUID();
+  const value = leaseValue(token, opts.holder);
 
   const { data: stored, error: readError } = await db.from('app_settings')
     .select('value, updated_at').eq('key', key).maybeSingle();
@@ -46,7 +66,7 @@ export async function claimLease(db: DB, key: string, opts: { ttlMs: number; now
   if (!stored) {
     // First claim for this key: the primary key is the fence.
     const { data: inserted, error: insertError } = await db.from('app_settings')
-      .insert({ key, value: { token }, updated_at: nowIso })
+      .insert({ key, value, updated_at: nowIso })
       .select('key').maybeSingle();
     if (insertError) {
       if (insertError.code === '23505') return { claimed: false, reason: 'held' };
@@ -61,12 +81,14 @@ export async function claimLease(db: DB, key: string, opts: { ttlMs: number; now
   }
 
   const heldSince = Date.parse(String(stored.updated_at ?? ''));
-  if (Number.isFinite(heldSince) && now.getTime() - heldSince < opts.ttlMs) return { claimed: false, reason: 'held' };
+  if (Number.isFinite(heldSince) && now.getTime() - heldSince < opts.ttlMs) {
+    return { claimed: false, reason: 'held', holder: recordedHolder(stored.value) };
+  }
 
   // Expired, released or undatable: take it over, fenced on the stamp just read
   // so a second caller that read the same stamp loses here.
   const { data: taken, error: takeError } = await db.from('app_settings')
-    .update({ value: { token }, updated_at: nowIso })
+    .update({ value, updated_at: nowIso })
     .eq('key', key).eq('updated_at', String(stored.updated_at))
     .select('key').maybeSingle();
   if (takeError) {
@@ -82,11 +104,12 @@ export async function claimLease(db: DB, key: string, opts: { ttlMs: number; now
  * need not wait out the ttl. Fenced on the holder's token: a lease that expired
  * and was taken over in the meantime is the new holder's, and stays so. A
  * release that fails is logged and otherwise harmless — the ttl frees it.
+ * `holder` is the one the claim named, so the fence matches what it stored.
  */
-export async function releaseLease(db: DB, key: string, token: string): Promise<void> {
+export async function releaseLease(db: DB, key: string, token: string, holder?: string): Promise<void> {
   const { data: released, error } = await db.from('app_settings')
     .update({ updated_at: RELEASED_AT })
-    .eq('key', key).eq('value', JSON.stringify({ token }))
+    .eq('key', key).eq('value', JSON.stringify(leaseValue(token, holder)))
     .select('key').maybeSingle();
   if (error) console.error('[lease] release failed', { key, error });
   else if (released?.key !== key) console.error('[lease] release found the lease already taken over', { key });

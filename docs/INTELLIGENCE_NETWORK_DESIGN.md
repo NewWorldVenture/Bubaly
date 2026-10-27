@@ -47,14 +47,28 @@ it provably safe, we don't ship it.
    and switching off a scope that contributes, are written under the same
    publication claim the aggregation publishes under, and the aggregation
    re-reads consent after its upserts (under that claim when it publishes, and
-   before it reports a failure when some of them failed), so no run stores the
-   family's row again and no publication written after the family is told it
-   left counts it (`lib/network/withdrawal-server.ts`). The withdrawal names
-   the household on screen and is refused when that is no longer the
-   account's active one, so a tab left open on another household changes
-   nothing. The copy says the rest: this month's published summaries keep the
-   family's share until next month's, and the noise makes a join or leave
-   unlikely to read from two months, not impossible.
+   before it reports a failure when some of them failed), so no run that
+   reaches its re-check stores the family's row again, and no publication
+   written after the family is told it left counts it
+   (`lib/network/withdrawal-server.ts`). Two cases app code cannot close, and
+   the owner's admission trigger on `network_contributions` (a consent check
+   under a row lock) does: a run that dies after upserting the family's row
+   and before its re-check (the cron route's `maxDuration` is 60 seconds and
+   it upserts one family at a time; a run that throws out to the route's
+   `catch` does not re-check either), and an upsert whose answer is lost and
+   that commits after the re-check read consent. Either keeps the row stored
+   until the next night's run prunes it, and neither ever publishes it: the
+   figures are held for the epoch, and a run publishes only the families it
+   re-checked under the claim. The withdrawal names the household on screen
+   and is refused when that is no longer the account's active one, so a tab
+   left open on another household changes nothing. A scope change is made
+   against the map stored at that moment: a switch-off only switches scopes
+   off, and any other change, joining included, is refused when the stored
+   row changed since the screen read it, so a second tab of the household
+   cannot switch back on a scope the first switched off. The copy says the
+   rest: this month's published summaries keep the family's share until next
+   month's, and the noise makes a join or leave unlikely to read from two
+   months, not impossible.
 
 ## 3. What we do NOT do
 
@@ -104,12 +118,19 @@ Runs daily, service role:
    the epoch), write/replace the `network_aggregates` row. Every other night of
    the epoch holds that snapshot unchanged and only re-stamps `computed_at`, so
    readers' 36-hour freshness rule still sees a live cron. One run at a time
-   holds or publishes (a claim in `app_settings`); a run that overlaps it
+   holds or publishes (a claim in `app_settings`, which records whether a run
+   or a withdrawal holds it); a run that overlaps another run
    refreshes the contributions and leaves the figures alone, and the prune
    only removes earlier epochs' rows, so overlapping runs neither publish an
    epoch twice nor delete its snapshot. Before it holds or publishes, a run
    re-reads consent for every family it stored and drops (and deletes) any
-   that left or switched a scope off since it started.
+   that left or switched a scope off since it started. A withdrawal holds the
+   claim only for its two writes, so a run that finds one holding it waits it
+   out; one still holding it after that (or a holder that recorded no kind)
+   would leave the night with no publisher, and the run reports a failure
+   instead of deferring to it. A member takes the claim at most ten times in
+   ten minutes; past that their withdrawals are still written, without the
+   claim.
 3. **Serve.** `visibleInsights()` maps `network_aggregates` rows a family is
    entitled to (opted-in scope) into `InsightCandidate`s; the k-floor is re-checked
    at read time as defense-in-depth.
