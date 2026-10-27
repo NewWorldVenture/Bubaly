@@ -1,5 +1,15 @@
 # Final Production Audit
 
+## PR1139 first hosted epoch failed; preserve evidence and repair faithful memory-tool fixture — 2026-10-27T18:55:22.995Z
+
+- Last Updated: 2026-10-27T18:55:22.995Z
+
+Original PR1139 head710f / actual tested merge b7a7163 has completed all three original workflows: CI40559042714, SQL40559042391 and Messaging40559042446. All19 jobs and63 raw artifacts were collected;15 jobs succeeded and4 failed. Each UTC/LosAngeles/Tokyo unit job failed the SAME two memory.remember cases in tests/tool-meals-memory-messages.test.ts; the quality aggregate failed on that dependency. Each unit run reports2failed/39809passed/2expected failures/123skipped across39936cases, with1failed/2801passed/5skipped files. These are genuine failed epochs, never green or a deployment qualification. CollectorPID18736 actually drained0/source-stable at18:42:29.662Z; root drained session80177. Conditional green-reader1a05 remains UNEXECUTED. A separate source-reviewed failed-evidence parser will preserve the complete first results.
+
+Before edits authorize ONLY the existing in-progress SUPPORT-77108673B6B4 fixture in a NEW private G-only descendant of710f. Its old local builder already slices ranges but ignores exact-count select options; the new complete member read receives missing count and returns a database error. This is the source-backed hypothesis, requiring an unchanged whole-file baseline before correction. Preserve all original case bodies/assertions and production fail-closed behavior. Calibrate the fixture to compute truthful exact filtered counts before inclusive range slicing, with errors/missing metadata modeled explicitly. Never relax the product completeness guard or edit held shared helpers. Root independently checked1048/1126 file inventories: neither owns this fixture. Whole-file import-boundary peer admission precedes FIRST; no actual SDK/Auth/Storage/database/provider/network/native effects and no stopped meal-vote or cancellation lane execution.
+
+Parallel agents preserve the failed epoch and independently review the new fixture and ready admin-denial test-only donor6ce578. Root remains the sole ledger writer/publisher. No current live head is superseded: original1139 is terminal. A genuine verified source successor may then use normal fresh CI, without cancellation, manual reruns or empty retry commits. Existing inventory/status vectors and2041 finite closures remain unchanged. Main e07 original CI40556879481 and Messaging40556878088 now also report success; earlier SQL/Audit success remains recorded. This does not repair failed production HWNs or change public defaultd93. Live deployment verification stays BLOCKED and PRODUCTION READY: NO.
+
 ## Pre-edit allocation: complete legacy assistant member snapshots without changing held matchers — 2026-10-27T18:46:55.480Z
 
 - Last Updated: 2026-10-27T18:46:55.480Z
