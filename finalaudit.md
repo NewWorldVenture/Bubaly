@@ -1,5 +1,18 @@
 # Final Production Audit
 
+## Additional auth composition allocation before FIRST: source-admitted safe standard subset — 2026-10-27T21:19:15.5213709Z
+
+- Last Updated: 2026-10-27T21:19:15.5213709Z
+
+Read-only census d836f5ef654039574e209161cea6472edf17d4b64dce7bb98aea67f0a89a4b66 binds all forty-five older standard fixtures, their original case vectors and 400 traversed executable sources (424 bindings). Twenty whole fixtures/346 cases have SDK/Auth/provider/cache implementation paths and remain locally SOURCE ONLY. The remaining twenty-five/311 are source eligible, not yet runtime qualified. Exact lists, source hashes, canonical mock identities and import chains are preserved in G:/BubalyAuthCompositionBoundaryCensus20261027/FINAL-whole45-local-source-boundary-census.json. Root will not infer SDK safety from synthetic transport flags or from module declarations being unused.
+
+Authorize only those exact twenty-five source-eligible whole fixtures as an additional local group on unchanged private 166dc5, AFTER a separately frozen V2 source/runtime packet and independent before-FIRST peer admission. Preserve every fixture and assertion unchanged; no partial test selection, model repair, provider implementation or stopped-lane replay. Use a separate new runtime/config/plan so no running strict phase or completed evidence pin is modified. Complete SDK/Auth/cache/coordinator/provider import guards and sticky outside-catch effect counters must refuse any unexpected executable path before an implementation can load or run; fetch/import evidence and exact case vectors remain mandatory. An empty group must refuse before spawn.
+
+The strict six whole fixtures/139 cases are qualifying under the preceding scope, with the genuine same18 baseline/fix retained. The additional twenty-five/311 may raise actual local coverage to thirty-one distinct whole fixtures/450 cases per timezone only after actual successful results. Until then, the extra group is unexecuted and receives no acceptance credit. The remaining twenty/346 stay whole-file exclusions locally; the complete reference is still fifty-one/796. Do not count any fixture or case twice across invocation groups. Existing strict UTC18 is reused, not repeated without a new cause.
+
+Full original hosted CI must still register all fifty-one complete current fixtures/796 cases unskipped in each actual timezone vector, including all locally excluded fixtures in their unchanged ordinary hosted suite. No workflow, skip, expected-failure or flaky-test policy changes are authorized. Full nonincremental types, type generation, appropriate lint/i18n, actual process drains, independent final composition peer, current ledger adoption and normal publication gates remain required. This is a runtime-scope allocation, not a test result, new product fix or audit closure. Counts and statuses are unchanged; main be321 is not superseded while its originals run.
+
+
 ## Auth composition boundary amendment before broad runtime: qualify the strict subset and hold all older standard fixtures locally — 2026-10-27T21:17:08.2814008Z
 
 - Last Updated: 2026-10-27T21:17:08.2814008Z
