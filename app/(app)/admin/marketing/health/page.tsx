@@ -31,10 +31,14 @@ export default async function CustomerHealthPage() {
     return <CustomerHealthReadError />;
   }
 
+  // `activityKnown` travels with the date: the view's date is the family row's
+  // last edit (lib/marketing/customers.ts), and read as activity it marked
+  // families who use the app daily "inactive 60d" and churn risk.
   const rows = customers
-    .map((c) => ({ c, h: customerHealth({ lifecycle: c.lifecycle, memberCount: c.memberCount, lastActivityAt: c.lastActivityAt }) }))
+    .map((c) => ({ c, h: customerHealth({ lifecycle: c.lifecycle, memberCount: c.memberCount, lastActivityAt: c.lastActivityAt, activityKnown: c.activityKnown }) }))
     .sort((a, b) => a.h.score - b.h.score); // worst first — these need attention
   const summary = summarizeHealth(rows.map((r) => r.h));
+  const recencyUnknown = rows.some((r) => r.h.inactiveDays === null);
 
   const stats = [
     { label: 'Avg Health', value: summary.avgScore == null ? '—' : `${summary.avgScore}`, icon: Gauge, tint: 'text-violet-400 bg-violet-500/15' },
@@ -46,6 +50,7 @@ export default async function CustomerHealthPage() {
   return (
     <div className="space-y-5">
       <p className="text-sm text-muted">{t('adminMarketingHealth.perCustomerHealthAmpChurnRisk')}</p>
+      {recencyUnknown && <p className="text-xs text-muted">{t('adminMarketingHealth.recencyNotScored')}</p>}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map((s) => (
@@ -80,7 +85,7 @@ export default async function CustomerHealthPage() {
                     <td className="py-2"><p className="font-medium">{c.name}</p>{c.ownerEmail && <p className="text-xs text-muted">{c.ownerEmail}</p>}</td>
                     <td className="py-2">{c.planLabel}</td>
                     <td className="py-2 capitalize">{c.lifecycle}</td>
-                    <td className="py-2">{h.inactiveDays >= 999 ? '—' : `${h.inactiveDays}d`}</td>
+                    <td className="py-2">{h.inactiveDays === null || h.inactiveDays >= 999 ? '—' : `${h.inactiveDays}d`}</td>
                     <td className="py-2">
                       <span className={`inline-flex items-center gap-2 rounded-full px-2.5 py-0.5 text-xs font-medium ${BAND_STYLE[h.band]}`}>
                         {h.score} · {HEALTH_BAND_LABEL[h.band]}

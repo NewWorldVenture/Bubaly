@@ -583,9 +583,17 @@ export async function adminRevokeInviteAction(inviteId: string): Promise<Result>
   if (!guard.ok) return guard;
 
   const supabase = createServiceClient();
+  // Only while it is still pending (R5-AW-REVOKED-ACCEPTED-INVITE). The users
+  // page offers Revoke on the rows that were pending when it rendered, so a
+  // stale page reached an invite accepted since: its status was overwritten
+  // to 'revoked' with accepted_by kept, the screen said it was revoked, and
+  // the log recorded a revoke of someone already in the family. 0482 holds a
+  // client to pending -> revoked; this is the same rule for the service role.
+  // No row changed is an invite that is no longer pending, or is gone.
   const { data: invite, error } = await supabase.from('invites')
-    .update({ status: 'revoked' }).eq('id', inviteId).select('family_id, email').single();
+    .update({ status: 'revoked' }).eq('id', inviteId).eq('status', 'pending').select('family_id, email').maybeSingle();
   if (error) return actionFailure(error, t('actions.couldNotRevokeThatInvite'));
+  if (!invite) return { ok: false, error: t('actions.inviteIsNoLongerPending') };
 
   await adminAuditLog({ familyId: invite.family_id, action: 'revoke', resource: 'invites', resourceId: inviteId, metadata: { email: invite.email } });
   revalidatePath('/admin/users');

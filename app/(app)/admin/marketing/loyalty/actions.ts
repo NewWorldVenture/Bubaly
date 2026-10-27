@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
-import { awardPoints, cancelRedemption } from '@/lib/loyalty/server';
+import { awardPoints, cancelRedemption, loyaltyAwardApplied } from '@/lib/loyalty/server';
 import { REWARD_KINDS } from '@/lib/marketing/loyalty';
 
 function s(fd: FormData, k: string): string | null {
@@ -87,12 +87,21 @@ export async function awardPointsAction(formData: FormData) {
   const familyId = s(formData, 'family_id');
   const points = num(formData, 'points');
   if (!familyId || !points || points === 0) return;
+  // The form's one-time id (page.tsx). A submission already on the ledger is
+  // not applied again: a second click or a resubmit after a lost response used
+  // to award (or deduct) the points twice.
+  const requestId = s(formData, 'request_id');
   try {
+    if (requestId && await loyaltyAwardApplied(supabase, familyId, requestId)) {
+      revalidatePath(PATH);
+      return;
+    }
     await awardPoints(supabase, familyId, points, {
       kind: 'adjust',
       source: 'manual',
       reason: s(formData, 'reason') ?? 'Manual adjustment',
       actorId,
+      requestId,
     });
   } catch (error) {
     marketingActionFailure('adjust loyalty points', error);
