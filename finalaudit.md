@@ -67945,7 +67945,7 @@ IN PROGRESS. No full production performance or capacity sign-off is established 
 
 ## Known Blockers
 
-- The latest verified public default remains d93. Main b10's Vercel deployment BVezktzRnDCzDGNYFP5XmQsxRrn1 failed. Receipt94ee914f confirms stable main b10, HTTP200/no-store and a nonmatching public revision. Private build logs remain unavailable; no credentials were retried.
+- The latest verified public default remains d93. Main 97d7168's Vercel deployment dpl_DiJ1c4FbLbJ4pdjRPpzyMUS5GCAB failed. Terminal receipt 79716115 confirms stable main 97d7168, HTTP 200/no-store and a nonmatching public revision. Private build logs remain unavailable; no credentials were retried. Earlier b10 failure evidence remains historical.
 - Production database verification and unapplied/held migration decisions remain separate owner/service dependencies. Main's recorded allocation map is preserved.
 - PRs #1048 and #1126 retain distinct held work and are not discarded to reduce the PR count.
 - The user has already selected preservation of existing conversation access and a new empty canonical Family Chat. Historical text saying that decision is still unmade is superseded; this checkpoint does not apply any production migration.
