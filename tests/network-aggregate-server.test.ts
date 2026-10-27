@@ -148,12 +148,13 @@ describe('CONTRIBUTE — one banded row per consenting family', () => {
           if (table !== 'transactions') return target.from(table);
           const builder: Record<string, unknown> = {};
           const chain = () => builder;
-          // `order` and `range` belong here too: the contribution reads page
-          // inside each chunk, so the stub has to answer the same builder the
-          // real one does or it fails on the missing method instead of on the
-          // transport error this test is about.
+          // `order` and `limit` belong here too: the contribution reads page
+          // inside each chunk (on the key, past the last id read), so the stub
+          // has to answer the same builder the real one does or it fails on
+          // the missing method instead of on the transport error this test is
+          // about.
           // So do `gt` and `lt`: the windows are end-exclusive (N15).
-          for (const m of ['select', 'in', 'eq', 'gt', 'gte', 'lt', 'lte', 'order', 'range']) builder[m] = chain;
+          for (const m of ['select', 'in', 'eq', 'gt', 'gte', 'lt', 'lte', 'order', 'limit', 'range']) builder[m] = chain;
           builder.then = (resolve: (v: unknown) => void) => resolve({ data: null, error: { message: 'connection reset' } });
           return builder;
         };

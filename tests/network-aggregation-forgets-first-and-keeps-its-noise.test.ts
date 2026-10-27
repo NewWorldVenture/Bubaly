@@ -72,7 +72,7 @@ function recording(inner: InMemorySupabase): { db: DB; namedFamilies: Set<string
 function refusing(inner: InMemorySupabase, table: string, column?: string): DB {
   const refused = () => {
     const chain: Record<string, unknown> = {};
-    for (const m of ['select', 'in', 'eq', 'gt', 'gte', 'lt', 'lte', 'or', 'order', 'range']) chain[m] = () => chain;
+    for (const m of ['select', 'in', 'eq', 'gt', 'gte', 'lt', 'lte', 'or', 'order', 'limit', 'range']) chain[m] = () => chain;
     chain.then = (resolve: (v: unknown) => void) => resolve({ data: null, error: { message: 'connection reset' } });
     return chain;
   };
