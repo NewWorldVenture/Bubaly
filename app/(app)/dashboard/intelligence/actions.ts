@@ -18,6 +18,11 @@
 // A, told it had left, went on contributing. A request for anything but the
 // active household and user is refused before anything is read or claimed,
 // the repo's contextChanged pattern (dashboard/autopilot/actions.ts).
+//
+// A scope change here only narrows: the scopes the browser sends as `false`
+// are switched off in the map STORED now, and a `true` is ignored. The module
+// sends only the one it switches off; a stale tab's whole map could otherwise
+// switch back on a scope another tab had switched off.
 'use server';
 
 import { getTranslations } from '@/lib/i18n/server';
@@ -77,8 +82,11 @@ export async function withdrawFromNetworkAction(
   if ('leave' in change && change.leave === true) withdrawal = { leave: true };
   else {
     const scopes = 'scopes' in change ? scopesFrom(change.scopes) : null;
-    if (!scopes) return { ok: false, error: notSaved };
-    withdrawal = { scopes };
+    // Only what it switches OFF is taken: a withdrawal never switches a scope
+    // on, whatever map a stale tab sends (withdrawal-server.ts, narrowScopes).
+    const scopesOff = scopes ? CONSENT_SCOPES.map(({ key }) => key).filter((key) => scopes[key] === false) : [];
+    if (scopesOff.length === 0) return { ok: false, error: notSaved };
+    withdrawal = { scopesOff };
   }
 
   try {

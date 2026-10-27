@@ -20,7 +20,7 @@
 import { createHmac } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
-import { readAll } from '@/lib/supabase/read-all';
+import { readAll, readAllById } from '@/lib/supabase/read-all';
 import { readAllInChunks, writeInChunks } from '@/lib/supabase/chunked-in';
 import type { Database } from '@/lib/database.types';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
@@ -46,7 +46,7 @@ export type AggregateResult = {
   epoch?: string;
   /** True when the epoch's snapshot was already published and the run left it unchanged. */
   held?: boolean;
-  /** True when another run held the publication: this one refreshed the contributions and left the figures to it. */
+  /** True when another RUN held the publication: this one refreshed the contributions and left the figures to it. */
   deferred?: boolean;
 };
 
@@ -63,24 +63,53 @@ export const NETWORK_PUBLICATION_LEASE_KEY = 'network_aggregate_publication:v1';
  */
 export const NETWORK_PUBLICATION_LEASE_MS = 10 * 60_000;
 /**
- * How far apart a caller's tries for the publication claim are. A family's
- * leave holds the claim for two writes, so a run that finds it taken tries a
- * few times before it defers: deferring to a leave would leave the night's
- * figures unwritten. Another run that keeps it past the tries is deferred to,
- * as before. A leave waits longer (withdrawal-server.ts).
+ * How far apart a caller's tries for the publication claim are. A run that
+ * finds another RUN holding it tries RUN_CLAIM_ATTEMPTS times and then defers
+ * to it, as before. One that finds a WITHDRAWAL holding it waits longer and
+ * never defers (RUN_WAITS_FOR_A_WITHDRAWAL_ATTEMPTS). A leave waits as long
+ * for a run (withdrawal-server.ts).
  */
 export const PUBLICATION_CLAIM_RETRY_MS = 250;
-const RUN_CLAIM_ATTEMPTS = 6;
+/** How many times a run tries for the claim while another RUN holds it, before it defers to that run. */
+export const RUN_CLAIM_ATTEMPTS = 6;
 
 /**
- * Claim the publication, trying `attempts` times while another holder has it.
- * Each try reads its own `now()`, so a wait is measured on the caller's clock.
- * A claim that cannot be read or written is not retried: the caller decides.
+ * Who holds the publication claim, recorded in the lease value so the caller
+ * that finds it taken knows whose it is. Only a run publishes: a run that
+ * defers to a 'withdrawal' (a leave, or a scope switch-off) leaves the night
+ * with no publisher, which deferring to a run never does.
  */
-export async function claimNetworkPublication(sb: DB, opts: { attempts: number; now: () => Date }): Promise<LeaseClaim> {
+export type PublicationHolder = 'run' | 'withdrawal';
+
+/**
+ * How long a run waits for a WITHDRAWAL that holds the claim before it gives
+ * up: sixteen tries, about four seconds, as long as a leave waits for a run.
+ * A leave holds it for two writes, so a live one is gone well inside this. One
+ * that still holds it died after claiming (its `finally` never ran) or is
+ * repeated in a loop; the run then reports the night as failed rather than
+ * deferring to it, since nobody else would publish.
+ */
+export const RUN_WAITS_FOR_A_WITHDRAWAL_ATTEMPTS = 16;
+
+/**
+ * Claim the publication as `holder`, trying `attempts` times while another
+ * holder has it, or `attemptsBehindAWithdrawal` while that holder is a
+ * withdrawal. Each try reads its own `now()`, so a wait is measured on the
+ * caller's clock. A claim that cannot be read or written is not retried: the
+ * caller decides. A try that lost the race to take a free claim does not know
+ * who won it (`holder` undefined), so it does not end the wait: the next try
+ * reads the winner, up to one try past the longer of the two waits.
+ */
+export async function claimNetworkPublication(sb: DB, opts: {
+  holder: PublicationHolder; attempts: number; attemptsBehindAWithdrawal?: number; now: () => Date;
+}): Promise<LeaseClaim> {
+  const longest = Math.max(opts.attempts, opts.attemptsBehindAWithdrawal ?? 0);
   for (let attempt = 1; ; attempt++) {
-    const claim = await claimLease(sb, NETWORK_PUBLICATION_LEASE_KEY, { ttlMs: NETWORK_PUBLICATION_LEASE_MS, now: opts.now() });
-    if (claim.claimed || claim.reason === 'error' || attempt >= opts.attempts) return claim;
+    const claim = await claimLease(sb, NETWORK_PUBLICATION_LEASE_KEY, { ttlMs: NETWORK_PUBLICATION_LEASE_MS, now: opts.now(), holder: opts.holder });
+    if (claim.claimed || claim.reason === 'error') return claim;
+    const limit = claim.holder === undefined ? longest + 1
+      : claim.holder === 'withdrawal' ? (opts.attemptsBehindAWithdrawal ?? opts.attempts) : opts.attempts;
+    if (attempt >= limit) return claim;
     await new Promise((resolve) => setTimeout(resolve, PUBLICATION_CLAIM_RETRY_MS));
   }
 }
@@ -399,12 +428,22 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
   // an opted-in family beyond PostgREST's db-max-rows would have its
   // contribution DELETED as if it had opted out — and then be missing from the
   // aggregates it consented to feed.
-  const { rows: consents, error: cErr } = await readAll<ConsentRow>((from, to) => sb.from('network_consent')
-    // OPEN families only (families.closed_at): a closed account stops feeding
-    // the network, and the prune below removes its stored contribution as it
-    // does a withdrawn consent's. Reopening contributes again the next night.
-    .select('family_id, enabled, scopes, consented_by, family:families!inner(closed_at, timezone)').is('family.closed_at', null)
-    .eq('enabled', true).order('family_id').range(from, to));
+  //
+  // Paged on the key (family_id past the last one read), not by offset. The
+  // offset pages were separate reads of a table families leave while it is
+  // read: a family that left between two pages moved every later row up one,
+  // and the family at the boundary was never read — pruned below as if it had
+  // withdrawn, and missing from the night's contributions. family_id is the
+  // table's primary key (0132), named `id` here for readAllById.
+  const { rows: consents, error: cErr } = await readAllById<ConsentRow & { id: string }>((cursor, limit) => {
+    const page = sb.from('network_consent')
+      // OPEN families only (families.closed_at): a closed account stops feeding
+      // the network, and the prune below removes its stored contribution as it
+      // does a withdrawn consent's. Reopening contributes again the next night.
+      .select('id:family_id, family_id, enabled, scopes, consented_by, family:families!inner(closed_at, timezone)').is('family.closed_at', null)
+      .eq('enabled', true).order('family_id').limit(limit);
+    return cursor ? page.gt('family_id', cursor) : page;
+  });
   if (cErr) return { ok: false, error: describeActionError(cErr), contributors: 0, aggregates: 0 };
 
   // Granular consent decides who contributes at all. A family with no scope a
@@ -567,18 +606,33 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
   //    the family was told it had left. A run that finds the claim taken
   //    re-checks too, after its own upserts, so a row it wrote back after a
   //    leave's delete does not stay.
+  //
+  //    Only a RUN is deferred to. A withdrawal holds the claim for its two
+  //    writes, so the run waits it out (RUN_WAITS_FOR_A_WITHDRAWAL_ATTEMPTS);
+  //    one still holding it after that publishes nothing, and deferring to it
+  //    reported a night with no figures written as a success. A holder that
+  //    recorded no kind (a claim written before holders were recorded) is not
+  //    known to publish either, so it is a failure too: a night the cron calls
+  //    done has a publisher.
   const epoch = publicationEpoch(now);
-  const lease = await claimNetworkPublication(sb, { attempts: RUN_CLAIM_ATTEMPTS, now: () => now });
+  const lease = await claimNetworkPublication(sb, {
+    holder: 'run', attempts: RUN_CLAIM_ATTEMPTS, attemptsBehindAWithdrawal: RUN_WAITS_FOR_A_WITHDRAWAL_ATTEMPTS, now: () => now,
+  });
   try {
     const recheck = await keepStillConsenting(sb, contributions);
     if (!recheck.ok) return { ok: false, error: recheck.error, contributors: 0, aggregates: 0 };
     if (!lease.claimed) {
-      if (lease.reason === 'held') return { ok: true, contributors: recheck.kept.length, aggregates: 0, epoch: epoch.key, deferred: true };
+      if (lease.reason === 'held' && lease.holder === 'run') {
+        return { ok: true, contributors: recheck.kept.length, aggregates: 0, epoch: epoch.key, deferred: true };
+      }
+      if (lease.reason === 'held') {
+        return { ok: false, error: 'the publication claim is held, and not by a run', contributors: recheck.kept.length, aggregates: 0 };
+      }
       return { ok: false, error: 'failed to claim the publication', contributors: recheck.kept.length, aggregates: 0 };
     }
     return await holdOrPublish(sb, recheck.kept, key, epoch, now);
   } finally {
-    if (lease.claimed) await releaseLease(sb, NETWORK_PUBLICATION_LEASE_KEY, lease.token);
+    if (lease.claimed) await releaseLease(sb, NETWORK_PUBLICATION_LEASE_KEY, lease.token, 'run');
   }
 }
 

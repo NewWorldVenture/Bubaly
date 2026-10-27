@@ -10,10 +10,10 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { readBenchmarkAggregates, readBenchmarksPublication } from '@/lib/network/benchmarks-server';
 import { benchmarkRows, groupBenchmarks } from '@/lib/network/benchmarks';
-import { aggregatesToInsights, AGG_DEFAULTS } from '@/lib/network/aggregate';
+import { aggregatesToInsights, AGG_DEFAULTS, publicationEpoch } from '@/lib/network/aggregate';
 import { bandFamilyLabel } from '@/lib/network/contribution';
 import { K_ANONYMITY_FLOOR, isSuppressed } from '@/lib/network/insights';
-import { fmtDate } from '@/lib/utils/format';
+import { getFormat } from '@/lib/utils/format-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,6 +65,13 @@ export default async function BenchmarksPage() {
     .map((g) => ({ ...g, rows: g.rows.filter((r) => safeIds.has(`${r.cohortKey}:${r.metric}:${r.value}`)) }))
     .filter((g) => g.rows.length > 0);
   const totalRows = benchmarkRows(read.aggregates).length;
+  // The MONTH these figures were published in, not `computedAt` itself: a run
+  // re-stamps the snapshot it holds every night without changing a figure
+  // (benchmarks-server.ts), so "Last updated" showed yesterday beside a
+  // methodology saying the figures change once a month. The epoch is a UTC
+  // calendar month (aggregate.ts, PUBLICATION_EPOCH), so it is named in UTC.
+  const { fmtDate } = await getFormat('UTC');
+  const publishedIn = read.computedAt ? publicationEpoch(new Date(read.computedAt)).start : null;
 
   const methodology = [
     { icon: ShieldCheck, text: t('benchmarksPage.methodologyConsent') },
@@ -81,8 +88,8 @@ export default async function BenchmarksPage() {
         <p className="mx-auto mt-6 inline-flex items-center gap-2 rounded-full border border-border bg-surface/60 px-4 py-2 text-sm text-muted">
           <ShieldCheck className="h-4 w-4 text-emerald-400" /> {t('benchmarksPage.aggregatedNotice')}
         </p>
-        {read.computedAt && (
-          <p className="mt-3 text-xs text-muted">{t('benchmarksPage.lastUpdated', { date: fmtDate(read.computedAt, 'MMM d, yyyy') })}</p>
+        {publishedIn && (
+          <p className="mt-3 text-xs text-muted">{t('benchmarksPage.publishedMonth', { month: fmtDate(publishedIn, 'MMMM yyyy') })}</p>
         )}
       </Section>
 
