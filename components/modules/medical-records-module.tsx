@@ -361,8 +361,8 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
     setProfileBaseline(snapshot);
   }
 
+  if (error) return <ErrorState message={error} onRetry={refresh} />;
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message={error} />;
 
   return (
     <div className="space-y-5">
