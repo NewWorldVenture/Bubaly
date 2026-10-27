@@ -1,5 +1,17 @@
 # Final Production Audit
 
+## Release only verified PR #1139; preserve and hold failed PR #1140 — 2026-10-27T19:53:57.755Z
+
+- Last Updated: 2026-10-27T19:53:57.755Z
+
+PR #1139 is independently qualified: all 19 original jobs, 63 raw files, all 19 tested checkout identities, three unit vectors, browser groups, database/build and cleanup evidence pass within their documented scope. Root is integrating only published 26d, whose tree equals tested 15a1. Current main is E07. Unqualified Legacy head 4d must not become an ancestor or contribute source to this release.
+
+PR #1140's original epoch is FAILED: 17 jobs succeeded; E2E shard 1 (122412886721) and its aggregate (122427775156) failed. The shard records 361 ordinary passes and one flaky contacts-at-390px case. Durable-session fixture initialization reported household HTTP 502, then Playwright's retry passed; the strict flaky-test gate correctly rejected the run. No fixture retry, CI rerun, gate relaxation or product change was made to conceal it. Collector 39432 actually drained 0, which means capture completion only. Root's pre-green check refused allRunsSuccess=false, leaving green reader7601 unexecuted with no green admission.
+
+The admitted failed-only reader17984 ran once, drained 0 with stable sources and empty stderr at 19:53:12.590Z; its result preserves failure and never qualifies a release. Source diagnosis56a9a123 traces a direct owned-family INSERT before the helper's explicit later setup. Database triggers may already write related rows; HTTP502 leaves commit state unknown, and cleanup acknowledgements do not prove row counts or rollback. Cause remains unestablished. Further work is limited to safe retained-artifact forensics until evidence supports a repository fix; no stopped Auth/native fault lane is replayed.
+
+The original six-artifact/79-case closure proposal34ca5aa7 may apply after actual verified #1139 main integration. The seven-artifact/95-case Legacy rebind does not apply to this release. Private DTO donor c5b adds three genuine privacy controls and passes local28/type checks, but is not included in this main candidate. All statuses and counts remain unchanged before publication. Production readiness remains NO; the Vercel and production-schema blockers remain explicit.
+
 ## PR1139 passes complete original hosted verification and independent final review — 2026-10-27T19:37:19.195Z
 
 - Last Updated: 2026-10-27T19:37:19.195Z
@@ -67825,7 +67837,7 @@ Current checkpoint: **2026-10-27T19:46:05.913Z**. **IN PROGRESS — final sign-o
 
 ## Build
 
-Hosted build and generated route checks passed for PR #1139. PR #1140 has passed its build; its last browser shard is still running. Production deployment of main E07 failed in Vercel (HWNs); no successful replacement or promotion is established.
+Hosted build and generated route checks passed for PR #1139. PR #1140 passed its build but its original hosted epoch failed the strict flaky-test gate and is held. Production deployment of main E07 failed in Vercel (HWNs); no successful replacement or promotion is established.
 
 ## Type Check
 
@@ -67888,7 +67900,7 @@ IN PROGRESS. No full production performance or capacity sign-off is established 
 
 ## Remaining Issues
 
-The register still contains 10,334 NOT STARTED, 3,334 IN PROGRESS and 10 BLOCKED obligations. Seven finite artifact closures are conditional; no early closure credit is granted. The complete audit and final regression are not finished.
+The register still contains 10,334 NOT STARTED, 3,334 IN PROGRESS and 10 BLOCKED obligations. Six finite artifact closures covering 79 cases await verified #1139 main integration; the additional Legacy artifact remains held. No early closure credit is granted. The complete audit and final regression are not finished.
 
 ## Production Readiness
 
