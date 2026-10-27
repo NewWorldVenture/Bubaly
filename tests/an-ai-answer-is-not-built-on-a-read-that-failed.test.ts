@@ -567,10 +567,12 @@ describe('an empty answer states an absence the route confirmed (C1-S9-41)', () 
  * Five of the 39 reads in the C1-S9-37 inventory are
  * `supabase.auth.getUser()`, which was set aside as "a different API". That is
  * a claim, and a claim about auth deserves a check rather than a note, so this
- * asserts the property that makes it true: `getUser()` resolves to
- * `{ data: { user }, error }`, and a failure yields `user: null`. Dropping the
- * error therefore cannot produce an AUTHENTICATED outcome — it can only deny.
- * Fail-closed by construction, which is the direction auth is allowed to fail.
+ * asserts the boundaries rather than one spelling of a user guard. An absent
+ * user must never authorize a write; a transient returned auth error must not
+ * claim that the reader signed out or has no saved state. The blog route now
+ * distinguishes that uncertainty before personalized work. These are source
+ * contracts; the independent whole HTTP-handler fixture supplies synthetic
+ * behavior evidence without executing a real Auth SDK or native session.
  *
  * Verified read-by-read, and pinned here so the classification survives an edit
  * that would quietly make one of them fail open.
@@ -578,7 +580,7 @@ describe('an empty answer states an absence the route confirmed (C1-S9-41)', () 
 describe('every auth.getUser() in the API denies on a null user (C1-S9-42)', () => {
   it.each([
     ['ai', 'app/api/ai/route.ts', /if \(auth\.user && \(await ensureActiveFamily/],
-    ['blog/save (POST)', 'app/api/blog/save/route.ts', /if \(!auth\.user\)/],
+    ['blog/save (POST)', 'app/api/blog/save/route.ts', /export async function POST\(req: NextRequest\) \{[\s\S]*?if \(authError \|\| !auth\.user\) \{\s*return NextResponse\.json\(\{ error: 'auth_required', authenticated: false \}, \{ status: 401 \}\);/],
     ['gif/search', 'app/api/gif/search/route.ts', /if \(!auth\.user\) return NextResponse\.json\([\s\S]{0,80}?status: 401/],
     ['google/calendar/callback', 'app/api/google/calendar/callback/route.ts', /if \(!userId\) return redirect\('error'\)/],
   ])('%s gates on the user being present', (_name, file, gate) => {
@@ -598,16 +600,43 @@ describe('every auth.getUser() in the API denies on a null user (C1-S9-42)', () 
   });
 
   it('the one that tolerates a null user is the anonymous-by-design path', () => {
-    // `blog/save`'s read handler computes save state for a visitor who may not
-    // be signed in at all, so `auth.user?.id ?? null` is the intended shape, not
-    // a dropped guard. The worst a transient auth failure does here is show a
-    // signed-in reader "not saved", which the next request corrects.
-    const source = readFileSync('app/api/blog/save/route.ts', 'utf8');
-    expect(source).toContain('saveState(svc, postId, auth.user?.id ?? null)');
-    // The WRITE path in the same file is gated, which is the line that matters.
-    expect(source).toContain('if (!auth.user)');
-    expect(at(source, 'saveState(svc, postId, auth.user?.id ?? null)'))
-      .toBeLessThan(at(source, 'if (!auth.user)'));
+    // Confirmed anonymous readers may see the published post and public count.
+    // Uncertain auth must retain uncertainty, not assert a signed-in reader's
+    // saved state or send them to sign in. Whole HTTP-handler controls exercise
+    // both paths independently; these source oracles pin their ordering.
+    const source = stripComments(readFileSync('app/api/blog/save/route.ts', 'utf8'));
+    const get = bodyOf(source, 'export async function GET', 'export async function POST');
+    const post = source.slice(at(source, 'export async function POST'));
+    const transientGuard = 'if (authError && isRetryableAuthError(authError))';
+    const unavailable = "return NextResponse.json({ error: t('save.couldNotRecordTheSave') }, { status: 503, headers: { 'Cache-Control': 'no-store' } });";
+    for (const handler of [get, post]) {
+      expect(handler).toContain('const { data: auth, error: authError } = await (await createServer()).auth.getUser();');
+      expect(handler).toMatch(/if \(authError && isRetryableAuthError\(authError\)\) \{\s*return NextResponse\.json\(\{ error: t\('save\.couldNotRecordTheSave'\) \}, \{ status: 503, headers: \{ 'Cache-Control': 'no-store' \} \}\);\s*\}/);
+      expect(at(handler, transientGuard)).toBeLessThan(at(handler, unavailable));
+    }
+
+    const sanitized = 'const user = authError ? null : auth.user;';
+    const personalizedRead = 'saveState(svc, postId, user?.id ?? null)';
+    const authenticatedOutput = '{ ...state, authenticated: !!user }';
+    expect(get).toContain(sanitized);
+    expect(get).toContain(personalizedRead);
+    expect(get).toContain(authenticatedOutput);
+    expect(get).not.toContain('saveState(svc, postId, auth.user?.id ?? null)');
+    expect(at(get, unavailable)).toBeLessThan(at(get, sanitized));
+    expect(at(get, sanitized)).toBeLessThan(at(get, personalizedRead));
+    expect(at(get, personalizedRead)).toBeLessThan(at(get, authenticatedOutput));
+    expect(at(get, 'const postId = await loadPostId(svc, slug);'))
+      .toBeLessThan(at(get, 'await (await createServer()).auth.getUser()'));
+    const stateRead = bodyOf(source, 'async function saveState', 'export async function GET');
+    expect(stateRead).toContain("svc.from('blog_post_saves').select('id', { count: 'exact', head: true }).eq('post_id', postId)");
+    expect(stateRead).toMatch(/userId\s*\?\s*svc\.from\('blog_post_saves'\)\.select\('id'\)\.eq\('post_id', postId\)\.eq\('user_id', userId\)\.maybeSingle\(\)\s*:\s*Promise\.resolve\(\{ data: null, error: null \}\)/);
+
+    const denied = 'if (authError || !auth.user)';
+    expect(post).toMatch(/if \(authError \|\| !auth\.user\) \{\s*return NextResponse\.json\(\{ error: 'auth_required', authenticated: false \}, \{ status: 401 \}\);\s*\}/);
+    expect(at(post, unavailable)).toBeLessThan(at(post, denied));
+    for (const work of ['const userId = auth.user.id;', 'const ip = clientIp(req.headers);', 'await enforceRequestRateLimit(', "svc.from('blog_post_saves').insert("]) {
+      expect(at(post, denied)).toBeLessThan(at(post, work));
+    }
   });
 
   it('no API route reads a user and then proceeds without checking it', () => {
