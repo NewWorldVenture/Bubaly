@@ -19,8 +19,9 @@ vi.mock('@/lib/server/plan', async (importOriginal) => ({
 // The family here is open, so the gate is answered rather than seeded.
 vi.mock('@/lib/server/account-standing', () => ({ refuseClosedOrTrialEnded: async () => null }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.context }));
-// The daily meter is counted with the service client (RLS hides audit_logs
-// from a non-manager), so both clients answer from the same results here.
+// The daily meter is counted with the service client (it counts the
+// server-filed ai_requests rows, which RLS hides from a non-manager), so both
+// clients answer from the same results here.
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.server, createServiceClient: () => ({ from: (table: string) => new MockQuery(table) }) }));
 vi.mock('@/lib/ai/provider', async (importOriginal) => ({
   describeAIError: (await importOriginal<typeof import('@/lib/ai/provider')>()).describeAIError,
@@ -91,7 +92,7 @@ beforeEach(() => {
     giftIdeas: [' TRAVEL  MUG ', 'Coffee grinder', 'Scarf', 'Sketchbook'].map((title) => ({ title, reason: 'Synthetic idea' })),
   }) });
   results = {
-    audit_logs: { data: null, error: null, count: 0 },
+    ai_requests: { data: null, error: null, count: 0 },
     relationship_profile: { data: {
       partner_name: 'Sam', partner_member_id: 'sam-id', interests: [], love_languages: [], gift_budget_cents: null,
     }, error: null },

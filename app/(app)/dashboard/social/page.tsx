@@ -7,6 +7,7 @@ import {
 import { requireFeature } from '@/lib/supabase/auth';
 import { getSocialOverview } from '@/lib/social/queries';
 import { getSocialAccess } from '@/lib/social/access';
+import { SOCIAL_SURFACES, canAnySocial, type SocialPermission } from '@/lib/social/roles';
 import { PLATFORMS, isProviderConfigured } from '@/lib/social/capabilities';
 import { PlatformDot } from '@/components/social/platform';
 import { Card } from '@/components/ui/card';
@@ -29,21 +30,26 @@ export default async function SocialOverviewPage() {
     getSocialAccess(familyId),
   ]);
 
+  // A tile or a link is shown only to a role that may open what it counts or
+  // leads to (SOCIAL_SURFACES): a read_only child, caregiver or guest was told
+  // how many drafts and scheduled posts the family had.
+  const sees = (needs?: readonly SocialPermission[]) => !needs || (access !== null && canAnySocial(access.can, needs));
   const stats = [
     { label: 'Connected accounts', value: overview.connectedCount, icon: CheckCircle2, tone: 'text-success bg-success/10' },
     { label: 'Feed items', value: overview.feedCount, icon: Newspaper, tone: 'text-brand-text bg-brand/10' },
-    { label: 'Drafts', value: overview.drafts, icon: FileEdit, tone: 'text-accent bg-accent/10' },
-    { label: 'Scheduled', value: overview.scheduled, icon: CalendarClock, tone: 'text-warning bg-warning/10' },
-    { label: 'Published', value: overview.published, icon: Send, tone: 'text-success bg-success/10' },
+    { label: 'Drafts', value: overview.drafts, icon: FileEdit, tone: 'text-accent bg-accent/10', needs: SOCIAL_SURFACES.pipeline },
+    { label: 'Scheduled', value: overview.scheduled, icon: CalendarClock, tone: 'text-warning bg-warning/10', needs: SOCIAL_SURFACES.pipeline },
+    { label: 'Published', value: overview.published, icon: Send, tone: 'text-success bg-success/10', needs: SOCIAL_SURFACES.published },
     { label: 'Open inbox', value: overview.openInbox, icon: InboxIcon, tone: 'text-brand-text bg-brand/10' },
-  ];
+  ].filter((s) => sees(s.needs));
 
   const quickLinks = [
-    { href: '/dashboard/social/accounts/connect', label: 'Connect an account', icon: Plug },
-    { href: '/dashboard/social/content-studio/new', label: 'Create content', icon: PenSquare },
+    { href: '/dashboard/social/accounts/connect', label: 'Connect an account', icon: Plug, needs: SOCIAL_SURFACES.connect },
+    { href: '/dashboard/social/content-studio/new', label: 'Create content', icon: PenSquare, needs: SOCIAL_SURFACES.compose },
     { href: '/dashboard/social/feed', label: 'Open unified feed', icon: Newspaper },
-    { href: '/dashboard/social/analytics', label: 'View analytics', icon: BarChart3 },
-  ];
+    { href: '/dashboard/social/analytics', label: 'View analytics', icon: BarChart3, needs: SOCIAL_SURFACES.analytics },
+  ].filter((q) => sees(q.needs));
+  const canConnect = sees(SOCIAL_SURFACES.connect);
 
   const configured = PLATFORMS.filter((p) => isProviderConfigured(p));
 
@@ -127,11 +133,11 @@ export default async function SocialOverviewPage() {
           icon={Plug}
           title={t('dashboardSocial.noAccountsConnectedYet')}
           description={t('social.connectASocialAccountTo')}
-          action={
+          action={canConnect ? (
             <Link href="/dashboard/social/accounts/connect" className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg">
               <Plug className="h-4 w-4" /> {t('dashboardSocial.connectAnAccount')}
             </Link>
-          }
+          ) : undefined}
         />
       )}
     </div>

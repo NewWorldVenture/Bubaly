@@ -50,9 +50,13 @@ vi.mock('next/link', () => ({
 }));
 vi.mock('@/components/dashboard/dashboard-weather', () => ({ DashboardWeather: () => null }));
 vi.mock('@/components/ui/avatar', () => ({ Avatar: () => null }));
-// The intelligence page's two reads beside the preview, neither of them money.
+// The intelligence page's reads beside the preview, none of them money (the
+// k-floor re-check of its cohort's aggregates is one of them).
 vi.mock('@/lib/metric/automatic-capture-server', () => ({ loadAutomaticCaptureShare: async () => ({ ok: true, data: null }) }));
-vi.mock('@/lib/network/benchmarks-server', () => ({ benchmarksPageIsPublished: async () => false }));
+vi.mock('@/lib/network/benchmarks-server', () => ({
+  benchmarksPageIsPublished: async () => false,
+  readTrueCohortSizes: async () => ({ ok: true, sizes: new Map() }),
+}));
 
 const { default: Home } = await import('@/app/(app)/home/page');
 const { default: IntelligencePage } = await import('@/app/(app)/dashboard/intelligence/page');

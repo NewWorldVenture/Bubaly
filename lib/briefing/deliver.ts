@@ -11,8 +11,8 @@
 // `brief:<family-local day>`, and it is sent with `notify()`'s `once` guard,
 // which drops a second copy whether or not the first was read. A cron that
 // re-runs, a retry, a manual dispatch: none of them can say the morning brief
-// twice. A cheap read of that key comes first so a re-run costs one query per
-// family rather than the ten the brief needs.
+// twice. A cheap read of that key for each manager comes first, so a re-run
+// costs a query or three per family rather than the ten the brief needs.
 //
 // WHEN IT LANDS. The cron is daily at 11:00 UTC (vercel.json — the Hobby plan
 // allows nothing more frequent), which is 7am in New York, 4am in Los
@@ -33,6 +33,7 @@ import type { ConciergeSnapshot } from '@/lib/concierge/digest';
 import type { Database } from '@/lib/database.types';
 import type { AiActivityRow, CompletedRunRow } from '@/lib/home/today';
 import type { NeedsReader } from '@/lib/home/needs-sources';
+import { isManager } from '@/lib/constants/roles';
 import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { notify } from '@/lib/services/notifications';
 import { claimLease, releaseLease } from '@/lib/server/app-settings-lease';
@@ -225,20 +226,40 @@ async function deliverMorningBrief(db: DB, family: { id: string; timezone: strin
   const target = morningTarget(now, tz);
   const relatedId = briefRelatedId(target.dayKey);
 
-  const { data: prior, error: priorError } = await db
+  // Already filed means every manager already has today's: the rule notify()'s
+  // `once` guard applies, recipient by recipient, below. It used to be ANY row
+  // of the family under this key, and 0388 lets any member file a notification
+  // addressed to themselves with any related_type and related_id, so a child's
+  // own row under `brief:<day>`, filed for each day ahead, skipped every
+  // manager's brief on each of those days. A member's own row now covers that
+  // member alone, and a child or a guest is not someone the brief goes to.
+  const { data: members, error: membersError } = await db
+    .from('family_members')
+    .select('user_id, role')
+    .eq('family_id', family.id)
+    .eq('is_active', true);
+  if (membersError) {
+    console.error('[briefing] morning brief recipient read failed', { familyId: family.id, error: membersError });
+    return 'failed';
+  }
+  const managers = [...new Set((members ?? []).filter((m) => m.user_id && isManager(m.role)).map((m) => m.user_id as string))];
+  const filed = await settleAll(managers.map((userId) => db
     .from('notifications')
     .select('id')
     .eq('family_id', family.id)
     .eq('related_type', BRIEF_RELATED_TYPE)
     .eq('related_id', relatedId)
-    .limit(1);
+    .eq('user_id', userId)
+    .order('id')
+    .limit(1)));
+  const priorError = filed.find((read) => read.error)?.error;
   if (priorError) {
     // Without the dedupe read a re-run would tell every manager twice; skip
     // the family this tick rather than ship the duplicate.
     console.error('[briefing] morning brief dedupe read failed', { familyId: family.id, error: priorError });
     return 'failed';
   }
-  if ((prior ?? []).length > 0) return 'skipped';
+  if (managers.length > 0 && filed.every((read) => (read.data ?? []).length > 0)) return 'skipped';
 
   // The day is CLAIMED, not merely read. "Once per family per day" was the read
   // above followed by notify()'s own read-then-insert, and `notifications` has

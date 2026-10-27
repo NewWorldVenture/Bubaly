@@ -8,10 +8,12 @@ import { IntelligenceModule } from '@/components/modules/intelligence-module';
 import {
   computeContribution, contributionFeatures, bedtimeToMinutes, typicalWeeklySpend, type ContributionInput,
 } from '@/lib/network/contribution';
-import { cohortKey, aggregatesToInsights, type NetworkAggregate } from '@/lib/network/aggregate';
-import { CHILD_ROLES, OPEN_CHORE_STATUSES, SPEND_WINDOW_DAYS } from '@/lib/network/aggregate-server';
-import { benchmarksPageIsPublished } from '@/lib/network/benchmarks-server';
-import type { ConsentScope } from '@/lib/network/insights';
+import { cohortKey, aggregatesToInsights, freshAggregatesSince, type NetworkAggregate } from '@/lib/network/aggregate';
+import {
+  CHILD_ROLES, OPEN_CHORE_STATUSES, OPEN_REMINDER_STATUSES, SPEND_WINDOW_DAYS, remindersStillDueBy,
+} from '@/lib/network/aggregate-server';
+import { benchmarksPageIsPublished, readTrueCohortSizes } from '@/lib/network/benchmarks-server';
+import { publishableInsights, type ConsentScope, type NetworkInsight } from '@/lib/network/insights';
 import { loadAutomaticCaptureShare } from '@/lib/metric/automatic-capture-server';
 import { AutomaticCaptureCard } from '@/components/metrics/automatic-capture-card';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
@@ -38,6 +40,9 @@ export default async function IntelligencePage() {
   // columns, which hold the day on the family's wall rather than an instant.
   const tz = ctx.active.family.timezone || 'UTC';
   const todayKey = dayKeyInTz(now, tz);
+  // End-EXCLUSIVE, as the nightly aggregation reads them: dinners on
+  // [today, today + 7) and spending on (today − 28, today]. Both ends inclusive
+  // was an eight-day week and a 29-day month.
   const weekEndKey = addDaysToDayKey(todayKey, 7);
   const weekEndIso = new Date(now.getTime() + 7 * 86_400_000).toISOString();
   const spendStartKey = addDaysToDayKey(todayKey, -SPEND_WINDOW_DAYS);
@@ -55,9 +60,9 @@ export default async function IntelligencePage() {
   // share that. The reads settle, and `previewError` below fails the whole
   // preview closed on the first error rather than previewing a lie.
   const seesSpending = readsHouseholdMoney(ctx.active.role);
-  const [members, mealPlans, teams, classes, chores, bedtimes, spend, reminders] = await settleAll([
+  const [members, mealPlans, teams, classes, chores, bedtimes, spend, reminders, legacyReminders] = await settleAll([
     supabase.from('family_members').select('id, birthday, role').eq('family_id', familyId).eq('is_active', true),
-    supabase.from('meal_plans').select('plan_date').eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', todayKey).lte('plan_date', weekEndKey),
+    supabase.from('meal_plans').select('plan_date').eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', todayKey).lt('plan_date', weekEndKey),
     supabase.from('teams').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_active', true),
     supabase.from('school_classes').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
     supabase.from('chore_assignments').select('member_id').eq('family_id', familyId).in('status', [...OPEN_CHORE_STATUSES]),
@@ -69,14 +74,20 @@ export default async function IntelligencePage() {
     // 1,000 rows, and a busy household was banded on part of its spending.
     seesSpending
       ? readAllByIdAsQuery<{ id: string; amount: number }>((after, limit) => {
-        let query = supabase.from('transactions').select('id, amount').eq('family_id', familyId).eq('type', 'expense').gte('date', spendStartKey).lte('date', todayKey);
+        let query = supabase.from('transactions').select('id, amount').eq('family_id', familyId).eq('type', 'expense').gt('date', spendStartKey).lte('date', todayKey);
         if (after) query = query.gt('id', after);
         return query.order('id').limit(limit);
       }, { max: SPEND_READ_MAX })
       : Promise.resolve({ data: [] as { amount: number }[], error: null }),
-    supabase.from('reminders').select('id', { count: 'exact', head: true }).eq('family_id', familyId).gte('remind_at', now.toISOString()).lte('remind_at', weekEndIso),
+    // The Reminders module's own table, open and due this week, as the nightly
+    // aggregation counts it; then the legacy table's OPEN rows, which still
+    // have writers. The legacy count alone banded a family whose reminders all
+    // live in the module as "none".
+    supabase.from('family_reminders').select('id', { count: 'exact', head: true }).eq('family_id', familyId)
+      .in('status', [...OPEN_REMINDER_STATUSES]).gte('remind_at', now.toISOString()).lte('remind_at', weekEndIso).or(remindersStillDueBy(weekEndIso)),
+    supabase.from('reminders').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_done', false).gte('remind_at', now.toISOString()).lte('remind_at', weekEndIso),
   ]);
-  const previewError = [members, mealPlans, teams, classes, chores, bedtimes, spend, reminders].map((r) => r.error).find(Boolean);
+  const previewError = [members, mealPlans, teams, classes, chores, bedtimes, spend, reminders, legacyReminders].map((r) => r.error).find(Boolean);
   if (previewError) {
     console.error('[intelligence] contribution preview read failed', previewError);
     return <IntelligenceReadError />;
@@ -96,27 +107,47 @@ export default async function IntelligencePage() {
       .map((b) => bedtimeToMinutes(b.target_bedtime))
       .filter((m): m is number => m !== null),
     typicalWeeklySpend: seesSpending ? typicalWeeklySpend((spend.data ?? []).map((t) => Number(t.amount)), SPEND_WINDOW_DAYS) : null,
-    remindersPerWeek: reminders.count ?? 0,
+    remindersPerWeek: (reminders.count ?? 0) + (legacyReminders.count ?? 0),
   };
 
   // Published aggregates for THIS family's cohort (RLS already restricts rows to
-  // opted-in scopes). Mapped to candidates; the module re-gates via visibleInsights.
+  // opted-in scopes), fresh ones only — rows a run that kept failing left
+  // behind are not the network's answer. Fresh says the cron still stands
+  // behind the figures, not that a family that withdrew is out of them: the
+  // held snapshot keeps its share until the next epoch's (aggregate.ts,
+  // AGGREGATE_MAX_AGE_MS).
+  //
+  // `cohort_size` is not selected here. It is the TRUE family count beside the
+  // noised `count`, and through this read any member of the family — a child
+  // included — could take it for every cohort. The k-floor is re-checked on the
+  // server below with the service role instead, and the number stops there:
+  // the module gets the noised count and a confidence derived from it.
   const myCohort = cohortKey(contributionFeatures(input, now));
   const { data: aggRows, error: aggError } = await supabase
     .from('network_aggregates')
-    .select('scope, cohort_key, metric, value, count, cohort_size')
+    .select('id, scope, cohort_key, metric, value, count')
     .eq('cohort_key', myCohort)
+    .gte('computed_at', freshAggregatesSince(now))
     .limit(500);
   if (aggError) {
     console.error('[intelligence] network aggregate read failed', aggError);
     return <IntelligenceReadError />;
   }
-  const aggregates: NetworkAggregate[] = (aggRows ?? []).map((a) => ({
-    scope: a.scope as ConsentScope, cohortKey: a.cohort_key, metric: a.metric,
-    value: a.value, count: a.count, cohortSize: a.cohort_size,
-  }));
+  const visibleRows = aggRows ?? [];
+  // A floor that could not be checked shows no insight rather than an
+  // unchecked one, and leaves the consent controls on screen.
+  const trueSizes = await readTrueCohortSizes(visibleRows.map((a) => a.id));
+  const aggregates: NetworkAggregate[] = trueSizes.ok
+    ? visibleRows.flatMap((a) => {
+      const cohortSize = trueSizes.sizes.get(a.id);
+      return cohortSize === undefined ? [] : [{
+        scope: a.scope as ConsentScope, cohortKey: a.cohort_key, metric: a.metric,
+        value: a.value, count: a.count, cohortSize,
+      }];
+    })
+    : [];
   // `t` so the two insight sentences reach the reader in their own language.
-  const candidates = aggregatesToInsights(aggregates, myCohort, t);
+  const candidates: NetworkInsight[] = publishableInsights(aggregatesToInsights(aggregates, myCohort, t));
 
   // Does /resources/benchmarks exist right now? The public page 404s unless the
   // admin publication flag is on, and marketing_settings is admin-only, so the

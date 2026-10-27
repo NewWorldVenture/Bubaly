@@ -37,6 +37,16 @@ async function memoryScope() {
   return scopeFromUserContext(ctx, supabase);
 }
 
+/**
+ * A guest views the family's memory and does not write to it, as every other
+ * household write refuses one (household-roles N4-R1-SIBLING): these three were
+ * the add, edit, pin and remove of Life & Milestones and Family Memory, and
+ * none of them asked.
+ */
+function guestRefusal(scope: { role: string }, t: (key: string) => string): FactActionResult | null {
+  return scope.role === 'guest' ? { ok: false, error: t('householdRoles.guestViewsOnly') } : null;
+}
+
 function refresh(): void {
   // Both modules render `family_facts`; a write from one must not leave the
   // other showing what it replaced.
@@ -50,6 +60,8 @@ export async function saveFactAction(
 ): Promise<FactActionResult> {
   const t = await getTranslations();
   const scope = await memoryScope();
+  const refused = guestRefusal(scope, t);
+  if (refused) return refused;
 
   try {
     if (factId) {
@@ -85,6 +97,8 @@ export async function setFactPinnedAction(factId: string, pinned: boolean): Prom
   const t = await getTranslations();
   if (!factId) return { ok: false, error: t('actions.thatMemoryCouldNotBe') };
   const scope = await memoryScope();
+  const refused = guestRefusal(scope, t);
+  if (refused) return refused;
 
   try {
     const result = await updateFact(scope, factId, { pinned });
@@ -101,6 +115,8 @@ export async function forgetFactAction(factId: string): Promise<FactActionResult
   const t = await getTranslations();
   if (!factId) return { ok: false, error: t('actions.thatMemoryCouldNotBe') };
   const scope = await memoryScope();
+  const refused = guestRefusal(scope, t);
+  if (refused) return refused;
 
   try {
     const result = await forgetFact(scope, factId, { kind: 'fact' });

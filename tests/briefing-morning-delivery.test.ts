@@ -122,6 +122,66 @@ describe('deliverMorningBriefs', () => {
     expect(notifications(db).filter((r) => r.related_id === 'brief:2026-09-08')).toHaveLength(2);
   });
 
+  // household-roles round 8 (the meter sweep). "Already filed today" was any
+  // row of the family under `brief:<day>`, and 0388 lets any member file a
+  // notification addressed to themselves with any related_type and related_id.
+  describe('a member’s own notification under the brief’s key', () => {
+    /** A notification as 0388's notif_insert admits it from a member's session: addressed to themselves. */
+    const ownRow = (id: string, userId: string, day: string) => ({
+      id, family_id: 'fam-1', user_id: userId, type: 'system', title: 'Morning brief: a quiet day.', body: null,
+      related_type: 'brief', related_id: briefRelatedId(day), is_read: false, created_at: '2026-09-06T20:00:00Z',
+    });
+
+    it('a child’s, filed for today and the days ahead, does not skip the managers’ brief on any of them', async () => {
+      const db = createInMemorySupabase<DB>();
+      household(db);
+      db.seed('notifications', ['2026-09-07', '2026-09-08'].map((day, i) => ownRow(`planted-${i}`, 'auth-child', day)));
+
+      expect(await deliverMorningBriefs(db, TICK)).toEqual({ delivered: 1, families: 1, skipped: 0, failed: 0 });
+      expect(await deliverMorningBriefs(db, new Date(TICK.getTime() + 24 * 3600_000))).toEqual({ delivered: 1, families: 1, skipped: 0, failed: 0 });
+
+      for (const day of ['2026-09-07', '2026-09-08']) {
+        const filed = notifications(db).filter((r) => r.related_id === briefRelatedId(day) && !String(r.id).startsWith('planted-'));
+        expect(filed.map((r) => r.user_id).sort()).toEqual(['auth-adult', 'auth-parent']);
+      }
+    });
+
+    it('a manager’s own covers that manager alone: the other is still told, once', async () => {
+      const db = createInMemorySupabase<DB>();
+      household(db);
+      db.seed('notifications', [ownRow('planted-adult', 'auth-adult', '2026-09-07')]);
+
+      expect(await deliverMorningBriefs(db, TICK)).toEqual({ delivered: 1, families: 1, skipped: 0, failed: 0 });
+      const today = notifications(db).filter((r) => r.related_id === briefRelatedId('2026-09-07'));
+      expect(today.map((r) => r.user_id).sort()).toEqual(['auth-adult', 'auth-parent']);
+      expect(today.find((r) => r.user_id === 'auth-parent')?.title).toMatch(/^Morning brief: 2 decisions need you/);
+
+      // Every manager has today's now: a re-run is skipped and files nothing.
+      expect(await deliverMorningBriefs(db, TICK)).toEqual({ delivered: 0, families: 1, skipped: 1, failed: 0 });
+      expect(notifications(db)).toHaveLength(2);
+    });
+
+    it('a recipient read that fails sends no brief, rather than a second one', async () => {
+      const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const db = createInMemorySupabase<DB>();
+      household(db);
+      const failing = { message: 'canceling statement due to statement timeout', code: '57014', details: null, hint: null };
+      const broken = {
+        from: (table: string) => {
+          if (table !== 'family_members') return db.from(table);
+          const b: Record<string, unknown> = {};
+          for (const m of ['select', 'eq']) b[m] = () => b;
+          b.then = (resolve: (v: unknown) => void) => resolve({ data: null, error: failing });
+          return b;
+        },
+      } as unknown as DB;
+
+      expect(await deliverMorningBriefs(broken, TICK)).toEqual({ delivered: 0, families: 1, skipped: 0, failed: 1 });
+      expect(notifications(db)).toHaveLength(0);
+      expect(err.mock.calls.map((c) => String(c[0]))).toContain('[briefing] morning brief recipient read failed');
+    });
+  });
+
   it('files the brief for the family’s 7am, not the cron’s', async () => {
     const db = createInMemorySupabase<DB>();
     household(db, 'America/Los_Angeles');

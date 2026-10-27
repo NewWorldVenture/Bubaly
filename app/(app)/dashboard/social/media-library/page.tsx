@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { ImageIcon, Film, Music, FileText } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireSocialPage } from '@/lib/social/access';
+import { SOCIAL_SURFACES } from '@/lib/social/roles';
 import { getMediaLibrary } from '@/lib/social/queries';
 import { createMediaAction } from '@/app/(app)/dashboard/social/actions';
 import { Card } from '@/components/ui/card';
@@ -19,8 +20,9 @@ const KIND_ICON = { image: ImageIcon, video: Film, audio: Music, document: FileT
 
 export default async function MediaLibraryPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  const { ctx, access } = await requireSocialPage(SOCIAL_SURFACES.media);
   const assets = await getMediaLibrary(ctx.active.familyId);
+  const canUpload = access.can('upload_media');
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
@@ -55,7 +57,7 @@ export default async function MediaLibraryPage() {
         )}
       </div>
 
-      <Card>
+      {canUpload && <Card>
         <h3 className="mb-2 text-sm font-semibold">{t('dashboardSocialMediaLibrary.addAsset')}</h3>
         <form action={createMediaAction} className="space-y-2">
           <input name="title" placeholder={t('dashboardSocialMediaLibrary.title')} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
@@ -74,7 +76,7 @@ export default async function MediaLibraryPage() {
           <SubmitButton className="h-9 w-full rounded-lg bg-brand text-sm font-medium text-brand-fg">{t('dashboardSocialMediaLibrary.addToLibrary')}</SubmitButton>
         </form>
         <p className="mt-2 text-[11px] text-muted">{t('dashboardSocialMediaLibrary.aspectRatioGuidancePerPlatformIs')}</p>
-      </Card>
+      </Card>}
     </div>
   );
 }

@@ -28,6 +28,23 @@ vi.mock('@/components/i18n/locale-provider', async () => (await import('./helper
 vi.mock('@/components/app/page-header', async () => ({ PageHeader: (await import('./helpers/module-harness')).ui.PageHeader }));
 vi.mock('@/components/ui/states', async () => (await import('./helpers/module-harness')).ui);
 vi.mock('next/link', async () => ({ default: (await import('./helpers/module-harness')).ui.Link }));
+// Leaving and a contributing scope's switch-off are written by the real
+// server action (app/(app)/dashboard/intelligence/actions.ts) through the
+// member's own client, here the same in-memory database; the session is stubbed.
+vi.mock('@/lib/i18n/server', async () => {
+  const { SOURCE_MESSAGES: messages, translate: tr } = await import('@/lib/i18n/messages');
+  return { getTranslations: async () => (key: string, params?: Record<string, string | number>) => tr(messages, key, params) };
+});
+vi.mock('@/lib/supabase/auth', () => ({
+  requireUserContext: async () => ({
+    user: { id: h.app.userId, email: null },
+    active: { familyId: h.app.familyId, role: (h.app as { role?: string }).role ?? 'parent', member: { id: 'member-1' }, family: { timezone: 'UTC' } },
+  }),
+}));
+vi.mock('@/lib/supabase/server', async () => {
+  const { clientFor } = await import('./helpers/module-harness');
+  return { createServer: async () => clientFor(h), createServiceClient: () => h.db };
+});
 
 const { IntelligenceModule } = await import('@/components/modules/intelligence-module');
 
@@ -63,7 +80,7 @@ describe('network consent is written from the row on screen', () => {
 
     await click(byName(tree, JOIN));
     expect(stored()).toMatchObject({ enabled: false, consented_by: null, consented_at: null });
-    expect(h.toasts.success).toEqual(['Left the network — nothing is shared']);
+    expect(h.toasts.success).toEqual(['Left the network. Your data is no longer used and your stored contribution is deleted. Summaries already published this month keep your share, mixed with at least 20 families and noise, until next month’s update.']);
 
     tree = screen();
     expect(switchOn(tree, JOIN)).toBe(false);

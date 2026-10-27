@@ -1,6 +1,6 @@
 // Closing one family does not lock a member out of their other, open families.
 //
-// GatedShell (app/(app)/layout.tsx) resolves ONE family — the stored preference,
+// UnlockedShell (app/(app)/layout.tsx) resolves ONE family — the stored preference,
 // else the earliest membership (chooseActiveMembership never looks at
 // closed_at) — and when that family is closed it replaces every (app) route
 // with <AccountClosedGate />. The gate offered "Reopen my account", which the

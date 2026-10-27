@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireSocialPage } from '@/lib/social/access';
+import { SOCIAL_SURFACES } from '@/lib/social/roles';
 import { getPost } from '@/lib/social/queries';
 import { PlatformBadge, PlatformDot } from '@/components/social/platform';
 import { RetryPublishButton } from '@/components/social/retry-button';
@@ -31,7 +32,8 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   // Not a row id at all: not found, before a read that would fail on it (B12).
   if (!isUuid(id)) return <AppNotFound backHref="/dashboard/social" />;
-  const ctx = await requireUserContext();
+  // A post's variants, targets and provider errors are the pipeline's.
+  const { ctx, access } = await requireSocialPage(SOCIAL_SURFACES.pipeline);
   // The attempt clocks below are rendered in the FAMILY's zone and locale; a bare
   // `toLocaleString()` on the server was the host's zone in the host's locale.
   const { fmtDate } = await getFormat(ctx.active.family.timezone || 'UTC');
@@ -42,7 +44,8 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
 
   const awaitingConfirmation = post.status === 'publishing' || targets.some((t) => t.status === 'publishing')
     || scheduleMessage === 'socialSchedule.awaitingConfirmation';
-  const canRetry = !awaitingConfirmation
+  // Retrying publishes, so it is offered to whoever may publish (the action refuses anyone else).
+  const canRetry = !awaitingConfirmation && access.can('publish_posts')
     && ['draft', 'scheduled', 'failed', 'partially_published'].includes(post.status)
     && targets.some((t) => t.status === 'failed' || t.status === 'pending');
 

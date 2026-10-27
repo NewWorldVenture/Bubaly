@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
-import { createServer } from '@/lib/supabase/server';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { settleAll, describeReadError } from '@/lib/supabase/settle';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { isWithheldFromGuest } from '@/lib/auth/guest-scope';
@@ -9,7 +9,7 @@ import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext, dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
-import { walletTierForPlanLevel, aiCoachLevel, AI_COACH_DAILY_LIMIT } from '@/lib/wallet/tiers';
+import { walletTierForPlanLevel, aiCoachLevel, AI_COACH_DAILY_LIMIT, AI_COACH_REQUEST_FEATURES } from '@/lib/wallet/tiers';
 import { balanceFromLedger, bucketBalances, weeksToGoal, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
 import { buildChildCoachPrompt, parseWalletCoach } from '@/lib/wallet/coach';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -77,7 +77,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
       return NextResponse.json({ error: tr('child.theAiMoneyCoachIs') }, { status: 403 });
     }
 
-    // Per-day metering (same counter as the family-wide coach)
+    // Per-day metering (same counter as the family-wide coach): the server's
+    // own record of each coaching, as app/api/ai/wallet/route.ts explains. Not
+    // the 'ai_coach_call' wallet trail rows, which any member may write as
+    // themselves (0380), so five planted rows used to refuse the parents
+    // (household-roles N6-R1-WALLET-METERS-FORGEABLE).
     const dailyLimit = AI_COACH_DAILY_LIMIT[tier];
     if (Number.isFinite(dailyLimit)) {
       // The family's midnight, not the host's. This bound is the daily AI
@@ -87,11 +91,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
       // tomorrow. Same defect and same fix as the kitchen display
       // (app/(app)/display/page.tsx:122).
       const startOfDay = new Date(zonedDayBoundsMs(dayKeyInTz(new Date(), ctx.active.family.timezone || 'UTC'), ctx.active.family.timezone || 'UTC').start);
-      const { count: usedToday, error: meterError } = await supabase
-        .from('wallet_audit_logs')
+      const { count: usedToday, error: meterError } = await createServiceClient()
+        .from('ai_requests')
         .select('id', { count: 'exact', head: true })
         .eq('family_id', familyId)
-        .eq('action', 'ai_coach_call')
+        .eq('kind', 'feature')
+        .in('feature', [...AI_COACH_REQUEST_FEATURES])
+        .eq('status', 'completed')
         .gte('created_at', startOfDay.toISOString());
       // An unreadable meter is not "none used": that answer lifted the daily
       // limit, and every call behind it is a paid model call.

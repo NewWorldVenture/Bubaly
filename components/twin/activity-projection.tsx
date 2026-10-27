@@ -40,14 +40,18 @@ const inputCls = 'h-10 w-full rounded-xl border border-border bg-bg px-3 text-sm
 
 export interface SavedSim {
   id: string; activityName: string; verdict: string; weeklyHours: number; createdAt: string;
+  /** A manager's, or the viewer's own scenario; never a guest's. */
+  canDelete: boolean;
 }
 
 export function ActivityProjection({
-  members, budgetCategories, saved,
+  members, budgetCategories, saved, canSave,
 }: {
   members: { id: string; display_name: string }[];
   budgetCategories: string[];
   saved: SavedSim[];
+  /** A guest projects, but does not keep a scenario for the family. */
+  canSave: boolean;
 }) {
   const t = useTranslations();
   const askConfirm = useConfirm();
@@ -86,7 +90,8 @@ export function ActivityProjection({
   function save() {
     if (!result) return;
     startTransition(async () => {
-      const res = await saveSimulationAction(currentInput(), result);
+      // The server projects it again and keeps its own answer, not this one.
+      const res = await saveSimulationAction(currentInput());
       if (!res.ok) { toastError(res.error); return; }
       success(t('activityProjection.scenarioSaved')); router.refresh();
     });
@@ -167,9 +172,11 @@ export function ActivityProjection({
               );
             })}
           </div>
-          <Button variant="secondary" className="w-full" onClick={save} disabled={pending}>
-            <Save className="h-4 w-4" /> {t('activityProjection.saveThisScenario')}
-          </Button>
+          {canSave && (
+            <Button variant="secondary" className="w-full" onClick={save} disabled={pending}>
+              <Save className="h-4 w-4" /> {t('activityProjection.saveThisScenario')}
+            </Button>
+          )}
         </div>
       )}
 
@@ -183,10 +190,12 @@ export function ActivityProjection({
                   s.verdict === 'clear' ? 'bg-emerald-400' : s.verdict === 'tight' ? 'bg-amber-400' : 'bg-rose-400')} />
                 <span className="min-w-0 flex-1 truncate">{s.activityName}</span>
                 <span className="shrink-0 text-xs text-muted">{s.weeklyHours}h/wk</span>
-                <button type="button" onClick={() => void remove(s)} disabled={pending} aria-label={t('activityProjection.deleteScenario')}
-                  className="shrink-0 rounded-lg p-1 text-muted transition hover:bg-elevated hover:text-rose-400 disabled:opacity-50">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                {s.canDelete && (
+                  <button type="button" onClick={() => void remove(s)} disabled={pending} aria-label={t('activityProjection.deleteScenario')}
+                    className="shrink-0 rounded-lg p-1 text-muted transition hover:bg-elevated hover:text-rose-400 disabled:opacity-50">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </li>
             ))}
           </ul>

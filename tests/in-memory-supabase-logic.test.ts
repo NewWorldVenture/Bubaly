@@ -61,6 +61,10 @@ describe('in-memory PostgREST logical filters', () => {
     ['label.ilike.%THREE%,value.gt.4', ['c']],
     ['value.gte.2,value.lt.2', ['a', 'b', 'c']],
     ['not.and(done.eq.false,value.lt.3)', ['b', 'c']],
+    ['optional.is.null,label.not.in.(one,two)', ['a', 'c']],
+    // PostgREST's `col.not.op`: NULL on a NULL column, as SQL's NOT is.
+    ['optional.not.eq.yes,value.eq.3', ['c']],
+    ['optional.not.is.null,value.eq.1', ['a', 'b', 'c']],
   ])('preserves flat operators and negation: %s', async (filter, ids) => {
     const result = await seeded().from('items').select('id').eq('family_id', 'own').or(filter).order('value');
     expect(result.data).toEqual(ids.map(id => ({ id })));
