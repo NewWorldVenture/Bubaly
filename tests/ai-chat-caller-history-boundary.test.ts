@@ -28,7 +28,10 @@ vi.mock('@/lib/server/ai-access', () => ({
   accessDeniedResponse: () => h.forbidden('unexpected allowance refusal'),
 }));
 vi.mock('@/lib/services/scope', () => ({ scopeFromUserContext: (ctx: { active: { familyId: string } }) => ({ db: h.db, familyId: ctx.active.familyId }) }));
-vi.mock('@/lib/calendar/occurrences', () => ({ readCalendarOccurrences: h.calendar }));
+vi.mock('@/lib/calendar/occurrences', async importOriginal => ({
+  readCalendarOccurrences: h.calendar,
+  readCountedRows: (await importOriginal<typeof import('@/lib/calendar/occurrences')>()).readCountedRows,
+}));
 vi.mock('@/lib/assistant/tools', () => ({ buildAssistantTools: h.tools }));
 vi.mock('@/lib/assistant/trust-wrapper', () => ({ wrapToolsWithTrust: h.wrap }));
 vi.mock('@/lib/ai/provider', () => ({
