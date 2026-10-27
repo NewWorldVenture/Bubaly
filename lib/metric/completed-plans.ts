@@ -13,12 +13,22 @@ export type CompletedPlansResult =
  * status cannot override an explicit partial, failed or cancelled state.
  * The queued/null states predate the lifecycle column. The concierge approval
  * writer also leaves awaiting_approval beside executed (actions.ts); those
- * records count only when a durable completion timestamp exists. */
+ * records count only when a durable completion timestamp exists.
+ *
+ * A typed concierge request's run is a plan only once a plan is attached to
+ * it. Two writers close one that never got a plan as `completed`: an answer or
+ * recommendation given after a clarifying question (answerClarification), and
+ * the placeholder retired when the cron had already claimed the planner's own
+ * run (adoptPlannedRun) — which also counted that one request twice. The same
+ * answer on the first turn files no run at all. So a `concierge` run without a
+ * `plan_id` is not a plan Bubaly ran; every other run type counts as before
+ * (`run_type` is NOT NULL, default 'concierge_plan', 0250). */
 function completedRunQuery(db: DB, familyId: string) {
   return db.from('family_automation_runs').select('id', { count: 'exact', head: true })
     .eq('family_id', familyId)
     .or('state.eq.completed,status.eq.executed')
-    .or('state.eq.completed,state.in.(queued,awaiting_approval),state.is.null');
+    .or('state.eq.completed,state.in.(queued,awaiting_approval),state.is.null')
+    .or('not.and(run_type.eq.concierge,plan_id.is.null)');
 }
 
 /** Recorded completion counts for the shared planning-time model.

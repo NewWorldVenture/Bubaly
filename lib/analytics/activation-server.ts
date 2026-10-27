@@ -5,7 +5,7 @@ import 'server-only';
 // (family, milestone). RLS requires the row's user_id to match the caller.
 // Telemetry never blocks the action — all failures are swallowed.
 import { createServer } from '@/lib/supabase/server';
-import { sessionIndexFromMs, type ActivationMilestone } from '@/lib/analytics/activation';
+import { recordableMsSinceSignup, sessionIndexFromMs, type ActivationMilestone } from '@/lib/analytics/activation';
 
 export async function recordActivationServer(opts: {
   userId: string | null;
@@ -32,7 +32,8 @@ export async function recordActivationServer(opts: {
       session_id: opts.familyId,
       milestone: opts.milestone,
       session_index: sessionIndexFromMs(ms),
-      ms_since_signup: ms,
+      // An INTEGER column: a household older than ~24.8 days is recorded untimed, not refused.
+      ms_since_signup: recordableMsSinceSignup(ms),
     });
     if (activationEventsWriteError) console.error('[activation] activation_events insert failed', activationEventsWriteError);
   } catch {

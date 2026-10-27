@@ -75,12 +75,19 @@ export type NeedsAttentionProps = {
   canDecide: boolean;
   /** Where the full, uncapped list lives; renders a "See all" link in the header and on the "+N more" line. */
   seeAllHref?: string;
+  /**
+   * A source of the list did not answer. "Nothing needs you right now" is then
+   * not something anyone knows, so it is not said; the page says the check is
+   * incomplete and offers `retryHref`.
+   */
+  unavailable?: boolean;
+  retryHref?: string;
   className?: string;
 };
 
 const ID_PREFIX = /^[a-z_]+:/;
 
-export function NeedsAttention({ items, more, headline, approvals, moneyApprovalKinds, recommendationBodies, canDecide, seeAllHref, className }: NeedsAttentionProps) {
+export function NeedsAttention({ items, more, headline, approvals, moneyApprovalKinds, recommendationBodies, canDecide, seeAllHref, unavailable = false, retryHref, className }: NeedsAttentionProps) {
   const t = useTranslations();
   const moreLine = more > 0
     ? (more === 1 ? t('needsAttention.moreItemNeedsYou', { n: more }) : t('needsAttention.moreItemsNeedYou', { n: more }))
@@ -96,10 +103,18 @@ export function NeedsAttention({ items, more, headline, approvals, moneyApproval
           </Link>
         )}
       </div>
-      {items.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-border px-4 py-5 text-center text-sm text-muted">
-          {t('needsAttention.nothingNeedsYouRightNowBubaly')}
+      {unavailable && (
+        <p role="alert" className="rounded-2xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-fg/80">
+          {t('needsAttention.couldNotCheckEverything')}
+          {retryHref && <>{' '}<Link href={retryHref} className="font-semibold underline underline-offset-2 focus-ring">{t('needsAttention.tryAgain')}</Link></>}
         </p>
+      )}
+      {items.length === 0 ? (
+        !unavailable && (
+          <p className="rounded-2xl border border-dashed border-border px-4 py-5 text-center text-sm text-muted">
+            {t('needsAttention.nothingNeedsYouRightNowBubaly')}
+          </p>
+        )
       ) : (
         <>
           <p className="-mt-1 text-sm text-fg/80">{headline}</p>

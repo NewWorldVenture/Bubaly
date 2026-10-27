@@ -44,6 +44,7 @@ import { isChildLoginAccount, memberHasAKidLogin } from '@/lib/server/child-acco
 import { requireUserContext } from '@/lib/supabase/auth';
 import { isManager } from '@/lib/constants/roles';
 import { mergeNotificationPrefs } from '@/lib/preferences/notification-prefs';
+import { recordActivationServer } from '@/lib/analytics/activation-server';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -75,6 +76,23 @@ const ONBOARDING_INVITE_EMAIL_CAP = 5;
  */
 const WELCOME_EMAIL_SENT_KEY = 'welcome_email_sent_at';
 const WELCOME_EMAIL_RACE_WINDOW_MS = 24 * 3_600_000;
+
+/**
+ * TTFV: a calendar the wizard imported — pasted, an ICS file or link, or a
+ * connected provider calendar, not the sample — is the household's `calendar_imported`
+ * milestone, the one the feeds action records for an ICS feed added later.
+ * The wizard recorded nothing, so the funnel's "Imported a calendar" and
+ * "Calendar imported (session 1)", rates over every household, counted only
+ * those feeds. Once per household, timed from its sign-up as the feeds
+ * action's is; best-effort, like every milestone (recordActivationServer
+ * swallows its own failures).
+ */
+async function recordWizardCalendarImport(admin: ReturnType<typeof createServiceClient>, userId: string, familyId: string): Promise<void> {
+  const { data: household, error: householdError } = await admin.from('families').select('created_at').eq('id', familyId).maybeSingle();
+  // Unread, the milestone is recorded untimed rather than timed from a guess.
+  if (householdError) console.error('[onboarding] household sign-up time read failed; recording the import untimed', { familyId, error: householdError });
+  await recordActivationServer({ userId, familyId, milestone: 'calendar_imported', signupAtIso: householdError ? null : household?.created_at ?? null });
+}
 
 function onboardingFailure(operation: string, error: unknown, fallback: string): { ok: false; error: string } {
   console.error(`[onboarding] ${operation} failed`, error);
@@ -494,6 +512,7 @@ export async function finalizeOnboardingAction(input: {
         if (!refreshed.ok) return refreshed;
         const enabled = await enableConnectedCalendar(connectedScope, connectedReceipt);
         if (!enabled.ok) return enabled;
+        await recordWizardCalendarImport(admin, auth.user.id, existingMembership.family_id);
         return { ok: true, data: { familyId: existingMembership.family_id, brief: buildFirstBrief(calendarImport.events, new Date(), [], family.timezone) } };
       }
       return { ok: true, data: { familyId: existingMembership.family_id } };
@@ -1009,6 +1028,11 @@ export async function finalizeOnboardingAction(input: {
   if (connectedReceipt && connectedScope) {
     const enabled = await enableConnectedCalendar(connectedScope, connectedReceipt);
     if (!enabled.ok) return enabled;
+  }
+  // The import landed (step 6a returns before here when it did not). The
+  // sample calendar ('demo') is not the household's own, so it is no import.
+  if ((importEvents.length > 0 && calendarImport.source !== 'demo') || connectedReceipt) {
+    await recordWizardCalendarImport(admin, auth.user.id, familyId);
   }
 
   // 8b. Send the branded welcome email (best-effort — the template existed but
