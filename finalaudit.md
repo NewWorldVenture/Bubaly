@@ -1,5 +1,19 @@
 # Final Production Audit
 
+## PR1136 merged into main with current canonical audit evidence — 2026-10-27T17:06:35.685Z
+
+- Last Updated: 2026-10-27T17:06:35.685Z
+
+PR #1136 is MERGED at 2026-10-27T17:05:03Z into main bd49aeb8373b61029bea57584e10b56404d26743. The normal nonforce push advanced a7ef to bd49; no protection bypass or CI override was used. Fresh final guard at 17:04:50 verified both other PR heads and all 97 owner paths with zero overlap with the five released nonledger paths. All nonledger source is byte-identical to tested checkout d044; ONLY finalaudit.md differs. Canonical e874 and tested bab9 are ancestors, and published ledger Git blob 471b03cc1246b728b76fa84c0a27ff24ebfed1c9 preserves all current audit history. Independent publication receipt 2b32a546 in G:/BubalyPR1136FreshMergeGuard20261027 confirms actual merged state and exact source/history.
+
+Independent final hosted peer c08d3339 in G:/BubalySchoolBab9FinalIndependentPeer20261027 rehashed all 63 raw artifacts and verified all 19 successful original jobs, actual tested identities and reader/collector exit-0 drain. Independent journal peer c47f6559 in G:/BubalyBab9JournalPreservationPeer20261027 confirms all 15,715 permanent ID/status pairs and previous history preserved. Latest journal counter verification PID 6868 actually drained 0/source-stable with empty stderr at 17:02:22.953Z: both whole counter fixtures, 62 ordinary passes.
+
+Git-connected Vercel production deployment 6Hq5e4EZaaqNtDY8rjXSLXxB41rB has started for exact main bd49. Its last observed status is PENDING, not success. Earlier failed deployment records and old default d93 remain historical evidence. Exact default promotion still requires completed correct-team/project deployment evidence and a fresh public build-info match; a main merge alone does not satisfy production. No production configuration or database changes were made.
+
+Next Medical integration is isolated in G:/BubalyMedicalReleaseIntegration20261027, branch codex/medical-release-integration-20261027, clean source commit 32ed255219346823b41d8d387a7a0e8943b3e62f above merged bd49. Its only two differences are exact qualified donor bf6a product/fixture blobs. A separate fresh physical dependency graph, source-peer admission, integration checks and original hosted epoch are required. This next work has not been added retroactively to PR #1136 or counted as released.
+
+Counts and all statuses remain unchanged: 15,715 total, 10,335 NOT STARTED, 3,330 IN PROGRESS, 1,804 PASS, 237 FIXED + PASS, nine BLOCKED, 2,041 finite closures (12.99% rounded). These are audit evidence counts, not product completion. PRODUCTION READY: NO.
+
 ## PR1136 original checks independently parsed; merge and deployment gates remain — 2026-10-27T17:02:06.329Z
 
 - Last Updated: 2026-10-27T17:02:06.329Z
