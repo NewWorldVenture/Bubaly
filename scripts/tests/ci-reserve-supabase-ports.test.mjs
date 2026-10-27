@@ -153,3 +153,147 @@ test('new explicit socket appearing after reservation still refuses', () => {
     apply: () => { applied = true; },
   }), /PORT_ALREADY_IN_USE/);
 });
+
+// Additive diagnostics controls. The original nineteen registrations and
+// assertions above remain byte-for-byte intact.
+import { formatGuardFailure } from '../ci-reserve-supabase-ports.mjs';
+
+const socketTables = [
+  ['/proc/net/tcp', 'tcp4'], ['/proc/net/tcp6', 'tcp6'],
+  ['/proc/net/udp', 'udp4'], ['/proc/net/udp6', 'udp6'],
+];
+function caught(run) {
+  let error;
+  try { run(); } catch (failure) { error = failure; }
+  assert.ok(error instanceof Error, 'The conflict must still refuse');
+  assert.equal(error.message, 'PORT_ALREADY_IN_USE');
+  return error;
+}
+const diagnostic = () => ({ phase: 'before_reservation', table: 'tcp4', port: 54324, state: '06' });
+function errorWith(detail) {
+  const error = new Error('PORT_ALREADY_IN_USE');
+  error.portDiagnostic = detail;
+  return error;
+}
+
+test('pre-reservation conflicts name only phase, table, protected local port and state without writing', () => {
+  for (const port of PORTS) for (const [file, name] of socketTables) for (const state of ['0A', '01', '06']) {
+    const f = fixture({ tables: { [file]: table(port, file.endsWith('6'), state) } });
+    const error = caught(() => f.run());
+    assert.equal(f.writes, 0);
+    assert.ok(!f.calls.includes('APPLY'));
+    assert.deepEqual(error.portDiagnostic, { phase: 'before_reservation', table: name, port, state });
+    assert.equal(formatGuardFailure(error), `PORT_ALREADY_IN_USE phase=before_reservation table=${name} port=${port} state=${state}`);
+  }
+});
+
+test('post-readback conflicts identify the second snapshot and preserve exactly one write and immediate refusal', () => {
+  for (const port of PORTS) for (const [file, name] of socketTables) for (const state of ['0A', '01', '06']) {
+    let reservations = '', writes = 0;
+    const calls = [];
+    const error = caught(() => reservePorts({ env, platform: 'linux', uid: 1001,
+      read(path) {
+        calls.push(path);
+        if (path === 'supabase/config.toml') return '';
+        if (path.endsWith('ip_local_reserved_ports')) return reservations;
+        return writes === 1 && path === file ? table(port, file.endsWith('6'), state) : header;
+      },
+      apply(value) { calls.push('APPLY'); writes++; reservations = value; },
+    }));
+    assert.equal(writes, 1);
+    const at = calls.indexOf('APPLY');
+    assert.ok(at >= 0);
+    assert.equal(calls.slice(0, at).filter(path => path.startsWith('/proc/net/')).length, 4);
+    assert.equal(calls[at + 1], '/proc/sys/net/ipv4/ip_local_reserved_ports');
+    assert.equal(calls.at(-1), file);
+    assert.deepEqual(error.portDiagnostic, { phase: 'after_reservation', table: name, port, state });
+    assert.equal(formatGuardFailure(error), `PORT_ALREADY_IN_USE phase=after_reservation table=${name} port=${port} state=${state}`);
+  }
+});
+
+test('all hexadecimal socket states remain conflicts, including lower-case source state normalization', () => {
+  for (let value = 0; value <= 255; value++) {
+    const state = value.toString(16).padStart(2, '0');
+    const error = caught(() => assertNoOwnedPortSockets(table(54324, false, state), { phase: 'before_reservation', table: 'tcp4' }));
+    assert.equal(error.portDiagnostic.state, state.toUpperCase());
+    assert.equal(formatGuardFailure(error), `PORT_ALREADY_IN_USE phase=before_reservation table=tcp4 port=54324 state=${state.toUpperCase()}`);
+  }
+});
+
+test('malformed state or context cannot turn a port conflict into permission to continue', () => {
+  for (const state of ['', 'not-a-state', '0A\nSYNTHETIC_PRIVATE_VALUE']) {
+    // The newline case can leave a valid first row, but no row content may be logged.
+    const error = caught(() => assertNoOwnedPortSockets(table(54324, false, state), { phase: 'before_reservation', table: 'tcp4' }));
+    assert.ok(!formatGuardFailure(error).includes('SYNTHETIC_PRIVATE_VALUE'));
+  }
+  for (const context of [undefined, null, {}, { phase: 'foreign', table: 'tcp4' },
+    { phase: 'before_reservation', table: '/arbitrary/file' }, { phase: 'before_reservation', table: 'tcp4', pid: 123 }]) {
+    const error = caught(() => assertNoOwnedPortSockets(table(54324), context));
+    assert.equal(formatGuardFailure(error), 'PORT_ALREADY_IN_USE');
+  }
+});
+
+test('formatter refuses any extra diagnostic fields instead of serializing sensitive metadata', () => {
+  for (const key of ['address', 'remote', 'pid', 'uid', 'inode', 'command', 'env', 'message', 'raw']) {
+    const error = errorWith({ ...diagnostic(), [key]: 'SYNTHETIC_PRIVATE_VALUE' });
+    assert.equal(formatGuardFailure(error), 'CI_PORT_GUARD_FAILED');
+  }
+  const symbol = Symbol('SYNTHETIC_PRIVATE_VALUE');
+  assert.equal(formatGuardFailure(errorWith({ ...diagnostic(), [symbol]: true })), 'CI_PORT_GUARD_FAILED');
+});
+
+test('formatter accepts only closed phases, tables, source ports and exactly two upper-case hexadecimal state digits', () => {
+  for (const changed of [{ phase: '' }, { phase: 'before_reservation\nPRIVATE' }, { phase: 'startup' },
+    { table: 'tcp' }, { table: '/proc/net/tcp' }, { table: 'tcp4\nPRIVATE' },
+    { port: 0 }, { port: 54330 }, { port: '54324' }, { port: 54324.5 },
+    { state: '' }, { state: '6' }, { state: '006' }, { state: '0a' }, { state: 'GG' }, { state: '06\nPRIVATE' }]) {
+    assert.equal(formatGuardFailure(errorWith({ ...diagnostic(), ...changed })), 'CI_PORT_GUARD_FAILED');
+  }
+  for (const detail of [null, [], 'PRIVATE', Object.create(diagnostic())]) {
+    assert.equal(formatGuardFailure(errorWith(detail)), 'CI_PORT_GUARD_FAILED');
+  }
+});
+
+test('formatter never calls getters, toJSON, string conversion or a diagnostic accessor', () => {
+  let accessed = 0;
+  const detail = diagnostic();
+  Object.defineProperty(detail, 'state', { get() { accessed++; throw new Error('PRIVATE'); } });
+  assert.equal(formatGuardFailure(errorWith(detail)), 'CI_PORT_GUARD_FAILED');
+  const accessor = new Error('PORT_ALREADY_IN_USE');
+  Object.defineProperty(accessor, 'portDiagnostic', { get() { accessed++; throw new Error('PRIVATE'); } });
+  assert.equal(formatGuardFailure(accessor), 'CI_PORT_GUARD_FAILED');
+  const convert = { ...diagnostic(), toJSON() { accessed++; throw new Error('PRIVATE'); }, toString() { accessed++; throw new Error('PRIVATE'); } };
+  assert.equal(formatGuardFailure(errorWith(convert)), 'CI_PORT_GUARD_FAILED');
+  const messageAccessor = new Error();
+  Object.defineProperty(messageAccessor, 'message', { get() { accessed++; throw new Error('PRIVATE'); } });
+  assert.equal(formatGuardFailure(messageAccessor), 'CI_PORT_GUARD_FAILED');
+  assert.equal(accessed, 0);
+});
+
+test('formatter does not echo arbitrary error messages or stacks even when they look like upper-case codes', () => {
+  for (const error of [new Error('SYNTHETIC_PRIVATE_VALUE'), new Error('https://user:secret@example.invalid/'),
+    'PORT_ALREADY_IN_USE', { message: 'PORT_ALREADY_IN_USE' }, null, undefined]) {
+    assert.equal(formatGuardFailure(error), 'CI_PORT_GUARD_FAILED');
+  }
+  const known = new Error('RESERVATION_WRITE_FAILED');
+  known.stack = 'SYNTHETIC_PRIVATE_VALUE';
+  assert.equal(formatGuardFailure(known), 'RESERVATION_WRITE_FAILED');
+  known.portDiagnostic = diagnostic();
+  assert.equal(formatGuardFailure(known), 'CI_PORT_GUARD_FAILED');
+});
+
+test('remote protected ports do not become local conflicts and successful reservation has no diagnostic side effect', () => {
+  const remoteOnly = `${header} 0: 00000000:c350 00000000:d434 01\n`;
+  const f = fixture({ tables: Object.fromEntries(socketTables.map(([file]) => [file, remoteOnly])) });
+  assert.deepEqual(f.run(), { protectedPorts: 12, existingReservationsPreserved: true });
+  assert.equal(f.writes, 1);
+});
+
+test('CLI catch prints the closed formatter and retains a nonzero exit instead of raw errors', () => {
+  const source = readFileSync(new URL('../ci-reserve-supabase-ports.mjs', import.meta.url), 'utf8');
+  const main = source.slice(source.lastIndexOf('if (process.argv[1]'));
+  assert.ok(main.startsWith('if (process.argv[1]'), 'Real CLI entry must exist');
+  assert.match(main, /console\.error\(formatGuardFailure\(error\)\)/);
+  assert.match(main, /process\.exitCode = 1/);
+  assert.doesNotMatch(main, /console\.(?:error|log)\(error(?:[),.]|\s)/);
+});

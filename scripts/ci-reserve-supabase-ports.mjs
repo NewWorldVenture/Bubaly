@@ -10,7 +10,46 @@ import { pathToFileURL } from 'node:url';
 export const PORTS = Object.freeze([3107, 8083, ...Array.from({ length: 10 }, (_, i) => 54320 + i)]);
 const RESERVED = '/proc/sys/net/ipv4/ip_local_reserved_ports';
 const SOCKETS = ['/proc/net/tcp', '/proc/net/tcp6', '/proc/net/udp', '/proc/net/udp6'];
+const TABLE_NAMES = ['tcp4', 'tcp6', 'udp4', 'udp6'];
+const PHASES = ['before_reservation', 'after_reservation'];
+const FAILURE_CODES = new Set(['INVALID_RESERVATIONS', 'INVALID_SOCKET_TABLE', 'PORT_ALREADY_IN_USE',
+  'REFUSE_NON_RUNNER_CONTROLLER', 'REFUSE_NON_HOSTED_E2E', 'REFUSE_CONNECTION_OVERRIDE',
+  'UNSUPPORTED_CONFIG_SECTION', 'UNSUPPORTED_CONFIG_KEY', 'UNSUPPORTED_CONFIG_INLINE_TABLE',
+  'UNRESERVED_CONFIG_PORT', 'RESERVATIONS_CHANGED_BEFORE_WRITE', 'RESERVATION_READBACK_MISMATCH',
+  'RESERVATION_WRITE_FAILED']);
 function requireThat(ok, code) { if (!ok) throw new Error(code); }
+
+// Only own data fields from this closed shape may reach a failure log. Do not
+// invoke getters/toJSON or copy arbitrary /proc rows, addresses or errors.
+function dataFields(value, keys) {
+  try {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return null;
+    const fields = Object.getOwnPropertyDescriptors(value);
+    if (Reflect.ownKeys(fields).length !== keys.length ||
+      !keys.every(key => Object.hasOwn(fields, key) && Object.hasOwn(fields[key], 'value'))) return null;
+    return Object.fromEntries(keys.map(key => [key, fields[key].value]));
+  } catch { return null; }
+}
+
+/** A bounded diagnostic, never permission to continue past a conflict. */
+export function formatGuardFailure(error) {
+  try {
+    if (!(error instanceof Error)) return 'CI_PORT_GUARD_FAILED';
+    const code = Object.getOwnPropertyDescriptor(error, 'message')?.value;
+    if (!FAILURE_CODES.has(code)) return 'CI_PORT_GUARD_FAILED';
+    const attached = Object.getOwnPropertyDescriptor(error, 'portDiagnostic');
+    if (!attached) return code;
+    if (code !== 'PORT_ALREADY_IN_USE' || !Object.hasOwn(attached, 'value')) return 'CI_PORT_GUARD_FAILED';
+    const detail = dataFields(attached.value, ['phase', 'table', 'port', 'state']);
+    if (!detail || !PHASES.includes(detail.phase) || !TABLE_NAMES.includes(detail.table) ||
+      !PORTS.includes(detail.port) || typeof detail.state !== 'string' || !/^[0-9A-F]{2}$/.test(detail.state)) {
+      return 'CI_PORT_GUARD_FAILED';
+    }
+    return `${code} phase=${detail.phase} table=${detail.table} port=${detail.port} state=${detail.state}`;
+  } catch { return 'CI_PORT_GUARD_FAILED'; }
+}
 
 export function parseRanges(value) {
   requireThat(typeof value === 'string', 'INVALID_RESERVATIONS');
@@ -37,13 +76,24 @@ export function formatRanges(ports) {
   return ranges.join(',');
 }
 
-export function assertNoOwnedPortSockets(source) {
+export function assertNoOwnedPortSockets(source, context) {
   const lines = source.trim().split(/\r?\n/);
   requireThat(lines.length > 0 && /\blocal_address\b/.test(lines.shift()), 'INVALID_SOCKET_TABLE');
   for (const line of lines) {
-    const local = line.trim().split(/\s+/)[1];
+    const columns = line.trim().split(/\s+/);
+    const local = columns[1];
     requireThat(/^[0-9A-Fa-f]{8}(?:[0-9A-Fa-f]{24})?:[0-9A-Fa-f]{4}$/.test(local ?? ''), 'INVALID_SOCKET_TABLE');
-    requireThat(!PORTS.includes(Number.parseInt(local.split(':')[1], 16)), 'PORT_ALREADY_IN_USE');
+    const port = Number.parseInt(local.split(':')[1], 16);
+    if (PORTS.includes(port)) {
+      const error = new Error('PORT_ALREADY_IN_USE');
+      const detail = dataFields(context, ['phase', 'table']);
+      // Malformed metadata still refuses the socket; it only loses detail.
+      if (detail && PHASES.includes(detail.phase) && TABLE_NAMES.includes(detail.table) &&
+        /^[0-9A-Fa-f]{2}$/.test(columns[3] ?? '')) {
+        error.portDiagnostic = { phase: detail.phase, table: detail.table, port, state: columns[3].toUpperCase() };
+      }
+      throw error;
+    }
   }
 }
 
@@ -97,13 +147,17 @@ export function reservePorts({ env, platform, uid, read, apply }) {
   assertCI(env, platform, uid);
   assertFixedConfig(read('supabase/config.toml'));
   const before = formatRanges(parseRanges(read(RESERVED)));
-  for (const file of SOCKETS) assertNoOwnedPortSockets(read(file));
+  for (const [index, file] of SOCKETS.entries()) assertNoOwnedPortSockets(read(file), {
+    phase: 'before_reservation', table: TABLE_NAMES[index],
+  });
   const combined = new Set([...parseRanges(before), ...PORTS]);
   const desired = formatRanges(combined);
   requireThat(formatRanges(parseRanges(read(RESERVED))) === before, 'RESERVATIONS_CHANGED_BEFORE_WRITE');
   if (desired !== before) apply(desired);
   requireThat(formatRanges(parseRanges(read(RESERVED))) === desired, 'RESERVATION_READBACK_MISMATCH');
-  for (const file of SOCKETS) assertNoOwnedPortSockets(read(file));
+  for (const [index, file] of SOCKETS.entries()) assertNoOwnedPortSockets(read(file), {
+    phase: 'after_reservation', table: TABLE_NAMES[index],
+  });
   return { protectedPorts: PORTS.length, existingReservationsPreserved: true };
 }
 
@@ -121,7 +175,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       } });
     console.log(`PASS CI fixed ports reserved (${result.protectedPorts}); existing reservations preserved`);
   } catch (error) {
-    console.error(/^[A-Z_]+$/.test(error?.message ?? '') ? error.message : 'CI_PORT_GUARD_FAILED');
+    console.error(formatGuardFailure(error));
     process.exitCode = 1;
   }
 }
