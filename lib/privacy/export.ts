@@ -206,7 +206,7 @@ async function readSection(scope: ServiceScope, key: ExportSectionKey): Promise<
       // and avatar of an ex-partner or former caregiver the roster never showed
       // them. The file says which it holds (includesRemovedMembers).
       const includeInactive = isManager(scope.role);
-      const r = await getMembers(scope, { includeInactive });
+      const r = await getMembers(scope, { includeInactive, requireComplete: true });
       return r.ok ? { ok: true, data: { data: r.data, count: r.data.length, includesRemovedMembers: includeInactive } } : r;
     }
     case 'calendar': {

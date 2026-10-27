@@ -398,3 +398,101 @@ describe('GET /api/privacy/export', () => {
     expect(db.table('trust_audit_logs')[0]).toMatchObject({ actor_id: 'mem-teen' });
   });
 });
+
+// A file with no roster window promises the whole authorized roster, even
+// when the server returns fewer rows than requested in each response.
+describe('member export completeness through a server response cap', () => {
+  beforeEach(() => { vi.spyOn(console, 'error').mockImplementation(() => {}); });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  function seedRoster(db: InMemorySupabase, count: number) {
+    db.replace('family_members', []);
+    const rows = Array.from({ length: count }, (_, i) => ({
+      id: `roster-${String(i).padStart(5, '0')}`, family_id: FAMILY,
+      user_id: `synthetic-roster-user-${i}`, display_name: `Roster ${i}`,
+      role: i === 0 ? 'parent' : 'teen', is_active: i % 2 === 0,
+      birthday: null, color: null, avatar_url: null,
+      created_at: '2026-09-01T00:00:00Z',
+    }));
+    db.seed('family_members', [...rows, {
+      id: 'foreign-roster', family_id: 'other-family', user_id: 'foreign-user',
+      display_name: 'FOREIGN-ROSTER-SENTINEL', role: 'parent', is_active: true,
+      birthday: null, color: null, avatar_url: null,
+      created_at: '2026-09-01T00:00:00Z',
+    }]);
+    return rows;
+  }
+
+  function failLaterRosterPage(db: InMemorySupabase) {
+    const original = db.from.bind(db);
+    let reads = 0;
+    db.from = ((table: string) => {
+      if (table === 'family_members' && ++reads === 2) {
+        const failed = createInMemorySupabase();
+        failing(failed, table, { code: '57014', message: 'synthetic later roster page timeout' });
+        return failed.from(table);
+      }
+      return original(table);
+    }) as typeof db.from;
+    return () => reads;
+  }
+
+  it.each([0, 7, 501, 2000])('exports all %i active and removed manager-visible members through a cap', async count => {
+    const db = household(undefined, 3);
+    const rows = seedRoster(db, count);
+    const result = await buildFamilyExport(scopeFor(db, 'parent'));
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('complete roster export refused');
+    const section = result.data.sections.find(s => s.key === 'members')!;
+    expect(section).toMatchObject({ count, limit: null, truncated: false, includesRemovedMembers: true });
+    const ids = (section.data as { id: string }[]).map(row => row.id);
+    expect(ids).toEqual(rows.map(row => row.id));
+    expect(new Set(ids).size).toBe(count);
+    const text = await readAll(serializeExport(result.data));
+    expect(text).not.toContain('FOREIGN-ROSTER-SENTINEL');
+    expect(text).not.toContain('foreign-user');
+  });
+
+  it('exports every active member for a nonmanager without removed or foreign rows', async () => {
+    const db = household(undefined, 3);
+    const rows = seedRoster(db, 17);
+    const active = rows.filter(row => row.is_active);
+    const result = await buildFamilyExport(scopeFor(db, 'teen'));
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('active roster export refused');
+    const section = result.data.sections.find(s => s.key === 'members')!;
+    expect(section).toMatchObject({ count: active.length, limit: null, truncated: false, includesRemovedMembers: false });
+    expect((section.data as { id: string }[]).map(row => row.id)).toEqual(active.map(row => row.id));
+    const text = await readAll(serializeExport(result.data));
+    expect(text).not.toContain('FOREIGN-ROSTER-SENTINEL');
+    for (const row of rows.filter(row => !row.is_active)) expect(text).not.toContain(JSON.stringify(row.user_id));
+  });
+
+  it('keeps an uncapped complete authorized roster unchanged', async () => {
+    const db = household();
+    const rows = seedRoster(db, 7);
+    const result = await buildFamilyExport(scopeFor(db, 'parent'));
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('healthy complete roster refused');
+    const section = result.data.sections.find(s => s.key === 'members')!;
+    expect(section).toMatchObject({ count: 7, limit: null, truncated: false, includesRemovedMembers: true });
+    expect((section.data as { id: string }[]).map(row => row.id)).toEqual(rows.map(row => row.id));
+  });
+
+  it('refuses the whole export if a later roster page fails', async () => {
+    const db = household(undefined, 3);
+    seedRoster(db, 7);
+    const reads = failLaterRosterPage(db);
+    const result = await buildFamilyExport(scopeFor(db, 'parent'));
+    expect(reads()).toBe(2);
+    expect(result).toEqual({ ok: false, failed: [{ key: 'members', error: expect.any(String) }] });
+  });
+
+  it('refuses more than the existing 2000-member completeness ceiling', async () => {
+    const db = household(undefined, 3);
+    seedRoster(db, 2001);
+    expect(await buildFamilyExport(scopeFor(db, 'parent'))).toEqual({
+      ok: false, failed: [{ key: 'members', error: expect.any(String) }],
+    });
+  });
+});
