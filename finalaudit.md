@@ -1,5 +1,18 @@
 # Final Production Audit
 
+## Release verified PR #1140 with the current audit ledger — 2026-10-27T21:00:50.4189558Z
+
+- Last Updated: 2026-10-27T21:00:50.4189558Z
+
+Independent final peer 063e48a8a5522fe6a78fbf9a1ac111b45a192023eec1337b64d55bbb8027856b admits semantic output 64c774d119d0d4fd142459c34106ba68fbde585486e89f961be2499a5d21e2c5: all 63 raw artifacts, 19 actual tested checkouts, complete three-zone registration vectors, 47 critical whole fixtures/700 cases, primary/auxiliary browser separation, database/build and both actual drained processes. The source was tested as b170 with parents 97d and 7ba6. All non-ledger bytes of the normal main candidate must equal that tested tree; root retains the current ledger and all first-failure history.
+
+This integration changes only the legacy AI chat route and assistant engine plus five associated fixtures. Exact member counts, stable pagination and accepted projections preserve caller and family boundaries. The added DTO fixture uses non-null sensitive-field sentinels to check the existing public projection; it makes no new DTO product-change claim. Held PR #1048's tool/helper work and PR #1126's schema work remain untouched. No migration, production configuration, provider or money action is included.
+
+No audit closure or production readiness credit precedes actual publication. The service-family artifact remains IN PROGRESS under its original additional browser/default criteria. The finite legacy 16-case artifact may close only after its full recorded acceptance conditions and actual main-source fit are independently confirmed. Existing Chat6/Retry48 artifact acceptance must be rebound to the new verified source without enlarging their scope. All counts remain unchanged in this candidate.
+
+The separate auth-read classifier and invite tasks remain private and IN PROGRESS; they are not part of this release. Root will run the ledger counter against the final private merge, verify unchanged tested application bytes and held-file boundaries, then perform a normal push. The resulting main SHA and deployment identity are recorded in the publication and production receipts. Until the public default matches a successfully deployed revision, PRODUCTION READY: NO.
+
+
 ## PR #1140 original logs pass semantic checks; final peer and main integration pending — 2026-10-27T21:00:13.9833142Z
 
 - Last Updated: 2026-10-27T21:00:13.9833142Z
