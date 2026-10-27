@@ -1,5 +1,19 @@
 # Final Production Audit
 
+## PR1136 original checks independently parsed; merge and deployment gates remain — 2026-10-27T17:02:06.329Z
+
+- Last Updated: 2026-10-27T17:02:06.329Z
+
+PR #1133 remains merged. Its successor PR #1136 at bab9a357c884e8980e859a9083dbf56595b93a9f now has all 19 original jobs successful across CI 40540759208, SQL 40540758934 and Messaging 40540759119, attempt 1. Sole collector PID 2372 actually drained 0/source-stable at 16:54:26.570Z. FIRST semantic reader PID 32188 actually drained 0/source-stable with empty stderr at 16:58:28.766Z. Qualification packet FINAL-school1136-bab9-original1136-three-runs19-jobs-bounded-semantic-qualification.json in G:/BubalySchool1136Bab9Preparation20261027 binds all 63 raw artifacts and the actual tested checkout d0447b5553171d3c2e95a18f5172f937bc7792cc, parents a7ef9c6930af4d2008a780ea729d6e6e376d221d and bab9. Tested tree equals head tree. No rerun, cancellation, guard relaxation or outcome borrowed from an earlier epoch.
+
+Each of three timezone jobs registers 2,804 unit files and 39,877 cases: 39,752 ordinary passes, two source-bound expected-failure controls and 123 skips; 2,799 files passed and five skipped. The 17 critical product files contribute 440 ordinary passes in every zone. Windows-only metadata coverage remains separately disclosed. Every original browser shard ran with retries disabled; primary browser totals are 2,893 registered, 2,885 passed and eight skipped. Separate RPC 48 and bill 8 cases are not added again to primary totals. All 29 pure port-guard controls pass while preserving all conflict refusals and the original 19 controls. This supports the bounded School repair, stronger synthetic memory proof and safe diagnostics; it does not establish complete product, live-auth, provider or database-policy acceptance. The prior 33a epoch remains preserved as 17 successful/two failed jobs; the unknown port-collision cause is still unknown.
+
+The separate Medical donor bf6a951af0518c6faba7074942b48c7a5b79f2e7 has independent local qualification 2327cdc2: the same 38-case regression changes from 22 passes/16 genuine failures to 38 passes, and ten whole related files yield 183 passes. Full nonincremental types PID 39496 actually drained 0 with empty output at 16:45:21.232Z. Only adjacent outer error/loading guards and retry-all-four are changed; signing, ownership, query and mutation behavior remain intact. Medical is NOT included in PR #1136 and still requires its own composition, hosted checks and release evidence.
+
+Production remains unverified: the latest known main deployments 9Gi/EMC failed, and the last direct default read still serves d93e089047a653cd7d082fe1e684147a84133d5d. The distinct standard Vercel credential identifies surgeservicesllc-9281 and has only SurgeServices team access; NewWorldVenture private build logs remain inaccessible. This is an access blocker, not an established build root cause. No further credential probing, production configuration, migrations or provider/money operations are authorized by this evidence. A normal merge and fresh exact-default verification remain required.
+
+All 15,715 permanent rows and their statuses are preserved: 10,335 NOT STARTED, 3,330 IN PROGRESS, 1,804 PASS, 237 FIXED + PASS and nine BLOCKED. Finite closure coverage remains 2,041/15,715 (12.99% rounded), not product completion. No new closure is credited by this journal. PRODUCTION READY: NO.
+
 ## BAB9 successor published; next isolated medical read proof allocated — 2026-10-27T16:37:35.828Z
 
 - Last Updated: 2026-10-27T16:37:35.828Z
