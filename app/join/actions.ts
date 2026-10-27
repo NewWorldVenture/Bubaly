@@ -3,6 +3,7 @@
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { ROLE_LABEL_KEYS, ROLE_ORDER, type MemberRole } from '@/lib/constants/roles';
+import { isRetryableAuthError } from '@/lib/auth/session';
 import { isChildLoginEmail } from '@/lib/onboarding/child-login';
 import { closePendingInvitesFor } from '@/lib/server/member-invites';
 
@@ -25,8 +26,9 @@ export type InvitePreview =
 export async function previewInviteAction(token: string): Promise<InvitePreview> {
   if (typeof token !== 'string' || !token || token.length > 200) return { ok: false, reason: 'invalid' };
   const supabase = await createServer();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { ok: false, reason: 'signed_out' };
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError && isRetryableAuthError(authError)) return { ok: false, reason: 'unavailable' };
+  if (authError || !auth.user) return { ok: false, reason: 'signed_out' };
   if (isChildLoginEmail(auth.user.email)) return { ok: false, reason: 'kid_login' };
 
   const { data: invite, error } = await createServiceClient().from('invites')

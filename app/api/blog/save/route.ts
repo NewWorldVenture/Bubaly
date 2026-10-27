@@ -1,3 +1,4 @@
+import { isRetryableAuthError } from '@/lib/auth/session';
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
@@ -65,8 +66,12 @@ export async function GET(req: NextRequest) {
   const postId = await loadPostId(svc, slug);
   if (!postId) return NextResponse.json({ error: t('save.notFound') }, { status: 404 });
 
-  const { data: auth } = await (await createServer()).auth.getUser();
-  const { error, ...state } = await saveState(svc, postId, auth.user?.id ?? null);
+  const { data: auth, error: authError } = await (await createServer()).auth.getUser();
+  if (authError && isRetryableAuthError(authError)) {
+    return NextResponse.json({ error: t('save.couldNotRecordTheSave') }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+  }
+  const user = authError ? null : auth.user;
+  const { error, ...state } = await saveState(svc, postId, user?.id ?? null);
   if (error) {
     // 503 rather than a state we could not read. The client keeps whatever it
     // had (`r.ok ? r.json() : null`), which is the honest outcome: an empty
@@ -75,7 +80,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: t('save.couldNotRecordTheSave') }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
   }
   return NextResponse.json(
-    { ...state, authenticated: !!auth.user },
+    { ...state, authenticated: !!user },
     { headers: { 'Cache-Control': 'no-store' } },
   );
 }
@@ -85,8 +90,11 @@ export async function POST(req: NextRequest) {
   const svc = createServiceClient();
 
   // Must be signed in to save — this is the whole point of the feature.
-  const { data: auth } = await (await createServer()).auth.getUser();
-  if (!auth.user) {
+  const { data: auth, error: authError } = await (await createServer()).auth.getUser();
+  if (authError && isRetryableAuthError(authError)) {
+    return NextResponse.json({ error: t('save.couldNotRecordTheSave') }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+  }
+  if (authError || !auth.user) {
     return NextResponse.json({ error: 'auth_required', authenticated: false }, { status: 401 });
   }
   const userId = auth.user.id;
