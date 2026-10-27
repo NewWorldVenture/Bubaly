@@ -1,5 +1,20 @@
 # Final Production Audit
 
+## Auth composition boundary amendment before broad runtime: qualify the strict subset and hold all older standard fixtures locally — 2026-10-27T21:17:08.2814008Z
+
+- Last Updated: 2026-10-27T21:17:08.2814008Z
+
+The new composition is private 166dc5ccfefac5c4c25093843e3bcf6839dbc9ba, with exactly the six allocated application/test paths. The complete new joining fixture genuinely reproduced 14 passes/four unknown-error failures against the accepted invite code and old classifier. With the exact accepted classifier tree, the SAME ordered eighteen cases pass, including healthy-browser → real preview action → pure classifier → rendered unavailable UI. PID 16824 actually drained 0/null/stable/empty at 21:15:37.975Z; independent peer 8bd4b162 binds the entire fixture and zero import/fetch/forbidden boundary receipts. No native SDK or refresh implementation was used.
+
+Before starting the older standard regression batch, source review found real SDK/Auth/provider imports in several unchanged fixtures. Five concrete examples include partial bearer/server imports in allowance8, api-ai-route32 and engine17, plus direct SDK/SSR imports in family-export6 and server-assurance16. The expanded forty-five-file census is still source-only and may identify additional paths. None of these forty-five whole fixtures has executed in this fresh composition, and no fixture or assertion will be changed to imitate the excluded implementations. The historical accepted qualifications remain dated evidence under their own disclosed scope; they do not authorize new prohibited runtime work or prove native parity.
+
+Amend the preceding local execution requirement conservatively BEFORE any broad runtime: hold ALL forty-five older standard fixtures locally while the independent census continues. A separately source-admitted strict subset may now qualify: tool22, DTO21, three pure/static classifier fixtures78, and the eighteen-case joining fixture. This is SIX distinct whole fixtures/139 cases per timezone, not the full 51/796 reference. Reuse the actual accepted fixed eighteen-case UTC proof rather than rerunning it; execute the missing strict groups/zones only after complete current source/runtime admission. An empty standard group must be refused, never interpreted as an unfiltered Vitest run. No unsafe whole fixture or partial case selection is authorized.
+
+Keep all eleven catalogs, complete SDK/Auth/cache/coordinator/provider premocks, import and fetch receipts, exact case-name vectors, full types and lint/i18n/type-generation gates. Subsequent source-admitted safe standard subsets may be added only with a separate frozen plan and another recorded allocation amendment before FIRST. Until then, standardFiles remains empty and every one of the forty-five original fixtures is explicitly unexecuted locally. No full local union claim, transferred old runtime acceptance or new closure credit is permitted.
+
+The full deduplicated FIFTY-ONE whole fixtures/796 cases remain mandatory in every fresh original hosted timezone vector on the actual future candidate, with their original sources and assertions intact. No hosted filter, skipped assertion, new native fault probe or workflow change is introduced. The ordinary existing hosted suite is a separate required gate; this amendment does not reroute any stopped local probe into hosted execution. Publication still needs an independent final composition peer, source fit, current ledger and normal CI gates. Main be321 and its original CI remain untouched; production is failed/public d93, and PRODUCTION READY remains NO. Audit counts and every register status are unchanged by this scope amendment.
+
+
 ## Pre-edit allocation: compose verified auth-read fixes and prove invite unknown-error coupling — 2026-10-27T21:08:08.4371751Z
 
 - Last Updated: 2026-10-27T21:08:08.4371751Z
