@@ -1,4 +1,11 @@
 # Final Production Audit
+## Parallel privacy candidate disposition and release access limitation — 2026-10-27T14:48:00Z
+
+The historical a7cd N8 FIRST proof actually drained exit1 with4 fixture-premise failures/0passes, empty stderr and stable source. All4 stopped before the UI action/privacy observations. The source peer and author missed a pagination detail: one under-lease consent recheck splits100+21 IDs, and readAll reads both data and an EMPTY terminal page per chunk, hence4query invocations. This is a test-harness error, not a demonstrated application privacy failure. No rerun or branch/production edit occurred. Receiptc47e444c preserves every first raw result. Current main1732 independently adds scope-map compare-and-set plus refresh on zero updated rows and narrows stored scopes through the helper; the frozen stale false-vs-true write cannot match that source contract. This historical candidate is retired without a current-main bug claim; full durable-consent/authorization workflows remain separately unverified. The earlier root/source-peer prelease explanation was a hypothesis and is superseded by this exact pagination account.
+
+Read-only Vercel investigationed2d06ca preserves the first certificate refusal and a standard system-CA successor. The configured token is INVALID, so the NewWorldVenture deployment's actual build error cannot be read here. No TLS bypass, secret disclosure, account/configuration change or unsupported browser automation occurred. This external access limitation does not authorize guessing at deployment fixes or claiming the older public default is current. Normal Git-triggered deployment after the verified merge remains the release path, subject to exact public revision/completed-status confirmation. No user question is required.
+
+D856 actual tested checkout804c has immutableparents1732+D856 and all23 repaired artifacts; current hosted build/typecheck is successful, while timezone/browser jobs remain in progress under the single live collector70326. New2802registry/54whole1033 source plan and semantic reader are independently reviewed before execution. All15,711IDs/statuses/counts remain unchanged; no broad feature or release-readiness closure is credited. PRODUCTION READY: NO.
 
 ## Combined PR1133 source qualified locally; production revision mismatch investigated — 2026-10-27T14:40:18.555Z
 
