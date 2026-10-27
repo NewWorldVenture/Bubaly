@@ -1,5 +1,17 @@
 # Final Production Audit
 
+## Original1139 failed results preserved; admin signer denial proof independently qualified locally — 2026-10-27T18:56:42.063Z
+
+- Last Updated: 2026-10-27T18:56:42.063Z
+
+Failed-only1139 parser a857/launcher1cc8 was independently source-admitted9b0c29f2 after all63 raw bindings and19 jobs were rehashed. Root exclusive FIRST actualPID30668 drained0/source-stable at18:56:09.995Z with empty stderr; output FINAL-failed-familyAI1139-original19-preservation.json explicitly records FAILED_ORIGINAL_FAMILYAI1139_3RUNS19JOBS63RAW_PRESERVED_NOT_GREEN. Exit0 means preservation only. Both named memory.remember failures across allthree zones and the Qualityaggregate dependency failure remain immutable. Conditional greenreader1a05 remains UNEXECUTED.
+
+Admin test-only donor6ce578eb94faa18b2185070c6fdaaf1a63d8bedd changes only tests/the-admin-opens-the-document-row-it-was-shown.test.ts. Allfive original callbacks/assertions and healthy120s control remain exact; three valid-input refusal controls reach actualadmin/assurance/canonicalread decisions and prove no privileged signing after denial. Actual5wholefixtures64PASS, scopedlint/typegen/full8GBnonincrementaltypes pass; typesPID18108 drained0/stable/empty18:39:37.065Z. Author dd404337 binds32 artifacts; independent6d45a814 rehashes all32 and validates original bodies, effect assertions, source and actualprocess results. These are synthetic action-boundary checks; no product defect/fix, actualMFA/Auth/Storage/RLS/UI or production acceptance is claimed. The support obligation remainsIP pending integration/hosted qualification.
+
+Root prepared G-only private successor G:/BubalyMemberChat1139SuccessorIntegration20261027 on codex/member-chat1139-successor-20261027 from710f and cherry-picked only that qualified Admin donor as610b372df8b. Its NEW physical npm graph actually drained0/PID16584 at18:55:59Z; no reused graph or private env files. Lock independently owns only the memory-tool local count fixture repair; Audit reviews its BEFORE-FIRST runtime boundary while Release preserves failed evidence and derives the full deduplicated successor fixture union. Current published1139 is unchanged and all its originaljobs are terminal. No emptyretrycommit/manualCIrerun/cancellation, guard relaxation or held source edits.
+
+GitHub-only exact e07 deployment7366544475 still exposes empty payload and generic failedHWNs status18:09:09Z; it supplies no build error. Previously exhausted wrong-team credentials are not retried. The deployment's target URL is not evidence of public default promotion. Correct NewWorldVenture build-log access remains the external blocker; publicd93 and PRODUCTION READY: NO remain. All15719 inventory IDs/statuses and2041 finite closures unchanged.
+
 ## PR1139 first hosted epoch failed; preserve evidence and repair faithful memory-tool fixture — 2026-10-27T18:55:22.995Z
 
 - Last Updated: 2026-10-27T18:55:22.995Z
