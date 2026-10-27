@@ -18,7 +18,7 @@ import type { ServiceScope } from '@/lib/services/types';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
 type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'delete'; filters: Record<string, unknown>; payload?: unknown };
-type Reply = { data: unknown; error: unknown };
+type Reply = { data: unknown; error: unknown; count?: number };
 
 function makeDb(respond: (call: Call) => Reply) {
   const calls: Call[] = [];
@@ -33,11 +33,19 @@ function makeDb(respond: (call: Call) => Reply) {
     // paged read it has reached the end. A fake that ignored the window would
     // hand `readAll` the same page forever, so model it.
     let window: { from: number; to: number } | null = null;
-    const paged = (reply: Reply): Reply => (window && Array.isArray(reply.data)
-      ? { ...reply, data: reply.data.slice(window.from, window.to + 1) }
-      : reply);
+    let counted = false;
+    let maximum: number | null = null;
+    const paged = (reply: Reply): Reply => {
+      if (call.kind !== 'select' || !Array.isArray(reply.data)) return reply;
+      const count = reply.data.length;
+      const data = window ? reply.data.slice(window.from, window.to + 1)
+        : maximum === null ? reply.data : reply.data.slice(0, maximum);
+      return { ...reply, data, ...(counted ? { count } : {}) };
+    };
     Object.assign(b, {
-      select: chain, order: chain, limit: chain, or: chain,
+      select: (_columns?: string, opts?: { count?: string }) => { counted = opts?.count === 'exact'; return b; },
+      limit: (count: number) => { maximum = count; return b; },
+      order: chain, or: chain,
       range: (from: number, to: number) => { window = { from, to }; return b; },
       eq: filter, is: filter, in: filter,
       ilike: (c: string, v: unknown) => filter(`ilike:${c}`, v),
