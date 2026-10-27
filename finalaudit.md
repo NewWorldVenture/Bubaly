@@ -7274,7 +7274,7 @@ The TLS problem was a missing Node system-CA setting, not a reason to disable ce
 
 ## Current reconciled audit counts
 
-- Last reconciled from the canonical register: **2026-10-26T21:27:40.747Z**. Current counts below include qualified finite closures; dated narratives remain historical.
+- Last reconciled from the canonical register: **2026-10-27T19:46:05.913Z**. Current counts below include qualified finite closures; dated narratives remain historical.
 
 - Retained existing DST regression file adds one inventory obligation during Gregorian-helper reconciliation:14,580 rows,11,678 NOT STARTED and2,549 IN PROGRESS;344 closures unchanged.
 
@@ -7284,8 +7284,8 @@ The TLS problem was a missing Node system-CA setting, not a reason to disable ce
 
 - Recounted row by row on 2026-10-04 from Register B itself (`node scripts/audit-register-counts.mjs`; `tests/the-audit-summary-counts-its-register.test.ts` now fails when this section and the rows disagree). The register holds 14,538 unique IDs with no duplicates and no unrecognised status. The previous 11,701 NOT STARTED / 2,484 IN PROGRESS tally predated LIBRARY-2E628A2A31CE's evidenced move from NOT STARTED to IN PROGRESS; the 15:39 UTC checkpoint already carried 11,700 / 2,485, and the rows confirm it.
 - Total Audit Items: **15,719**. Prior count explanations are preserved in the dated status summary below.
-- Not Started: **10,334**. Recounted on 2026-10-09 after relationship/source inventory reconciliation; prior dated tallies remain below.
-- In Progress: **3,334**. Recounted on 2026-10-09 after relationship/source inventory reconciliation; prior dated tallies remain below.
+- Not Started: **10,334**. Current canonical register; earlier dated tallies remain historical.
+- In Progress: **3,334**. Current canonical register; earlier dated tallies remain historical.
 - Passed: **1,804**. Prior count explanations are preserved in the dated status summary below.
 - Fixed + Passed: **237**. Prior count explanations are preserved in the dated status summary below.
 - Blocked: **10**. Prior count explanations are preserved in the dated status summary below.
@@ -7354,6 +7354,8 @@ Retained previous product-completion snapshot:
 Retained historical product-completion summary (superseded tally; the word "Current" below belongs to its earlier snapshot):
 
 > - Product completion: **Not assessed**. Current verified audit closure coverage is499/15,009 (3.32%); prior snapshot470/14,977 (3.14%) remains dated history; prior snapshot429/14,977 (2.86%) remains dated history; zero external-blocker completion credit. The older target statement below is retained as dated history, not the current tally: - Overall Completion under the adopted target: **2.49% credited**, using372 PASS/FIXEDPASS and zero eligible_external_BLOCKED credit out of14,968. If all six external blockers qualify, coverage would be2.53%; no such credit is awarded.
+
+- Overall audit completion under the adopted formula: **12.98%** ((2,041 verified closures + **0** independently credited external blocks) / 15,719). The 10 BLOCKED rows remain visible; none receives automatic completion credit without a separate eligibility review. This is audit disposition coverage, not a product-build percentage.
 
 ## Current source audit checkpoint — 2026-10-03 15:37 UTC, Codex/root review coordination
 
@@ -67815,3 +67817,83 @@ No audit rows are closed by this checkpoint, and overall audit readiness remains
 ### Historical audit wording preserved during the 1732 reconciliation
 
 The earlier RLS attribution read “Codex, who”; main generalizes this to “the agent that”. The earlier unpublished lifecycle pointer was `da6bbc8b1` on `wip/lifecycle-fix-partial-20261022`; main describes it as “kept on a local branch that was never pushed”. These exact historical pointers remain recorded here alongside the updated descriptions. Neither wording change is a new verification or closure.
+
+
+# Final Regression
+
+Current checkpoint: **2026-10-27T19:46:05.913Z**. **IN PROGRESS — final sign-off is pending.** This checkpoint supersedes historical release-state descriptions above without deleting their evidence. The complete application audit and second full regression pass are unfinished.
+
+## Build
+
+Hosted build and generated route checks passed for PR #1139. PR #1140 has passed its build; its last browser shard is still running. Production deployment of main E07 failed in Vercel (HWNs); no successful replacement or promotion is established.
+
+## Type Check
+
+Full nonincremental checks with an explicit 8 GB heap passed for both qualified private compositions and their source-bound hosted build. The future DTO test-only donor remains private and cannot transfer hosted qualification.
+
+## Lint
+
+Applicable local lint and i18n checks passed. Original hosted lint/audit gates passed; this does not complete every repository audit item.
+
+## Automated Tests
+
+PR #1139: all 19 original jobs and 63 raw artifacts independently verified; each timezone has 39,814 ordinary passes, 2 expected failures and 123 skips. Critical selection: 43 whole fixtures / 624 cases without skips. Primary browser groups: 2,885 passes and 8 skips; auxiliaries are counted separately. PR #1140: local 47 whole fixtures / 697 passes in each timezone; hosted verification remains incomplete until every original job and receipt qualifies. Neither PR is merged yet.
+
+## Authentication
+
+IN PROGRESS. Synthetic authorization seams and browser fixtures do not prove full native authentication, OTP, provider parity or indefinite-session workflows. Stopped native probes are not retried or renamed.
+
+## Authorization
+
+IN PROGRESS. New caller-history, complete-member and admin-denial controls have bounded source-bound evidence. Broader role, RLS, held-schema and production gates remain explicit obligations.
+
+## Core User Journeys
+
+IN PROGRESS. No complete assistant journey is inferred from the legacy caller-context capture; the healthy synthetic POST intentionally stops before streaming and provider execution. Other unaudited journeys remain in the register.
+
+## APIs
+
+IN PROGRESS. Current tests prove only their recorded routes, error paths and synthetic boundaries. Full lifecycle, real persistence and production behavior remain separate.
+
+## Database
+
+IN PROGRESS. Disposable CI migration replay and boundary probes pass within recorded scope. The latest recorded production schema verification failed all 52 checks with HTTP 401; no new successful production verification is claimed in this cycle. No production migration or backfill was applied.
+
+## Integrations
+
+IN PROGRESS / credential-dependent portions BLOCKED where individually recorded. No provider, customer, configuration or financial changes were made. Private Vercel build logs are unavailable with the session's accessible team; GitHub exposes only a generic failure.
+
+## Mobile / Responsive
+
+IN PROGRESS. Hosted device fixtures and mobile type/config checks pass within their documented limits. The explicit dependency allowlist remains; this is not blanket security or every-device approval.
+
+## Accessibility
+
+IN PROGRESS. Existing bounded browser and focus evidence remains intact. Complete contrast, screen-reader and every-control coverage is not inferred.
+
+## Security
+
+IN PROGRESS. Family privacy, sensitive data, production RLS, held migrations and other high-risk obligations remain open. Finite test-artifact closure cannot close their parent workflows.
+
+## Performance
+
+IN PROGRESS. No full production performance or capacity sign-off is established by functional tests.
+
+## Known Blockers
+
+- The latest verified public default is still d93; main E07's Vercel deployment failed. NewWorldVenture build-log access is unavailable. The updated Computer Use skill requires a JavaScript runtime that is absent here; no custom automation or credential retry was used.
+- Production database verification and unapplied/held migration decisions remain separate owner/service dependencies. Main's recorded allocation map is preserved.
+- PRs #1048 and #1126 retain distinct held work and are not discarded to reduce the PR count.
+- The user has already selected preservation of existing conversation access and a new empty canonical Family Chat. Historical text saying that decision is still unmade is superseded; this checkpoint does not apply any production migration.
+
+## Remaining Issues
+
+The register still contains 10,334 NOT STARTED, 3,334 IN PROGRESS and 10 BLOCKED obligations. Seven finite artifact closures are conditional; no early closure credit is granted. The complete audit and final regression are not finished.
+
+## Production Readiness
+
+**NO**
+
+## Final Sign-Off
+
+**Pending.**
