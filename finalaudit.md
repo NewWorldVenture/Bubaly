@@ -1,5 +1,14 @@
 # Final Production Audit
 
+- Last Updated: 2026-10-27T15:04:28.6513772Z
+## Next School donor locally qualified; latest ledger counter verified
+
+School donor672d592c4ad169e90cbc6ac2f42a3216466ab151 is independently qualified LOCALLY by handoff479f522a/peer729e26d1. The SAME15fixture first yields9healthyPASS/6genuineFAIL on unchanged1732, then15PASS after only the adjacent outer error-first/retry-all-three guard repair. Six related whole fixtures142PASS/0skip; scopedlint/i18n/typegen0; explicit8GB/nonincremental fulltypes35200actuallydrained0/empty/stable15:00:49.731Z. All queries, inner desk, roles, forms, mutations and handlers remain byte-exact modulo line endings. Original source, first failures and all phase raw are retained. No whole School/Auth/SDK/desk lifecycle/native/production acceptance is inferred. This donor is isolated, unpublished and NOT included in frozenPR1133; its artifact/component rows remain IN PROGRESS pending integration and required release qualification.
+
+The latest15,712-row ledger now passes both whole counter fixtures62ordinaryPASS/0fail/skip, actualPID26112drained0/stable at14:59:54.510Z. First run preserved an environment omission: the58-case Python-backed file could not register because the restricted PATH had noPython; the other4cases passed. No source/test was weakened. A separate runner adds an owned copied G-only Python3.12 runtime, pins its files and finding-index source, and disables user packages/bytecode; the unchanged two whole fixtures then pass62. First metadata-only School allocation also preserved a readRegister object-vs-array assertion refusal before any write; V2 uses the actual rows API and reconciles all counts.
+
+Sourcepeer6eab2def confirms all15,711olderrows byte-exact, one legitimately allocated SchoolIP row and only derived summary/header updates; no old evidence/history/status is removed. Current totals15,712=10,337NS+3,325IP+1,804PASS+237FIXEDPASS+9BLOCKED,2,041finiteclosures. Public production remainsd93 vsmain1732's failed deployment, per independent source/history65cb4c6a; build-info is dynamic/no-store with validated build-time revision and NO older-SHA fallback. The mismatch is real but its build failure cause is unknown without logs. No production success or new closure is claimed; readiness NO.
+
 ## Next isolated School read-recovery task allocated while PR1133 source stays frozen — 2026-10-27T14:51:54.434Z
 
 - Last Updated: 2026-10-27T14:51:54.434Z
