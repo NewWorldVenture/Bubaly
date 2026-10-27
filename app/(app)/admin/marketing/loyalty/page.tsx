@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { randomUUID } from 'node:crypto';
 import Link from 'next/link';
 import { Gift, Trophy, Coins, Settings2, Users, Sparkles } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -202,7 +203,10 @@ export default async function LoyaltyPage() {
           </label>
           <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingLoyalty.points')}</span><input type="number" name="points" required className={inputCls} placeholder={t('adminMarketingLoyalty.eG250')} /></label>
           <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingLoyalty.reason')}</span><input name="reason" className={inputCls} placeholder="optional" /></label>
-          <div className="sm:col-span-4"><button className="inline-flex h-10 items-center gap-1 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Coins className="h-4 w-4" /> {t('adminMarketingLoyalty.awardAdjustPoints')}</button></div>
+          {/* One id per rendered form: the action applies it once, and the
+              button stays disabled while the award is in flight. */}
+          <input type="hidden" name="request_id" value={randomUUID()} />
+          <div className="sm:col-span-4"><SubmitButton className="inline-flex h-10 items-center gap-1 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Coins className="h-4 w-4" /> {t('adminMarketingLoyalty.awardAdjustPoints')}</SubmitButton></div>
         </form>
       </Card>
 

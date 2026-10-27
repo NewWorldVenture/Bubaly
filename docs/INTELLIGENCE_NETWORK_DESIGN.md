@@ -34,9 +34,41 @@ it provably safe, we don't ship it.
    is a per-family **feature vector of coarse bands** (see §4), written to a
    family-owned row. Aggregation reads those, never the source tables.
 6. **Differential-privacy-lite.** Published aggregate counts get small calibrated
-   noise (±) so that adding/removing one family can't be inferred from a delta.
+   noise (±), and are published on a fixed epoch (a UTC calendar month by
+   default, `PUBLICATION_EPOCH`): inside an epoch no published figure changes,
+   so two nights have no delta to read a family from, and each epoch draws
+   every band's noise afresh. That is one fresh sample per band per epoch: a
+   watcher who averages many epochs still converges on the true counts, slowly
+   (the measured rate is pinned in `tests/network-noise-is-drawn-once-per-epoch.test.ts`),
+   so the guarantee is a bounded budget, not "can never be inferred".
 7. **Reversible + forgettable.** Turning off consent deletes the family's
-   contribution row immediately; the next aggregation run recomputes without it.
+   contribution row immediately; the published figures are rebuilt without it
+   at the next epoch's snapshot (up to a month at the default epoch). Leaving,
+   and switching off a scope that contributes, are written under the same
+   publication claim the aggregation publishes under, and the aggregation
+   re-reads consent after its upserts (under that claim when it publishes, and
+   before it reports a failure when some of them failed), so no run that
+   reaches its re-check stores the family's row again, and no publication
+   written after the family is told it left counts it
+   (`lib/network/withdrawal-server.ts`). Two cases app code cannot close, and
+   the owner's admission trigger on `network_contributions` (a consent check
+   under a row lock) does: a run that dies after upserting the family's row
+   and before its re-check (the cron route's `maxDuration` is 60 seconds and
+   it upserts one family at a time; a run that throws out to the route's
+   `catch` does not re-check either), and an upsert whose answer is lost and
+   that commits after the re-check read consent. Either keeps the row stored
+   until the next night's run prunes it, and neither ever publishes it: the
+   figures are held for the epoch, and a run publishes only the families it
+   re-checked under the claim. The withdrawal names the household on screen
+   and is refused when that is no longer the account's active one, so a tab
+   left open on another household changes nothing. A scope change is made
+   against the map stored at that moment: a switch-off only switches scopes
+   off, and any other change, joining included, is refused when the stored
+   row changed since the screen read it, so a second tab of the household
+   cannot switch back on a scope the first switched off. The copy says the
+   rest: this month's published summaries keep the family's share until next
+   month's, and the noise makes a join or leave unlikely to read from two
+   months, not impossible.
 
 ## 3. What we do NOT do
 
@@ -80,9 +112,25 @@ Runs daily, service role:
 1. **Contribute.** For each family with `consent.enabled`, recompute the coarse
    feature vector (reuse `computeContribution` + the banding helpers) and upsert
    `network_contributions`. Families that opted out have their row deleted.
-2. **Aggregate.** Group contributions by `(scope, cohort_key, metric)`. For each
-   group: if `count(distinct family) < K` → **skip** (never written). Else compute
-   the statistic, add DP noise, write/replace the `network_aggregates` row.
+2. **Aggregate — once per publication epoch.** Group contributions by
+   `(scope, cohort_key, metric)`. For each group: if `count(distinct family) < K`
+   → **skip** (never written). Else compute the statistic, add DP noise (keyed on
+   the epoch), write/replace the `network_aggregates` row. Every other night of
+   the epoch holds that snapshot unchanged and only re-stamps `computed_at`, so
+   readers' 36-hour freshness rule still sees a live cron. One run at a time
+   holds or publishes (a claim in `app_settings`, which records whether a run
+   or a withdrawal holds it); a run that overlaps another run
+   refreshes the contributions and leaves the figures alone, and the prune
+   only removes earlier epochs' rows, so overlapping runs neither publish an
+   epoch twice nor delete its snapshot. Before it holds or publishes, a run
+   re-reads consent for every family it stored and drops (and deletes) any
+   that left or switched a scope off since it started. A withdrawal holds the
+   claim only for its two writes, so a run that finds one holding it waits it
+   out; one still holding it after that (or a holder that recorded no kind)
+   would leave the night with no publisher, and the run reports a failure
+   instead of deferring to it. A member takes the claim at most ten times in
+   ten minutes; past that their withdrawals are still written, without the
+   claim.
 3. **Serve.** `visibleInsights()` maps `network_aggregates` rows a family is
    entitled to (opted-in scope) into `InsightCandidate`s; the k-floor is re-checked
    at read time as defense-in-depth.
@@ -95,9 +143,9 @@ Everything flows through the gate that already exists — the cron cannot bypass
 | Threat | Mitigation |
 |---|---|
 | Re-identify a family from a small cohort | K-floor (≥20) + DP noise; cohorts keyed on coarse bands only |
-| Differencing attack (compare runs to isolate one family) | DP noise on published counts; replace-in-place, no per-run deltas exposed |
+| Differencing attack (compare runs to isolate one family) | DP noise on published counts, published on a fixed epoch (a calendar month): within it no figure changes, and each epoch draws every band afresh — one sample per band per epoch, so long-run averaging is bounded by that budget, not ruled out (`lib/network/aggregate-server.ts`, `stickyNoise`) |
 | Malicious writer smuggles PII into `features` | Server-side allowlist validation of banded keys; no free text |
-| Consent revoked but data lingers | Opt-out deletes the contribution row; aggregates recomputed without it |
+| Consent revoked but data lingers | Opt-out deletes the contribution row; aggregates recomputed without it at the next epoch's snapshot |
 | Insider/DB dump | `network_aggregates` holds only ≥K aggregates; `network_contributions` holds only coarse bands, no identifiers |
 
 ## 7. Open decisions for you

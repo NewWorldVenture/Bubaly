@@ -23,6 +23,7 @@ type LoyaltyRpcResult = {
   needed?: number;
   account?: Account;
   redemption_id?: string;
+  transaction_id?: string;
 };
 
 function parseRpcResult(data: Json | null): LoyaltyRpcResult {
@@ -55,7 +56,28 @@ export async function ensureAccount(supabase: DB, familyId: string): Promise<Acc
   return data;
 }
 
-export type AwardOpts = { kind?: 'earn' | 'redeem' | 'adjust' | 'expire'; reason?: string; source?: string; rewardId?: string | null; actorId?: string | null };
+export type AwardOpts = {
+  kind?: 'earn' | 'redeem' | 'adjust' | 'expire'; reason?: string; source?: string; rewardId?: string | null; actorId?: string | null;
+  /**
+   * The submission this award answers (a form's one-time id). Stamped on the
+   * ledger row it writes, so the same submission arriving again — a second
+   * click, a resubmit after a lost response — finds it (loyaltyAwardApplied)
+   * and is not applied twice.
+   */
+  requestId?: string | null;
+};
+
+/**
+ * Whether a submission's award is already on the ledger. The RPC itself has no
+ * dedupe, so a repeated manual award changed the balance twice and, because
+ * lifetime points only ever go up, left the family's tier inflated for good.
+ */
+export async function loyaltyAwardApplied(supabase: DB, familyId: string, requestId: string): Promise<boolean> {
+  const { data, error } = await supabase.from('loyalty_transactions').select('id')
+    .eq('family_id', familyId).eq('metadata->>request_id', requestId).limit(1);
+  if (error) throw stableRpcError('check the loyalty award', error);
+  return (data ?? []).length > 0;
+}
 
 /**
  * Award (or, with a negative amount + kind 'adjust', deduct) points. Updates the
@@ -80,6 +102,15 @@ export async function awardPoints(supabase: DB, familyId: string, points: number
     throw stableRpcError('update loyalty points', new Error(result.reason ?? 'The loyalty engine rejected the update.'));
   }
   if (!result.account) throw stableRpcError('update loyalty points', new Error('The updated loyalty account was not returned.'));
+  if (opts.requestId && result.transaction_id) {
+    // The receipt a repeat of this submission is recognised by. The award has
+    // landed either way, so a receipt that did not is logged, not thrown.
+    const { data: stamped, error: stampError } = await supabase.from('loyalty_transactions')
+      .update({ metadata: { request_id: opts.requestId } })
+      .eq('id', result.transaction_id).eq('family_id', familyId)
+      .select('id').maybeSingle();
+    if (stampError || !stamped) console.error('[loyalty] award receipt was not recorded', stampError ?? new Error('The ledger row was not returned.'));
+  }
   return result.account;
 }
 

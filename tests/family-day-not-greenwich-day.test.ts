@@ -33,11 +33,12 @@ function allowedFile(registry: Map<string, string>, file: string): boolean {
  * the reason it has not been converted. Shrinking this list is the point of it;
  * adding to it needs a reason as good as these.
  */
-const ALLOWED = new Map([
-  // Platform-wide aggregation across every family at once. There is no single
-  // family zone to resolve, and UTC bucketing is what a cross-household
-  // benchmark should use.
-  ['lib/network/aggregate-server.ts', 'platform-wide aggregation; UTC bucketing is correct'],
+const ALLOWED = new Map<string, string>([
+  // lib/network/aggregate-server.ts left this list when the nightly
+  // aggregation began reading each family's dinners and spending on its own
+  // calendar (N15). "Platform-wide, so UTC bucketing is correct" was the reason
+  // it gave, and it was not one: the band is the FAMILY's week, and a Pacific
+  // family's evening run read tomorrow's dinner plans as tonight's.
   // app/api/cron/wallet-allowance/route.ts left this list when it began
   // deciding each rule on its own family's day: its "bounded to one day early"
   // was a Pacific child paid on the eve of the due day.
@@ -193,10 +194,13 @@ describe("a family's day is not Greenwich's day", () => {
   });
 
   it('normalizes separators without exempting an unlisted sibling', () => {
-    expect(allowedFile(ALLOWED, 'lib/network/aggregate-server.ts')).toBe(true);
-    expect(allowedFile(ALLOWED, 'lib\\network\\aggregate-server.ts')).toBe(true);
-    expect(allowedFile(ALLOWED, 'lib/network/another-aggregate-server.ts')).toBe(false);
-    expect(allowedFile(ALLOWED, 'lib\\network\\another-aggregate-server.ts')).toBe(false);
+    // A registry of one, since the real one may be empty: the matcher is what
+    // is under test here, not any entry.
+    const registry = new Map([['lib/network/aggregate-server.ts', 'sample entry']]);
+    expect(allowedFile(registry, 'lib/network/aggregate-server.ts')).toBe(true);
+    expect(allowedFile(registry, 'lib\\network\\aggregate-server.ts')).toBe(true);
+    expect(allowedFile(registry, 'lib/network/another-aggregate-server.ts')).toBe(false);
+    expect(allowedFile(registry, 'lib\\network\\another-aggregate-server.ts')).toBe(false);
     const unsafe = "const today = now.toISOString().slice(0, 10); .eq('plan_date', today)";
     expect(greenwichDayNextToDateFilter(unsafe, new Set(['plan_date']))).toEqual(['plan_date']);
   });

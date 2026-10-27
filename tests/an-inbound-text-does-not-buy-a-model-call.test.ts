@@ -125,6 +125,8 @@ function refuseCounts(client: InMemorySupabase): void {
  * defaults to now(), which is what the hourly window counts. The in-memory
  * client's defaults are static values, so the clock default is added at insert time.
  */
+/** How far the database's clock runs ahead of this host's (round 9: the window's upper bound). */
+let databaseClockAheadMs = 0;
 function database(): InMemorySupabase {
   const fresh = createInMemorySupabase({
     uniques: { guardian_callback_events: [['event_id']], notifications: [['id']], ai_tool_calls: [['id']], guardian_communications: [['twilio_sms_sid']] },
@@ -135,7 +137,9 @@ function database(): InMemorySupabase {
     const query = realFrom(table);
     if (table !== 'guardian_communications') return query;
     const realInsert = query.insert.bind(query);
-    query.insert = (rows) => realInsert((Array.isArray(rows) ? rows : [rows]).map((row) => ({ started_at: new Date().toISOString(), ...row })));
+    query.insert = (rows) => realInsert((Array.isArray(rows) ? rows : [rows]).map((row) => ({
+      started_at: new Date(Date.now() + databaseClockAheadMs).toISOString(), ...row,
+    })));
     return query;
   }) as InMemorySupabase['from'];
   return fresh;
@@ -143,6 +147,7 @@ function database(): InMemorySupabase {
 
 beforeEach(() => {
   vi.resetModules();
+  databaseClockAheadMs = 0;
   vi.stubEnv('NODE_ENV', 'production'); vi.stubEnv('NEXT_PUBLIC_APP_URL', ORIGIN); vi.stubEnv('TWILIO_AUTH_TOKEN', TOKEN);
   vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('live transport is prohibited in this fixture'); }));
   db = database();
@@ -378,5 +383,156 @@ describe('the cap is a hard cap on model spend', () => {
     const source = readFileSync('app/api/guardian/inbound/whatsapp/route.ts', 'utf8');
     expect(at(source, "from('guardian_communications').insert(")).toBeLessThan(at(source, 'await overInboundCap('));
     expect(at(source, 'await overInboundCap(')).toBeLessThan(at(source, 'await detectScamWithAI('));
+  });
+});
+
+// household-roles round 8 (the meter sweep): the "announced once" check read
+// every notification under the text's record and refused on any it could not
+// explain. 0388 lets a member's session file a notification addressed only to
+// themselves, under any related_id, and every member can read the Guardian
+// inbox, so a child who saw a new text arrive could file rows of their own
+// under it while the decision was being made: the notice was never written,
+// every retry answered unavailable, and the parents were never told.
+describe('a member’s own notifications under a new text', () => {
+  const CHILD_USER = '55555555-5555-4555-8555-555555555555';
+  function childFilesUnder(smsSid: string, titled: string) {
+    const comm = commFor(smsSid);
+    if (!comm) throw new Error('the text is recorded before it is decided');
+    db.seed('notifications', Array.from({ length: 11 }, (_, i) => ({
+      id: `eeeeeeee-0000-4000-8000-${i.toString(16).padStart(12, '0')}`, family_id: FAMILY, user_id: CHILD_USER, type: 'system',
+      title: i === 0 ? titled : 'seen', body: null, related_type: 'guardian_communications', related_id: comm.id,
+      is_read: false, send_at: new Date().toISOString(),
+    })));
+  }
+
+  it('do not keep the family from being told, once, and the text completes', async () => {
+    seam.pipeline.mockImplementation(async () => { childFilesUnder(sid(50), '💬 Text from (555) 555-0199'); return routine(); });
+
+    expect(await sms(sid(50), SENDER)).toBe('completed');
+    const told = db.table('notifications').filter((row) => row.user_id === null);
+    expect(told).toHaveLength(1);
+    expect(told[0]).toMatchObject({ title: '💬 Text from (555) 555-0199', related_id: commFor(sid(50))?.id });
+
+    // A redelivery completes against the saved notice and tells nobody twice.
+    expect(await sms(sid(50), SENDER)).toBe('completed');
+    expect(db.table('notifications').filter((row) => row.user_id === null)).toHaveLength(1);
+  });
+
+  it('control: the family’s own notice still counts as the one already sent', async () => {
+    expect(await sms(sid(51), SENDER)).toBe('completed');
+    expect(await sms(sid(51), SENDER)).toBe('completed');
+    expect(db.table('notifications')).toHaveLength(1);
+    expect(seam.scam).toHaveBeenCalledOnce();
+  });
+});
+
+// household-roles round 8 (the meter sweep): the window had no upper bound.
+// Only the provider webhooks write guardian_communications, as the service
+// role with started_at defaulting to now(), but 0453 still lets a parent or an
+// adult insert a record with any started_at. A record dated in the future
+// counted in every window until that date, so a family's worth dated 2100 held
+// every routine text and WhatsApp to the family, unannounced, for good, and a
+// sender's worth silenced that sender. The window is now the last hour and
+// nothing dated after now.
+describe('a record dated after now is not one of this hour’s messages', () => {
+  /** Records a manager could insert directly, dated in 2100. */
+  function datedAhead(count: number, from: (i: number) => string, commType: 'sms_inbound' | 'whatsapp_inbound', firstSid: number) {
+    db.seed('guardian_communications', Array.from({ length: count }, (_, i) => ({
+      id: `dddddddd-0000-4000-8000-${(firstSid + i).toString(16).padStart(12, '0')}`, family_id: FAMILY, member_id: MEMBER, comm_type: commType, direction: 'inbound',
+      from_number: from(i), to_number: GUARDIAN, body: 'planted', twilio_sms_sid: sid(firstSid + i), status: 'received',
+      started_at: new Date(Date.parse('2100-01-01T00:00:00Z') + i * 60_000).toISOString(),
+    })));
+  }
+  const manySenders = (i: number) => `+1555100${String(i).padStart(4, '0')}`;
+
+  it('an SMS: a family’s worth dated 2100 does not hold a routine text', async () => {
+    datedAhead(GUARDIAN_INBOUND_FAMILY_CAP, manySenders, 'sms_inbound', 4000);
+    expect(await sms(sid(40), OTHER)).toBe('completed');
+    expect(seam.scam).toHaveBeenCalledOnce();
+    expect(commFor(sid(40))).toMatchObject({ status: 'received' });
+    expect(String(commFor(sid(40))?.ai_decision_reason)).not.toMatch(/hourly message cap/);
+    expect(db.table('notifications')).toHaveLength(1);
+  });
+
+  it('an SMS: a sender’s worth dated 2100 does not hold that sender’s routine text', async () => {
+    datedAhead(GUARDIAN_INBOUND_SENDER_CAP, () => SENDER, 'sms_inbound', 4400);
+    expect(await sms(sid(41), SENDER)).toBe('completed');
+    expect(seam.scam).toHaveBeenCalledOnce();
+    expect(commFor(sid(41))).toMatchObject({ status: 'received' });
+    expect(db.table('notifications')).toHaveLength(1);
+  });
+
+  it('a WhatsApp: a family’s worth dated 2100 does not hold a routine message', async () => {
+    datedAhead(GUARDIAN_INBOUND_FAMILY_CAP, manySenders, 'whatsapp_inbound', 4500);
+    expect((await whatsapp(sid(42), OTHER)).status).toBe(200);
+    expect(seam.scam).toHaveBeenCalledOnce();
+    expect(seam.notify).toHaveBeenCalledOnce();
+    expect(commFor(sid(42))).toMatchObject({ status: 'received' });
+  });
+
+  it('a WhatsApp: a sender’s worth dated 2100 does not hold that sender’s message', async () => {
+    datedAhead(GUARDIAN_INBOUND_SENDER_CAP, () => SENDER, 'whatsapp_inbound', 4900);
+    expect((await whatsapp(sid(43), SENDER)).status).toBe(200);
+    expect(seam.scam).toHaveBeenCalledOnce();
+    expect(seam.notify).toHaveBeenCalledOnce();
+    expect(commFor(sid(43))).toMatchObject({ status: 'received' });
+  });
+
+  it('control: the messages that did arrive this hour still count beside them, for an SMS and a WhatsApp', async () => {
+    datedAhead(GUARDIAN_INBOUND_FAMILY_CAP, manySenders, 'sms_inbound', 5000);
+    datedAhead(GUARDIAN_INBOUND_FAMILY_CAP, manySenders, 'whatsapp_inbound', 5400);
+    priorMessages(GUARDIAN_INBOUND_SENDER_CAP, SENDER, 'sms_inbound', 5800);
+    priorMessages(GUARDIAN_INBOUND_SENDER_CAP, SENDER, 'whatsapp_inbound', 5900);
+
+    expect(await sms(sid(44), SENDER)).toBe('completed');
+    expect(commFor(sid(44))).toMatchObject({ status: 'blocked' });
+    expect(String(commFor(sid(44))?.ai_decision_reason)).toMatch(/hourly message cap/);
+    expect((await whatsapp(sid(45), SENDER)).status).toBe(200);
+    expect(commFor(sid(45))).toMatchObject({ status: 'blocked' });
+    expect(seam.scam).not.toHaveBeenCalled();
+    expect(seam.notify).not.toHaveBeenCalled();
+    expect(db.table('notifications')).toEqual([]);
+  });
+});
+
+// household-roles round 9 (R8-RV3-GUARDIAN-CAP-BOUND-ON-APP-CLOCK): round 8's
+// upper bound was this host's own now. The message is recorded first, dated
+// by the DATABASE's clock (started_at defaults to now()), and the count is to
+// include it; with the database a few seconds ahead, that record fell past the
+// bound, the count came up one short, and the `>` cap let the message through
+// to a model call and a ping. The bound now allows for the skew.
+describe('a record the database dated a moment ahead of this host still counts', () => {
+  /** The sender's cap's worth this hour, the latest dated a few seconds ahead of this host, as the database dated it. */
+  function capWithOneAhead(commType: 'sms_inbound' | 'whatsapp_inbound', firstSid: number) {
+    priorMessages(GUARDIAN_INBOUND_SENDER_CAP - 1, SENDER, commType, firstSid);
+    priorMessages(1, SENDER, commType, firstSid + GUARDIAN_INBOUND_SENDER_CAP);
+    db.table('guardian_communications').at(-1)!.started_at = new Date(Date.now() + 3_000).toISOString();
+  }
+
+  it('an SMS past the sender cap, its own record dated 3 s ahead, buys no model call', async () => {
+    databaseClockAheadMs = 3_000;
+    capWithOneAhead('sms_inbound', 6000);
+    expect(await sms(sid(46), SENDER)).toBe('completed');
+    expect(seam.scam).not.toHaveBeenCalled();
+    expect(commFor(sid(46))).toMatchObject({ status: 'blocked' });
+    expect(String(commFor(sid(46))?.ai_decision_reason)).toMatch(/hourly message cap/);
+    expect(db.table('notifications')).toEqual([]);
+  });
+
+  it('a WhatsApp past the sender cap, its own record dated 3 s ahead, buys no model call', async () => {
+    databaseClockAheadMs = 3_000;
+    capWithOneAhead('whatsapp_inbound', 6100);
+    expect((await whatsapp(sid(47), SENDER)).status).toBe(200);
+    expect(seam.scam).not.toHaveBeenCalled();
+    expect(seam.notify).not.toHaveBeenCalled();
+    expect(commFor(sid(47))).toMatchObject({ status: 'blocked' });
+  });
+
+  it('control: one under the cap, the same skew, is still analysed and announced', async () => {
+    databaseClockAheadMs = 3_000;
+    priorMessages(GUARDIAN_INBOUND_SENDER_CAP - 1, SENDER, 'sms_inbound', 6200);
+    expect(await sms(sid(48), SENDER)).toBe('completed');
+    expect(seam.scam).toHaveBeenCalledOnce();
+    expect(commFor(sid(48))).toMatchObject({ status: 'received' });
   });
 });

@@ -12,9 +12,23 @@ const state = vi.hoisted(() => ({
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => state.db }));
 // `family.timezone`: the post page dates each attempt in the family's zone.
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => ({ active: { familyId: '11111111-1111-4111-8111-111111111111', family: { timezone: 'UTC' } }, user: { id: '22222222-2222-4222-8222-222222222222' } }) }));
-vi.mock('@/lib/social/access', () => ({ requireSocialPermission: state.permission }));
+// The post page's plan and social-role guard is a boundary like the permission
+// check beside it (a role that may read the pipeline).
+vi.mock('@/lib/social/access', () => ({
+  requireSocialPermission: state.permission,
+  requireSocialPage: async () => ({ ctx: { active: { familyId: '11111111-1111-4111-8111-111111111111', family: { timezone: 'UTC' } }, user: { id: '22222222-2222-4222-8222-222222222222' } }, access: { can: () => true } }),
+}));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key, getLocaleContext: async () => ({ locale: { code: 'en-US' } }) }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+// The family's plan is a controlled boundary here: these cases are about the
+// flows behind it. tests/social-is-the-familys-plan-and-the-members-role.test.ts
+// drives the real plan check for the actions and the pages, and
+// tests/social-scheduled-publish.test.ts for the drain.
+vi.mock('@/lib/server/feature-entitlement', () => ({
+  resolveFeatureEntitlement: async () => ({ allowed: true, planLevel: 1 }),
+  familyHasFeature: async () => true,
+  getFeatureTiersByHref: async () => ({}),
+}));
 vi.mock('next/headers', () => ({ cookies: async () => ({ set() {} }) }));
 vi.mock('next/link', () => ({ default: 'a' }));
 vi.mock('next/navigation', () => ({ notFound() { throw new Error('not found'); } }));

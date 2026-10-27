@@ -25,7 +25,52 @@ export type OnboardingRow = {
   status: string;
   value_engaged: boolean;
   steps_completed: string[] | null;
+  user_id?: string | null;
+  reset_at?: string | null;
+  /**
+   * When the run's wizard started (attachWizardStarts). Present means "this is
+   * the clock": a null is a run with no recorded start, which is untimed. Left
+   * out, `created_at` is the start, as it always was for a bare row.
+   */
+  started_at?: string | null;
 };
+
+/** The onboarding_events columns that say when a signed-in wizard run started. */
+export type WizardEvent = { user_id: string | null; phase: string; created_at: string };
+
+/**
+ * Give every row the start of the wizard run that completed it.
+ *
+ * `created_at` is not that. For the ordinary sign-up the progress row is born
+ * inside `onboarding_claim_family`, in the same finalize request that stamps
+ * `completed_at` — so "median setup time" was the finalize request's few
+ * seconds, nearly every run "met" the 90-second goal and the banner said On
+ * target whatever the wizard took. An auto-provisioned account's row is born
+ * when the account was provisioned, possibly days earlier, so the two clocks
+ * were mixed in one figure. The wizard's own 'started' event (onboarding-track,
+ * which carries the signed-in user) is the start for every path: the earliest
+ * one for that user inside the run — after its last reset, and not after it
+ * completed. A run with no such event (every run recorded before the wizard
+ * said whose it was) is untimed rather than timed from the wrong clock.
+ */
+export function attachWizardStarts<T extends OnboardingRow>(rows: T[], events: WizardEvent[]): (T & { started_at: string | null })[] {
+  const startsByUser = new Map<string, number[]>();
+  for (const event of events) {
+    const at = Date.parse(event.created_at);
+    if (event.phase !== 'started' || !event.user_id || !Number.isFinite(at)) continue;
+    const list = startsByUser.get(event.user_id) ?? [];
+    list.push(at);
+    startsByUser.set(event.user_id, list);
+  }
+  return rows.map((row) => {
+    const end = row.completed_at ? Date.parse(row.completed_at) : NaN;
+    const reset = row.reset_at ? Date.parse(row.reset_at) : NaN;
+    const from = Number.isFinite(reset) && (!Number.isFinite(end) || reset <= end) ? reset : -Infinity;
+    const starts = (row.user_id ? startsByUser.get(row.user_id) ?? [] : [])
+      .filter((at) => at >= from && (!Number.isFinite(end) || at <= end));
+    return { ...row, started_at: starts.length ? new Date(Math.min(...starts)).toISOString() : null };
+  });
+}
 
 export type StepStat = { key: StepKey; label: string; count: number; pct: number };
 export type StallStat = { key: StepKey | 'not_started'; label: string; count: number };
@@ -51,7 +96,9 @@ const round1 = (n: number) => Math.round(n * 10) / 10;
 /** Completion seconds for a finished run (null if unfinished or unparseable). */
 export function ttvSeconds(row: OnboardingRow): number | null {
   if (!row.completed_at) return null;
-  const start = new Date(row.created_at).getTime();
+  const startIso = row.started_at === undefined ? row.created_at : row.started_at;
+  if (!startIso) return null;
+  const start = new Date(startIso).getTime();
   const end = new Date(row.completed_at).getTime();
   if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
   return (end - start) / 1000;
@@ -65,7 +112,13 @@ export function percentile(values: number[], p: number): number | null {
   return sorted[Math.min(sorted.length - 1, Math.max(0, rank - 1))];
 }
 
-const isCompleted = (r: OnboardingRow) => r.status === 'completed' || !!r.completed_at;
+// A reset run is open again, whatever completion it carried before the reset:
+// counting it done kept it out of "where incomplete runs stall". So is a run
+// back in progress: the progress writer now clears completed_at on both, but a
+// row reset before it did, or one prepareCalendarFamily reopened (it moves the
+// status alone, through the member's session), still carries the old stamp.
+const OPEN_AGAIN = new Set(['reset', 'in_progress']);
+const isCompleted = (r: OnboardingRow) => r.status === 'completed' || (!!r.completed_at && !OPEN_AGAIN.has(r.status));
 
 /** The furthest step a run reached, in canonical order (null if none). */
 export function furthestStep(steps: string[] | null): StepKey | null {

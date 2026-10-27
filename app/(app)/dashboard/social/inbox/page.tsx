@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { formatDistanceToNow } from 'date-fns';
 import { Inbox as InboxIcon, ExternalLink } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { getInbox, getAccounts } from '@/lib/social/queries';
 import { resolveCommentAction } from '@/app/(app)/dashboard/social/actions';
 import { PROVIDERS, PLATFORMS, type SocialPlatform } from '@/lib/social/capabilities';
@@ -21,7 +21,12 @@ export const dynamic = 'force-dynamic';
 
 export default async function InboxPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  // The plan, here as well as in the layout (household-roles N2-R1-payload).
+  // The layout shows a family without Social only the accounts it may still
+  // disconnect, but a page renders beside its layout, not inside it: the
+  // page's own data went out in the response all the same. A refusal here
+  // ships nothing of it; for a family with Social nothing changes.
+  const ctx = await requireFeature('/dashboard/social');
   const familyId = ctx.active.familyId;
   const [{ comments, messages }, accounts] = await Promise.all([
     getInbox(familyId),

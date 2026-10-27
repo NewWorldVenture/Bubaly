@@ -45,9 +45,24 @@ function contains(value: unknown, expected: unknown): boolean {
   return value === expected;
 }
 
+/** PostgREST's list text `(a,b,"c")` as its members. */
+const listMembers = (list: string) => list.replace(/^\(/, '').replace(/\)$/, '').split(',').map(value => value.trim().replace(/^"|"$/g, ''));
+
 function matches(row: PushFixtureRow, expression: string): boolean {
   if (expression.startsWith('and(') && expression.endsWith(')')) return clauses(expression.slice(4, -1)).every(part => matches(row, part));
   if (expression.startsWith('or(') && expression.endsWith(')')) return clauses(expression.slice(3, -1)).some(part => matches(row, part));
+  // `col.in.(a,b)` and its negation `col.not.in.(a,b)`. Either is NULL, so not
+  // true, on a NULL column, as in SQL: an OR that keeps NULL rows says so with
+  // its own `col.is.null` branch.
+  const list = expression.match(/^([a-z_]+)\.(not\.)?in\.(\(.*\))$/);
+  if (list) {
+    if (row[list[1]] == null) return false;
+    const found = listMembers(list[3]).includes(String(row[list[1]]));
+    return list[2] ? !found : found;
+  }
+  // `col.not.is.null`: IS NOT NULL, the one negated IS a dispatcher writes.
+  const notNull = expression.match(/^([a-z_]+)\.not\.is\.null$/);
+  if (notNull) return row[notNull[1]] != null;
   const match = expression.match(/^([a-z_]+)\.(eq|neq|is|gt|gte|lt|lte)\.(.+)$/);
   if (!match) throw new Error(`Unsupported fixture filter: ${expression}`);
   if (match[2] === 'is' && match[3] === 'null') return row[match[1]] == null;
@@ -64,6 +79,9 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
   // Per-device receipts (0440). Present by default because every dispatch reads
   // them; a test that needs the pre-0440 database deletes the key.
   tables.push_deliveries ??= [];
+  // The marketing push audience reads the accepted invites of the accounts
+  // still in it (R4-AW-REMOVED-TEEN-OWN-ADDRESS); none, unless a test adds one.
+  tables.invites ??= [];
   const faults = new Set<string>();
   const thrownFaults = new Set<string>();
   const emptyWrites = new Set<string>();
@@ -184,6 +202,12 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
         return query;
       },
       not: (key: string, operator: string, value: unknown) => {
+        // `.not(col, 'in', '(a,b)')`: NOT IN, which no NULL column satisfies.
+        if (operator === 'in' && typeof value === 'string') {
+          const members = listMembers(value);
+          filters.push(row => row[key] != null && !members.includes(String(row[key])));
+          return query;
+        }
         if (operator !== 'is' || value !== null) throw new Error(`Unsupported fixture not filter: ${key}.${operator}.${value}`);
         filters.push(row => row[key] != null);
         return query;

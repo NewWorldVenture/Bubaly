@@ -44,8 +44,10 @@ const GEN_COLORS = [
 
 export function FamilyTreeModule() {
   const t = useTranslations();
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
+  // A guest views the family tree and does not change it (0464).
+  const readOnly = role === 'guest';
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
   const { data: nodes, loading, error, refresh } = useRealtimeQuery<Node>({
@@ -170,9 +172,11 @@ export function FamilyTreeModule() {
                 </button>
               </div>
             )}
-            <Button onClick={() => { setEditNode(null); setForm(blank()); }}>
-              <Plus className="h-4 w-4" /> {t('familyTree.addPerson')}
-            </Button>
+            {!readOnly && (
+              <Button onClick={() => { setEditNode(null); setForm(blank()); }}>
+                <Plus className="h-4 w-4" /> {t('familyTree.addPerson')}
+              </Button>
+            )}
           </div>
         }
       />
@@ -204,7 +208,7 @@ export function FamilyTreeModule() {
           icon={GitBranch}
           title={t('familyTree.yourFamilyTreeIsEmpty')}
           description={t('familyTreeModule.startByAddingTheOldest')}
-          action={<Button onClick={() => { setEditNode(null); setForm(blank()); }}><Plus className="h-4 w-4" /> {t('familyTree.addFirstPerson')}</Button>}
+          action={readOnly ? undefined : <Button onClick={() => { setEditNode(null); setForm(blank()); }}><Plus className="h-4 w-4" /> {t('familyTree.addFirstPerson')}</Button>}
         />
       ) : view === 'tree' ? (
         /* Hierarchical tree view */
@@ -218,8 +222,8 @@ export function FamilyTreeModule() {
               memberById={memberById}
               onToggle={toggleExpand}
               onView={setDetail}
-              onEdit={startEdit}
-              onDelete={remove}
+              onEdit={readOnly ? undefined : startEdit}
+              onDelete={readOnly ? undefined : remove}
             />
           ))}
         </div>
@@ -253,14 +257,14 @@ export function FamilyTreeModule() {
                           </p>
                           {n.birth_place && <p className="mt-0.5 text-xs text-muted">{n.birth_place}</p>}
                         </div>
-                        <div className="flex shrink-0 gap-1">
+                        {!readOnly && <div className="flex shrink-0 gap-1">
                           <button aria-label={t('a11y.edit')} onClick={() => startEdit(raw)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg">
                             <Edit2 className="h-3.5 w-3.5" />
                           </button>
                           <button aria-label={t('a11y.delete')} onClick={() => remove(n.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger">
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
-                        </div>
+                        </div>}
                       </div>
                       {n.bio && <p className="mt-2 text-sm text-fg/80">{n.bio}</p>}
                       {n.children.length > 0 && (
@@ -290,14 +294,14 @@ export function FamilyTreeModule() {
             {detail.bio && <p className="text-sm text-fg/90">{detail.bio}</p>}
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setDetail(null)}>{t('familyTree.close')}</Button>
-              <Button variant="secondary" onClick={() => { setDetail(null); startEdit(detail); }}><Edit2 className="h-4 w-4" /> {t('familyTree.edit')}</Button>
+              {!readOnly && <Button variant="secondary" onClick={() => { setDetail(null); startEdit(detail); }}><Edit2 className="h-4 w-4" /> {t('familyTree.edit')}</Button>}
             </div>
           </div>
         </Modal>
       )}
 
       {/* Add / Edit modal */}
-      {form && (
+      {form && !readOnly && (
         <Modal open onClose={() => { setForm(null); setEditNode(null); }} title={editNode ? t('dialogTitle.editPerson') : t('dialogTitle.addToFamilyTree')}>
           <form onSubmit={editNode ? update : save} className="space-y-3">
             <Field label={t('familyTree.name')} required>
@@ -364,8 +368,9 @@ function TreeBranch({
   memberById: Map<string, { display_name: string; color: string | null }>;
   onToggle: (id: string) => void;
   onView: (n: any) => void;
-  onEdit: (n: any) => void;
-  onDelete: (id: string) => void;
+  /** Absent for a reader who may not change the tree. */
+  onEdit?: (n: any) => void;
+  onDelete?: (id: string) => void;
 }) {
   const t = useTranslations();
   const hasChildren = node.children.length > 0;
@@ -406,12 +411,16 @@ function TreeBranch({
           <button onClick={() => onView(node)} className="rounded-lg p-1 text-muted hover:bg-elevated hover:text-fg" title={t('familyTree.view')}>
             <Eye className="h-3.5 w-3.5" />
           </button>
-          <button onClick={() => onEdit(node)} className="rounded-lg p-1 text-muted hover:bg-elevated hover:text-fg" title={t('familyTree.edit')}>
-            <Edit2 className="h-3.5 w-3.5" />
-          </button>
-          <button onClick={() => onDelete(node.id)} className="rounded-lg p-1 text-muted hover:bg-elevated hover:text-danger" title={t('familyTree.remove')}>
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          {onEdit && (
+            <button onClick={() => onEdit(node)} className="rounded-lg p-1 text-muted hover:bg-elevated hover:text-fg" title={t('familyTree.edit')}>
+              <Edit2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {onDelete && (
+            <button onClick={() => onDelete(node.id)} className="rounded-lg p-1 text-muted hover:bg-elevated hover:text-danger" title={t('familyTree.remove')}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       </div>
 

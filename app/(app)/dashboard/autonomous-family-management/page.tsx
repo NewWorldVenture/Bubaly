@@ -51,7 +51,8 @@ export default async function AutonomousManagementPage() {
   const manager = isManager(ctx.active.role);
 
   const [signals, recs, rules, pendingRuns, doneRuns] = await Promise.all([
-    gatherSignalsResult(familyId, tz),
+    // A guest is not read the household's bills (lib/auth/guest-scope).
+    gatherSignalsResult(familyId, tz, undefined, { role: ctx.active.role }),
     settle(supabase.from('family_ai_recommendations').select('*').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(8)),
     settle(supabase.from('family_automation_rules').select('id, name, is_enabled').eq('family_id', familyId).eq('is_enabled', true)),
     settle(supabase.from('family_automation_runs').select('*').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(6)),
@@ -71,7 +72,7 @@ export default async function AutonomousManagementPage() {
 
   const monitoring = [
     { label: 'Tasks & chores', value: `${counts.openTasks} open` },
-    { label: 'Bills', value: `${counts.overdueBills + counts.billsDueSoon} due soon` },
+    ...(counts.billsWithheld ? [] : [{ label: 'Bills', value: `${counts.overdueBills + counts.billsDueSoon} due soon` }]),
     { label: 'Appointments', value: `${counts.appointmentsToday} today` },
     { label: 'School deadlines', value: `${counts.homeworkDueSoon} this week` },
     { label: 'Sports', value: `${counts.sportsThisWeek} this week` },

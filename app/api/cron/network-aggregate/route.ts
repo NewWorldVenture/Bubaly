@@ -8,8 +8,10 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 // Intelligence Network aggregation cron — recomputes each consenting family's coarse
-// contribution and republishes the k-anonymized, DP-noised cross-family aggregates.
-// Nothing is published until >= 100 families contribute (launch gate). Scheduled daily.
+// contribution nightly, and publishes the k-anonymized, DP-noised cross-family
+// aggregates once per publication epoch (a calendar month; the other nights hold
+// that snapshot unchanged). Nothing is published until >= 100 families contribute
+// (launch gate). Scheduled daily.
 export async function GET(req: NextRequest) {
   const t = await getTranslations();
   if (!hasCronAuthorization(req)) {

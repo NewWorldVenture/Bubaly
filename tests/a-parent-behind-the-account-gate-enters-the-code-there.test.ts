@@ -5,7 +5,7 @@
 // parent who enrolled an authenticator with { ok: false, stepUp }, and the
 // billing routes do the same (refuseWithoutBillingStepUp). The gates handed
 // that to reportRefusal, which navigated to /auth/step-up?next=<here>. But the
-// step-up page is an (app) route, and GatedShell (app/(app)/layout.tsx) returns
+// step-up page is an (app) route, and UnlockedShell (app/(app)/layout.tsx) returns
 // <AccountClosedGate /> or <TrialPaywallGate /> IN PLACE of every (app) route's
 // children: the step-up form never rendered, the parent landed on the gate
 // again, clicked again, was refused again. A session reaches aal2 only through

@@ -6,6 +6,7 @@ import { decisionCompression, type DecisionCompression } from '@/lib/reasoning/e
 import { conversionAfterValue, type ConversionAfterValue } from '@/lib/billing/conversion';
 import { referralCoefficient, type ReferralCoefficient } from '@/lib/referrals/core';
 import { FIRST_VALUE_MILESTONE } from '@/lib/analytics/activation';
+import { keepAttestedActivations } from '@/lib/analytics/activation-attestation';
 
 type DB = SupabaseClient<Database>;
 const DAY_MS = 86_400_000;
@@ -100,8 +101,8 @@ export async function loadStrategyMetrics(sb: DB, now: Date = new Date(), window
     }),
     readMetric('recorded paid activations', async () => {
       const [activations, subscriptions, receipts] = await Promise.all([
-        readAll(() => sb.from('activation_events').select('id, family_id, created_at')
-          .eq('milestone', FIRST_VALUE_MILESTONE).not('family_id', 'is', null)
+        readAll(() => sb.from('activation_events').select('id, user_id, family_id, session_id, created_at')
+          .eq('milestone', FIRST_VALUE_MILESTONE).not('family_id', 'is', null).not('user_id', 'is', null)
           .lte('created_at', until).order('id').limit(PAGE_SIZE)),
         readAll(() => sb.from('subscriptions').select('id, family_id, plan, status')
           .lte('created_at', until).order('id').limit(PAGE_SIZE)),
@@ -109,8 +110,13 @@ export async function loadStrategyMetrics(sb: DB, now: Date = new Date(), window
           .eq('kind', 'subscription').eq('related_type', 'subscription').not('related_id', 'is', null)
           .lte('created_at', until).order('id').limit(PAGE_SIZE)),
       ]);
+      // A first-value row counts only when a member of that household recorded
+      // it (0146 lets anyone, the anon key included, file one naming any family
+      // with any created_at). An unanswered membership read fails this metric.
+      const attested = await keepAttestedActivations(sb, activations);
+      if (attested.data === null) throw attested.error ?? new Error('Activation membership read was unavailable');
       return conversionAfterValue(
-        activations.filter((a): a is typeof a & { family_id: string } => Boolean(a.family_id))
+        attested.data.filter((a): a is typeof a & { family_id: string } => Boolean(a.family_id))
           .map((a) => ({ familyId: a.family_id, reachedAt: a.created_at })),
         subscriptions.map((s) => ({ familyId: s.family_id, plan: s.plan, status: s.status })),
         receipts.map((r) => ({

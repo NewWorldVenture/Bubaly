@@ -33,6 +33,12 @@ export async function launchLifeEventAction(templateKey: string, eventDate?: str
   if (!getTemplate(templateKey)) return { ok: false, error: t('lifeEventActions.unknownLifeEvent') };
 
   const ctx = await requireUserContext();
+  // A guest views the household and does not plan in it (0464), as the Moving
+  // module, play dates and the twin's scenarios refuse one. A launch writes a
+  // plan, its checklist, to-dos, reminders and, for a move, the move and its
+  // task list (lib/life-events/launch.ts): a guest who could not add a move in
+  // Moving started one here (household-roles N4-R1).
+  if (ctx.active.role === 'guest') return { ok: false, error: t('householdRoles.guestViewsOnly') };
   const supabase = await createServer();
   const scope = scopeFromUserContext(ctx, supabase);
 
@@ -58,6 +64,9 @@ export async function setLifeEventStatusAction(planId: string, status: 'active' 
   const t = await getTranslations();
   if (!planId) return { ok: false, error: t('lifeEventActions.invalidPlan') };
   const ctx = await requireUserContext();
+  // Completing, archiving or reopening a plan is planning, which a guest does
+  // not do, as a launch refuses one above (household-roles N4-R1-SIBLING).
+  if (ctx.active.role === 'guest') return { ok: false, error: t('householdRoles.guestViewsOnly') };
   const supabase = await createServer();
   // "Completed" and "archived" both remove the plan from the active list, so a
   // no-op leaves it sitting there after the family said they were done with it.

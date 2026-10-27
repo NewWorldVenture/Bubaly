@@ -6,6 +6,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { AiRequestDuplicate, AiRequestNotFiled, withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, describeAIError, isAIConfigured, type AIMessage } from '@/lib/ai/provider';
+import type { TokenUsage } from '@/lib/ai/usage';
 import { ASSISTANT_STOPPED, finalizeAssistantContent, stoppedAssistantContent, summarizeToolResult } from '@/lib/ai/assistant-engine';
 import { chronologicalMessages } from '@/lib/ai/conversation-session';
 import { toStructuredContent } from '@/lib/ai/result-cards';
@@ -226,6 +227,12 @@ export async function POST(req: NextRequest) {
           async (obs) => {
         let content = '';
         let responseError: string | undefined;
+        // What the non-streaming fallback reports it cost: the stream reports
+        // no total. A turn the fallback answered is still settled 'failed' with
+        // the stream's error, and the Free allowance counts a failed row only
+        // for the model work it recorded (lib/server/ai-access.ts), so without
+        // this a Free family whose stream always broke chatted without limit.
+        let usage: TokenUsage | null | undefined;
         const actions: { name: string; args: Record<string, unknown>; result: unknown }[] = [];
         const pushAction = (name: string, args: Record<string, unknown>, result: unknown) => {
           actions.push({ name, args, result });
@@ -249,6 +256,7 @@ export async function POST(req: NextRequest) {
           if (!content && actions.length === 0 && !stopped.signal.aborted) {
             try {
               const result = await provider.runTools({ system, messages, tools, maxTokens: 1500, signal: stopped.signal });
+              usage = result.usage;
               // No actions existed before this fallback. Each returned entry
               // is one execution, even when two calls had identical arguments.
               for (const a of result.actions) pushAction(a.name, a.args, a.result);
@@ -329,7 +337,7 @@ export async function POST(req: NextRequest) {
           send({ type: 'error', error: describeActionError(persistenceError, t('chat.iGeneratedAResponseBut')) });
         }
 
-        obs.used(provider.model, undefined);
+        obs.used(provider.model, usage);
         // The turn's request id, so a spoken answer rides on this exchange (F19).
         send({ type: 'done', content: assistantContent, persisted: !persistenceError, requestId: obs.requestId });
         if (connected) controller.close();

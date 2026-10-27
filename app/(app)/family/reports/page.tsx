@@ -29,7 +29,9 @@ export default async function FamilyReportsPage() {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   // The family's zone, not the server's: every count below is a day key.
-  const result = await gatherSignalsResult(ctx.active.familyId, ctx.active.family.timezone || 'UTC');
+  // The viewer goes with it: a guest is not shown the household's bills here,
+  // any more than on /dashboard/bills or /dashboard/family-cfo.
+  const result = await gatherSignalsResult(ctx.active.familyId, ctx.active.family.timezone || 'UTC', undefined, { role: ctx.active.role });
   if (result.error || !result.data) {
     console.error('[family-reports] required read failed', result.error);
     return <ReadFailure />;
@@ -55,7 +57,7 @@ export default async function FamilyReportsPage() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <StatTile href="/dashboard/family-coo" label={t('familyReports.openTasks')} value={counts.openTasks} icon={CheckCircle2} accent="bg-emerald-600" sublabel="Operations" />
-        <StatTile href="/dashboard/family-cfo" label={t('familyReports.billsDueSoon')} value={counts.overdueBills + counts.billsDueSoon} icon={CreditCard} accent="bg-blue-600" sublabel="Finances" />
+        {!counts.billsWithheld && <StatTile href="/dashboard/family-cfo" label={t('familyReports.billsDueSoon')} value={counts.overdueBills + counts.billsDueSoon} icon={CreditCard} accent="bg-blue-600" sublabel="Finances" />}
         <StatTile href="/dashboard/family-school" label={t('familyReports.schoolDeadlines')} value={counts.homeworkDueSoon} icon={GraduationCap} accent="bg-amber-500" sublabel="School" />
         <StatTile href="/dashboard/family-sports" label={t('familyReports.sports7d')} value={counts.sportsThisWeek} icon={Trophy} accent="bg-teal-600" sublabel="Sports" />
         <StatTile href="/dashboard/family-health" label={t('familyReports.apptsToday')} value={counts.appointmentsToday} icon={HeartPulse} accent="bg-rose-500" sublabel="Health" />
@@ -64,9 +66,10 @@ export default async function FamilyReportsPage() {
 
       <SectionCard title={t('familyReports.highlights')}>
         <ul className="space-y-2 text-sm">
-          <li className="flex items-center gap-2"><BarChart3 className="h-4 w-4 text-brand-text" /> {taskRate}{t('familyReports.ofTasksCompletedThisCycle')}</li>
+          {/* All-time: the done and total chore counts have no date bound, so this is not "this cycle". */}
+          <li className="flex items-center gap-2"><BarChart3 className="h-4 w-4 text-brand-text" /> {taskRate}{t('familyReports.ofAllTasksCompleted')}</li>
           <li className="flex items-center gap-2"><Gauge className="h-4 w-4 text-violet-400" /> {t('familyReports.familyLoadIs')} <LevelBadge level={stress.level} /> with {stress.factors.length} factor{stress.factors.length === 1 ? '' : 's'} flagged.</li>
-          <li className="flex items-center gap-2"><CreditCard className="h-4 w-4 text-blue-400" /> {counts.billsPaid} of {counts.billsTotal} {t('familyReports.trackedBillsArePaid')}</li>
+          {!counts.billsWithheld && <li className="flex items-center gap-2"><CreditCard className="h-4 w-4 text-blue-400" /> {counts.billsPaid} of {counts.billsTotal} {t('familyReports.trackedBillsArePaid')}</li>}
         </ul>
       </SectionCard>
     </div>
