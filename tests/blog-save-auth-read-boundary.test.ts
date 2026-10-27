@@ -5,7 +5,7 @@ import { NextRequest } from 'next/server';
 type AuthError = { name?: string; status?: number; code?: string; message?: string };
 type Read = { table: string; op: string; filters: Record<string, unknown>; aggregate: boolean };
 const h = vi.hoisted(() => ({ user: { id: 'reader-a' } as { id: string } | null, error: null as AuthError | null,
-  reads: [] as Read[], writes: [] as Read[], saved: true, published: true, insertError: null as { code: string } | null,
+  reads: [] as Read[], writes: [] as Read[], saved: true, published: true, postLookupError: null as { code: string; message: string } | null, postLookupPartial: false, insertError: null as { code: string } | null,
   deleteError: null as { code: string } | null, readError: false, rateAllowed: true, rate: vi.fn(), ip: vi.fn() }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/server/rate-limit', () => ({ clientIp: () => { h.ip(); return 'synthetic-ip'; } }));
@@ -17,7 +17,7 @@ vi.mock('@/lib/supabase/server', () => ({
     const result = () => {
       const copy = { ...state, filters: { ...state.filters } };
       if (state.op === 'select') h.reads.push(copy); else h.writes.push(copy);
-      if (table === 'blog_posts') return { data: h.published ? { id: 'published-post' } : null, error: null };
+      if (table === 'blog_posts') return { data: h.postLookupError ? (h.postLookupPartial ? { id: 'published-post' } : null) : h.published ? { id: 'published-post' } : null, error: h.postLookupError };
       if (table !== 'blog_post_saves') throw new Error('Unexpected synthetic table');
       if (state.op === 'insert') return { data: null, error: h.insertError };
       if (state.op === 'delete') return { data: null, error: h.deleteError };
@@ -41,7 +41,7 @@ const privateReads = () => h.reads.filter(x => x.table === 'blog_post_saves' && 
 const publicReads = () => h.reads.filter(x => x.table === 'blog_posts' || x.aggregate);
 beforeEach(() => {
   h.user = { id: 'reader-a' }; h.error = null; h.reads = []; h.writes = []; h.saved = true; h.published = true;
-  h.insertError = null; h.deleteError = null; h.readError = false; h.rateAllowed = true; h.rate.mockClear(); h.ip.mockClear();
+  h.postLookupError = null; h.postLookupPartial = false; h.insertError = null; h.deleteError = null; h.readError = false; h.rateAllowed = true; h.rate.mockClear(); h.ip.mockClear();
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => vi.restoreAllMocks());
@@ -138,4 +138,30 @@ describe('blog saves keep unknown auth reads unavailable', () => {
       await uncertain(method);
     });
   }
+});
+
+
+// Literal returned lookup errors only; no transport rejection or post-write fault.
+describe('blog save post lookup uncertainty is not a missing article', () => {
+  for (const partial of [false, true]) for (const method of ['GET', 'POST'] as const) {
+    it(method + ' returned published-post lookup error with ' + (partial ? 'partial data' : 'null data') + ' is unavailable before bookmark work', async () => {
+      h.postLookupError = { code: 'SYNTHETIC_POST_LOOKUP', message: 'Synthetic post lookup unavailable' };
+      h.postLookupPartial = partial;
+      const response = await (method === 'GET' ? get() : post());
+      expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(await response.json()).toEqual({ error: 'save.couldNotRecordTheSave' });
+      expect(h.reads).toEqual([{ table: 'blog_posts', op: 'select', aggregate: false, filters: { slug: 'family-day', published: true } }]);
+      expect(h.writes).toEqual([]);
+      expect(privateReads()).toEqual([]);
+    });
+  }
+  it('POST confirmed missing published post retains404 and does not write a bookmark', async () => {
+    h.published = false;
+    const response = await post();
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: 'save.notFound' });
+    expect(h.reads).toEqual([{ table: 'blog_posts', op: 'select', aggregate: false, filters: { slug: 'family-day', published: true } }]);
+    expect(h.writes).toEqual([]);
+  });
 });

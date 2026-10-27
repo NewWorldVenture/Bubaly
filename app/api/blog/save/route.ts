@@ -18,15 +18,15 @@ export const runtime = 'nodejs';
 // is an aggregate produced by the service role — no per-user data is exposed.
 
 const MAX_BODY_BYTES = 2_048;
+const POST_LOOKUP_UNAVAILABLE = Symbol('post_lookup_unavailable');
 
-async function loadPostId(svc: ReturnType<typeof createServiceClient>, slug: string): Promise<string | null> {
+async function loadPostId(svc: ReturnType<typeof createServiceClient>, slug: string): Promise<string | null | typeof POST_LOOKUP_UNAVAILABLE> {
   const { data, error } = await svc.from('blog_posts').select('id').eq('slug', slug).eq('published', true).maybeSingle();
-  // A refused read returned null, and both callers answer that with a 404 for
-  // a post that is published and present. Nothing here can distinguish them
-  // afterwards, so the distinction is made where it exists. Audit C1-S9-43.
+  // A returned lookup error does not establish absence, even if partial data
+  // accompanies it. Keep that outcome separate from a confirmed missing post.
   if (error) {
     console.error('[blog] post lookup failed', { slug, error: error.message });
-    return null;
+    return POST_LOOKUP_UNAVAILABLE;
   }
   return data?.id ?? null;
 }
@@ -64,6 +64,12 @@ export async function GET(req: NextRequest) {
 
   const svc = createServiceClient();
   const postId = await loadPostId(svc, slug);
+  if (postId === POST_LOOKUP_UNAVAILABLE) {
+    return NextResponse.json(
+      { error: t('save.couldNotRecordTheSave') },
+      { status: 503, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
   if (!postId) return NextResponse.json({ error: t('save.notFound') }, { status: 404 });
 
   const { data: auth, error: authError } = await (await createServer()).auth.getUser();
@@ -120,6 +126,12 @@ export async function POST(req: NextRequest) {
   if (!slug) return NextResponse.json({ error: t('save.slugRequired') }, { status: 400 });
 
   const postId = await loadPostId(svc, slug);
+  if (postId === POST_LOOKUP_UNAVAILABLE) {
+    return NextResponse.json(
+      { error: t('save.couldNotRecordTheSave') },
+      { status: 503, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
   if (!postId) return NextResponse.json({ error: t('save.notFound') }, { status: 404 });
 
   // Toggle: insert wins the save; a unique-violation means it existed → remove.

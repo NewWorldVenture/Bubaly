@@ -704,8 +704,9 @@ describe('a published post is not reported missing (C1-S9-43)', () => {
     expect(body).toContain('const { data, error }');
     expect(body).toContain('if (error)');
     expect(body).toContain('console.error');
-    // Still returns null — the callers' 404 is the only channel available from
-    // here — but the failure now exists somewhere other than nowhere.
+    // Historical C1-S9-43 (before 2026-10-27): logging was the only distinction
+    // from callers' 404. Lookup refusals now have a 503/no-store response,
+    // independently covered by whole HTTP fixtures; success still falls back to null.
     expect(body).toContain('return data?.id ?? null;');
   });
 });
