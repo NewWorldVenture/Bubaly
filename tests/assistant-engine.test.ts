@@ -19,6 +19,7 @@ function chain(table: string) {
   const t = tables[table] ?? {};
   const ordering: { column: string; ascending: boolean }[] = [];
   let maximum = Infinity;
+  let page: [number, number] | null = null;
   const c: Record<string, unknown> = {
     // The context builder (lib/ai/context) reads through the domain services,
     // which use the full filter vocabulary — every filter is a no-op here and
@@ -26,7 +27,8 @@ function chain(table: string) {
     select: () => c, eq: () => c, neq: () => c, in: () => c, is: () => c, not: () => c, or: () => c, ilike: () => c,
     gte: () => c, gt: () => c, lte: () => c, lt: () => c,
     order: (column: string, options?: { ascending?: boolean }) => { ordering.push({ column, ascending: options?.ascending !== false }); return c; },
-    limit: (count: number) => { maximum = count; return c; }, range: () => c,
+    limit: (count: number) => { maximum = count; return c; },
+    range: (from: number, to: number) => { page = [from, to]; return c; },
     insert: (rows: unknown) => { inserts.push({ table, rows }); return { then: (onF: (v: { error: unknown }) => unknown) => Promise.resolve({ error: t.error ?? null }).then(onF) }; },
     // `.eq().select()` as well as a bare `.eq()`: the conversation metadata
     // write asks for its row since C1-S9-66, and a real builder allows both.
@@ -46,8 +48,9 @@ function chain(table: string) {
           if (delta) return order.ascending ? delta : -delta;
         }
         return 0;
-      }).slice(0, maximum);
-      return Promise.resolve({ data: t.error ? null : rows, error: t.error ?? null, count: t.error ? null : (t.rows ?? []).length }).then(onF);
+      });
+      const selected = (page ? rows.slice(page[0], page[1] + 1) : rows).slice(0, maximum);
+      return Promise.resolve({ data: t.error ? null : selected, error: t.error ?? null, count: t.error ? null : (t.rows ?? []).length }).then(onF);
     },
   };
   return c;

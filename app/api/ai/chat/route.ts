@@ -22,7 +22,7 @@ import { assistantTurnRequestKey, findPriorTurn } from '@/lib/ai/assistant-turn-
 import { answerPriorTurn } from '@/lib/ai/assistant-turn-answer';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
-import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { readCalendarOccurrences, readCountedRows } from '@/lib/calendar/occurrences';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 
 export const runtime = 'nodejs';
@@ -122,6 +122,11 @@ export async function POST(req: NextRequest) {
     // Conversation history (text turns), plus a live family snapshot.
     const nowIso = new Date().toISOString();
     const chatTimezone = ctx.active.family.timezone || 'UTC';
+    // The legacy toolbox matches names against this exact snapshot. Never
+    // hand it a server-capped prefix that can hide the requested exact member.
+    const roster = () => supabase.from('family_members')
+      .select('id, display_name, role', { count: 'exact' })
+      .eq('family_id', familyId).eq('is_active', true).order('id');
     const [
       { data: history, error: historyError },
       { data: members, error: membersError },
@@ -131,7 +136,9 @@ export async function POST(req: NextRequest) {
     ] = await settleAll([
       supabase.from('ai_messages').select('role, content, created_at').eq('conversation_id', conversationId)
         .eq('family_id', familyId).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(40),
-      supabase.from('family_members').select('id, display_name, role').eq('family_id', familyId).eq('is_active', true),
+      readCountedRows<Pick<Database['public']['Tables']['family_members']['Row'], 'id' | 'display_name' | 'role'>>(
+        () => roster().limit(1000), (from, to) => roster().range(from, to), 2000, 'active family members',
+      ),
       // The next twelve things on the calendar, series included; bounded to a
       // month ahead, which is as far as "what's coming up" reaches
       // (lib/calendar/occurrences.ts).

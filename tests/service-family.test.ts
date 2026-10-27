@@ -221,3 +221,77 @@ describe('family name resolution with earlier competing matches', () => {
     }]);
   });
 });
+
+describe('the family service returns public DTOs from private raw rows', () => {
+  type FamilyRow = Database['public']['Tables']['family_members']['Row'];
+  const privateRows: FamilyRow[] = [
+    { ...ROWS[0], role: 'parent', email: 'synthetic-parent-private@example.invalid', phone: '+15555550121', onboarding_key: 'synthetic-private-parent-invite' },
+    { ...ROWS[2], role: 'child', email: 'synthetic-child-private@example.invalid', phone: '+15555550122', onboarding_key: 'synthetic-private-child-invite' },
+    { ...ROWS[1], id: 'inactive-adult', role: 'adult', is_active: false, email: 'synthetic-inactive-private@example.invalid', phone: '+15555550123', onboarding_key: 'synthetic-private-inactive-invite' },
+    { ...ROWS[0], id: 'foreign-parent', family_id: 'another-family', role: 'parent', email: 'synthetic-foreign-private@example.invalid', phone: '+15555550124', onboarding_key: 'synthetic-private-foreign-invite' },
+  ];
+  const publicKeys = ['id', 'userId', 'displayName', 'role', 'birthday', 'age', 'isActive', 'canManage', 'hasLogin', 'color', 'avatarUrl'].sort();
+  const publicActiveRoster = [
+    { id: 'member-1', userId: 'auth-user-1', displayName: 'Dan', role: 'parent', birthday: '1985-01-10', age: 41, isActive: true, canManage: true, hasLogin: true, color: '#111', avatarUrl: null },
+    { id: 'member-3', userId: null, displayName: 'Samantha', role: 'child', birthday: '2018-12-31', age: 7, isActive: true, canManage: false, hasLogin: false, color: null, avatarUrl: null },
+  ];
+
+  function privateRead(single = false) {
+    return makeDb((call) => {
+      if (call.table !== 'family_members' || call.kind !== 'select') throw new Error('Only synthetic family-member reads are permitted');
+      expect(Object.keys(call.filters).sort()).toEqual(single ? ['family_id', 'id'] : ['family_id', 'is_active']);
+      const rows = privateRows.filter((row) => Object.entries(call.filters).every(([column, value]) => {
+        if (!['family_id', 'id', 'is_active'].includes(column)) throw new Error('Unexpected synthetic member predicate');
+        return row[column as keyof FamilyRow] === value;
+      }));
+      return { data: single ? rows[0] ?? null : rows, error: null };
+    });
+  }
+
+  function expectPublicOnly(value: object) {
+    expect(Object.keys(value).sort()).toStrictEqual(publicKeys);
+    const serialized = JSON.stringify(value);
+    for (const row of privateRows) {
+      for (const secret of [row.email, row.phone, row.onboarding_key]) {
+        expect(secret).not.toBeNull();
+        expect(serialized).not.toContain(secret);
+      }
+    }
+  }
+
+  it('omits non-null private contact and onboarding values from the default active roster', async () => {
+    const { db, calls } = privateRead();
+    const result = await getMembers(scopeWith(db));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data).toStrictEqual(publicActiveRoster);
+    result.data.forEach(expectPublicOnly);
+    expect(calls).toEqual([{ table: 'family_members', kind: 'select', filters: { family_id: 'fam-1', is_active: true } }]);
+  });
+
+  it('keeps complete-roster reads public while preserving account and managed-child DTO semantics', async () => {
+    const { db, calls } = privateRead();
+    const result = await getMembers(scopeWith(db), { requireComplete: true });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data).toStrictEqual(publicActiveRoster);
+    result.data.forEach(expectPublicOnly);
+    expect(calls).toEqual([{ table: 'family_members', kind: 'select', filters: { family_id: 'fam-1', is_active: true } }]);
+  });
+
+  it('keeps an inactive member detail public and does not return a raw member from another family', async () => {
+    const { db, calls } = privateRead(true);
+    const result = await getMember(scopeWith(db), 'inactive-adult');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data).toStrictEqual({ id: 'inactive-adult', userId: 'auth-user-2', displayName: 'Sam', role: 'adult', birthday: null, age: null, isActive: false, canManage: true, hasLogin: true, color: null, avatarUrl: null });
+    expectPublicOnly(result.data);
+    const foreign = await getMember(scopeWith(db), 'foreign-parent');
+    expect(foreign.ok).toBe(false);
+    expect(!foreign.ok && foreign.code).toBe('not_found');
+    expect(calls).toEqual([
+      { table: 'family_members', kind: 'select', filters: { id: 'inactive-adult', family_id: 'fam-1' } },
+      { table: 'family_members', kind: 'select', filters: { id: 'foreign-parent', family_id: 'fam-1' } },
+    ]);
+  });
+});

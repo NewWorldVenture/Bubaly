@@ -37,6 +37,7 @@ import type { ServiceScope } from '@/lib/services/types';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { chronologicalMessages } from '@/lib/ai/conversation-session';
+import { readCountedRows } from '@/lib/calendar/occurrences';
 
 type DB = SupabaseClient<Database>;
 type MessageInsert = Database['public']['Tables']['ai_messages']['Insert'];
@@ -245,6 +246,11 @@ export async function prepareAssistantTurn(input: AssistantTurnInput): Promise<
   { ok: true; turn: PreparedAssistantTurn } | { ok: false; error: string }
 > {
   const { supabase, familyId, userId, conversationId, message } = input;
+  // Tools resolve names from this snapshot. A capped prefix can hide an exact
+  // match, so either read the complete active roster or refuse the context.
+  const roster = () => supabase.from('family_members')
+    .select('id, user_id, display_name, role', { count: 'exact' })
+    .eq('family_id', familyId).eq('is_active', true).order('id');
   const [
     { data: history, error: historyError },
     { data: members, error: membersError },
@@ -255,7 +261,9 @@ export async function prepareAssistantTurn(input: AssistantTurnInput): Promise<
     // — the tool registry scopes writes by `family_members.id`, not by the auth
     // user id. The context builder loads the roster again through the family
     // service; that read is what gives it ages and manager flags.
-    supabase.from('family_members').select('id, user_id, display_name, role').eq('family_id', familyId).eq('is_active', true),
+    readCountedRows<Pick<Database['public']['Tables']['family_members']['Row'], 'id' | 'user_id' | 'display_name' | 'role'>>(
+      () => roster().limit(1000), (from, to) => roster().range(from, to), 2000, 'active family members',
+    ),
   ]);
   const contextError = historyError ?? membersError;
   if (contextError) {
