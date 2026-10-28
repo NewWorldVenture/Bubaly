@@ -99,6 +99,42 @@ export function readSummary(markdown) {
   return summary;
 }
 
+// The adopted policy currently grants no independently credited external blocks.
+// BLOCKED register rows are not an eligibility source for additional credit.
+const INDEPENDENT_EXTERNAL_CREDIT = 0;
+const LIVE_COMPLETION_PREFIX = '- Overall audit completion under the adopted formula:';
+const COUNT_TOKEN = String.raw`(?:0|[1-9]\d*|[1-9]\d{0,2}(?:,\d{3})+)`;
+const LIVE_COMPLETION = new RegExp(
+  String.raw`^${LIVE_COMPLETION_PREFIX} \*\*(\d+\.\d{2})%\*\* \(\((${COUNT_TOKEN}) verified closures \+ \*\*(${COUNT_TOKEN})\*\* independently credited external blocks\) / (${COUNT_TOKEN})\)\.(?:[ \t].*)?$`,
+);
+
+/** Exactly one unquoted, unfenced live formula; historical prose is not a candidate. */
+function readLiveCompletion(markdown) {
+  const candidates = [];
+  let fence = null;
+  for (const raw of markdown.split('\n')) {
+    const line = raw.replace(/\r$/, '');
+    const marker = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (fence) {
+      if (marker && marker[1][0] === fence.character && marker[1].length >= fence.length && !marker[2].trim()) fence = null;
+      continue;
+    }
+    if (marker) {
+      fence = { character: marker[1][0], length: marker[1].length };
+      continue;
+    }
+    if (line.startsWith(LIVE_COMPLETION_PREFIX)) candidates.push(line);
+  }
+  if (candidates.length !== 1) return { problem: `live adopted formula requires exactly one unquoted, unfenced record; found ${candidates.length}` };
+  const match = LIVE_COMPLETION.exec(candidates[0]);
+  if (!match) return { problem: 'live adopted formula is malformed' };
+  const counts = match.slice(2).map(toNumber);
+  if (counts.some((value) => !Number.isSafeInteger(value) || value < 0) || counts[2] === 0) {
+    return { problem: 'live adopted formula has unsafe counts or a zero denominator' };
+  }
+  return { percent: match[1], closed: counts[0], external: counts[1], total: counts[2] };
+}
+
 /** Every way the summary disagrees with the register, as sentences. */
 export function reconcile(markdown) {
   const register = countRegister(markdown);
@@ -125,6 +161,17 @@ export function reconcile(markdown) {
       `summary closure coverage says ${summary.coveragePercent}% (${summary.coverageClosed}/${summary.coverageTotal}); ` +
         `the register gives ${percent}% (${register.closed}/${register.total})`,
     );
+  }
+  const completion = readLiveCompletion(markdown);
+  if (completion.problem) {
+    problems.push(completion.problem);
+  } else if (
+    !Number.isSafeInteger(register.total) || register.total <= 0 ||
+    completion.closed !== register.closed || completion.total !== register.total ||
+    completion.external !== INDEPENDENT_EXTERNAL_CREDIT ||
+    completion.percent !== (((register.closed + INDEPENDENT_EXTERNAL_CREDIT) / register.total) * 100).toFixed(2)
+  ) {
+    problems.push('live adopted formula disagrees with verified register closures, total, percentage or explicit external-credit policy');
   }
   return { register, summary, problems };
 }
