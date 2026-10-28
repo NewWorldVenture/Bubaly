@@ -502,7 +502,7 @@ export async function runAssistantTurn(input: AssistantTurnInput, prepared: Prep
       const actions: ExecutedAssistantAction[] = result.actions.map((a) => ({ name: a.name, args: a.args, result: a.result }));
       const stopped = input.signal?.aborted;
       const content = stopped ? stoppedAssistantContent(result.text) : finalizeAssistantContent(result.text, actions);
-      if (stopped) obs.failed(new Error(ASSISTANT_STOPPED), { partial: actions.length > 0 || Boolean(result.text) });
+      if (stopped) obs.failed(Object.defineProperty(new Error(ASSISTANT_STOPPED), 'publicErrorCode', { value: 'request_stopped' }), { partial: actions.length > 0 || Boolean(result.text) });
       const { cards, runIds } = await collectOutcomes(input, prepared, actions);
       const persisted = await persistAssistantTurn(input.supabase, {
         familyId: input.familyId, conversationId: input.conversationId, message: input.message,
@@ -642,7 +642,7 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
 
             if (signal.aborted) {
               responseError = ASSISTANT_STOPPED;
-              obs.failed(new Error(ASSISTANT_STOPPED), { partial: actions.length > 0 || Boolean(content) });
+              obs.failed(Object.defineProperty(new Error(ASSISTANT_STOPPED), 'publicErrorCode', { value: 'request_stopped' }), { partial: actions.length > 0 || Boolean(content) });
             }
             const assistantContent = signal.aborted ? stoppedAssistantContent(content) : finalizeAssistantContent(content, actions);
             const persisted = await persistAssistantTurn(input.supabase, {
