@@ -38,20 +38,22 @@ export const runtime = 'nodejs';
 // /api/blog/save, migration 0227); it stays reachable, so it stays bound.
 
 const MAX_BODY_BYTES = 2_048;
+const POST_LOOKUP_UNAVAILABLE = Symbol('post-lookup-unavailable');
+type PublishedPostLookup = string | null | typeof POST_LOOKUP_UNAVAILABLE;
 
-async function loadPostId(supabase: ReturnType<typeof createServiceClient>, slug: string): Promise<string | null> {
+async function loadPostId(supabase: ReturnType<typeof createServiceClient>, slug: string): Promise<PublishedPostLookup> {
   const { data, error } = await supabase
     .from('blog_posts')
     .select('id')
     .eq('slug', slug)
     .eq('published', true)
     .maybeSingle();
-  // A refused read returned null, and both callers answer that with a 404 for
-  // a post that is published and present. Nothing here can distinguish them
-  // afterwards, so the distinction is made where it exists. Audit C1-S9-43.
+  // Keep a refused lookup distinct from a confirmed missing published post.
+  // The private marker lets both callers report availability without claiming
+  // absence; the existing logging and successful fallback remain intact.
   if (error) {
     console.error('[blog] post lookup failed', { slug, error: error.message });
-    return null;
+    return POST_LOOKUP_UNAVAILABLE;
   }
   return data?.id ?? null;
 }
@@ -81,6 +83,9 @@ export async function GET(req: NextRequest) {
 
   const supabase = createServiceClient();
   const postId = await loadPostId(supabase, slug);
+  if (postId === POST_LOOKUP_UNAVAILABLE) {
+    return NextResponse.json({ error: t('like.couldNotRecordTheLike') }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+  }
   if (!postId) return NextResponse.json({ error: t('like.notFound') }, { status: 404 });
 
   const state = await likeState(supabase, postId, visitorId);
@@ -123,6 +128,9 @@ export async function POST(req: NextRequest) {
   if (!slug) return NextResponse.json({ error: t('like.invalidSlug') }, { status: 400 });
 
   const postId = await loadPostId(supabase, slug);
+  if (postId === POST_LOOKUP_UNAVAILABLE) {
+    return NextResponse.json({ error: t('like.couldNotRecordTheLike') }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+  }
   if (!postId) return NextResponse.json({ error: t('like.notFound') }, { status: 404 });
 
   // Toggle: insert wins the ♥; a unique-violation means it existed → remove it.
