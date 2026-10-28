@@ -79,10 +79,22 @@ export type AiObserver = {
   failed: (err: unknown, opts?: { partial?: boolean }) => void;
 };
 
-/** Trim an error for a column a family may end up reading in a support reply. */
+/** This family-readable column stores categories, never private error details. */
 function describe(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err ?? 'Unknown error');
-  return raw.slice(0, 500);
+  try {
+    // Read only an own data property: getters, inherited values and coercion
+    // can expose private diagnostics or replace the original body exception.
+    const descriptor = err !== null && (typeof err === 'object' || typeof err === 'function')
+      ? Object.getOwnPropertyDescriptor(err, 'status')
+      : undefined;
+    const status = descriptor?.value;
+    if (typeof status === 'number' && Number.isInteger(status) && status >= 400 && status <= 599) {
+      return `Provider request failed (HTTP ${status}).`;
+    }
+  } catch {
+    // A proxy may refuse reflection; bookkeeping still preserves the body error.
+  }
+  return 'AI request failed.';
 }
 
 export async function withAiRequest<T>(
