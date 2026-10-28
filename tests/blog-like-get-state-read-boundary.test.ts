@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
   countError: null as { code: string } | null,
   ownData: { id: 'own-heart' } as { id: string } | null,
   ownError: null as { code: string } | null,
+  rejectCount: false, rejectOwn: false,
   postData: { id: 'published-post' } as { id: string } | null,
   postError: null as { message: string } | null,
   reads: [] as Read[], forbidden: [] as string[], services: vi.fn(),
@@ -31,9 +32,11 @@ vi.mock('@/lib/supabase/server', () => ({
         if (state.filters.post_id !== 'published-post') return refuse('post-bound heart read');
         if (state.aggregate) {
           if (Object.keys(state.filters).length !== 1) return refuse('aggregate scope');
+          if (h.rejectCount) return Promise.reject(new Error('Synthetic count promise rejected'));
           return { data: null, count: h.count, error: h.countError };
         }
         if (state.filters.visitor_id !== 'visitor-own-0001' || Object.keys(state.filters).length !== 2) return refuse('own visitor scope');
+        if (h.rejectOwn) return Promise.reject(new Error('Synthetic own-row promise rejected'));
         return { data: h.ownData, error: h.ownError };
       };
       const q = {
@@ -73,6 +76,7 @@ async function unavailable(cookie: string | null = OWN) {
 }
 beforeEach(() => {
   h.count = 7; h.countError = null; h.ownData = { id: 'own-heart' }; h.ownError = null;
+  h.rejectCount = false; h.rejectOwn = false;
   h.postData = { id: 'published-post' }; h.postError = null; h.reads = []; h.services.mockClear();
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
@@ -130,5 +134,15 @@ describe('blog like GET preserves heart-read uncertainty without writes', () => 
   it('invalid slug is refused before any service read', async () => {
     const response = await get(OWN, undefined, 'Invalid Slug'); expect(response.status).toBe(400); expect(await response.json()).toEqual({ error: 'like.invalidSlug' });
     expect(h.reads).toEqual([]); expect(h.services).not.toHaveBeenCalled();
+  });
+  it('a rejected fake count query is unavailable without discarding own-row scope', async () => {
+    h.rejectCount = true; await unavailable();
+  });
+  it('a rejected fake own-row query is unavailable without discarding public count scope', async () => {
+    h.rejectOwn = true; await unavailable();
+  });
+  it('a visitor-less GET never constructs or rejects the unused fake own-row query', async () => {
+    h.rejectOwn = true; const response = await get(null); expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store'); expect(await response.json()).toEqual({ count: 7, liked: false }); scope(false);
   });
 });
