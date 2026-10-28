@@ -811,6 +811,22 @@ export async function confirmFact(scope: ServiceScope, suggestionId: string): Pr
     return fail('That one had already lapsed, so confirming it would save nothing. Dismiss it, or ask Bubaly again for something current.', { code: SERVICE_CODES.invalidInput });
   }
 
+  // Validate the pending card's member within this family before creating a fact.
+  if (suggestion.member_id) {
+    try {
+      const member = await getMember(scope, suggestion.member_id);
+      if (!member.ok) {
+        if (member.code === SERVICE_CODES.notFound) return member;
+        return fail('Could not confirm that family member.', { code: SERVICE_CODES.db });
+      }
+      if (!member.data || !sameMemberReference(member.data.id, suggestion.member_id)) {
+        return fail('Could not confirm that family member.', { code: SERVICE_CODES.db });
+      }
+    } catch {
+      return fail('Could not confirm that family member.', { code: SERVICE_CODES.db });
+    }
+  }
+
   const { data: fact, error: insertError } = await scope.db
     .from('family_facts')
     .insert({
