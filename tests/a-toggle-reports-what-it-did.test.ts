@@ -38,11 +38,27 @@ describe('a toggle reports what it did', () => {
   });
 
   it('GET answers 503 rather than asserting a state it could not read', () => {
-    const body = save.slice(save.indexOf('export async function GET'));
+    const body = save.slice(save.indexOf('export async function GET'), save.indexOf('export async function POST'));
     expect(body).toMatch(/if \(error\) \{/);
     expect(body).toMatch(/status: 503/);
-    // The client's `r.ok ? r.json() : null` then leaves its state untouched.
-    expect(heart).toContain('r.ok ? r.json() : null');
+    // Unreadable state stays unknown. Loading blocks writes; an error tap
+    // retries the read and returns before the mutation path is reached.
+    expect(heart).toContain("useState<'loading' | 'ready' | 'error'>('loading')");
+    expect(heart).toContain("if (!r.ok) throw new Error('Saved state unavailable')");
+    expect(heart).toContain("typeof d.saved !== 'boolean'");
+    expect(heart).toContain("typeof d.authenticated !== 'boolean'");
+    expect(heart).toContain("typeof d.count !== 'number' || !Number.isFinite(d.count) || d.count < 0");
+    expect(heart).toContain(".catch(() => { if (!cancelled) setReadStatus('error'); })");
+    expect(heart).toContain("setReadStatus('ready')");
+    expect(heart).toContain("if (busy || readStatus === 'loading') return;");
+    expect(heart).toMatch(/if \(readStatus === 'error'\) \{\s*setReadStatus\('loading'\);\s*setReadAttempt\(\(attempt\) => attempt \+ 1\);\s*return;\s*\}/);
+    const retry = heart.indexOf("if (readStatus === 'error')");
+    const write = heart.indexOf("fetch('/api/blog/save', {");
+    expect(retry).toBeGreaterThan(-1);
+    expect(write).toBeGreaterThan(retry);
+    expect(heart).toContain("disabled={busy || readStatus === 'loading'}");
+    expect(heart).toContain("aria-pressed={readStatus === 'ready' ? saved : undefined}");
+    expect(heart).toContain("t('blogHeartButton.retrySavedState')");
   });
 
   it('the batched reads are settled, so a rejection cannot follow a write', () => {
