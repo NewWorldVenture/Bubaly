@@ -21,14 +21,14 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/database.types';
-import { UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
+import { fenceUntrusted, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { getMembers, getPreferences } from '@/lib/services/family';
 import { dayKeyInTz, scopeNow } from '@/lib/services/scope';
 import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { INTENT_SLICES, isSliceName, type IntentKey, type SliceName } from './intents';
-import { applySlicePolicy, viewerFor, type SliceDefinition, type SliceEnv, type SliceResult } from './policy';
+import { applySlicePolicy, displayName, viewerFor, type SliceDefinition, type SliceEnv, type SliceResult } from './policy';
 import { DEFAULT_CONTEXT_BUDGET_CHARS, renderContext, type RenderSection } from './render';
 import { activitiesSlice } from './slices/activities';
 import { documentsSlice } from './slices/documents';
@@ -112,10 +112,10 @@ export function headerLines(header: ContextHeader): string[] {
     // An invalid zone or locale must not take the prompt down; the ISO instant still says when it is.
   }
   return [
-    `Family: ${header.familyName}`,
+    `Family: ${fenceUntrusted('family_name', header.familyName)}`,
     `Time zone: ${header.tz}. Today is ${header.todayKey}; local date/time now: ${nowLocal}.`,
     `Locale ${header.locale}, currency ${header.currency}.`,
-    `Asking: ${header.viewerName ?? 'the system'} (${header.viewerRole}).`,
+    `Asking: ${header.viewerName == null ? 'the system' : fenceUntrusted('viewer_name', displayName(header.viewerName))} (${header.viewerRole}).`,
   ];
 }
 
