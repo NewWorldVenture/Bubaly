@@ -79,10 +79,41 @@ export type AiObserver = {
   failed: (err: unknown, opts?: { partial?: boolean }) => void;
 };
 
-/** Trim an error for a column a family may end up reading in a support reply. */
+const PUBLIC_ERROR_LABELS = new Map<string, string>([
+  ['request_stopped', 'AI request stopped.'],
+  ['chore_plan_parse', 'The chore plan did not parse as a JSON array.'],
+  ['provider_auth', 'The model provider failed (auth).'],
+  ['provider_quota', 'The model provider failed (quota).'],
+  ['provider_rate_limit', 'The model provider failed (rate_limit).'],
+  ['provider_model', 'The model provider failed (model).'],
+  ['provider_network', 'The model provider failed (network).'],
+  ['provider_unknown', 'The model provider failed (unknown).'],
+  ['provider_cancelled', 'The model provider failed (cancelled).'],
+  ['provider_unconfigured', 'The model provider failed (unconfigured).'],
+]);
+
+/** This family-readable column stores categories, never private error details. */
 function describe(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err ?? 'Unknown error');
-  return raw.slice(0, 500);
+  try {
+    // Read only an own data property: getters, inherited values and coercion
+    // can expose private diagnostics or replace the original body exception.
+    const isObject = err !== null && (typeof err === 'object' || typeof err === 'function');
+    const publicCode = isObject ? Object.getOwnPropertyDescriptor(err, 'publicErrorCode')?.value : undefined;
+    if (typeof publicCode === 'string') {
+      const label = PUBLIC_ERROR_LABELS.get(publicCode);
+      if (label !== undefined) return label;
+    }
+    const descriptor = isObject
+      ? Object.getOwnPropertyDescriptor(err, 'status')
+      : undefined;
+    const status = descriptor?.value;
+    if (typeof status === 'number' && Number.isInteger(status) && status >= 400 && status <= 599) {
+      return `Provider request failed (HTTP ${status}).`;
+    }
+  } catch {
+    // A proxy may refuse reflection; bookkeeping still preserves the body error.
+  }
+  return 'AI request failed.';
 }
 
 export async function withAiRequest<T>(

@@ -206,13 +206,13 @@ export async function generateChorePlan(
           // family gets a fixed message.
           const category = describeAIError(err).code;
           if (provider) obs.used(provider.model, null);
-          obs.failed(new Error(`The model provider failed (${category}).`));
+          obs.failed(Object.defineProperty(new Error(`The model provider failed (${category}).`), 'publicErrorCode', { value: `provider_${category}` }));
           return { items: [], error: PROVIDER_FAILED, providerFailure: category };
         }
         obs.used(provider.model, completion.usage);
         const parsed = parseJsonLoose(completion.text);
         if (!Array.isArray(parsed)) {
-          obs.failed(new Error('The chore plan did not parse as a JSON array.'));
+          obs.failed(Object.defineProperty(new Error('The chore plan did not parse as a JSON array.'), 'publicErrorCode', { value: 'chore_plan_parse' }));
           return { items: [], error: 'Could not parse the AI plan.' };
         }
         return { items: parsed.map(normalizePlanItem).filter(Boolean) as ChorePlanItem[] };

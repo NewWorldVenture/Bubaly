@@ -116,7 +116,7 @@ describe('malformed JSON keeps the richer fallback', () => {
     await POST(request());
 
     const errors = recordedErrors();
-    expect(errors).toContain('The coach reply was not valid JSON.');
+    expect(errors).toEqual(['AI request failed.']);
     // The whole point. V8 writes `Unexpected token 'A', "Ava had th"... is not
     // valid JSON`, and that must not reach a column the admin console renders.
     for (const e of errors) {
@@ -145,6 +145,6 @@ describe('the other two outcomes stay as they were', () => {
     mocks.complete.mockResolvedValue({ text: 'Sounds like a tricky week!', usage: null });
     const body = await (await POST(request())).json() as { insight: string };
     expect(body.insight).toBe('Keep logging — patterns will sharpen over time.');
-    expect(recordedErrors().join(' ')).toContain('without a usable insight');
+    expect(recordedErrors()).toEqual(['AI request failed.']);
   });
 });
