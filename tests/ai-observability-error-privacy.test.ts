@@ -127,7 +127,7 @@ describe('family-readable AI request errors contain categories, never private di
   });
   it('does not invoke status or message accessors while producing its safe fallback', async () => {
     let reads = 0; const error = new Error();
-    Object.defineProperties(error, { status: { get() { reads++; return 503; } }, message: { get() { reads++; return PRIVATE; } } });
+    Object.defineProperties(error, { status: { get() { reads++; return 503; } }, message: { get() { reads++; return PRIVATE; } }, name: { get() { reads++; return PRIVATE; } } });
     await thrown(error); safeClose(fallback); expect(reads).toBe(0);
   });
   it('ignores an inherited status getter instead of invoking it', async () => {
