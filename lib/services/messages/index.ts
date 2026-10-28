@@ -230,7 +230,7 @@ export async function createAnnouncement(scope: ServiceScope, input: CreateAnnou
           ...(!sameId(found.author_id, scope.userId) ? ['author_id'] : []),
           ...(!sameId(found.author_member_id, scope.memberId) ? ['author_member_id'] : []),
         ],
-        message: () => 'An announcement with this headline is already saved. This request did not post a new announcement.',
+        message: () => 'An existing announcement with this headline does not match this request\'s author. Review the announcements before trying again.',
         id: (found) => found.id,
       },
       find: async () => {
