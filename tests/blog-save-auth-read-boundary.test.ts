@@ -121,10 +121,26 @@ describe('blog saves retain auth read uncertainty', () => {
   it('a refused healthy rate limit still avoids mutation', async () => { h.rateAllowed = false; const response = await post(); expect(response.status).toBe(429); expect(response.headers.get('retry-after')).toBe('30'); expect(h.writes).toEqual([]); });
   it('a caller-supplied user id cannot choose the bookmark owner', async () => { await post(JSON.stringify({ slug: 'family-day', user_id: 'foreign-reader' })); expect(h.writes.every(x => x.filters.user_id === 'reader-a')).toBe(true); expect(h.writes).toHaveLength(1); });
   it('an unreadable healthy saved state retains existing unavailable semantics', async () => { h.readError = true; const response = await get(); expect(response.status).toBe(503); expect(response.headers.get('cache-control')).toBe('no-store'); });
-  it('the unchanged heart source retains state on non-OK GET and only treats POST401 as sign-in', () => {
-    const source = readFileSync('components/blog/heart-button.tsx', 'utf8');
-    expect(source).toContain('r.ok ? r.json() : null'); expect(source).toContain('if (cancelled || !d) return;'); expect(source).toContain('if (res.status === 401)');
-    // This is source evidence, not a rendered three-state-heart or login-lifecycle claim.
+  it('the heart source keeps unread saved state unknown, retries reads and only treats POST401 as sign-in', () => {
+    const source = readFileSync('components/blog/heart-button.tsx', 'utf8').replace(/\r\n/g, '\n');
+    expect(source).toContain("useState<'loading' | 'ready' | 'error'>('loading')");
+    expect(source).toContain("if (!r.ok) throw new Error('Saved state unavailable')");
+    expect(source).toContain("if (!d || typeof d.saved !== 'boolean' || typeof d.authenticated !== 'boolean'");
+    expect(source).toContain("if (!cancelled) setReadStatus('error')");
+    expect(source).toContain("setReadStatus('ready')");
+    expect(source).toContain("aria-pressed={readStatus === 'ready' ? saved : undefined}");
+    const toggleStart = source.indexOf('const toggle = useCallback');
+    expect(toggleStart).toBeGreaterThan(-1);
+    const toggle = source.slice(toggleStart);
+    const write = toggle.indexOf("await fetch('/api/blog/save'");
+    expect(write).toBeGreaterThan(-1);
+    const beforeWrite = toggle.slice(0, write);
+    expect(beforeWrite).toContain("if (busy || readStatus === 'loading') return;");
+    expect(beforeWrite).toContain("if (readStatus === 'error') {\n      setReadStatus('loading');\n      setReadAttempt((attempt) => attempt + 1);\n      return;\n    }");
+    expect(beforeWrite).toContain('if (authed === false) { goSignIn(); return; }');
+    expect(toggle.slice(write)).toContain('if (res.status === 401)');
+    // Source compatibility only. The separate whole component fixture models
+    // unread state/retry; this does not execute native Auth or prove a lifecycle.
   });
 });
 
