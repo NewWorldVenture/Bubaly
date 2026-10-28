@@ -185,4 +185,73 @@ describe('family-readable AI request errors contain categories, never private di
     const error = Object.defineProperty(new Error(PRIVATE), 'publicErrorCode', { value: 'request_stopped', enumerable: false });
     await thrown(error); safeClose('AI request stopped.');
   });
+  it('records only the controlled chore_plan_parse category while preserving thrown identity and partial status', async () => {
+    const error = Object.defineProperty(new Error(PRIVATE), 'publicErrorCode', { value: 'chore_plan_parse', enumerable: false });
+    await thrown(error); safeClose('The chore plan did not parse as a JSON array.');
+    await handled(error, true); safeClose('The chore plan did not parse as a JSON array.', 'partially_completed');
+  });
+  it('records only the controlled provider_auth category while preserving thrown identity and partial status', async () => {
+    const error = Object.defineProperty(new Error(PRIVATE), 'publicErrorCode', { value: 'provider_auth', enumerable: false });
+    await thrown(error); safeClose('The model provider failed (auth).');
+    await handled(error, true); safeClose('The model provider failed (auth).', 'partially_completed');
+  });
+  it('records only the controlled provider_quota category while preserving thrown identity and partial status', async () => {
+    const error = Object.defineProperty(new Error(PRIVATE), 'publicErrorCode', { value: 'provider_quota', enumerable: false });
+    await thrown(error); safeClose('The model provider failed (quota).');
+    await handled(error, true); safeClose('The model provider failed (quota).', 'partially_completed');
+  });
+  it('records only the controlled provider_rate_limit category while preserving thrown identity and partial status', async () => {
+    const error = Object.defineProperty(new Error(PRIVATE), 'publicErrorCode', { value: 'provider_rate_limit', enumerable: false });
+    await thrown(error); safeClose('The model provider failed (rate_limit).');
+    await handled(error, true); safeClose('The model provider failed (rate_limit).', 'partially_completed');
+  });
+  it('records only the controlled provider_model category while preserving thrown identity and partial status', async () => {
+    const error = Object.defineProperty(new Error(PRIVATE), 'publicErrorCode', { value: 'provider_model', enumerable: false });
+    await thrown(error); safeClose('The model provider failed (model).');
+    await handled(error, true); safeClose('The model provider failed (model).', 'partially_completed');
+  });
+  it('records only the controlled provider_network category while preserving thrown identity and partial status', async () => {
+    const error = Object.defineProperty(new Error(PRIVATE), 'publicErrorCode', { value: 'provider_network', enumerable: false });
+    await thrown(error); safeClose('The model provider failed (network).');
+    await handled(error, true); safeClose('The model provider failed (network).', 'partially_completed');
+  });
+  it('records only the controlled provider_unknown category while preserving thrown identity and partial status', async () => {
+    const error = Object.defineProperty(new Error(PRIVATE), 'publicErrorCode', { value: 'provider_unknown', enumerable: false });
+    await thrown(error); safeClose('The model provider failed (unknown).');
+    await handled(error, true); safeClose('The model provider failed (unknown).', 'partially_completed');
+  });
+  it('records only the controlled provider_cancelled category while preserving thrown identity and partial status', async () => {
+    const error = Object.defineProperty(new Error(PRIVATE), 'publicErrorCode', { value: 'provider_cancelled', enumerable: false });
+    await thrown(error); safeClose('The model provider failed (cancelled).');
+    await handled(error, true); safeClose('The model provider failed (cancelled).', 'partially_completed');
+  });
+  it('records only the controlled provider_unconfigured category while preserving thrown identity and partial status', async () => {
+    const error = Object.defineProperty(new Error(PRIVATE), 'publicErrorCode', { value: 'provider_unconfigured', enumerable: false });
+    await thrown(error); safeClose('The model provider failed (unconfigured).');
+    await handled(error, true); safeClose('The model provider failed (unconfigured).', 'partially_completed');
+  });
+  it('does not coerce unknown, nonstring or prototype-like own public codes into a category', async () => {
+    let coercions = 0;
+    const opaque = { toString() { coercions++; throw Error('Unexpected literal coercion'); }, valueOf() { coercions++; throw Error('Unexpected literal coercion'); } };
+    for (const value of [undefined, null, false, 503, 'unapproved_code', '__proto__', 'constructor', 'toString', opaque]) {
+      const error = Object.defineProperty(new Error(PRIVATE), 'publicErrorCode', { value });
+      await thrown(error); safeClose(fallback);
+    }
+    expect(coercions).toBe(0);
+  });
+  it('ignores inherited public-code data and getters without invoking them', async () => {
+    let reads = 0;
+    for (const prototype of [{ publicErrorCode: 'provider_auth' }, { get publicErrorCode() { reads++; return 'provider_auth'; } }]) {
+      const error = Object.create(prototype) as object;
+      Object.defineProperty(error, 'message', { value: PRIVATE });
+      await thrown(error); safeClose(fallback);
+    }
+    expect(reads).toBe(0);
+  });
+  it('prioritizes a recognized own public code while retaining HTTP fallback for an unknown own code', async () => {
+    const known = Object.defineProperties(new Error(PRIVATE), { publicErrorCode: { value: 'provider_auth' }, status: { value: 503 } });
+    await thrown(known); safeClose('The model provider failed (auth).');
+    const unknown = Object.defineProperties(new Error(PRIVATE), { publicErrorCode: { value: 'unapproved_code' }, status: { value: 503 } });
+    await thrown(unknown); safeClose(safeHttp(503));
+  });
 });
