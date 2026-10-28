@@ -289,7 +289,7 @@ export async function POST(req: NextRequest) {
         // whose actions were all refused must not sign off with "Done".
         if (stopped.signal.aborted) {
           responseError = ASSISTANT_STOPPED;
-          obs.failed(new Error(ASSISTANT_STOPPED), { partial: actions.length > 0 || Boolean(content) });
+          obs.failed(Object.defineProperty(new Error(ASSISTANT_STOPPED), 'publicErrorCode', { value: 'request_stopped' }), { partial: actions.length > 0 || Boolean(content) });
         }
         const assistantContent = stopped.signal.aborted ? stoppedAssistantContent(content) : finalizeAssistantContent(content, actions);
 

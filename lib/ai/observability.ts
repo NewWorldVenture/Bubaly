@@ -79,14 +79,29 @@ export type AiObserver = {
   failed: (err: unknown, opts?: { partial?: boolean }) => void;
 };
 
+const PUBLIC_ERROR_LABELS = new Map<string, string>([
+  ['request_stopped', 'AI request stopped.'],
+  ['chore_plan_parse', 'The chore plan did not parse as a JSON array.'],
+  ['provider_auth', 'The model provider failed (auth).'],
+  ['provider_quota', 'The model provider failed (quota).'],
+  ['provider_rate_limit', 'The model provider failed (rate_limit).'],
+  ['provider_model', 'The model provider failed (model).'],
+  ['provider_network', 'The model provider failed (network).'],
+  ['provider_unknown', 'The model provider failed (unknown).'],
+  ['provider_cancelled', 'The model provider failed (cancelled).'],
+  ['provider_unconfigured', 'The model provider failed (unconfigured).'],
+]);
+
 /** This family-readable column stores categories, never private error details. */
 function describe(err: unknown): string {
   try {
     // Read only an own data property: getters, inherited values and coercion
     // can expose private diagnostics or replace the original body exception.
     const isObject = err !== null && (typeof err === 'object' || typeof err === 'function');
-    if (isObject && Object.getOwnPropertyDescriptor(err, 'publicErrorCode')?.value === 'request_stopped') {
-      return 'AI request stopped.';
+    const publicCode = isObject ? Object.getOwnPropertyDescriptor(err, 'publicErrorCode')?.value : undefined;
+    if (typeof publicCode === 'string') {
+      const label = PUBLIC_ERROR_LABELS.get(publicCode);
+      if (label !== undefined) return label;
     }
     const descriptor = isObject
       ? Object.getOwnPropertyDescriptor(err, 'status')
