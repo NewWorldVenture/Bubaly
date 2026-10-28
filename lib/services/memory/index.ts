@@ -194,6 +194,25 @@ export async function rememberFact(scope: ServiceScope, input: RememberInput): P
     return fail('That expiry date could not be read, so Bubaly has not saved the memory. Give a real date as 2026-09-30, or a time with its zone as 2026-09-30T17:00:00Z.', { code: SERVICE_CODES.invalidInput });
   }
 
+  // A caller may have selected this member before switching active families.
+  // Check the reference before either confirmed or inferred memory is probed
+  // or written. Inactive same-family members remain valid historical subjects;
+  // omitted/null/empty inputs keep their existing wire behavior.
+  if (input.memberId) {
+    try {
+      const member = await getMember(scope, input.memberId);
+      if (!member.ok) {
+        if (member.code === SERVICE_CODES.notFound) return member;
+        return fail('Could not confirm that family member.', { code: SERVICE_CODES.db });
+      }
+      if (!member.data || !sameMemberReference(member.data.id, input.memberId)) {
+        return fail('Could not confirm that family member.', { code: SERVICE_CODES.db });
+      }
+    } catch {
+      return fail('Could not confirm that family member.', { code: SERVICE_CODES.db });
+    }
+  }
+
   // "Allow memory" (Settings → Bubaly AI) is about what BUBALY keeps: the copy
   // reads "Let Bubaly remember what it learns about your family … and use it
   // next time." It was stored, toggled and read by nothing, so a family that
