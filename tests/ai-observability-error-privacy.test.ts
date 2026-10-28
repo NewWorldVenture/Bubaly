@@ -127,7 +127,7 @@ describe('family-readable AI request errors contain categories, never private di
   });
   it('does not invoke status or message accessors while producing its safe fallback', async () => {
     let reads = 0; const error = new Error();
-    Object.defineProperties(error, { status: { get() { reads++; return 503; } }, message: { get() { reads++; return PRIVATE; } }, name: { get() { reads++; return PRIVATE; } } });
+    Object.defineProperties(error, { status: { get() { reads++; return 503; } }, message: { get() { reads++; return PRIVATE; } }, name: { get() { reads++; return PRIVATE; } }, publicErrorCode: { get() { reads++; return 'request_stopped'; } } });
     await thrown(error); safeClose(fallback); expect(reads).toBe(0);
   });
   it('ignores an inherited status getter instead of invoking it', async () => {
@@ -180,5 +180,9 @@ describe('family-readable AI request errors contain categories, never private di
   it('keeps the original body failure even when literal close bookkeeping is refused', async () => {
     fake.closeRefused = true; const error = httpError(504); await thrown(error); safeClose(safeHttp(504));
     expect(fake.updates.filter(call => call.patch.completed_at)).toHaveLength(1);
+  });
+  it('keeps a controlled own public stop category without copying its private message or replacing the thrown object', async () => {
+    const error = Object.defineProperty(new Error(PRIVATE), 'publicErrorCode', { value: 'request_stopped', enumerable: false });
+    await thrown(error); safeClose('AI request stopped.');
   });
 });
