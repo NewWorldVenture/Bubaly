@@ -88,16 +88,16 @@ export async function GET(req: NextRequest) {
   }
   if (!postId) return NextResponse.json({ error: t('like.notFound') }, { status: 404 });
 
-  const [counted, liked] = await Promise.all([
+  const [counted, ownHeart] = await Promise.all([
     settle(supabase.from('blog_post_likes').select('id', { count: 'exact', head: true }).eq('post_id', postId)),
     visitorId
-      ? supabase.from('blog_post_likes').select('id').eq('post_id', postId).eq('visitor_id', visitorId).maybeSingle()
+      ? settle(supabase.from('blog_post_likes').select('id').eq('post_id', postId).eq('visitor_id', visitorId).maybeSingle())
       : Promise.resolve({ data: null, error: null }),
   ]);
-  if (counted.error || liked.error) {
+  if (counted.error || ownHeart.error) {
     return NextResponse.json({ error: t('like.couldNotRecordTheLike') }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
   }
-  return NextResponse.json({ count: counted.count ?? 0, liked: !!liked.data }, { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json({ count: counted.count ?? 0, liked: !!ownHeart.data }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function POST(req: NextRequest) {
