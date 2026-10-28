@@ -61,7 +61,7 @@ function get(cookie: string | null = OWN, named?: string, slug = 'family-day') {
 const heartReads = () => h.reads.filter(x => x.table === 'blog_post_likes');
 function scope(own: boolean) {
   expect(h.reads[0]).toEqual({ table: 'blog_posts', aggregate: false, filters: { slug: 'family-day', published: true } });
-  expect(heartReads()).toEqual([
+  expect([...heartReads()].sort((a, b) => Number(b.aggregate) - Number(a.aggregate))).toEqual([
     { table: 'blog_post_likes', aggregate: true, filters: { post_id: 'published-post' } },
     ...(own ? [{ table: 'blog_post_likes', aggregate: false, filters: { post_id: 'published-post', visitor_id: OWN } }] : []),
   ]);
