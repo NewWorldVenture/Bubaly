@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 
 // Literal callback boundary only. No assertion that an installed Auth SDK emits
 // contradictory error+user records; those are defensive admission controls.
-const boundary = vi.hoisted(() => ({ fetchCalls: 0, forbidden: [] as string[] }));
+const boundary = vi.hoisted(() => ({ fetchCalls: 0 }));
 const fake = vi.hoisted(() => ({
   auth: { data: { user: { id: 'session-user' } as { id: string } | null }, error: null as unknown },
   authThrown: null as unknown,
@@ -54,6 +54,21 @@ vi.mock('@/lib/preferences/notification-prefs', () => ({
   },
 }));
 
+type ActualGuard = { snapshot(): { forbiddenImports: string[]; fetchCalls: number }; recordFetch(): never };
+const actualGuard = (globalThis as unknown as Record<symbol, ActualGuard>)[Symbol.for('bubaly.callback.guard.v1')];
+if (!actualGuard || typeof actualGuard.snapshot !== 'function' || typeof actualGuard.recordFetch !== 'function') {
+  throw new Error('Required sticky callback import/fetch guard is absent');
+}
+const importSnapshot = actualGuard.snapshot();
+expect(importSnapshot.forbiddenImports).toEqual([]);
+expect(importSnapshot.fetchCalls).toBe(0);
+function assertBoundary() {
+  expect(boundary.fetchCalls).toBe(0);
+  const snapshot = actualGuard.snapshot();
+  expect(snapshot.forbiddenImports).toEqual([]);
+  expect(snapshot.fetchCalls).toBe(0);
+}
+
 const ORIGIN = 'https://callback.example.test';
 type CallbackRequest = Parameters<(typeof import('@/app/api/google/calendar/callback/route'))['GET']>[0];
 function request(query = '?code=synthetic-code&state=issued', cookie: string | null = 'issued'): CallbackRequest {
@@ -83,16 +98,14 @@ beforeEach(() => {
   fake.key = true;
   fake.merge = { ok: true };
   fake.calls = [];
-  vi.stubGlobal('fetch', () => { boundary.fetchCalls++; throw new Error('Forbidden network in literal callback fixture'); });
+  vi.stubGlobal('fetch', () => { boundary.fetchCalls++; return actualGuard.recordFetch(); });
 });
 afterEach(() => {
-  expect(boundary.fetchCalls).toBe(0);
-  expect(boundary.forbidden).toEqual([]);
+  assertBoundary();
   vi.unstubAllGlobals();
 });
 afterAll(() => {
-  expect(boundary.fetchCalls).toBe(0);
-  expect(boundary.forbidden).toEqual([]);
+  assertBoundary();
 });
 
 describe('Google Calendar callback admits only an error-free authenticated identity', () => {
