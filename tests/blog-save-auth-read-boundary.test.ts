@@ -110,6 +110,7 @@ describe('blog saves retain auth read uncertainty', () => {
     h.insertError = { code: '23505' };
     const response = await post(); expect(response.status).toBe(200); expect((await response.json()).saved).toBe(false);
     expect(h.writes.map(x => [x.op, x.filters.user_id])).toEqual([['insert', 'reader-a'], ['delete', 'reader-a']]);
+    expect(h.writes.map(x => [x.op, x.filters.post_id])).toEqual([['insert', 'published-post'], ['delete', 'published-post']]);
   });
   it('invalid JSON still refuses before a toggle', async () => { const response = await post('{'); expect(response.status).toBe(400); expect(h.writes).toEqual([]); });
   it('an oversized payload still refuses before a toggle', async () => { const response = await post(JSON.stringify({ slug: 'x'.repeat(3000) })); expect(response.status).toBe(413); expect(h.writes).toEqual([]); });
