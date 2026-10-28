@@ -84,7 +84,11 @@ function describe(err: unknown): string {
   try {
     // Read only an own data property: getters, inherited values and coercion
     // can expose private diagnostics or replace the original body exception.
-    const descriptor = err !== null && (typeof err === 'object' || typeof err === 'function')
+    const isObject = err !== null && (typeof err === 'object' || typeof err === 'function');
+    if (isObject && Object.getOwnPropertyDescriptor(err, 'publicErrorCode')?.value === 'request_stopped') {
+      return 'AI request stopped.';
+    }
+    const descriptor = isObject
       ? Object.getOwnPropertyDescriptor(err, 'status')
       : undefined;
     const status = descriptor?.value;
