@@ -272,7 +272,12 @@ describe('memory.remember', () => {
 
   it('resolves a member name and stores an explicit preference as a confirmed fact', async () => {
     const { db, calls } = makeDb((call) => {
-      if (call.table === 'family_members') return { data: MEMBERS, error: null };
+      if (call.table === 'family_members') {
+        const data = 'id' in call.filters
+          ? MEMBERS.find((member) => member.id === call.filters.id && member.family_id === call.filters.family_id) ?? null
+          : MEMBERS;
+        return { data, error: null };
+      }
       if (call.table === 'family_facts' && call.kind === 'insert') {
         return { data: { ...(call.payload as Record<string, unknown>), id: 'fact-1', created_at: '', updated_at: '' }, error: null };
       }
