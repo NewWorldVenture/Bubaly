@@ -48,9 +48,9 @@ export async function GET(req: NextRequest) {
   try {
     const supabase = await createServer();
     // Identity comes from the session, never from `state`.
-    const { data: auth, error: authError } = await supabase.auth.getUser();
+    const { data: auth } = await supabase.auth.getUser();
     const userId = auth.user?.id;
-    if (authError || !userId) return redirect('error');
+    if (!userId) return redirect('error');
 
     // Same origin the consent request was built from, so the two redirect_uri
     // values Google compares are produced by one function, not two.

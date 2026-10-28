@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 
 // Literal callback boundary only. No assertion that an installed Auth SDK emits
 // contradictory error+user records; those are defensive admission controls.
-const boundary = vi.hoisted(() => ({ fetchCalls: 0 }));
+const boundary = vi.hoisted(() => ({ fetchCalls: 0, defaultFetchCalls: 0, forbiddenFactories: [] as string[] }));
 const fake = vi.hoisted(() => ({
   auth: { data: { user: { id: 'session-user' } as { id: string } | null }, error: null as unknown },
   authThrown: null as unknown,
@@ -54,16 +54,61 @@ vi.mock('@/lib/preferences/notification-prefs', () => ({
   },
 }));
 
+// Known forbidden boundary imports fail in their mock factories before any
+// implementation is loaded. Default CI observes only this closed mock graph;
+// local adapter runs additionally retain their admitted external load veto.
+vi.mock('@supabase/supabase-js', () => {
+  boundary.forbiddenFactories.push('@supabase/supabase-js');
+  throw new Error('Forbidden SDK implementation import in callback fixture');
+});
+vi.mock('@supabase/ssr', () => {
+  boundary.forbiddenFactories.push('@supabase/ssr');
+  throw new Error('Forbidden SSR implementation import in callback fixture');
+});
+vi.mock('@supabase/auth-js', () => {
+  boundary.forbiddenFactories.push('@supabase/auth-js');
+  throw new Error('Forbidden Auth SDK implementation import in callback fixture');
+});
+vi.mock('@/lib/supabase/auth', () => {
+  boundary.forbiddenFactories.push('@/lib/supabase/auth');
+  throw new Error('Forbidden Auth implementation import in callback fixture');
+});
+vi.mock('next/cache', () => {
+  boundary.forbiddenFactories.push('next/cache');
+  throw new Error('Forbidden cache implementation import in callback fixture');
+});
+vi.mock('@/lib/ai/provider', () => {
+  boundary.forbiddenFactories.push('@/lib/ai/provider');
+  throw new Error('Forbidden provider implementation import in callback fixture');
+});
+vi.mock('@/lib/sync/crypto', () => {
+  boundary.forbiddenFactories.push('@/lib/sync/crypto');
+  throw new Error('Forbidden encryption implementation import in callback fixture');
+});
+
 type ActualGuard = { snapshot(): { forbiddenImports: string[]; fetchCalls: number }; recordFetch(): never };
-const actualGuard = (globalThis as unknown as Record<symbol, ActualGuard>)[Symbol.for('bubaly.callback.guard.v1')];
+const defaultLiteralGuard: ActualGuard = {
+  snapshot: () => ({ forbiddenImports: [...boundary.forbiddenFactories], fetchCalls: boundary.defaultFetchCalls }),
+  recordFetch: () => {
+    boundary.defaultFetchCalls++;
+    throw new Error('Forbidden network in default literal callback fixture');
+  },
+};
+const actualGuard = process.env.BUBALY_ADAPTER_PHASE
+  ? (globalThis as unknown as Record<symbol, ActualGuard>)[Symbol.for('bubaly.callback.guard.v1')]
+  : defaultLiteralGuard;
 if (!actualGuard || typeof actualGuard.snapshot !== 'function' || typeof actualGuard.recordFetch !== 'function') {
   throw new Error('Required sticky callback import/fetch guard is absent');
 }
+expect(boundary.forbiddenFactories).toEqual([]);
+expect(boundary.defaultFetchCalls).toBe(0);
 const importSnapshot = actualGuard.snapshot();
 expect(importSnapshot.forbiddenImports).toEqual([]);
 expect(importSnapshot.fetchCalls).toBe(0);
 function assertBoundary() {
   expect(boundary.fetchCalls).toBe(0);
+  expect(boundary.defaultFetchCalls).toBe(0);
+  expect(boundary.forbiddenFactories).toEqual([]);
   const snapshot = actualGuard.snapshot();
   expect(snapshot.forbiddenImports).toEqual([]);
   expect(snapshot.fetchCalls).toBe(0);
