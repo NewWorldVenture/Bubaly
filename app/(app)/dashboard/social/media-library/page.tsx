@@ -45,7 +45,7 @@ export default async function MediaLibraryPage() {
                     )}
                   </div>
                   <p className="truncate text-xs font-medium">{a.title ?? 'Untitled'}</p>
-                  <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-1">
                     <Badge tone="neutral">{a.kind}</Badge>
                     <Badge tone={a.status === 'ready' ? 'success' : 'warning'}>{a.status}</Badge>
                   </div>

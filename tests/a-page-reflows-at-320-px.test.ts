@@ -18,6 +18,13 @@ import { sourceFiles } from './helpers/hover-reveals';
 // The admin console was swept the same way later: 5 of its 79 routes scrolled
 // sideways at 320 px (/admin, /admin/admins, /admin/feedback,
 // /admin/marketing/settings and /admin/subscriptions), from the same two shapes.
+//
+// UI-001 swept every member, admin and public route again at six widths, on a
+// phone's viewport (isMobile, where the layout viewport grows with the content).
+// At 320 px four member routes scrolled sideways (/dashboard/agents,
+// /dashboard/journeys, /dashboard/social/content-studio/new, by 177 px and
+// still 107 px at 390, and /dashboard/social/media-library), and the phone
+// number field ran past its own box everywhere it is used.
 
 /** Each class string in a file that makes a grid with breakpoint columns and no base column count. */
 function unboundedGrids(src: string): string[] {
@@ -49,6 +56,9 @@ describe('a page reflows at 320 px', () => {
       ['app/(app)/admin/page.tsx', 'grid grid-cols-1 gap-4 lg:grid-cols-3'],
       ['app/(app)/admin/subscriptions/page.tsx', 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]'],
       ['app/(app)/admin/marketing/settings/page.tsx', 'grid grid-cols-1 gap-5 lg:grid-cols-2'],
+      ['components/modules/agents-module.tsx', 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_1.3fr]'],
+      // A fieldset's min-width is its content's by default, so it also needs min-w-0.
+      ['components/social/studio-form.tsx', 'grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-3'],
     ];
     for (const [file, cls] of fixed) {
       const src = readFileSync(file, 'utf8');
@@ -60,9 +70,10 @@ describe('a page reflows at 320 px', () => {
   it('the count of grids with no base column only goes down', () => {
     // 330 on main c95b118; the nine files above held 11 of them. Most fit
     // their content at 320 px, as the sweep showed; this keeps new ones from
-    // being added without a base column. 319 to 316 with the three admin grids.
+    // being added without a base column. 319 to 316 with the three admin grids,
+    // and 314 with UI-001's two.
     const count = files.reduce((n, f) => n + unboundedGrids(readFileSync(f, 'utf8')).length, 0);
-    expect(count).toBeLessThanOrEqual(316);
+    expect(count).toBeLessThanOrEqual(314);
     expect(count).toBeGreaterThan(100); // non-vacuity: the scanner finds them
   });
 
@@ -109,6 +120,20 @@ describe('a page reflows at 320 px', () => {
     const settings = src('app/(app)/admin/marketing/settings/page.tsx');
     expect(settings).toContain('className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-border px-3 py-2 text-sm"');
     expect(settings).toContain('<span className="inline-flex min-w-0 items-center gap-1 text-muted [overflow-wrap:anywhere]"><XCircle className="h-4 w-4 shrink-0" /> Set {p.env}</span>');
+  });
+
+  it('the rows the UI-001 sweep found wrap, stack or shrink', () => {
+    const src = (f: string) => readFileSync(f, 'utf8');
+    // Three stat tiles side by side left 51 px for "Completion" at 320 px; they stack below sm.
+    expect(src('app/(app)/dashboard/journeys/page.tsx')).toContain('className="grid grid-cols-1 gap-3 sm:grid-cols-3"');
+    expect(src('app/(app)/dashboard/journeys/page.tsx')).not.toContain('className="grid grid-cols-3 gap-3"');
+    // A media card's kind and status badges wrap rather than push the card past the screen.
+    expect(src('app/(app)/dashboard/social/media-library/page.tsx')).toContain('<div className="flex flex-wrap items-center gap-1">\n                    <Badge tone="neutral">{a.kind}</Badge>');
+    // The number field could not shrink below its own width inside a box that hides
+    // overflow: its end was cut off, and with focus in it the box scrolled the country
+    // button out of view (rendered: the phone sign-in form tests in
+    // tests/e2e/a-popup-opens-closes-and-keeps-its-targets-apart.spec.ts).
+    expect(src('components/ui/phone-input.tsx')).toContain('className="min-w-0 flex-1 bg-transparent px-3 text-sm text-fg placeholder:text-muted outline-none"');
   });
 
   it('the scanner: breakpoint columns without a base count; a base count or no breakpoint is fine', () => {
