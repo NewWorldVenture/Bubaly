@@ -98,7 +98,7 @@ export default async function JourneysPage() {
       />
       <p className="text-xs text-muted">{t('journeys.lastDaysWindow', { days: JOURNEY_WINDOW_DAYS })}</p>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatTile label={t('dashboardJourneys.journeysStarted')} value={totalStarts} icon={Activity} accent="bg-blue-600" />
         <StatTile label={t('dashboardJourneys.completed')} value={totalCompletions} icon={CheckCircle2} accent="bg-emerald-600" />
         <StatTile label={t('dashboardJourneys.completion')} value={formatRate(overallRate)} icon={Timer} accent="bg-violet-600" />
