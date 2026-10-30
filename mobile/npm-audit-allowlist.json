@@ -9,6 +9,11 @@
       "package": "braces",
       "added": "2026-10-03",
       "reason": "braces <=3.0.3 stack-exhaustion DoS on deeply nested patterns; no patched release yet. Reached through Expo/Metro tooling: expo -> @expo/cli -> @expo/metro-file-map -> micromatch, and expo -> @expo/metro -> metro-file-map -> micromatch. The lockfile shows these paths; it does not show whether braces reaches a device bundle. Remove when braces ships a fix."
+    },
+    "GHSA-qr28-fpjm-wq7f": {
+      "package": "decode-uri-component",
+      "added": "2026-10-29",
+      "reason": "decode-uri-component <=0.5.0 quadratic-time decoding of long percent-encoded runs (denial of service). Unlike the build-tooling entries, this one reaches the device bundle: expo-router 57.x -> query-string 7.1.3 -> decode-uri-component ^0.2.2 parses the app's own links, so a crafted link could stall the JavaScript thread until the app is closed. The only fix is 0.5.1, which is ESM-only; query-string 7 requires it from CommonJS, so forcing it would break link parsing. Every expo-router 57.x release still needs query-string ^7.1.3; expo-router 58 (Expo SDK 58) drops query-string. Accepted by the owner on 2026-10-29 over moving to Expo SDK 58 now. Remove when the app moves to a fixed expo-router."
     }
   }
 }
