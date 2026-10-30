@@ -236,8 +236,8 @@ function VoiceCaptureSession() {
         />
 
         {/* Live routing preview */}
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <div className="min-h-[1.75rem]">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="min-h-[1.75rem] min-w-0">
             {preview?.text && (() => {
               const meta = KIND_META[preview.kind];
               const Icon = meta.icon;

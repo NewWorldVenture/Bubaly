@@ -25,6 +25,14 @@ import { sourceFiles } from './helpers/hover-reveals';
 // /dashboard/journeys, /dashboard/social/content-studio/new, by 177 px and
 // still 107 px at 390, and /dashboard/social/media-library), and the phone
 // number field ran past its own box everywhere it is used.
+//
+// A second UI-001 pass opened every dialog, menu and disclosure, and the forms
+// behind Add/New/Edit buttons, at 320x568 and on a phone held sideways (568x320).
+// Three forms that open in place scrolled the page sideways at 320 px (family
+// emergency's Add plan, weather's Add city, the voice command's Run row), and
+// the guardian contact editor ran off the top of the screen with its first
+// fields out of reach. The PIN lock screen and the exit-intent offer, which no
+// button opens, had the same shape: taller than a sideways phone, and no scroll.
 
 /** Each class string in a file that makes a grid with breakpoint columns and no base column count. */
 function unboundedGrids(src: string): string[] {
@@ -59,6 +67,8 @@ describe('a page reflows at 320 px', () => {
       ['components/modules/agents-module.tsx', 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_1.3fr]'],
       // A fieldset's min-width is its content's by default, so it also needs min-w-0.
       ['components/social/studio-form.tsx', 'grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-3'],
+      ['components/family/quick-add.tsx', 'grid grid-cols-1 gap-3 sm:grid-cols-2'],
+      ['app/(app)/dashboard/family-emergency/page.tsx', 'grid grid-cols-1 gap-5 md:grid-cols-2'],
     ];
     for (const [file, cls] of fixed) {
       const src = readFileSync(file, 'utf8');
@@ -71,9 +81,9 @@ describe('a page reflows at 320 px', () => {
     // 330 on main c95b118; the nine files above held 11 of them. Most fit
     // their content at 320 px, as the sweep showed; this keeps new ones from
     // being added without a base column. 319 to 316 with the three admin grids,
-    // and 314 with UI-001's two.
+    // 314 with UI-001's two, and 312 with its second pass's two.
     const count = files.reduce((n, f) => n + unboundedGrids(readFileSync(f, 'utf8')).length, 0);
-    expect(count).toBeLessThanOrEqual(314);
+    expect(count).toBeLessThanOrEqual(312);
     expect(count).toBeGreaterThan(100); // non-vacuity: the scanner finds them
   });
 
@@ -134,6 +144,31 @@ describe('a page reflows at 320 px', () => {
     // button out of view (rendered: the phone sign-in form tests in
     // tests/e2e/a-popup-opens-closes-and-keeps-its-targets-apart.spec.ts).
     expect(src('components/ui/phone-input.tsx')).toContain('className="min-w-0 flex-1 bg-transparent px-3 text-sm text-fg placeholder:text-muted outline-none"');
+  });
+
+  it('what opens on a small screen stays on it: forms in place wrap and shrink, dialogs scroll', () => {
+    const src = (f: string) => readFileSync(f, 'utf8');
+    // A card action that opens into a form (QuickAdd) takes a row of its own, filled by the form.
+    const card = src('components/family/shell.tsx');
+    expect(card).toContain('<div className="mb-4 flex items-start justify-between gap-3 has-[form]:flex-wrap">');
+    expect(card).toContain('<div className="flex shrink-0 items-center gap-3 has-[form]:basis-full">');
+    expect(src('components/family/quick-add.tsx')).toContain('className="w-full rounded-2xl border border-border bg-surface/60 p-4 space-y-3"');
+    // Weather's city search beside its Search and close buttons.
+    expect(src('components/modules/weather-module.tsx')).toContain('<div className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-xl');
+    // The voice command's routing preview and its Clear / Run command buttons.
+    expect(src('components/modules/voice-module.tsx')).toContain('<div className="mt-3 flex flex-wrap items-center justify-between gap-2">\n          <div className="min-h-[1.75rem] min-w-0">');
+    // The guardian contact editor caps its height and scrolls, as the rules editor beside it does.
+    for (const f of ['components/guardian/contact-list.tsx', 'components/guardian/rules-editor.tsx']) {
+      expect(src(f), f).toMatch(/role="dialog"[\s\S]{0,120}className="relative z-10 w-full max-w-(md|lg) max-h-\[85dvh\] overflow-y-auto /);
+    }
+    // The exit-intent offer is never taller than the screen.
+    expect(src('components/marketing/exit-intent.tsx')).toContain('className="relative z-10 max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl');
+    // The PIN lock screen scrolls from its top on a short screen: centred with my-auto,
+    // because justify-center on a scroller cuts off the top, where no scroll reaches.
+    const lock = src('components/app/app-lock-gate.tsx');
+    expect(lock).toContain('className="fixed inset-0 z-[200] flex flex-col items-center overflow-y-auto bg-bg px-6 py-6"');
+    expect(lock).toContain('<div className="my-auto flex w-full max-w-xs flex-col items-center">');
+    expect(lock).not.toContain('items-center justify-center bg-bg px-6');
   });
 
   it('the scanner: breakpoint columns without a base count; a base count or no breakpoint is fine', () => {

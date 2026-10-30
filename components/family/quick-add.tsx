@@ -92,7 +92,7 @@ export function QuickAdd({
   return (
     <form
       action={submit}
-      className="rounded-2xl border border-border bg-surface/60 p-4 space-y-3"
+      className="w-full rounded-2xl border border-border bg-surface/60 p-4 space-y-3"
     >
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
@@ -100,7 +100,7 @@ export function QuickAdd({
           <X className="h-4 w-4" />
         </button>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {fields.map((f) => {
           const id = `${table}-${f.name}`;
           const base = 'w-full rounded-2xl border border-border bg-bg px-3.5 py-2.5 text-sm outline-none transition focus:border-brand';
