@@ -37,12 +37,14 @@ export function SectionCard({
 }) {
   return (
     <section className={cn('rounded-2xl border border-border bg-surface/40 p-5', className)}>
-      <div className="mb-4 flex items-start justify-between gap-3">
+      {/* An action that opens into a form (QuickAdd) takes a row of its own: beside
+          the title it ran off a 320 px screen and covered the title. */}
+      <div className="mb-4 flex items-start justify-between gap-3 has-[form]:flex-wrap">
         <div className="min-w-0">
           <h2 className="font-semibold">{title}</h2>
           {description && <p className="mt-0.5 text-xs text-muted">{description}</p>}
         </div>
-        <div className="flex shrink-0 items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3 has-[form]:basis-full">
           {action}
           {viewAllHref && <ViewAllLink href={viewAllHref} />}
         </div>

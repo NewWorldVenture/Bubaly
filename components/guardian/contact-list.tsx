@@ -303,7 +303,7 @@ function ContactModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="contact-editor-title"
-        className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-bg p-5 space-y-4 shadow-2xl outline-none"
+        className="relative z-10 w-full max-w-md max-h-[85dvh] overflow-y-auto rounded-2xl border border-border bg-bg p-5 space-y-4 shadow-2xl outline-none"
       >
         <h2 id="contact-editor-title" className="text-lg font-bold">{contact ? 'Edit Contact' : 'Add Contact'}</h2>
         <div className="space-y-3">
