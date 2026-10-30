@@ -8526,7 +8526,7 @@ The TLS problem was a missing Node system-CA setting, not a reason to disable ce
 
 ## Current reconciled audit counts
 
-- Last reconciled from the canonical register: **2026-10-28T22:24:03.181Z**. Current counts below include qualified finite closures; dated narratives remain historical.
+- Last reconciled from the canonical register: **2026-10-30T21:12:51.000Z**. Current counts below include qualified finite closures; dated narratives remain historical.
 
 - Retained existing DST regression file adds one inventory obligation during Gregorian-helper reconciliation:14,580 rows,11,678 NOT STARTED and2,549 IN PROGRESS;344 closures unchanged.
 
@@ -8536,8 +8536,8 @@ The TLS problem was a missing Node system-CA setting, not a reason to disable ce
 
 - Recounted row by row on 2026-10-04 from Register B itself (`node scripts/audit-register-counts.mjs`; `tests/the-audit-summary-counts-its-register.test.ts` now fails when this section and the rows disagree). The register holds 14,538 unique IDs with no duplicates and no unrecognised status. The previous 11,701 NOT STARTED / 2,484 IN PROGRESS tally predated LIBRARY-2E628A2A31CE's evidenced move from NOT STARTED to IN PROGRESS; the 15:39 UTC checkpoint already carried 11,700 / 2,485, and the rows confirm it.
 - Total Audit Items: **15,732**. Prior count explanations are preserved in the dated status summary below.
-- Not Started: **10,325**. Current canonical register; earlier dated tallies remain historical.
-- In Progress: **3,335**. Current canonical register; earlier dated tallies remain historical.
+- Not Started: **10,323**. Current canonical register; earlier dated tallies remain historical.
+- In Progress: **3,337**. Current canonical register; earlier dated tallies remain historical.
 - Passed: **1,818**. Prior count explanations are preserved in the dated status summary below.
 - Fixed + Passed: **244**. Prior count explanations are preserved in the dated status summary below.
 - Blocked: **10**. Prior count explanations are preserved in the dated status summary below.
@@ -31419,7 +31419,7 @@ not read the same on this page.*
 | SOCIAL-001 | SOCIAL | Live social publishing connectors | 🔄 IN PROGRESS | High | Source inspection; full desired platform/flow verification pending. Follow-up inspection confirms no platform has per-account OAuth/token persistence wired. Existing X text/link input fits a bounded first live connector; official OAuth/PKCE/create-post contracts were checked. | X account OAuth/PKCE and encrypted canonical tokens implemented with owner/family/current-access/deadline/replay checks, safe reconnect/disconnect, exact-count ambiguity rejection and fixed bounded provider calls. Text/link-only registry publisher distinguishes confirmed success, explicit rejection and uncertain acceptance. Existing schema Update types aligned without SQL. | 80 X execution cases, including actual connect/callback/create action/pipeline/registry/retry, PASS; all combined gates PASS on6094eb04. See social-x-cycle.md and social-verification-checkpoint.md. | Controlled provider/database transport only; no live posts or OAuth exchanges. Implementation is no longer an empty registry; the full multi-provider workflow remains incomplete. |
 | A11Y-001 | A11Y | Keyboard, focus, labels, errors and assistive technology | 🔄 IN PROGRESS | High | Guards on main include tests/a-focused-control-shows-it.test.ts, tests/a-focus-colour-reads-at-3-to-1.test.ts, tests/the-focus-ring-only-shows-on-focus.test.ts, tests/a-page-reflows-at-320-px.test.ts, tests/informative-text-is-not-faded.test.ts, tests/token-text-at-reduced-alpha-is-readable.test.ts, tests/a-brand-button-keeps-its-text-readable-on-hover.test.ts, tests/text-on-a-gradient-reads-at-4-5-to-1.test.ts, tests/a-button-with-nothing-in-it-has-a-name.test.ts, tests/a-feedback-status-badge-reads-in-the-dark-theme.test.ts and tests/a-swapped-form-keeps-focus.test.ts, with rendered specs under tests/e2e (see the A11Y-001 section). | 32 merged PRs, 2026-10-10 to 2026-10-26: #990, #991, #993, #994, #996, #998, #1000 to #1003, #1005 to #1012, #1014, #1015, #1018, #1019 composed with the owner's FC1/FC2 correction through #1025, #1095, #1096, #1097, #1098, #1100, #1115, #1117, #1118, #1120 and #1123. | CI green on each merged head; production serves main. The route sweeps (axe, Tab-through focus pixel diff, 320 px reflow, and every dialog, menu and disclosure opened on the 241 member routes in both themes; axe, 320 px reflow, a Tab-through focus pixel diff and every popup opened on the 79 admin routes) were author-run on local production builds and are not committed. A keyboard-only pass with the Orca screen reader on Chromium is written up in docs/final-audit/a11y-001-screen-reader-cycle.md. | Open: physical devices, and the screen readers people use on them (VoiceOver, TalkBack, NVDA, JAWS). 2026-10-26T13:51:05.712Z: Sidebar full-contrast proposal selected by root under user autonomous/no-questions instruction; no invented individual PR approval. PR1096 closed/merged87e511e821e4b0924f16c698da20de4ada6a0e21, exact qualifiedtreee26bdb698163236e7c7fd62309889685e8ad0d5e, parent97f97. Root current composition preserves newer PinAll hoverbrightness95; whole15 source/arithmetic checks plus lint/typegen/fulltypes0 independently qualified245bc6ab. At13:44:14Z www public build-info200/no-store equalsmainbefore/after87; Vercel wAeTGwv1gNe1Ffr4kASpePef8S61 completed, observer88140 actuallydrained0. Earlier pending-sidebar statements are dated history. This adds one bounded contrastfix to earlier30-PR history, not full renderedSidebar/native/physical/screenreader or A11Yclosure. |
 | PERF-001 | PERF | Page, client bundle, network and database performance | ⬜ NOT STARTED | High | Pending | None | Pending |  |
-| UI-001 | UI | Small phone through wide desktop interactions and browser errors | ⬜ NOT STARTED | High | Pending | None | Pending |  |
+| UI-001 | UI | Small phone through wide desktop interactions and browser errors | 🔄 IN PROGRESS | High | tests/a-page-reflows-at-320-px.test.ts (UI-001 cases); tests/e2e/a-popup-opens-closes-and-keeps-its-targets-apart.spec.ts (on a 320 px phone). | #1151 (7d345a7) and #1153 (9b5117d). | Author-run sweeps of 246 member, 79 admin and 28 public routes at eight viewports from 320x568 to 2560x1440 and 568x320, with every popup and Add/New/Edit dialog opened at 320x568 and 568x320: after the fixes no sideways scroll, unreachable control or browser error; CI green on both heads. Not committed. | Open: Safari, Firefox, physical devices, zoom and text size, form submission. |
 | DATA-001 | DATA | Resource CRUD, persistence, concurrent operations and failed reads | ⬜ NOT STARTED | High | Pending | None | Pending |  |
 | AI-001 | AI | AI permissions, input context, provider boundaries and reliable execution | ⬜ NOT STARTED | High | Pending | None | Pending |  |
 | PAY-001 | PAY | Billing lifecycle and entitlement verification in sandbox only | ⬜ NOT STARTED | High | Pending | None | Pending |  |
@@ -31463,7 +31463,7 @@ not read the same on this page.*
 | UI-WF-029 | UI-FLOW | Marketing pages, dynamic content, contact, consent and subscriptions | ✅ PASS | Low | `tests/e2e/marketing-public.spec.ts`, `public.spec.ts` and `csp.spec.ts`, green on main's CI; not re-driven here. | None | PASS (2026-09-29) | Marketing pages, contact, consent and subscriptions are covered by the public-site E2E specs. |
 | UI-WF-030 | UI-FLOW | Profile, household configuration, preferences and setup | ✅ PASS | Low | Walked 2026-09-29 on a local production build as a Plus parent: every route 200, no page error, no raw error or key; creates driven through the real form, reloaded, and checked in the database. | None | PASS (2026-09-29) | Profile, settings and household configuration render clean. |
 | UI-WF-031 | UI-FLOW | Offline, install, updates and native shell lifecycle | ✅ PASS | Low | `tests/e2e/` register-sw, service-worker-cache, service-worker-native and native-bootstrap specs, green on main's CI; not re-driven here. | None | PASS (2026-09-29) | Offline and install behaviour are covered by the PWA E2E specs. |
-| MOBILE-SURFACE-001 | RUNTIME | Responsive Next.js website | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| MOBILE-SURFACE-001 | RUNTIME | Responsive Next.js website | 🔄 IN PROGRESS | Unassessed | See UI-001. | #1151 (7d345a7) and #1153 (9b5117d). | UI-001's sweeps cover all seven viewport classes (small, normal and large phone, tablet, laptop, desktop, wide desktop) and a phone held sideways, on Chromium with a phone's viewport and touch: after #1151 and #1153 no sideways scroll, unreachable control or browser error on the 353 routes. | Open: Safari, Firefox and physical devices. |
 | MOBILE-SURFACE-002 | RUNTIME | Installed PWA | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | MOBILE-SURFACE-003 | RUNTIME | Capacitor hosted-web native shell | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | MOBILE-SURFACE-004 | RUNTIME | Expo native application | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -35963,7 +35963,7 @@ Pending
 
 ### UI-001 — Small phone through wide desktop interactions and browser errors
 
-Status: ⬜ NOT STARTED
+Status: 🔄 IN PROGRESS
 Severity: High
 Route(s), components, actions, tables and providers: Trace using linked discovery inventory; record exact exercised chain before passing.
 
@@ -35979,19 +35979,27 @@ The complete supported workflow performs authorized actions, persists intended s
 - [ ] Console and network inspection; related regression
 
 #### Issues Found
-No complete workflow finding yet; investigation pending.
+Found by sweeps of every member (246), admin (79) and public (28) route of a seeded local household on local production builds of main (5733d36, and from the large-phone pass on #1151's build), as a super admin with a populated household. Eight viewports: 320x568, 390x844 and 430x932 phones, a 568x320 phone held sideways and a 768x1024 tablet, each with a phone's viewport (isMobile, touch), and 1280x800, 1920x1080 and 2560x1440 desktops. On each page the sweep recorded sideways scroll and the element causing it, controls cut off at the screen's edge outside any scroller, and the browser's own errors: console errors and warnings, uncaught exceptions, failed requests and HTTP 4xx/5xx. A second pass opened every menu, listbox and disclosure, and the dialogs and forms behind Add/New/Edit-style buttons (239 dialogs on 123 member routes), at 320x568 and 568x320, and at 2560x1440 for member routes, recording the open popup past the screen's edge, controls in it that no scroll can reach, sideways scroll while it is open, and browser errors. Every modal dialog's classes were then checked for a height cap and a scroll.
+- At 320 px four member routes scrolled sideways (#1151): /dashboard/agents (6 px) and /dashboard/social/content-studio/new (177 px, still 107 px at 390), grids with columns only from `lg`, the second on a `<fieldset>` whose min-width is its content's; /dashboard/journeys (14 px), three stat tiles side by side; /dashboard/social/media-library (18 px), a media card's badges that did not wrap.
+- The phone number field (`PhoneInput`) could not shrink below its own width inside a box that hides overflow (#1151): on settings its end was cut off, and on log-in and sign-up, where it takes focus as the form opens, the box scrolled 82 px to the caret and pushed the country button out of view, mostly hidden at 390 px too.
+- Forms that open in place scrolled the page sideways at 320 px (#1153): family emergency's Add plan opened inside its card's header beside the title, covering the title (37 px); weather's Add city search could not shrink beside its Search button (85 px); the voice command's preview and its Clear / Run command buttons did not wrap (87 px).
+- Dialogs taller than the screen with no scroll (#1153): the guardian contact editor was pinned to the bottom of the screen with its top and first fields out of reach, 68 px off-screen at 320x568 and 252 px at 568x320; the PIN lock screen centred a 540 px column with no scroll, so on a phone held sideways its title, the keypad's last row (0 and delete) and Forgot PIN? Sign out were cut off; the exit-intent offer had no height cap. Every other dialog the pass opened stayed on screen or scrolled; most use the shared Modal, which caps its height and scrolls.
+- Nothing else at any width: no other sideways scroll, cut-off control or browser error. The only 4xx answers were deliberate: the two `seed` paths removed by admin reach N8, and /resources/benchmarks, a 404 until an admin publishes it (the sitemap leaves it out then). GIF search and the assistant's quick prompts answered 503 because the local stack has no GIPHY or AI key; both tell the person it is not configured.
+- Observed, by design: the calendar's week view draws each day to its elapsed time (`dayTicks` in components/modules/calendar-module.tsx), so on a 25-hour day (1 November 2026 in America/New_York) that column's hour rows sit out of line with the other days'.
 
 #### Fixes Applied
-None
+#1151 (7d345a7): `grid-cols-1` on the agents grid and `min-w-0 grid-cols-1` on the content studio's fieldset; the journeys tiles stack below `sm`; the media card's badges wrap; the phone number input is `min-w-0`. #1153 (9b5117d): a SectionCard action that opens into a form takes a row of its own (`has-[form]:`) and QuickAdd's and the family emergency page's grids get a base column; the weather search field is `min-w-0`; the voice preview row wraps; the guardian contact editor and the exit-intent offer cap their height and scroll; the PIN lock screen scrolls from its top (`my-auto` instead of `justify-center`).
 
 #### Retest Results
-Pending
+On each fix's production build the routes were measured again: no sideways scroll at 320, 390 or 568 px wide; the number field inside its box at 320 and 390 px (x 112 to 290 inside 29 to 291, and 112 to 360 inside 29 to 361); the contact editor at 69 to 552 of 568 and 32 to 304 of 320, scrolling; the lock screen's and the exit offer's classes, drawn with the build's stylesheet at 568x320, leave every control on screen or reachable by scrolling, where main's cut off the lock screen's title, last keypad row and sign-out. At 1280 px Add plan opens under its title and the voice row stays on one line. The large-phone, landscape and popup passes ran on #1151's build. CI passed on both PRs' heads (#1153 on every check; #1151 apart from the Mobile job's GHSA-qr28-fpjm-wq7f, failing on main's own lockfile and then allowlisted by #1152).
 
 #### Evidence
-Pending
+Committed guards: tests/a-page-reflows-at-320-px.test.ts (its two UI-001 cases and their rows in the grid list; the unbounded-grid ceiling 316 to 312) and the "on a 320 px phone" case in tests/e2e/a-popup-opens-closes-and-keeps-its-targets-apart.spec.ts. The sweeps were author-run on local production builds and are not committed.
+
+Not covered: Safari and Firefox (the sweeps ran in Chromium only), physical phones and tablets, browser zoom and text-size settings, and interactions beyond opening and closing popups: the sweeps submitted no form.
 
 #### Final Status
-⬜ NOT STARTED
+🔄 IN PROGRESS
 
 ### DATA-001 — Resource CRUD, persistence, concurrent operations and failed reads
 
