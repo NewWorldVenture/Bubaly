@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { IntentLink } from '@/components/ui/intent-link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, useTransition, useRef, useCallback } from 'react';
 import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
@@ -279,7 +280,7 @@ function SidebarDashboardLinks() {
         const Icon = dashboardIcon[view];
         const active = onDashboard && currentView === view;
         return (
-          <Link
+          <IntentLink
             key={view}
             href={view === defaultDashboard ? '/dashboard' : `/dashboard?view=${view}`}
             className={cn(
@@ -289,7 +290,7 @@ function SidebarDashboardLinks() {
           >
             <Icon className="h-5 w-5 shrink-0" />
             {navLabel(t, dashboardLabel(view, role))}
-          </Link>
+          </IntentLink>
         );
       })}
     </>
@@ -398,17 +399,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           >
             <Menu className="h-6 w-6" />
           </button>
-          <Link href="/home" aria-label={t('nav.home')} className="lg:hidden">
+          <IntentLink href="/home" aria-label={t('nav.home')} className="lg:hidden">
             <LogoMark className="h-8 w-14 sm:h-9 sm:w-16" variant="home" />
-          </Link>
+          </IntentLink>
           <div className="flex-1" />
           <HeaderSearch />
           {/* Nudge the search bar left of the action cluster for breathing room. */}
           <div className="hidden md:block md:w-4 lg:w-10" aria-hidden />
           <BlogLauncher />
-          <Link href="/feedback" aria-label={t('shell.shareIdea')} title={t('shell.shareIdea')} className="hidden h-10 w-10 items-center justify-center rounded-full text-muted hover:bg-elevated hover:text-fg md:inline-flex">
+          <IntentLink href="/feedback" aria-label={t('shell.shareIdea')} title={t('shell.shareIdea')} className="hidden h-10 w-10 items-center justify-center rounded-full text-muted hover:bg-elevated hover:text-fg md:inline-flex">
             <Gift className="h-5 w-5" />
-          </Link>
+          </IntentLink>
           <NotificationBell />
           <UserMenu />
         </header>
@@ -473,14 +474,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             if (isCapture) {
               // Raised center FAB-style Capture button
               return (
-                <Link
+                <IntentLink
                   key={item.href}
                   href={item.href}
                   aria-label={t('shell.capture')}
                   className="relative -mt-5 flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-full bg-brand shadow-lg shadow-brand/30 text-white transition hover:scale-105 active:scale-95"
                 >
                   <item.icon className="h-6 w-6" />
-                </Link>
+                </IntentLink>
               );
             }
 
@@ -500,9 +501,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {inner}
               </button>
             ) : (
-              <Link key={item.href} href={item.href} className={tabClass}>
+              <IntentLink key={item.href} href={item.href} className={tabClass}>
                 {inner}
-              </Link>
+              </IntentLink>
             );
           })}
         </div>

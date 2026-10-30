@@ -28,11 +28,12 @@ const HANDLERS = files('app', /(^|\/)route\.ts$/)
 
 const SURFACE = [...files('app', /\.tsx$/), ...files('components', /\.tsx$/)];
 
-/** `<Link` opening tags with `{…}` balanced. */
+/** `<Link` and `<IntentLink` opening tags with `{…}` balanced. An IntentLink
+ *  (components/ui/intent-link.tsx) is a Link that waits for a hover, focus or
+ *  touch before it prefetches; it still prefetches, so it is held to the same rule. */
 function linkTags(src: string): string[] {
   const out: string[] = [];
-  for (let at = src.indexOf('<Link'); at !== -1; at = src.indexOf('<Link', at + 1)) {
-    if (!/[\s\n]/.test(src[at + 5] ?? '')) continue;
+  for (const { index: at } of src.matchAll(/<(?:Intent)?Link(?=\s)/g)) {
     let depth = 0;
     for (let i = at; i < src.length; i += 1) {
       if (src[i] === '{') depth += 1;

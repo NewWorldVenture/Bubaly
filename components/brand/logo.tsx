@@ -5,7 +5,7 @@
 // server layouts under `app/(app)/kids` and `app/(auth)`.
 import Image from 'next/image';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import Link from 'next/link';
+import { IntentLink } from '@/components/ui/intent-link';
 import { cn } from '@/lib/utils/cn';
 
 export function LogoMark({
@@ -45,7 +45,9 @@ export function Logo({
   markVariant?: 'family' | 'home';
 }) {
   const t = useTranslations();
-  const HomeLink = documentNavigation ? 'a' : Link;
+  // The logo is on screen on every page of the layout that draws it, and is
+  // seldom what someone follows: it prefetches its page on intent, not on sight.
+  const HomeLink = documentNavigation ? 'a' : IntentLink;
   return (
     <HomeLink
       href={href}
