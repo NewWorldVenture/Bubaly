@@ -302,7 +302,10 @@ describe('the main Autopilot scan and the policy pass share one table', () => {
     const db = createInMemorySupabase({ uniques: { autopilot_suggestions: [['family_id', 'dedupe_key']] } });
     seedStreak(db, 'family-1', 3);
 
-    const first = await runAutopilotScan(db as never, 'family-1', 'user-1', 'UTC', 'en-US', echo);
+    // At NOW, like every other scan here. Unpinned, the scan read the real date:
+    // the streak's approvals start on 12 August 2026, the policy window is 90
+    // days, and from 10 November 2026 the streak was two and there was no offer.
+    const first = await runAutopilotScan(db as never, 'family-1', 'user-1', 'UTC', 'en-US', echo, NOW);
     expect(first.policyCandidates).toBe(1);
     expect(first.autoExecuted).toBe(0);
     expect(policyRows(db)).toHaveLength(1);
@@ -310,7 +313,7 @@ describe('the main Autopilot scan and the policy pass share one table', () => {
     // The main pass clears OPEN rows whose signal vanished; a policy row is
     // never among its drafts, so without the carve-out this second scan would
     // delete the offer it had just made.
-    const second = await runAutopilotScan(db as never, 'family-1', 'user-1', 'UTC', 'en-US', echo);
+    const second = await runAutopilotScan(db as never, 'family-1', 'user-1', 'UTC', 'en-US', echo, NOW);
     expect(second.cleared).toBe(0);
     expect(second.policyCandidates).toBe(1);
     expect(policyRows(db)).toHaveLength(1);
