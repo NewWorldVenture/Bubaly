@@ -57,7 +57,9 @@ const FIXED = [
   'components/vacations/trip-packing.tsx',
   'components/vacations/trip-budget.tsx',
   'components/vacations/trip-overview.tsx',
-  'components/family/play-dates-view.tsx',
+  // The play-date writes left the browser for server actions (household-roles
+  // N9): the confirmed write, and its read, are held where they now live.
+  'app/(app)/dashboard/family/play-dates/actions.ts',
   'components/family/check-in-view.tsx',
   'components/family/driving-safety-view.tsx',
   'components/meals/favorites-view.tsx',
@@ -77,7 +79,9 @@ const FIXED = [
   'components/modules/celebrations-module.tsx',
   'components/modules/concierge-module.tsx',
   'components/modules/insurance-module.tsx',
-  'components/modules/life-events-module.tsx',
+  // The checklist tick left the browser for a server action (household-roles
+  // N4-R1-SIBLING): the confirmed write, and its read, are held where it now lives.
+  'app/(app)/dashboard/life-events/actions.ts',
   'components/modules/screen-time-module.tsx',
   'components/modules/security-module.tsx',
   'components/modules/tax-vault-module.tsx',

@@ -234,7 +234,9 @@ beforeEach(() => {
     { id: 'm-liam', family_id: FAMILY, display_name: 'Liam', is_active: true },
     { id: 'm-other', family_id: 'family-2', display_name: 'Outsider', is_active: true },
   ]);
-  mocks.requireUserContext.mockResolvedValue({ user: { id: USER }, active: { familyId: FAMILY } });
+  // The active family's row rides along, as requireUserContext always carries it
+  // (commitImport times the calendar_imported milestone from its created_at).
+  mocks.requireUserContext.mockResolvedValue({ user: { id: USER }, active: { familyId: FAMILY, family: { id: FAMILY, created_at: '2026-01-01T00:00:00.000Z' } } });
   mocks.createServer.mockResolvedValue(db);
 });
 

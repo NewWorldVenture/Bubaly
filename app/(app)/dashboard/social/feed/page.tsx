@@ -2,8 +2,9 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import { Newspaper, ExternalLink, Heart, MessageCircle, Repeat2, Plug } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { getFeed, getAccounts } from '@/lib/social/queries';
+import { getSocialAccess } from '@/lib/social/access';
 import { PLATFORMS, PROVIDERS, isPlatform, type SocialPlatform } from '@/lib/social/capabilities';
 import { PlatformBadge } from '@/components/social/platform';
 import { Card } from '@/components/ui/card';
@@ -22,16 +23,26 @@ type SP = { platform?: string; media?: string; q?: string };
 export default async function FeedPage({ searchParams }: { searchParams: Promise<SP> }) {
   const t = await getTranslations();
   const sp = await searchParams;
-  const ctx = await requireUserContext();
+  // The plan, here as well as in the layout (household-roles N2-R1-payload).
+  // The layout shows a family without Social only the accounts it may still
+  // disconnect, but a page renders beside its layout, not inside it: the
+  // page's own data went out in the response all the same. A refusal here
+  // ships nothing of it; for a family with Social nothing changes.
+  const ctx = await requireFeature('/dashboard/social');
   const familyId = ctx.active.familyId;
   const platform = isPlatform(sp.platform) ? sp.platform : undefined;
 
-  const [items, accounts] = await Promise.all([
+  const [items, accounts, access] = await Promise.all([
     getFeed(familyId, { platform, mediaType: sp.media, search: sp.q }),
     getAccounts(familyId),
+    getSocialAccess(familyId),
   ]);
 
   const connected = accounts.filter((a) => a.status === 'connected');
+  // Every social role reads the feed; connecting is connect_accounts' alone.
+  // The empty feed's Connect sent a read_only child to a page that sent them
+  // straight back here (household-roles N1-R1).
+  const canConnect = access?.can('connect_accounts') ?? false;
   const qs = (next: Partial<SP>) => {
     const merged = { ...sp, ...next };
     const params = new URLSearchParams();
@@ -69,7 +80,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
               : t('uiText.connectedAccountsHaveNoSyncedPostsYet')
           }
           action={
-            connected.length === 0 ? (
+            connected.length === 0 && canConnect ? (
               <Link href="/dashboard/social/accounts/connect" className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg">
                 <Plug className="h-4 w-4" /> {t('dashboardSocialFeed.connectAnAccount')}
               </Link>

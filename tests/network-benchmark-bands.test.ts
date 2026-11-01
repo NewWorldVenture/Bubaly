@@ -181,15 +181,19 @@ describe('aggregation of the new metrics under k-anonymity', () => {
   }, NOW);
 
   it('publishes a band only once ≥ K distinct families back it, per metric', () => {
-    // 120 families: 105 spend "100–250", 15 spend "1,000+" → the rare band is suppressed.
+    // 120 families: 100 spend "100–250", 10 spend "1,000+" and 10 "500–1,000" →
+    // the rare bands are suppressed. (They hide 20 between them, so the common
+    // band can be shown: alone, 15 withheld beside 105 shown would have said
+    // exactly how many spend more — see tests/network-aggregate.test.ts.)
     const contributions = [
-      ...Array.from({ length: 105 }, (_, i) => family(`a-${i}`, 150, 20 * 60)),
-      ...Array.from({ length: 15 }, (_, i) => family(`b-${i}`, 5000, 20 * 60)),
+      ...Array.from({ length: 100 }, (_, i) => family(`a-${i}`, 150, 20 * 60)),
+      ...Array.from({ length: 10 }, (_, i) => family(`b-${i}`, 5000, 20 * 60)),
+      ...Array.from({ length: 10 }, (_, i) => family(`c-${i}`, 700, 20 * 60)),
     ];
     const agg = aggregateContributions(contributions);
     const spend = agg.filter((a) => a.metric === 'weekly_spend_band');
     expect(spend.map((a) => a.value)).toEqual(['100–250']);
-    expect(spend[0].cohortSize).toBe(105);
+    expect(spend[0].cohortSize).toBe(100);
     // the bedtime band is shared by all 120 → published with the full cohort
     const bed = agg.find((a) => a.metric === 'bedtime_band');
     expect(bed?.value).toBe('8–9pm');

@@ -16,7 +16,13 @@ const STATUS_TONE: Record<string, 'neutral' | 'brand' | 'success' | 'warning' | 
   canceled: 'neutral',
 };
 
-export async function PostsList({ posts, emptyLabel }: { posts: Tables<'social_posts'>[]; emptyLabel?: string }) {
+/**
+ * `linkToDetail`: whether each post links to its detail page, which is the
+ * pipeline's (SOCIAL_SURFACES.pipeline). The published list also opens for an
+ * analyst, and every link there sent them back to the feed (household-roles
+ * N1-R1), so it lists the titles without links for a viewer who cannot open them.
+ */
+export async function PostsList({ posts, emptyLabel, linkToDetail = true }: { posts: Tables<'social_posts'>[]; emptyLabel?: string; linkToDetail?: boolean }) {
   const t = await getTranslations();
   if (posts.length === 0) {
     return <EmptyState icon={FileText} title={emptyLabel ?? 'No posts yet'} description={t('postsList.createContentInTheStudio')} />;
@@ -36,9 +42,11 @@ export async function PostsList({ posts, emptyLabel }: { posts: Tables<'social_p
           {posts.map((p) => (
             <tr key={p.id} className="border-t border-border hover:bg-elevated/50">
               <td className="px-3 py-2">
-                <Link href={`/dashboard/social/posts/${p.id}`} className="font-medium hover:underline">
-                  {p.title || p.body.slice(0, 60) || 'Untitled'}
-                </Link>
+                {linkToDetail ? (
+                  <Link href={`/dashboard/social/posts/${p.id}`} className="font-medium hover:underline">
+                    {p.title || p.body.slice(0, 60) || 'Untitled'}
+                  </Link>
+                ) : <span className="font-medium">{p.title || p.body.slice(0, 60) || 'Untitled'}</span>}
               </td>
               <td className="px-3 py-2 capitalize text-muted">{p.kind}</td>
               <td className="px-3 py-2">

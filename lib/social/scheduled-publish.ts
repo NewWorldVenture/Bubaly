@@ -6,6 +6,9 @@ import { getConnector, type ConnectorPublishInput, type ConnectorPublishOutput }
 import { derivePostStatus } from './content';
 import { runPublishNow, type PublishOutcome } from './publish';
 import { assertXCredentials } from './account-tokens';
+import { familyHasFeature, getFeatureTiersByHref } from '@/lib/server/feature-entitlement';
+import type { FeatureTier } from '@/lib/constants/feature-catalog';
+import { accountReopenedSince } from '@/lib/family/account-reopened';
 import {
   ScheduledPublishError, SCHEDULE_TOOL, scheduleFailure, scheduleIdentity, scheduleSignal,
   readSchedule, changeSchedule, checkScheduleActor, requestScheduleActor, readScheduleSnapshot,
@@ -230,12 +233,28 @@ export async function publishScheduledPostNow(postId: string): Promise<PublishOu
   return executeScheduled(db, receipt, actor, true, AbortSignal.timeout(70_000));
 }
 
-export async function runScheduledPublishDrain(options: { now?: Date; signal?: AbortSignal } = {}): Promise<{ inspected: number; attempted: number; published: number; pending: number; unknown: number; failed: number }> {
+/**
+ * Holds that are the family's own state, not a fault: a plan without Social,
+ * or an account that was closed when the post came due. Counted as `held`,
+ * apart from `failed`, so a routine downgrade or a closed account does not
+ * turn the cron red (household-roles N2-R2-CRON). The other holds (a changed
+ * post, revoked authority, a lost connection) still count as failures.
+ */
+const FAMILY_STATE_HOLDS = new Set(['socialSchedule.notInPlan', 'socialSchedule.cameDueWhileClosed']);
+
+/** When the family's row last changed (families.updated_at, stamped by the database on every update), from the drain's embed. */
+function familyChangedAt(row: { family?: unknown }): number {
+  const family = Array.isArray(row.family) ? row.family[0] : row.family;
+  const at = family && typeof family === 'object' ? (family as { updated_at?: unknown }).updated_at : null;
+  return typeof at === 'string' ? Date.parse(at) : Number.NaN;
+}
+
+export async function runScheduledPublishDrain(options: { now?: Date; signal?: AbortSignal } = {}): Promise<{ inspected: number; attempted: number; published: number; pending: number; unknown: number; failed: number; held: number }> {
   const db = createServiceClient(), now = options.now ?? new Date();
   // Stop dispatch at70s and all finalization at100s, within the110s route limit.
   const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(70_000)]) : AbortSignal.timeout(70_000);
   const completionSignal = AbortSignal.timeout(100_000);
-  const summary = { inspected: 0, attempted: 0, published: 0, pending: 0, unknown: 0, failed: 0 };
+  const summary = { inspected: 0, attempted: 0, published: 0, pending: 0, unknown: 0, failed: 0, held: 0 };
   const cursorKey = `${SCHEDULE_TOOL}:cursor`;
   const savedCursor = await db.from('app_settings').select('value').eq('key', cursorKey).abortSignal(scheduleSignal(signal)).maybeSingle();
   if (savedCursor.error) return scheduleFailure();
@@ -244,10 +263,38 @@ export async function runScheduledPublishDrain(options: { now?: Date; signal?: A
   if (savedCursor.data && (!cursor || !/^[0-9a-f-]{36}$/i.test(cursor))) return scheduleFailure();
   let wrapped = false;
   const visited = new Set<string>();
+  // The plan and the feature switch, as the pages and the actions check them.
+  // The drain published for every family with a queued post, so a family below
+  // Social's tier, or every family once Social was switched off, still had its
+  // scheduled posts sent. Asked once per family per drain; the tiers once per
+  // drain. An unreadable plan throws into the receipt's own catch: counted as
+  // failed, left queued, retried on the next tick.
+  //
+  // A post that comes due while its family is without Social is HELD, with the
+  // reason, not left queued (household-roles N2-R2). Left queued, it went out on
+  // the first tick after the family was entitled again, however late: a "this
+  // Saturday" post weeks after Saturday, on a public account, with nobody asked.
+  // As for a changed post or revoked authority, an ordinary future tick cannot
+  // invent the consent; whoever may publish sees why it was held and sends it
+  // by hand (retryPublishAction). This is the family's own plan, decided as a
+  // pipeline decides it (no super administrator in a cron), so a super
+  // administrator's schedule for a family without Social is held at its time
+  // the same way rather than staying queued with nothing said.
+  const entitled = new Map<string, boolean>();
+  let tiers: Record<string, FeatureTier> | null = null;
+  const familyMayPublish = async (familyId: string): Promise<boolean> => {
+    const known = entitled.get(familyId);
+    if (known !== undefined) return known;
+    tiers ??= await getFeatureTiersByHref(db, { onUnavailable: 'throw' });
+    const allowed = await familyHasFeature(db, familyId, '/dashboard/social', tiers);
+    entitled.set(familyId, allowed);
+    return allowed;
+  };
   for (let page = 0; page < 20 && !signal.aborted; page += 1) {
     // Receipts of OPEN families only (families.closed_at): a closed account's
     // scheduled posts are not published. Its receipts stay queued, untouched.
-    let query = db.from('ai_tool_calls').select('id, family:families!inner(closed_at)').is('family.closed_at', null)
+    // The family's updated_at comes along for the closed-account hold below.
+    let query = db.from('ai_tool_calls').select('id, family:families!inner(closed_at, updated_at)').is('family.closed_at', null)
       .eq('tool_name', SCHEDULE_TOOL).contains('outputs', { drain: true }).order('id').limit(1);
     if (cursor) query = query.gt('id', cursor);
     const rows = await query.abortSignal(scheduleSignal(signal));
@@ -269,6 +316,28 @@ export async function runScheduledPublishDrain(options: { now?: Date; signal?: A
         if (receipt.outputs.reconcile && (receipt.outputs.phase !== 'dispatching' || heldPresentation)) await reconcileScheduledPost(db, receipt, signal);
         if (receipt.outputs.phase !== 'queued' || Date.parse(receipt.inputs.scheduledFor) > now.getTime()
           || (receipt.outputs.retryAt && Date.parse(receipt.outputs.retryAt) > now.getTime())) continue;
+        if (!(await familyMayPublish(receipt.family_id))) scheduleFailure('notInPlan');
+        // A post that came due while its family's account was closed is held
+        // the same way (household-roles N2-R2-CLOSED). The drain does not look
+        // at a closed family, so on the first tick after the family reopened
+        // every such post was sent, however late. A post that became sendable
+        // before the family's account was REOPENED, and is still unsent,
+        // waited through the closure; one due after the reopen is sent at its
+        // time. The reopen is the record the server writes for it in a ledger
+        // no member writes (lib/family/account-reopened.ts), not families.updated_at: the
+        // database stamps that on every change to the row, so an open family
+        // that renamed itself after a post came due, before the drain reached
+        // it, had the post held (N3-R1-CLOSED-FALSE-HOLD). The stamp is still
+        // the cheap first question, since a reopen changes the row: a post due
+        // after the row last changed was not waiting through a reopen, and the
+        // trail is read only when it might have been. A trail that cannot be
+        // read sends nothing: the post stays queued for the next tick.
+        const dueAt = Date.parse(receipt.outputs.retryAt ?? receipt.inputs.scheduledFor);
+        if (dueAt < familyChangedAt(row)) {
+          const reopened = await accountReopenedSince(db, receipt.family_id, new Date(dueAt), scheduleSignal(signal));
+          if (reopened === null) scheduleFailure();
+          if (reopened) scheduleFailure('cameDueWhileClosed');
+        }
         const refreshed = await readSchedule(db, receipt.id, signal);
         if (!refreshed) continue;
         summary.attempted++;
@@ -278,19 +347,25 @@ export async function runScheduledPublishDrain(options: { now?: Date; signal?: A
         else if ((await readSchedule(db, refreshed.id, completionSignal))?.outputs.phase === 'queued') summary.pending++;
         else summary.failed++;
       } catch (error) {
-        summary.failed++;
+        const key = error instanceof ScheduledPublishError ? error.key : 'socialSchedule.storageUnavailable';
+        // A hold for the family's own state is a decision, counted once it is
+        // saved; one that could not be saved is a failure like any other.
+        let familyStateHeld = false;
         // A failed required read is visible and retryable. Revoked or changed
         // authority is held; an ordinary future tick cannot invent new consent.
         const current = await readSchedule(db, row.id, completionSignal).catch(() => null);
         if (current?.outputs.phase === 'queued') {
-          const key = error instanceof ScheduledPublishError ? error.key : 'socialSchedule.storageUnavailable';
-          const held = key === 'socialSchedule.changed' || key === 'socialSchedule.permissionDenied' || key === 'socialSchedule.reconnectRequired';
+          const held = key === 'socialSchedule.changed' || key === 'socialSchedule.permissionDenied' || key === 'socialSchedule.reconnectRequired'
+            || key === 'socialSchedule.notInPlan' || key === 'socialSchedule.cameDueWhileClosed';
           const errorKey = held ? key : key === 'socialSchedule.accessUnavailable' ? key : 'socialSchedule.storageUnavailable';
           const t = await getTranslations();
           const saved = await changeSchedule(db, current, { ...current.outputs, phase: held ? 'failed' : 'queued', reconcile: true },
             { state: held ? 'failed' : current.state, error: t(errorKey), errorKey }, completionSignal).catch(() => null);
+          familyStateHeld = Boolean(saved) && FAMILY_STATE_HOLDS.has(key);
           if (saved) await reconcileScheduledPost(db, saved, completionSignal).catch(() => undefined);
         }
+        if (familyStateHeld) summary.held++;
+        else summary.failed++;
       }
       finally {
         const stored = await db.from('app_settings').upsert({ key: cursorKey, value: { id: cursor } }, { onConflict: 'key' }).select('key').abortSignal(scheduleSignal(completionSignal)).maybeSingle();

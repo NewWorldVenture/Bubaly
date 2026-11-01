@@ -20,6 +20,22 @@ import {
 } from '@/lib/services/memory';
 import type { ServiceScope } from '@/lib/services/types';
 
+// This fixture models memory queries, not the family roster. Its original
+// business responders and call ordering stay unchanged when creation admits a
+// member reference; only this existing literal same-family subject is known.
+vi.mock('@/lib/services/family', () => ({
+  getMember: async (scope: { familyId: string }, memberId: string) => {
+    if (scope.familyId !== 'fam-1' || memberId !== 'member-2') {
+      return { ok: false, code: 'not_found', error: 'That family member could not be found.' };
+    }
+    return { ok: true, data: {
+      id: 'member-2', userId: 'auth-child-2', displayName: 'Maya', role: 'child',
+      birthday: null, age: null, isActive: true, canManage: false, hasLogin: true,
+      color: null, avatarUrl: null,
+    } };
+  },
+}));
+
 type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'delete'; filters: Record<string, unknown>; payload?: unknown };
 type Reply = { data: unknown; error: unknown };
 

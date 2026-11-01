@@ -21,20 +21,32 @@ export function HeartButton({ slug, className }: { slug: string; className?: str
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [pop, setPop] = useState(false);
+  const [readStatus, setReadStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [readAttempt, setReadAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    setReadStatus('loading');
+    setSaved(false);
+    setCount(null);
+    setAuthed(null);
     fetch(`/api/blog/save?slug=${encodeURIComponent(slug)}`)
-      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => { if (!r.ok) throw new Error('Saved state unavailable'); return r.json(); })
       .then((d: { saved?: boolean; count?: number; authenticated?: boolean } | null) => {
-        if (cancelled || !d) return;
-        setSaved(!!d.saved);
-        setCount(typeof d.count === 'number' ? d.count : 0);
-        setAuthed(!!d.authenticated);
+        if (cancelled) return;
+        if (!d || typeof d.saved !== 'boolean' || typeof d.authenticated !== 'boolean'
+          || typeof d.count !== 'number' || !Number.isFinite(d.count) || d.count < 0) {
+          setReadStatus('error');
+          return;
+        }
+        setSaved(d.saved);
+        setCount(d.count);
+        setAuthed(d.authenticated);
+        setReadStatus('ready');
       })
-      .catch(() => { /* leave the button usable with no count */ });
+      .catch(() => { if (!cancelled) setReadStatus('error'); });
     return () => { cancelled = true; };
-  }, [slug]);
+  }, [slug, readAttempt]);
 
   const goSignIn = useCallback(() => {
     const dest = pathname || `/blog/${slug}`;
@@ -42,7 +54,12 @@ export function HeartButton({ slug, className }: { slug: string; className?: str
   }, [router, pathname, slug]);
 
   const toggle = useCallback(async () => {
-    if (busy) return;
+    if (busy || readStatus === 'loading') return;
+    if (readStatus === 'error') {
+      setReadStatus('loading');
+      setReadAttempt((attempt) => attempt + 1);
+      return;
+    }
     // Not signed in → send them to sign in (and back). This is the gate.
     if (authed === false) { goSignIn(); return; }
 
@@ -82,9 +99,12 @@ export function HeartButton({ slug, className }: { slug: string; className?: str
     } finally {
       setBusy(false);
     }
-  }, [busy, authed, saved, count, slug, goSignIn]);
+  }, [busy, readStatus, authed, saved, count, slug, goSignIn]);
 
-  const label = authed === false
+  const label = readStatus === 'loading'
+    ? t('blogHeartButton.loadingSavedState')
+    : readStatus === 'error' ? t('blogHeartButton.retrySavedState')
+    : authed === false
     ? t('blogHeartButton.signInToSaveThisArticle')
     : saved ? t('blogHeartButton.removeFromSaved') : t('blogHeartButton.saveThisArticle');
 
@@ -92,7 +112,9 @@ export function HeartButton({ slug, className }: { slug: string; className?: str
     <button
       type="button"
       onClick={toggle}
-      aria-pressed={saved}
+      disabled={busy || readStatus === 'loading'}
+      aria-busy={busy || readStatus === 'loading'}
+      aria-pressed={readStatus === 'ready' ? saved : undefined}
       aria-label={label}
       title={authed === false ? t('blogHeartButton.signInToSave') : undefined}
       className={cn(
@@ -113,8 +135,8 @@ export function HeartButton({ slug, className }: { slug: string; className?: str
           !saved && 'group-hover:scale-110',
         )}
       />
-      <span className="tabular-nums">{count == null ? '—' : formatLikeCount(count)}</span>
-      <span className="sr-only">{saved ? 'saved' : 'saves'}</span>
+      <span className="tabular-nums">{readStatus === 'error' ? t('blogHeartButton.retrySavedState') : count == null ? '—' : formatLikeCount(count)}</span>
+      <span className="sr-only">{readStatus === 'ready' ? saved ? 'saved' : 'saves' : null}</span>
     </button>
   );
 }

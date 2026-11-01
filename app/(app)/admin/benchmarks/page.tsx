@@ -14,17 +14,30 @@ import { fmtDate } from '@/lib/utils/format';
 import { setBenchmarksPublicationAction } from './actions';
 import { SubmitButton } from '@/components/ui/submit-button';
 import { settle } from '@/lib/supabase/settle';
+import { requireSuperAdminPage } from '@/lib/auth/super-admin-page';
 
 export const metadata: Metadata = { title: 'Household Benchmarks', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 // The research half of the Intelligence Network, for the site admin: every
-// published aggregate, metric × cohort, with the distinct-family count (n) and
-// the k-anonymity floor visible on the page — so what gets quoted in content
-// can be checked against the guarantee it was made under. Service-role read:
+// published aggregate, metric × cohort, with its noised count and the
+// k-anonymity floor visible on the page — so what gets quoted in content can
+// be checked against the guarantee it was made under. Service-role read:
 // network_aggregates is RLS-gated to consenting families, and the admin
 // console is not one. Rows are already k-anonymized and DP-noised.
+//
+// The table shows the rows the CSV export holds, with the same noised count
+// and no TRUE band size (`cohortSize`): the export dropped it because it is
+// quoted, and a figure on this page is quoted just the same — beside the
+// noised count it is the exact number the noise hides. It stays on the
+// server, for the floor.
+//
+// The page gates itself before that read: an RSC navigation that names
+// another /admin page as where it came from is rendered from this segment
+// down, and the /admin layout's super-admin and step-up checks do not run
+// (lib/auth/super-admin-page.ts).
 export default async function AdminBenchmarksPage() {
+  await requireSuperAdminPage();
   const t = await getTranslations();
   const supabase = createServiceClient();
   const [publication, aggregates, contributorsResult, optedInResult] = await Promise.all([
@@ -134,8 +147,7 @@ export default async function AdminBenchmarksPage() {
                   <tr className="text-left text-xs uppercase tracking-wide text-muted">
                     <th className="py-2 pr-4">{t('adminBenchmarks.cohort')}</th>
                     <th className="py-2 pr-4">{t('adminBenchmarks.value')}</th>
-                    <th className="py-2 pr-4 text-right">{t('adminBenchmarks.familiesReported')}</th>
-                    <th className="py-2 text-right">{t('adminBenchmarks.cohortN')}</th>
+                    <th className="py-2 text-right">{t('adminBenchmarks.familiesReported')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -143,8 +155,7 @@ export default async function AdminBenchmarksPage() {
                     <tr key={`${r.cohortKey}|${r.value}`} className="border-t border-border">
                       <td className="py-2 pr-4">{cohortLabel(r, t)}</td>
                       <td className="py-2 pr-4 font-medium">{r.valueKey ? t(r.valueKey) : r.value}</td>
-                      <td className="py-2 pr-4 text-right tabular-nums">{r.count.toLocaleString()}</td>
-                      <td className="py-2 text-right tabular-nums">{r.cohortSize.toLocaleString()}</td>
+                      <td className="py-2 text-right tabular-nums">{r.count.toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>

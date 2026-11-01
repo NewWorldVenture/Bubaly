@@ -13,7 +13,7 @@ import { reactBrowserScripts } from './helpers/react-browser';
 const { react, reactDom } = reactBrowserScripts('production');
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 const sources = Object.fromEntries([
-  'components/settings/privacy-center.tsx', 'lib/constants/roles.ts', 'lib/supabase/settle.ts',
+  'components/settings/privacy-center.tsx', 'lib/constants/roles.ts', 'lib/supabase/settle.ts', 'lib/auth/mfa.ts', 'lib/auth/redirect.ts',
 ].map(file => [file, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
 }).outputText]));
@@ -27,11 +27,12 @@ const row = (family: string, exported = false): Row => ({
   reason: `${family} private history`, created_at: '2026-10-13T14:00:00Z',
 });
 type State = { rows: Row[]; queries: URL[]; holdA: boolean; release: Array<() => Promise<void>>; fail: boolean; unexpected: string[]; errors: string[] };
-type Probe = { render: (patch: { familyId?: string; role?: string; userId?: string }) => string; settle: () => Promise<void>; rejections: string[] };
+type SessionFailure = 'user' | 'aal' | null;
+type Probe = { render: (patch: { familyId?: string; role?: string; userId?: string }) => string; settle: () => Promise<void>; rejections: string[]; setSessionFailure: (failure: SessionFailure) => void; releaseSessionReads: () => void };
 declare global { interface Window { __privacyFamily: Probe } }
 const fixtureStates = new WeakMap<Page, State>();
 
-async function install(page: Page, options: { rows?: Row[]; role?: string; holdA?: boolean; fail?: boolean } = {}): Promise<State> {
+async function install(page: Page, options: { rows?: Row[]; role?: string; holdA?: boolean; fail?: boolean; sessionFailure?: SessionFailure; holdSessionFor?: string; returnedSessionUser?: string } = {}): Promise<State> {
   const state: State = { rows: options.rows ?? [row('family-A'), row('family-B'), row('family-A', true), row('family-B', true)], queries: [], holdA: options.holdA ?? false, release: [], fail: options.fail ?? false, unexpected: [], errors: [] };
   fixtureStates.set(page, state);
   page.on('pageerror', error => state.errors.push(error.message));
@@ -64,8 +65,17 @@ async function install(page: Page, options: { rows?: Row[]; role?: string; holdA
     window.addEventListener('unhandledrejection', event => { rejections.push(String(event.reason)); event.preventDefault(); });
     const app = { familyId: 'family-A', userId: 'user-one', userEmail: 'synthetic@example.invalid', role: ${JSON.stringify(options.role ?? 'parent')}, members: [{ id: 'member-family-A', display_name: 'Actor A' }, { id: 'member-family-B', display_name: 'Actor B' }] };
     const db = window.supabase.createClient(${JSON.stringify(provider)}, 'synthetic-public-key', { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
-    db.auth.getUser = async () => ({ data: { user: { id: app.userId, last_sign_in_at: null } }, error: null });
-    db.auth.mfa.getAuthenticatorAssuranceLevel = async () => ({ data: { currentLevel: 'aal1', nextLevel: 'aal1' }, error: null });
+    const sessionProbe = { failure: ${JSON.stringify(options.sessionFailure ?? null)}, holdFor: ${JSON.stringify(options.holdSessionFor ?? null)}, releases: [] };
+    const authRead = async kind => {
+      const caller = app.userId, fails = sessionProbe.failure === kind;
+      if (sessionProbe.holdFor === caller) await new Promise(resolve => sessionProbe.releases.push(resolve));
+      if (fails) throw new Error('synthetic session transport refusal: ' + kind);
+      return kind === 'user'
+        ? { data: { user: { id: ${JSON.stringify(options.returnedSessionUser ?? null)} ?? caller, last_sign_in_at: null } }, error: null }
+        : { data: { currentLevel: caller === 'user-one' ? 'aal2' : 'aal1', nextLevel: 'aal2' }, error: null };
+    };
+    db.auth.getUser = () => authRead('user');
+    db.auth.mfa.getAuthenticatorAssuranceLevel = () => authRead('aal');
     const noop = () => null;
     const requires = {
       react: React,
@@ -78,7 +88,6 @@ async function install(page: Page, options: { rows?: Row[]; role?: string; holdA
       '@/components/ui/toast': { useToast: () => ({ success: noop, error: noop }) },
       '@/components/ui/button': { Button: ({ children, loading, size, variant, ...props }) => h('button', props, children) },
       '@/components/ui/card': { Card: ({ children, ...props }) => h('section', props, children) },
-      '@/lib/auth/mfa': { sessionStrength: () => 'signed_in' },
       '@/components/auth/sign-out-form': { SignOutForm: () => null },
     };
     function load(file) {
@@ -87,6 +96,8 @@ async function install(page: Page, options: { rows?: Row[]; role?: string; holdA
       const require = name => {
         if (name === '@/lib/constants/roles') return load('lib/constants/roles.ts');
         if (name === '@/lib/supabase/settle') return load('lib/supabase/settle.ts');
+        if (name === '@/lib/auth/mfa') return load('lib/auth/mfa.ts');
+        if (name === '@/lib/auth/redirect') return load('lib/auth/redirect.ts');
         if (Object.hasOwn(requires, name)) return requires[name];
         throw new Error('Unexpected fixture import ' + name);
       };
@@ -97,6 +108,8 @@ async function install(page: Page, options: { rows?: Row[]; role?: string; holdA
     const root = ReactDOM.createRoot(document.getElementById('root'));
     window.__privacyFamily = {
       rejections,
+      setSessionFailure: failure => { sessionProbe.failure = failure; },
+      releaseSessionReads: () => { sessionProbe.holdFor = null; for (const release of sessionProbe.releases.splice(0)) release(); },
       render: patch => { Object.assign(app, patch); ReactDOM.flushSync(() => root.render(h(Component))); return document.getElementById('root').textContent; },
       settle: () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))),
     };
@@ -198,4 +211,43 @@ test('a genuine empty active history reports both empty states', async ({ page }
   await expect(page.getByText('privacyCenter.noAccessYet', { exact: true })).toBeVisible();
   expect(state.queries).toHaveLength(2);
   expect(state.unexpected).toEqual([]);
+});
+
+for (const sessionFailure of ['user', 'aal'] as const) {
+  test(`a rejected ${sessionFailure} session read is retryable without an unhandled rejection`, async ({ page }) => {
+    await install(page, { sessionFailure });
+    await expect(page.getByText('privacyCenter.couldNotLoadSession', { exact: true })).toBeVisible();
+    await expect(page.getByText('privacyCenter.thisDevice', { exact: true })).toHaveCount(0);
+    await page.evaluate(() => window.__privacyFamily.setSessionFailure(null));
+    await page.getByRole('button', { name: 'privacyCenter.retry', exact: true }).click();
+    await expect(page.getByText('privacyCenter.sessionAal2', { exact: true })).toBeVisible();
+    await expect(page.getByText('privacyCenter.couldNotLoadSession', { exact: true })).toHaveCount(0);
+  });
+}
+
+test('a session reply for another caller refuses the session card', async ({ page }) => {
+  await install(page, { returnedSessionUser: 'other-caller' });
+  await expect(page.getByText('privacyCenter.couldNotLoadSession', { exact: true })).toBeVisible();
+  await expect(page.getByText('privacyCenter.thisDevice', { exact: true })).toHaveCount(0);
+});
+
+test('a retained component drops old session assurance before the caller change renders', async ({ page }) => {
+  await install(page);
+  await expect(page.getByText('privacyCenter.sessionAal2', { exact: true })).toBeVisible();
+  const immediate = await page.evaluate(() => window.__privacyFamily.render({ userId: 'user-two' }));
+  expect(immediate).not.toContain('privacyCenter.sessionAal2');
+  await expect(page.getByText('privacyCenter.sessionAal1', { exact: true })).toBeVisible();
+});
+
+test('a held old caller session reply cannot replace the new caller session', async ({ page }) => {
+  await install(page, { holdSessionFor: 'user-one' });
+  await page.evaluate(() => window.__privacyFamily.render({ userId: 'user-two' }));
+  try {
+    await expect(page.getByText('privacyCenter.sessionAal1', { exact: true })).toBeVisible({ timeout: 2000 });
+  } finally {
+    await page.evaluate(() => window.__privacyFamily.releaseSessionReads());
+  }
+  await page.evaluate(() => window.__privacyFamily.settle());
+  await expect(page.getByText('privacyCenter.sessionAal2', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('privacyCenter.sessionAal1', { exact: true })).toBeVisible();
 });

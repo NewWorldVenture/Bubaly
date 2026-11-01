@@ -139,9 +139,12 @@ export function AppLockGate({ blocked = false, unavailable = false, onRetry, onU
       role="dialog"
       aria-modal="true"
       aria-labelledby="app-lock-title"
-      className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-bg px-6"
+      className="fixed inset-0 z-[200] flex flex-col items-center overflow-y-auto bg-bg px-6 py-6"
     >
-      <div className="flex w-full max-w-xs flex-col items-center">
+      {/* my-auto, not justify-center: centred when it fits, and on a phone held
+          sideways (320 px tall) it scrolls from its top instead of cutting off
+          the PIN dots and the keypad's last row. */}
+      <div className="my-auto flex w-full max-w-xs flex-col items-center">
         <div className="grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-brand-text">
           <Lock className="h-7 w-7" />
         </div>

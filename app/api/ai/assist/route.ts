@@ -8,7 +8,7 @@ import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, describeAIError, isAIConfigured, type AIMessage } from '@/lib/ai/provider';
-import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
+import { fenceUntrusted, fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
@@ -47,7 +47,11 @@ const INBOX_MESSAGE_MAX_CHARS = 4_000;
 const MAX_TOKENS: Record<Purpose, number> = { concierge: 700, inbox_reply: 300 };
 
 function conciergePrompt(familyName: string | null | undefined): string {
-  return `You are a luxury family concierge AI for the ${familyName || 'family'} household. You help families plan memorable experiences, make reservations, coordinate schedules, and arrange special moments. Be warm, enthusiastic, and practical. Ask one clarifying question at a time when you need a key detail (budget, dates, party size). When you have enough information, suggest specific options with helpful tips, and offer to save the plan. Keep responses concise and actionable.`;
+  return `You are a luxury family concierge AI for this household. You help families plan memorable experiences, make reservations, coordinate schedules, and arrange special moments. Be warm, enthusiastic, and practical. Ask one clarifying question at a time when you need a key detail (budget, dates, party size). When you have enough information, suggest specific options with helpful tips, and offer to save the plan. Keep responses concise and actionable.
+
+${UNTRUSTED_CONTENT_RULE}
+
+Household name: ${fenceUntrusted('household_name', familyName || 'family')}`;
 }
 
 function inboxReplyPrompt(channel: string): string {

@@ -163,7 +163,7 @@ export function StudioForm({ accounts, defaultTimezone }: { accounts: AccountLit
   }
 
   return (
-    <fieldset disabled={locked} className="grid gap-4 lg:grid-cols-3">
+    <fieldset disabled={locked} className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-3">
       {/* Editor */}
       <div className="space-y-4 lg:col-span-2">
         <Card>

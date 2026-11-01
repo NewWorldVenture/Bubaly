@@ -169,6 +169,8 @@ export function isRetryableAuthError(error: unknown): boolean {
   const e = error as { name?: unknown; status?: unknown; code?: unknown; message?: unknown };
 
   if (e.name === 'AuthRetryableFetchError') return true;
+  // An unknown wrapper without response metadata cannot prove revocation.
+  if (e.name === 'AuthUnknownError' && e.status === undefined && e.code === undefined) return true;
 
   const status = typeof e.status === 'number' ? e.status : null;
   if (status !== null && (status === 0 || status === 408 || status === 429 || status >= 500)) return true;

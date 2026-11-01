@@ -39,6 +39,9 @@ export type JourneySummary = {
   medianSteps: number | null;
 };
 
+/** The longest a recorded journey can honestly take: a day. */
+export const MAX_JOURNEY_DURATION_MS = 86_400_000;
+
 /** Median of a numeric list (sorted copy). Returns null for empty input. */
 export function median(nums: number[]): number | null {
   if (nums.length === 0) return null;
@@ -64,7 +67,10 @@ export function summarizeJourneys(events: JourneyEventLike[]): JourneySummary[] 
     const starts = evs.filter((e) => e.phase === 'started').length;
     const completedEvents = evs.filter((e) => e.phase === 'completed');
     const completedSessions = new Set(completedEvents.map((e) => e.session_id));
-    const durations = completedEvents.map((e) => e.duration_ms).filter((d): d is number => typeof d === 'number' && d >= 0);
+    // journey_events takes any duration from any member (0124 checks only the
+    // family), so a value no journey could take is not a timing.
+    const durations = completedEvents.map((e) => e.duration_ms)
+      .filter((d): d is number => typeof d === 'number' && Number.isFinite(d) && d >= 0 && d <= MAX_JOURNEY_DURATION_MS);
     const steps = completedEvents.map((e) => e.step).filter((s) => typeof s === 'number');
 
     out.push({

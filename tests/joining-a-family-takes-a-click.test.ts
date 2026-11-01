@@ -17,6 +17,7 @@ import { resetHookSlots } from './helpers/hook-slots';
 
 const h = await vi.hoisted(async () => (await import('./helpers/module-state')).createModuleState());
 const nav = vi.hoisted(() => ({ token: 'tok-live', push: vi.fn(), refresh: vi.fn() }));
+const faults = vi.hoisted(() => ({ client: null as null | { name: string; status?: number; code?: string; message: string }, server: null as null | { name: string; status?: number; code?: string; message: string }, serviceReads: vi.fn() }));
 const who = vi.hoisted(() => ({ user: { id: 'u-sam', email: 'sam@example.test' } as { id: string; email: string } | null }));
 
 vi.mock('react', async (original) => (await import('./helpers/hook-slots')).withHookSlots(await original<object>(), h.hooks));
@@ -38,15 +39,15 @@ vi.mock('@/lib/supabase/server', () => {
   const client = () => {
     const db = h.db as InMemorySupabase;
     return new Proxy(db, { get: (target, key) => (key === 'auth'
-      ? { getUser: async () => ({ data: { user: who.user }, error: null }) }
+      ? { getUser: async () => ({ data: { user: who.user }, error: faults.server }) }
       : Reflect.get(target, key)) });
   };
-  return { createServer: async () => client(), createServiceClient: () => client() };
+  return { createServer: async () => client(), createServiceClient: () => { faults.serviceReads(); return client(); } };
 });
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => {
     const db = h.db as InMemorySupabase;
-    return { auth: { getUser: async () => ({ data: { user: who.user }, error: null }) }, rpc: (name: string, args: Record<string, unknown>) => db.rpc(name, args) };
+    return { auth: { getUser: async () => ({ data: { user: who.user }, error: faults.client }) }, rpc: (name: string, args: Record<string, unknown>) => db.rpc(name, args) };
   },
 }));
 
@@ -125,4 +126,106 @@ describe('the join page asks before it accepts', () => {
     expect(accepts).toEqual([]);
     expect(has(tree, 'This invite is invalid or has expired. Ask whoever invited you to send a new one.')).toBe(true);
   });
+});
+
+// Literal returned-error records; no SDK implementation or fault injection runs.
+beforeEach(() => { faults.client = null; faults.server = null; faults.serviceReads.mockClear(); });
+const { previewInviteAction } = await import('@/app/join/actions');
+const unavailableRead = () => ({ name: 'AuthRetryableFetchError', status: 503, message: 'Synthetic unavailable auth read' });
+describe('uncertain auth reads do not decide that the invitee signed out', () => {
+  for (const staleUser of [false, true]) {
+    it('client returned 503 with ' + (staleUser ? 'stale user' : 'no user') + ' shows retry copy without protected reads', async () => {
+      if (!staleUser) who.user = null;
+      faults.client = unavailableRead();
+      const tree = await mounted();
+      expect(has(tree, 'We couldn’t add you to the family just now. Check your connection and try again.')).toBe(true);
+      expect(has(tree, 'Sign in')).toBe(false);
+      expect(has(tree, 'The Riveras')).toBe(false);
+      expect(faults.serviceReads).not.toHaveBeenCalled();
+      expect(accepts).toEqual([]);
+      expect(db.table('family_members')).toEqual([]);
+      expect(db.table('invites').every(i => i.status === 'pending')).toBe(true);
+    });
+    it('server returned 503 with ' + (staleUser ? 'stale user' : 'no user') + ' refuses preview before service access', async () => {
+      if (!staleUser) who.user = null;
+      faults.server = unavailableRead();
+      expect(await previewInviteAction('tok-live')).toEqual({ ok: false, reason: 'unavailable' });
+      expect(faults.serviceReads).not.toHaveBeenCalled();
+      expect(accepts).toEqual([]);
+      expect(db.table('family_members')).toEqual([]);
+      expect(db.table('invites').every(i => i.status === 'pending')).toBe(true);
+    });
+  }
+  it('a confirmed anonymous client still offers sign in without protected reads', async () => {
+    who.user = null;
+    const tree = await mounted();
+    expect(has(tree, 'Sign in')).toBe(true);
+    expect(has(tree, 'The Riveras')).toBe(false);
+    expect(faults.serviceReads).not.toHaveBeenCalled();
+    expect(accepts).toEqual([]);
+  });
+  it('a confirmed anonymous server still returns signed out before service access', async () => {
+    who.user = null;
+    expect(await previewInviteAction('tok-live')).toEqual({ ok: false, reason: 'signed_out' });
+    expect(faults.serviceReads).not.toHaveBeenCalled();
+  });
+});
+
+describe('confirmed returned credential rejection stays signed out', () => {
+  for (const status of [401, 403]) {
+    it('client rejection ' + status + ' ignores stale user and permits no protected read', async () => {
+      faults.client = { name: 'AuthApiError', status, message: 'Credential rejected' };
+      const tree = await mounted();
+      expect(has(tree, 'Sign in')).toBe(true);
+      expect(has(tree, 'The Riveras')).toBe(false);
+      expect(faults.serviceReads).not.toHaveBeenCalled();
+      expect(accepts).toEqual([]);
+    });
+    it('server rejection ' + status + ' ignores stale user and permits no protected read', async () => {
+      faults.server = { name: 'AuthApiError', status, message: 'Credential rejected' };
+      expect(await previewInviteAction('tok-live')).toEqual({ ok: false, reason: 'signed_out' });
+      expect(faults.serviceReads).not.toHaveBeenCalled();
+      expect(accepts).toEqual([]);
+    });
+  }
+});
+
+// Same accepted invite consumers, now with the literal unknown-wrapper shape.
+// No SDK constructor, refresh request, stored session or fault-loop is involved.
+const unknownRead = () => ({ name: 'AuthUnknownError', __isAuthError: true,
+  status: undefined, code: undefined, message: 'Unexpected end of JSON input',
+  originalError: { name: 'SyntaxError', message: 'Unexpected end of JSON input' } });
+
+describe('the invite consumers keep unknown returned auth reads unavailable', () => {
+  for (const staleUser of [false, true]) {
+    it('client unknown read with ' + (staleUser ? 'stale user' : 'no user') + ' cannot become sign-in', async () => {
+      if (!staleUser) who.user = null;
+      faults.client = unknownRead();
+      const tree = await mounted();
+      expect(has(tree, 'We couldn’t add you to the family just now. Check your connection and try again.')).toBe(true);
+      expect(has(tree, 'Sign in')).toBe(false);
+      expect(has(tree, 'The Riveras')).toBe(false);
+      expect(faults.serviceReads).not.toHaveBeenCalled();
+      expect(accepts).toEqual([]);
+      expect(db.table('family_members')).toEqual([]);
+      expect(db.table('invites').every(i => i.status === 'pending')).toBe(true);
+    });
+    it('server unknown read with ' + (staleUser ? 'stale user' : 'no user') + ' cannot become signed out', async () => {
+      if (!staleUser) who.user = null;
+      faults.server = unknownRead();
+      expect(await previewInviteAction('tok-live')).toEqual({ ok: false, reason: 'unavailable' });
+      if (staleUser) {
+        // The browser check succeeds; the actual preview action carries the
+        // unknown read outcome back through the real component's UI branch.
+        const tree = await mounted();
+        expect(has(tree, 'We couldn’t add you to the family just now. Check your connection and try again.')).toBe(true);
+        expect(has(tree, 'Sign in')).toBe(false);
+        expect(has(tree, 'The Riveras')).toBe(false);
+      }
+      expect(faults.serviceReads).not.toHaveBeenCalled();
+      expect(accepts).toEqual([]);
+      expect(db.table('family_members')).toEqual([]);
+      expect(db.table('invites').every(i => i.status === 'pending')).toBe(true);
+    });
+  }
 });

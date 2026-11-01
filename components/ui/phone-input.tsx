@@ -144,7 +144,7 @@ export function PhoneInput({
           value={localNumber}
           onChange={(e) => setLocalNumber(e.target.value)}
           placeholder={country.format}
-          className="flex-1 bg-transparent px-3 text-sm text-fg placeholder:text-muted outline-none"
+          className="min-w-0 flex-1 bg-transparent px-3 text-sm text-fg placeholder:text-muted outline-none"
           aria-label={tr('phoneInput.phoneNumber')}
           autoFocus={autoFocus}
         />

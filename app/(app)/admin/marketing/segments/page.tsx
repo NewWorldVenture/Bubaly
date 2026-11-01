@@ -31,7 +31,9 @@ export default async function SegmentsPage() {
     return <AdminSegmentsReadError />;
   }
   const { data: segments } = segmentsResult;
-  const { customers } = customersResult;
+  // The count is the audience a campaign to the segment would reach, and a
+  // family that closed its account is not in it (lib/marketing/send.ts).
+  const customers = customersResult.customers.filter((c) => !c.closedAt);
 
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -56,7 +58,10 @@ export default async function SegmentsPage() {
                       {rules.lifecycle?.map((l) => <span key={l} className="rounded bg-elevated px-2 py-0.5 capitalize">{l}</span>)}
                       {rules.plans?.map((p) => <span key={p} className="rounded bg-elevated px-2 py-0.5">{p}</span>)}
                       {rules.minLtvCents ? <span className="rounded bg-elevated px-2 py-0.5">LTV ≥ ${(rules.minLtvCents / 100).toFixed(0)}</span> : null}
-                      {rules.inactiveForDays ? <span className="rounded bg-elevated px-2 py-0.5">inactive {rules.inactiveForDays}d</span> : null}
+                      {/* A segment made while the rule was offered. It matches no
+                          one now (lib/marketing/customers.ts activityKnown), and
+                          says why rather than reading as an empty audience. */}
+                      {rules.inactiveForDays ? <span className="rounded bg-elevated px-2 py-0.5">{t('adminMarketingSegments.inactiveRuleNoSignal', { n: rules.inactiveForDays })}</span> : null}
                     </div>
                   </div>
                   <form action={archiveSegment}>
@@ -98,9 +103,6 @@ export default async function SegmentsPage() {
           <div className="grid grid-cols-2 gap-2">
             <label className="text-xs text-muted">{t('adminMarketingSegments.minEstLtv')}
               <input name="minLtvDollars" type="number" min="0" className={inputCls} />
-            </label>
-            <label className="text-xs text-muted">{t('adminMarketingSegments.inactiveForDays')}
-              <input name="inactiveForDays" type="number" min="0" className={inputCls} />
             </label>
           </div>
           <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:brightness-95">{t('adminMarketingSegments.createSegment')}</SubmitButton>

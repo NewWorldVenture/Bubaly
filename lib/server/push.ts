@@ -18,6 +18,10 @@ import { childrenBlockedOn } from '@/lib/notifications/child-channels';
 import { isMissingRelationError } from '@/lib/supabase/errors';
 import { readAll } from '@/lib/supabase/read-all';
 import { readAllInChunks } from '@/lib/supabase/chunked-in';
+import {
+  aheadAndBehind, isMarketplaceNotice, latestCreatedAt, MARKETPLACE_RELATED_TYPE, NOTIFICATION_CLOCK_SKEW_MS, readFairBatch,
+  recipientList, type FairExclusion, type FairRow,
+} from '@/lib/notifications/fair-batch';
 
 type DB = SupabaseClient<Database>;
 
@@ -35,6 +39,42 @@ type DB = SupabaseClient<Database>;
  * attempts before the row is stamped and the failure is logged at error level.
  */
 export const PUSH_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The most rows of one dispatch batch a single family takes while another
+ * family's rows are waiting, and the most one recipient inside a family takes
+ * while anyone else's are (lib/notifications/fair-batch.ts). A family's
+ * whole-family rows count as one more of its recipients. 0191's price drops
+ * are the marketplace's, wherever they land: it takes a family's share, and
+ * each seller (the listing's family) a recipient's, as does each listing.
+ *
+ * A member's session may still insert notifications addressed to themselves,
+ * any number of them, dated whenever they like (0388), and a member can cause
+ * whole-family rows by the hundred, in every family that saved a listing of
+ * theirs, through 0191's price-drop trigger, so a child's flood ahead of the
+ * cursor held back every family's pushes for as many ticks as it took to
+ * drain at 200 rows a tick. Now their family takes 40 of a batch, the child 10
+ * of those, all price drops 40 and one seller's listings 10 of those however
+ * many listings it has, whichever families they land in, and the room left
+ * goes to everyone else first.
+ */
+export const PUSH_ROWS_PER_FAMILY = 40;
+export const PUSH_ROWS_PER_RECIPIENT = 10;
+/** A listing id as 0191 writes it into related_id (marketplace_listings.id is a uuid). */
+const LISTING_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The part of each read a run keeps for the rows behind its cursor: the
+ * retries (a failed delivery inside PUSH_RETRY_WINDOW_MS, a row skipped for
+ * configuration or cut by the run's time budget) and any surplus a fair batch
+ * left behind. 50 of a 200-row batch. The wrap used to run only when the
+ * forward page came back short, so a forward range one member kept full
+ * starved every family's retries. The retries keep their own place in the
+ * stored cursor (`retry`), so each run's reserve goes on through the rows
+ * behind rather than re-reading the oldest of them, and goes round to the
+ * oldest once nothing after that place is left for the batch.
+ */
+export const PUSH_RETRY_SHARE = 0.25;
 
 import { isDeliverablePushEndpoint } from '@/lib/server/push-endpoint';
 import { MAX_PUSH_DEVICES_PER_USER } from '@/lib/push/device-cap';
@@ -579,18 +619,54 @@ export function pushConfigured(): { web: boolean; native: boolean } {
   return { web: ensureVapid(), native: native.fcm || native.apns };
 }
 
-type PushCursor = { version: 1; createdAt: string; id: string };
+type PushPosition = { createdAt: string; id: string };
+/**
+ * Where the forward traversal is, and where the retries behind it go on from
+ * (`retry`, absent when they start again from the oldest row behind; after it
+ * they go round to the oldest row, up to it). A cursor an earlier deploy wrote
+ * has no `retry`, and an earlier deploy's reader ignores one, so a deploy in
+ * either direction keeps reading the cursor it finds.
+ */
+type PushCursor = { version: 1; createdAt: string; id: string; retry?: PushPosition };
+
+/**
+ * created_at then id, as the pending-push query orders them, to the
+ * microsecond PostgreSQL keeps (Date.parse stops at the millisecond). A fair
+ * batch is gathered over several reads, so it is put back in traversal order
+ * before it is sent and before the cursor is taken from its last row.
+ */
+function traversalOrder(a: { created_at: string; id: string }, b: { created_at: string; id: string }): number {
+  const instant = (value: string): [number, number] => {
+    const ms = Date.parse(value);
+    return [Number.isFinite(ms) ? ms : Infinity, Number((/\.\d{3}(\d{1,3})/.exec(value)?.[1] ?? '').padEnd(3, '0'))];
+  };
+  const [aMs, aMicro] = instant(a.created_at);
+  const [bMs, bMicro] = instant(b.created_at);
+  if (aMs !== bMs) return aMs < bMs ? -1 : 1;
+  if (aMicro !== bMicro) return aMicro - bMicro;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+function parsePushPosition(value: unknown): PushPosition | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const position = value as Record<string, unknown>;
+  // Keep PostgreSQL's fractional-second precision: Date.toISOString() would
+  // truncate microseconds and revisit/skip rows at the page boundary.
+  if (typeof position.createdAt !== 'string'
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(position.createdAt)
+    || !Number.isFinite(Date.parse(position.createdAt)) || typeof position.id !== 'string'
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(position.id)) return null;
+  return { createdAt: position.createdAt, id: position.id };
+}
 
 function parsePushCursor(value: unknown): PushCursor | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const cursor = value as Record<string, unknown>;
-  // Keep PostgreSQL's fractional-second precision: Date.toISOString() would
-  // truncate microseconds and revisit/skip rows at the page boundary.
-  if (cursor.version !== 1 || typeof cursor.createdAt !== 'string'
-    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(cursor.createdAt)
-    || !Number.isFinite(Date.parse(cursor.createdAt)) || typeof cursor.id !== 'string'
-    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cursor.id)) return null;
-  return { version: 1, createdAt: cursor.createdAt, id: cursor.id };
+  const position = cursor.version === 1 ? parsePushPosition(cursor) : null;
+  if (!position) return null;
+  if (cursor.retry === undefined || cursor.retry === null) return { version: 1, ...position };
+  const retry = parsePushPosition(cursor.retry);
+  return retry ? { version: 1, ...position, retry } : null;
 }
 
 /**
@@ -619,6 +695,18 @@ function parsePushCursor(value: unknown): PushCursor | null {
  * scheduled for 8am tomorrow buzzed the phone on the next two-hourly scan —
  * tonight. `send_at` is `not null default now()` (0002_tables.sql:415), so this
  * withholds nothing that was due.
+ *
+ * A batch is shared fairly by family and, inside a family, by recipient
+ * (PUSH_ROWS_PER_FAMILY, PUSH_ROWS_PER_RECIPIENT); the retries behind the
+ * cursor keep their own part of every read (PUSH_RETRY_SHARE); and a row
+ * dated after now is not read. A member may plant rows addressed to
+ * themselves with any created_at, and cause whole-family rows through 0191's
+ * price-drop trigger in every family that saved their listing, which count
+ * against the marketplace, the listing and its seller, not the families they
+ * land in (lib/notifications/fair-batch.ts). No writer sets
+ * created_at, so the date bound leaves out only planted rows, and the shares
+ * hold back only a family's or a recipient's own surplus, only while someone
+ * else's rows are waiting.
  */
 export async function dispatchPendingPushes(
   supabase: DB,
@@ -641,14 +729,25 @@ export async function dispatchPendingPushes(
   const cursor = stored ? parsePushCursor(stored.value) : null;
   if (stored && !cursor) throw new Error('Push cursor is invalid.');
   const dueAt = (opts.now ?? new Date()).toISOString();
-  async function page(size: number, wrap = false) {
+  // Nothing dated after now: only a member's own planted row can be, and one
+  // dated in the future never aged out of the retry window below. Wall-clock,
+  // like the budget: `opts.now` decides what is due, and no row is created
+  // after the real now.
+  const createdBy = latestCreatedAt(new Date());
+  /**
+   * One page of a range: 'ahead' of the cursor, or behind it, where the
+   * retries go on after their own place ('behind') and then, once that is
+   * spent, start again from the oldest row up to it ('lapped').
+   */
+  async function page(size: number, range: 'ahead' | 'behind' | 'lapped', excluded: FairExclusion) {
+    const wrap = range !== 'ahead';
     let q = supabase.from('notifications')
       // Rows of OPEN families only (families.closed_at): a closed account's
       // devices are not buzzed. In the query, before the page limit, so queued
       // rows of a closed family cannot fill the page ahead of everyone else's.
       .select('id, family_id, user_id, title, body, related_type, related_id, created_at, family:families!inner(closed_at)')
       .is('family.closed_at', null)
-      .is('pushed_at', null).lte('send_at', dueAt)
+      .is('pushed_at', null).lte('send_at', dueAt).lte('created_at', createdBy)
       // Chat notices have not opted into external delivery. Filter before the
       // page limit so a busy conversation cannot starve other notifications.
       .or('related_type.is.null,related_type.neq.family_message')
@@ -657,23 +756,111 @@ export async function dispatchPendingPushes(
     if (cursor) {
       // Strictly validated timestamp/UUID values cannot inject filter syntax.
       q = q.or(`created_at.${wrap ? 'lt' : 'gt'}.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.${wrap ? 'lte' : 'gt'}.${cursor.id})`);
+      // Behind it, the retries go on from where the last run's left off, and
+      // then go round to the oldest rows, up to and including that place.
+      const from = wrap ? cursor.retry : undefined;
+      if (from && range === 'behind') q = q.or(`created_at.gt.${from.createdAt},and(created_at.eq.${from.createdAt},id.gt.${from.id})`);
+      if (from && range === 'lapped') q = q.or(`created_at.lt.${from.createdAt},and(created_at.eq.${from.createdAt},id.lte.${from.id})`);
     }
+    // Families, recipients, families' whole-family rows, the marketplace, its
+    // listings and its full sellers' landing families that already hold their
+    // share of this batch, exactly as isExcluded leaves them out. 0191's price
+    // drops (user_id null, related_type MARKETPLACE_RELATED_TYPE, related_id
+    // the listing) count against the marketplace, their listing and their
+    // seller, not the family they land in, so a family left out at its share
+    // is left out without them. Each `or` ANDs with the rest; a NULL user_id
+    // passes the recipients' and is judged by the others.
+    const notMarket = `user_id.not.is.null,related_type.is.null,related_type.neq.${MARKETPLACE_RELATED_TYPE}`;
+    if (excluded.families.length) {
+      q = q.or(`family_id.not.in.${recipientList(excluded.families)},and(user_id.is.null,related_type.eq.${MARKETPLACE_RELATED_TYPE})`);
+    }
+    if (excluded.recipients.length) q = q.or(`user_id.is.null,user_id.not.in.${recipientList(excluded.recipients)}`);
+    if (excluded.familyWide.length) {
+      q = q.or(`user_id.not.is.null,family_id.not.in.${recipientList(excluded.familyWide)},related_type.eq.${MARKETPLACE_RELATED_TYPE}`);
+    }
+    if (excluded.marketplace) q = q.or(notMarket);
+    if (excluded.listings.length) q = q.or(`${notMarket},related_id.is.null,related_id.not.in.${recipientList(excluded.listings)}`);
+    if (excluded.landing.length) q = q.or(`${notMarket},family_id.not.in.${recipientList(excluded.landing)}`);
+    if (excluded.unlisted) q = q.or(`${notMarket},related_id.not.is.null`);
     const { data, error } = await q;
     if (error) {
       console.error('[push] pending-push read failed', { familyId: opts.familyId ?? null, error });
       throw new Error('Pending-push read failed.');
     }
-    return data ?? [];
+    return withSellers(data ?? []);
   }
-  const rows = await page(limit);
-  if (cursor && rows.length < limit) rows.push(...await page(limit - rows.length, true));
+  // The family whose listing each price drop names, so the batch counts the
+  // drop against its seller (sellerOf in lib/notifications/fair-batch.ts):
+  // one lookup a page, of the listings this run has not looked up yet, each
+  // listing once a run. A listing not found (deleted since), an id that is
+  // not one, or a lookup that failed leaves the drop with no seller: it counts
+  // against the drops not found, not against the family it landed in, which
+  // is a watcher's as often as the seller's own (readFairBatch). A failed
+  // lookup is logged, not a failed run.
+  const sellers = new Map<string, string | null>();
+  async function withSellers<R extends FairRow>(rows: R[]): Promise<(R & { seller_family_id?: string | null })[]> {
+    const unknown = [...new Set(rows.filter((n) => isMarketplaceNotice(n) && n.related_id && !sellers.has(n.related_id))
+      .map((n) => n.related_id!))];
+    for (const id of unknown) sellers.set(id, null);
+    const listingIds = unknown.filter((id) => LISTING_ID.test(id));
+    if (listingIds.length) {
+      try {
+        const { data: listings, error } = await readAllInChunks<{ id: string; family_id: string }>(listingIds, (chunk, from, to) => supabase
+          .from('marketplace_listings').select('id, family_id').in('id', chunk).order('id').range(from, to));
+        if (error || !listings) console.error('[push] price-drop seller read failed', { error });
+        else for (const listing of listings) sellers.set(listing.id, listing.family_id);
+      } catch (error) {
+        console.error('[push] price-drop seller read failed', { error });
+      }
+    }
+    return rows.map((n) => (isMarketplaceNotice(n) && n.related_id ? { ...n, seller_family_id: sellers.get(n.related_id) ?? null } : n));
+  }
+  const forward = (size: number, excluded: FairExclusion) => page(size, 'ahead', excluded);
+  // Behind the cursor the retries go round: after their own place first, then
+  // from the oldest row up to it, so a row they passed is reached again as soon
+  // as nothing after their place is left for this batch. Waiting for the lap to
+  // end instead, a retry passed once waited for as long as untaken rows behind
+  // the cursor (a flood's surplus, which a full forward page leaves there every
+  // tick) kept it from ending, and with nothing after the place and nothing
+  // ahead, a run read nothing at all and the lap never ended.
+  const readBehind = async (size: number, excluded: FairExclusion) => {
+    const after = await page(size, 'behind', excluded);
+    return !cursor?.retry || after.length >= size ? after : [...after, ...await page(size - after.length, 'lapped', excluded)];
+  };
+  // With a cursor, every read keeps part of the batch for the rows behind it,
+  // so retries progress whatever lies ahead (PUSH_RETRY_SHARE).
+  const ranges = cursor ? aheadAndBehind(forward, readBehind, PUSH_RETRY_SHARE) : null;
+  const batch = await readFairBatch(ranges?.read ?? forward, limit, {
+    perFamily: PUSH_ROWS_PER_FAMILY, perRecipient: PUSH_ROWS_PER_RECIPIENT,
+  });
+  const ahead = batch.filter((n) => !ranges?.isBehind(n)).sort(traversalOrder);
+  const behind = ranges ? batch.filter((n) => ranges.isBehind(n)).sort(traversalOrder) : [];
+  const rows = [...ahead, ...behind];
   if (rows.length === 0) return { notifications: 0, result: { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 } };
-  const last = rows[rows.length - 1];
-  const nextPosition = parsePushCursor({ version: 1, createdAt: last.created_at, id: last.id });
-  if (!nextPosition) throw new Error('Push notification cursor fields are invalid.');
+  // The cursor follows the forward traversal. Only a batch that took
+  // everything ahead of it wraps, to its last row behind; one whose retries
+  // rode along on their reserve keeps its place ahead.
+  const wraps = !ranges || ahead.length === 0 || behind.length === 0 || ranges.aheadExhausted(batch);
+  const last = wraps ? rows[rows.length - 1] : ahead[ahead.length - 1];
+  const nextPosition = parsePushPosition({ createdAt: last.created_at, id: last.id });
+  // The retries keep a place of their own behind the cursor (R9-RV2): from
+  // the oldest row behind, every run re-read the same rows, so under a flood
+  // ahead (no wrap) a retry behind a reserve's worth of older ones still
+  // failing waited until they aged out, or for good if they were skipped.
+  // They go on after the last row they took, in the order they go round (a
+  // row they took on going round from the oldest comes after every row after
+  // their old place), and start again from the oldest once they have taken
+  // everything behind (or the cursor wraps to them).
+  const from = cursor?.retry;
+  const lapped = from ? behind.filter((n) => traversalOrder(n, { created_at: from.createdAt, id: from.id }) <= 0) : [];
+  const restart = !ranges || ranges.behindExhausted(batch) || (wraps && behind.length > 0);
+  const retryRow = restart ? null : lapped.at(-1) ?? behind.at(-1) ?? null;
+  const retry = restart ? null
+    : retryRow ? parsePushPosition({ createdAt: retryRow.created_at, id: retryRow.id }) : cursor?.retry ?? null;
+  if (!nextPosition || (retryRow && !retry)) throw new Error('Push notification cursor fields are invalid.');
   // A wrap can return to the same position. Change the stored identity even
   // then, so only one competing snapshot can match the original JSON value.
-  const nextCursor = { ...nextPosition, generation: randomUUID() };
+  const nextCursor = { version: 1, ...nextPosition, ...(retry ? { retry } : {}), generation: randomUUID() };
   // Save progress before any external send. A write failure sends nothing;
   // a later delivery failure stays pending and is revisited on wrap-around.
   //
@@ -783,7 +970,12 @@ export async function dispatchPendingPushes(
     // repaired; a dead endpoint does not. Expiring those too would silently
     // drop every notification raised during a misconfiguration, and nothing is
     // being sent meanwhile, so none of them can be buzzing anyone twice.
-    const expired = r.failed > 0 && !r.familyReadFailed && ageMs >= PUSH_RETRY_WINDOW_MS;
+    // A row dated after now is past any window too: no writer sets created_at,
+    // so only a member's planted row can be, and its age stayed negative, so it
+    // was retried for good. The read above leaves those out; this holds if it
+    // ever does not. Against the wall clock, as that read is.
+    const datedAhead = !Number.isNaN(createdMs) && createdMs > Date.now() + NOTIFICATION_CLOCK_SKEW_MS;
+    const expired = r.failed > 0 && !r.familyReadFailed && (ageMs >= PUSH_RETRY_WINDOW_MS || datedAhead);
     if (incomplete && !expired) {
       console.warn('[push] delivery incomplete; leaving pushed_at null to retry', {
         notificationId: n.id, failed: r.failed, skipped: r.skipped, ageMs,

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { BarChart3, Eye, Users, Heart, MessageCircle, Share2, MousePointerClick, PlaySquare } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireSocialPage } from '@/lib/social/access';
+import { SOCIAL_SURFACES } from '@/lib/social/roles';
 import { getAnalytics, getAccounts } from '@/lib/social/queries';
 import { PROVIDERS, type SocialPlatform } from '@/lib/social/capabilities';
 import { PlatformDot } from '@/components/social/platform';
@@ -16,7 +17,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function AnalyticsPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  const { ctx } = await requireSocialPage(SOCIAL_SURFACES.analytics);
   const familyId = ctx.active.familyId;
   const [{ totals, byPlatform }, accounts] = await Promise.all([
     getAnalytics(familyId),

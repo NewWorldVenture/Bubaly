@@ -22,17 +22,21 @@ import { isSensitiveCategory } from '@/lib/documents/sensitivity';
 // does, and the bucket counts every upload.
 
 const h = await vi.hoisted(async () => (await import('./helpers/module-state')).createModuleState());
-const bucket = vi.hoisted(() => ({ uploads: [] as string[], refuseRemove: false }));
+const bucket = vi.hoisted(() => ({ uploads: [] as string[], removes: [] as string[][], refuseRemove: false }));
 
 vi.mock('react', async (original) => (await import('./helpers/hook-slots')).withHookSlots(await original<object>(), h.hooks));
 vi.mock('@/lib/hooks/use-realtime-query', async () => (await import('./helpers/module-harness')).realtimeQueryModule(h));
 vi.mock('@/lib/supabase/client', async () => {
   const { clientFor } = await import('./helpers/module-harness');
+  const { withFaults } = await import('./helpers/in-memory-supabase');
   return {
     createClient: () => {
       const client = clientFor(h);
       return {
-        ...client,
+        // Reservation writes end in single(), which is a terminal promise:
+        // retain fault injection there instead of allowing it to execute
+        // before the older harness's builder.then can inspect the fault.
+        ...withFaults(client, (table, calls) => h.fault?.(table, calls.map(call => call.method)) ?? null),
         storage: {
           from: (name: string) => {
             const real = client.storage.from(name);
@@ -40,7 +44,7 @@ vi.mock('@/lib/supabase/client', async () => {
               ...real,
               upload: async (path: string) => { bucket.uploads.push(path); return real.upload(path); },
               // Storage answers a refused delete with no error and an empty list.
-              remove: async (paths: string[]) => (bucket.refuseRemove ? { data: [], error: null } : real.remove(paths)),
+              remove: async (paths: string[]) => { bucket.removes.push(paths); return bucket.refuseRemove ? { data: [], error: null } : real.remove(paths); },
             };
           },
         },
@@ -74,7 +78,7 @@ beforeEach(() => {
   h.rows = { documents: [] }; h.readErrors = {}; h.refreshes = []; h.calls = [];
   h.storage = { objects: new Map(), refused: new Set() };
   h.toasts = { success: [], error: [] }; h.timeZone = 'UTC';
-  bucket.uploads = []; bucket.refuseRemove = false;
+  bucket.uploads = []; bucket.removes = []; bucket.refuseRemove = false;
   // 0266's insert policy: a sensitive row is a manager's to write.
   h.fault = (table, calls) => (table === 'documents' && calls.includes('insert') && isSensitiveCategory(category) && !isManager(role as never)
     ? { code: '42501', message: 'new row violates row-level security policy for table "documents"' }
@@ -141,20 +145,20 @@ describe('Documents refuses an adults-only folder before the file moves', () => 
 
     expect(h.toasts.error).toEqual([t('documentsModule.failedToSaveFile')]);
     expect(h.toasts.success).toEqual([]);
-    expect(bucket.uploads).toHaveLength(1);
+    expect(bucket.uploads).toHaveLength(0);
     expect(stored(), 'the uploaded file outlived its refused row').toEqual([]);
     expect(db.table('documents')).toEqual([]);
   });
 
-  it('a rollback the bucket refuses is said out loud, not dropped', async () => {
+  it('a refused reservation needs no storage compensation even when removal would be refused', async () => {
     h.fault = (table, calls) => (table === 'documents' && calls.includes('insert') ? { code: '23514', message: 'check constraint' } : null);
     bucket.refuseRemove = true;
     await upload('parent', 'School');
 
     expect(h.toasts.error).toEqual([t('documentsModule.failedToSaveFile')]);
-    expect(stored()).toHaveLength(1);
-    expect(vi.mocked(console.error)).toHaveBeenCalledWith(
-      '[documents] upload rollback left an object behind', { path: stored()[0] }, expect.any(String),
-    );
+    expect(bucket.uploads).toEqual([]);
+    expect(bucket.removes).toEqual([]);
+    expect(stored()).toEqual([]);
+    expect(db.table('documents')).toEqual([]);
   });
 });

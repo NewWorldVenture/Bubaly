@@ -46,11 +46,15 @@ const TICKETS = [
   { id: 't2', ticket_number: 'TKT-2', status: 'resolved', priority: 'low', category: 'account', subject: 'Rename family', requester_name: 'Ben', requester_email: 'ben@example.com', assigned_agent_name: 'Kim', description: 'Please rename us', updated_at: '2026-10-01T10:00:00Z' },
   { id: 't3', ticket_number: 'TKT-3', status: 'open', priority: 'normal', category: 'other', subject: '=HYPERLINK("x")', requester_name: 'Cy', requester_email: 'cy@example.com', assigned_agent_name: null, description: 'formula in a subject', updated_at: '2026-09-30T10:00:00Z' },
 ];
+// Written by last night's run: aggregates older than a day and a half are not
+// published any more (lib/network/aggregate.ts, AGGREGATE_MAX_AGE_MS), so a
+// fixed date here would read as a cron that stopped running.
+const LAST_RUN = new Date(Date.now() - 6 * 3_600_000).toISOString();
 const AGGREGATES = [
-  { id: 'a1', scope: 'benchmarks', cohort_key: 'kids:6–9|size:3–4', metric: 'chores_per_child', value: '3-5', count: 40, cohort_size: K_ANONYMITY_FLOOR + 5, computed_at: '2026-10-01T00:00:00Z' },
-  { id: 'a2', scope: 'benchmarks', cohort_key: 'kids:6–9|size:3–4', metric: 'chores_per_child', value: '6-8', count: 12, cohort_size: K_ANONYMITY_FLOOR + 5, computed_at: '2026-10-01T00:00:00Z' },
+  { id: 'a1', scope: 'benchmarks', cohort_key: 'kids:6–9|size:3–4', metric: 'chores_per_child', value: '3-5', count: 40, cohort_size: K_ANONYMITY_FLOOR + 5, computed_at: LAST_RUN },
+  { id: 'a2', scope: 'benchmarks', cohort_key: 'kids:6–9|size:3–4', metric: 'chores_per_child', value: '6-8', count: 12, cohort_size: K_ANONYMITY_FLOOR + 5, computed_at: LAST_RUN },
   // Below the k-anonymity floor: the read excludes it, so it must not be counted or exported.
-  { id: 'a3', scope: 'benchmarks', cohort_key: 'kids:10–13|size:1–2', metric: 'chores_per_child', value: '3-5', count: 3, cohort_size: K_ANONYMITY_FLOOR - 1, computed_at: '2026-10-01T00:00:00Z' },
+  { id: 'a3', scope: 'benchmarks', cohort_key: 'kids:10–13|size:1–2', metric: 'chores_per_child', value: '3-5', count: 3, cohort_size: K_ANONYMITY_FLOOR - 1, computed_at: LAST_RUN },
 ];
 
 let db: InMemorySupabase;

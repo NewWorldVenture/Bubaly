@@ -31,11 +31,15 @@ let db: ReturnType<typeof createInMemorySupabase<SupabaseClient<Database>>>;
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const created_at = '2026-09-01T00:00:00.000Z';
 const cutoff = new Date('2026-09-09T00:00:00.000Z');
-const progress = (n: number) => ({ id: id(n), created_at, completed_at: '2026-09-01T00:30:00.000Z', status: 'completed', value_engaged: true, steps_completed: [] });
-const activation = (n: number) => ({ id: id(n), created_at, session_id: `cohort-${n}`, milestone: 'first_outcome_viewed', session_index: 1, ms_since_signup: 1_800_000 });
+const progress = (n: number) => ({ id: id(n), user_id: `user-${n}`, created_at, completed_at: '2026-09-01T00:30:00.000Z', status: 'completed', value_engaged: true, steps_completed: [] });
+// A household, and the member who recorded its milestone: what the real writers stamp.
+const fam = (n: number) => `10000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const activation = (n: number) => ({ id: id(n), created_at, user_id: `user-${n}`, family_id: fam(n), session_id: fam(n), milestone: 'first_outcome_viewed', session_index: 1, ms_since_signup: 1_800_000 });
 beforeEach(() => {
   vi.clearAllMocks(); state.admin = true;
   db = createInMemorySupabase<SupabaseClient<Database>>(); state.db = db;
+  db.seed('families', Array.from({ length: 11 }, (_, n) => ({ id: fam(n + 1), created_at })));
+  db.seed('family_members', Array.from({ length: 11 }, (_, n) => ({ id: `20000000-0000-4000-8000-${String(n + 1).padStart(12, '0')}`, family_id: fam(n + 1), user_id: `user-${n + 1}` })));
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => vi.restoreAllMocks());
@@ -52,7 +56,7 @@ describe('complete onboarding telemetry', () => {
   it.each([
     ['onboarding_progress', loadOnboardingProgress, progress],
     ['activation_events', loadActivationEvents, activation],
-    ['onboarding_events', loadOnboardingEvents, (n: number) => ({ id: id(n), created_at, session_id: `cohort-${n}`, step: 'done', phase: 'completed', duration_ms: 100 })],
+    ['onboarding_events', loadOnboardingEvents, (n: number) => ({ id: id(n), user_id: `user-${n}`, created_at, session_id: `cohort-${n}`, step: 'done', phase: 'completed', duration_ms: 100 })],
   ] as const)('reads all %s rows even when the server caps every page below the request', async (table, load, row) => {
     db.seed(table, Array.from({ length: 11 }, (_, n) => row(n + 1)));
     const from = db.from.bind(db);
@@ -82,7 +86,7 @@ describe('complete onboarding telemetry', () => {
   });
 
   it('uses an older cohort first-view event beyond the old page boundary', async () => {
-    db.seed('activation_events', Array.from({ length: 401 }, (_, n) => ({ ...activation(n + 1), session_id: 'one-cohort', ms_since_signup: n === 400 ? 60_000 : 3_600_000 })));
+    db.seed('activation_events', Array.from({ length: 401 }, (_, n) => ({ ...activation(n + 1), user_id: 'user-1', family_id: fam(1), session_id: fam(1), ms_since_signup: n === 400 ? 60_000 : 3_600_000 })));
     const result = await loadActivationEvents(db, cutoff);
     expect(summarizeActivation(result.data!)).toMatchObject({ cohorts: 1, under30MinRate: 1, timedValueCohorts: 1 });
   });
@@ -136,6 +140,8 @@ describe('rendered timing reports', () => {
 
   it('renders real threshold and missing-data counts with distinct setup/view labels', async () => {
     db.seed('onboarding_progress', [progress(1), { ...progress(2), completed_at: '2026-09-01T00:31:00.000Z' }, { ...progress(3), completed_at: null }]);
+    // Each run's wizard start, as the signed-in wizard records it.
+    db.seed('onboarding_events', [1, 2, 3].map((n) => ({ id: id(100 + n), user_id: `user-${n}`, created_at, session_id: `run-${n}`, step: 'profile', phase: 'started', duration_ms: 0 })));
     db.seed('activation_events', [activation(1), { ...activation(2), ms_since_signup: 1_800_001 }, { ...activation(3), ms_since_signup: null }]);
     const audit = await html(await AuditPage());
     const funnel = await html(await FunnelPage());

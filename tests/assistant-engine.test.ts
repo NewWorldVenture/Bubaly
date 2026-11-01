@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { extractFencedBlocks, stripFencedBlocks } from '@/lib/ai/safety/untrusted';
 
 // F19: on a capped plan the request row is the meter, so withAiRequest refuses
 // when it cannot be filed. This file is about other behaviour and its fake
@@ -19,6 +20,7 @@ function chain(table: string) {
   const t = tables[table] ?? {};
   const ordering: { column: string; ascending: boolean }[] = [];
   let maximum = Infinity;
+  let page: [number, number] | null = null;
   const c: Record<string, unknown> = {
     // The context builder (lib/ai/context) reads through the domain services,
     // which use the full filter vocabulary — every filter is a no-op here and
@@ -26,7 +28,8 @@ function chain(table: string) {
     select: () => c, eq: () => c, neq: () => c, in: () => c, is: () => c, not: () => c, or: () => c, ilike: () => c,
     gte: () => c, gt: () => c, lte: () => c, lt: () => c,
     order: (column: string, options?: { ascending?: boolean }) => { ordering.push({ column, ascending: options?.ascending !== false }); return c; },
-    limit: (count: number) => { maximum = count; return c; }, range: () => c,
+    limit: (count: number) => { maximum = count; return c; },
+    range: (from: number, to: number) => { page = [from, to]; return c; },
     insert: (rows: unknown) => { inserts.push({ table, rows }); return { then: (onF: (v: { error: unknown }) => unknown) => Promise.resolve({ error: t.error ?? null }).then(onF) }; },
     // `.eq().select()` as well as a bare `.eq()`: the conversation metadata
     // write asks for its row since C1-S9-66, and a real builder allows both.
@@ -46,8 +49,9 @@ function chain(table: string) {
           if (delta) return order.ascending ? delta : -delta;
         }
         return 0;
-      }).slice(0, maximum);
-      return Promise.resolve({ data: t.error ? null : rows, error: t.error ?? null, count: t.error ? null : (t.rows ?? []).length }).then(onF);
+      });
+      const selected = (page ? rows.slice(page[0], page[1] + 1) : rows).slice(0, maximum);
+      return Promise.resolve({ data: t.error ? null : selected, error: t.error ?? null, count: t.error ? null : (t.rows ?? []).length }).then(onF);
     },
   };
   return c;
@@ -168,7 +172,8 @@ describe('prepareAssistantTurn', () => {
     expect(prepared.turn.messages).toEqual([
       { role: 'user', content: 'hi' }, { role: 'assistant', content: 'hello' }, { role: 'user', content: 'Plan tacos for Saturday' },
     ]);
-    expect(prepared.turn.system).toContain('Family: The Hughens');
+    expect(extractFencedBlocks(prepared.turn.system).filter(block => block.label === 'FAMILY_NAME').map(block => block.text)).toEqual(['The Hughens']);
+    expect(stripFencedBlocks(prepared.turn.system).split('\n').filter(line => line.startsWith('Family: '))).toEqual(['Family: ']);
     // The system prompt is now the context builder's rendering (lib/ai/context),
     // chosen by intent: "Plan tacos for Saturday" is a capture, which carries the
     // roster, schedule, tasks and shopping slices, and every row-derived string
@@ -177,7 +182,8 @@ describe('prepareAssistantTurn', () => {
     // event title from the fixture must be fenced rather than pasted raw.
     expect(prepared.turn.system).toContain('0 open to-dos, 2 open chores');
     expect(prepared.turn.system).toMatch(/<<<UNTRUSTED_EVENT_TITLE_[A-Za-z0-9_-]+>>>Soccer<<<END_EVENT_TITLE_/);
-    expect(prepared.turn.system).toContain('Asking: Dan (parent).');
+    expect(extractFencedBlocks(prepared.turn.system).filter(block => block.label === 'VIEWER_NAME').map(block => block.text)).toEqual(['Dan']);
+    expect(stripFencedBlocks(prepared.turn.system).split('\n').filter(line => line.startsWith('Asking: '))).toEqual(['Asking:  (parent).']);
     expect(prepared.turn.provider).toBe(provider);
 
     runAction.mockResolvedValueOnce({ ok: true, summary: 'Planned "Tacos" for 2026-09-06.' });

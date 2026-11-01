@@ -28,10 +28,12 @@ vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: () => h.db,
   describeConfiguredServiceKey: () => null,
 }));
-// The Billing tab lists Stripe's latest invoices; Stripe answers from here.
-vi.mock('@/lib/stripe', () => ({
-  getStripe: () => ({ invoices: { list: async () => ({ data: h.invoices }) } }),
-}));
+// The Billing tab lists Stripe's latest invoices, through the key billing
+// uses (stripeFromKey over Stripe Setup, then the environment); Stripe answers from here.
+vi.mock('@/lib/stripe', () => {
+  const client = { invoices: { list: async () => ({ data: h.invoices }) } };
+  return { getStripe: () => client, stripeFromKey: () => client };
+});
 vi.mock('@/lib/i18n/server', () => ({
   getTranslations: async () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params),
   getLocaleContext: async () => ({ locale: { code: 'en-US' } }),
@@ -74,6 +76,8 @@ beforeEach(() => {
   db = createInMemorySupabase({ maxRows: CAP });
   h.db = db;
   h.invoices = [];
+  // The key billing uses, saved in Stripe Setup.
+  db.seed('stripe_settings', [{ id: 'singleton', secret_key: 'sk_test_fixture' }]);
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-10-22T12:00:00Z'));
   vi.spyOn(console, 'warn').mockImplementation(() => {});

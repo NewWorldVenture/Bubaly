@@ -29,7 +29,11 @@ export default async function FamilyDigitalTwinPage() {
 
   const [membersRes, { data: profiles }, { data: routines }, { data: classes }, { data: teams }, { data: goals }, { data: budgets }] = await settleAll([
     supabase.from('family_members').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at'),
-    supabase.from('family_digital_twin_profiles').select('*').eq('family_id', familyId),
+    // Only what the cards render. `*` brought every member's metadata (the
+    // nightly scan's per-sibling reliabilityScore and choreCompletionRate,
+    // which the memory service keeps from anyone but a manager), their stress
+    // baseline and the parents' notes into this page for every viewer.
+    supabase.from('family_digital_twin_profiles').select('member_id, strengths, ai_insights').eq('family_id', familyId),
     supabase.from('family_routines').select('member_id, title').eq('family_id', familyId).eq('status', 'active'),
     supabase.from('school_classes').select('member_id, subject').eq('family_id', familyId),
     supabase.from('teams').select('member_id, sport').eq('family_id', familyId).eq('is_active', true),
@@ -49,10 +53,14 @@ export default async function FamilyDigitalTwinPage() {
   }
   const members = membersRes.data;
   const { data: savedSimRows } = await supabase
-    .from('twin_simulations').select('id, activity_name, verdict, weekly_hours, created_at')
+    .from('twin_simulations').select('id, activity_name, verdict, weekly_hours, created_at, created_by')
     .eq('family_id', familyId).order('created_at', { ascending: false }).limit(20);
+  // A scenario is removed by a manager or by whoever saved it, and a guest
+  // keeps none (deleteSimulationAction holds the same rule).
+  const guest = ctx.active.role === 'guest';
   const savedSims: SavedSim[] = (savedSimRows ?? []).map((s) => ({
     id: s.id, activityName: s.activity_name, verdict: s.verdict, weeklyHours: Number(s.weekly_hours), createdAt: s.created_at,
+    canDelete: !guest && (manager || s.created_by === ctx.user.id),
   }));
   // A budget is the household's money: only those who read it are offered one
   // to check a cost against (the actions refuse or skip it for anyone else).
@@ -84,7 +92,7 @@ export default async function FamilyDigitalTwinPage() {
 
       {memberList.length > 0 && <DecisionSimulator members={memberList} budgetCategories={budgetCategories} />}
 
-      {memberList.length > 0 && <ActivityProjection members={memberList} budgetCategories={budgetCategories} saved={savedSims} />}
+      {memberList.length > 0 && <ActivityProjection members={memberList} budgetCategories={budgetCategories} saved={savedSims} canSave={!guest} />}
 
       <div className="grid gap-5 lg:grid-cols-2">
         {(members ?? []).map((m) => {

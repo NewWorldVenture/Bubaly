@@ -20,6 +20,7 @@ import type { EventCategory } from '@/lib/database.types';
 import { normalizeName } from '@/lib/groceries/normalize-name';
 import { normalizeEmail, normalizePhone } from '@/lib/migrate/parse';
 import { logAudit } from '@/lib/server/audit';
+import { recordActivationServer } from '@/lib/analytics/activation-server';
 import {
   eventKey, itemKey, resolveImportedItems,
   type ExistingContact, type ExistingGroceryItem, type ExistingItem, type ExistingMember, type ResolutionPlan,
@@ -350,11 +351,24 @@ export async function commitImport(payload: ImportPayload): Promise<ImportResult
         assignee_id: assignee,
       };
     });
+    // TTFV: a calendar brought over from another app is the household's
+    // `calendar_imported` milestone, as an ICS feed added in Settings and the
+    // onboarding wizard's import are. Recorded once events have landed, even
+    // when a later batch fails (those are imported all the same), timed from the
+    // household's sign-up; once per household, best-effort
+    // (recordActivationServer swallows its own failures).
+    const recordCalendarImport = async () => {
+      if (counts.events > 0) await recordActivationServer({ userId, familyId, milestone: 'calendar_imported', signupAtIso: ctx.active.family.created_at });
+    };
     for (let i = 0; i < toInsert.length; i += 500) {
       const { error, count } = await supabase.from('calendar_events').insert(toInsert.slice(i, i + 500), { count: 'exact' });
-      if (error) return partialFailure('calendar events', error);
+      if (error) {
+        await recordCalendarImport();
+        return partialFailure('calendar events', error);
+      }
       counts.events += count ?? toInsert.slice(i, i + 500).length;
     }
+    await recordCalendarImport();
   }
 
   // ── Tasks → chores (+ an assignment for each reviewed owner), de-duped by

@@ -15,7 +15,7 @@ export function ActivationBeacon({
   signupAtIso?: string | null;
 }) {
   useEffect(() => {
-    trackActivationOnce({ milestone, familyId, userId, signupAtIso });
+    void trackActivationOnce({ milestone, familyId, userId, signupAtIso });
   }, [milestone, familyId, userId, signupAtIso]);
   return null;
 }

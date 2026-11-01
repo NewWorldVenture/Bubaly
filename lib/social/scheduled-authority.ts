@@ -39,7 +39,8 @@ const outputSchema = z.object({
   actor: actorSchema.nullable(), targets: z.array(resultSchema).min(1).max(10),
   retryAt: z.string().datetime().nullable(), reconcile: z.boolean(), drain: z.boolean(),
   errorKey: z.enum(['socialSchedule.storageUnavailable', 'socialSchedule.accessUnavailable', 'socialSchedule.permissionDenied',
-    'socialSchedule.changed', 'socialSchedule.reconnectRequired', 'socialSchedule.approvalRequired', 'socialSchedule.awaitingConfirmation']).nullable(),
+    'socialSchedule.changed', 'socialSchedule.reconnectRequired', 'socialSchedule.approvalRequired', 'socialSchedule.awaitingConfirmation',
+    'socialSchedule.notInPlan', 'socialSchedule.cameDueWhileClosed']).nullable(),
 }).strict();
 export type ScheduleActor = z.infer<typeof actorSchema>;
 export type ScheduleInputs = z.infer<typeof inputSchema>;

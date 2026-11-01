@@ -5,11 +5,11 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { SectionCard, MiniEmpty, MiniError, StatTile } from '@/components/family/shell';
 import {
-  summarizeOnboardingFunnel, formatRate, formatDuration, ONBOARDING_STEPS,
-  type OnboardingEventLike,
+  summarizeOnboardingFunnel, oneRunPerAccount, formatRate, formatDuration, ONBOARDING_STEPS,
+  type AccountOnboardingEvent,
 } from '@/lib/analytics/onboarding';
 import { summarizeActivation, type ActivationEventLike } from '@/lib/analytics/activation';
-import { loadActivationEvents, loadOnboardingEvents } from '@/lib/analytics/onboarding-server';
+import { loadActivationTelemetry, loadOnboardingEvents } from '@/lib/analytics/onboarding-server';
 import { ThirtyMinuteSummary } from '@/components/analytics/thirty-minute-summary';
 import { getTranslations } from '@/lib/i18n/server';
 import { AppNotFound } from '@/components/app/app-not-found';
@@ -34,15 +34,18 @@ export default async function OnboardingFunnelPage() {
   const supabase = createServiceClient();
   const cutoff = new Date();
   const [{ data, error: funnelError }, { data: actData, error: actError }] = await Promise.all([
-    loadOnboardingEvents(supabase, cutoff), loadActivationEvents(supabase, cutoff),
+    loadOnboardingEvents(supabase, cutoff), loadActivationTelemetry(supabase, cutoff),
   ]);
 
-  const funnel = summarizeOnboardingFunnel((data ?? []) as OnboardingEventLike[]);
+  // One run per account (oneRunPerAccount): 0133 lets any signed-in account
+  // file sessions under its own id in a loop, and the funnel counts sessions.
+  const funnel = summarizeOnboardingFunnel(oneRunPerAccount((data ?? []) as AccountOnboardingEvent[]));
   const stepLabel = (key: string | null) =>
     ONBOARDING_STEPS.find((s) => s.key === key)?.label ?? key ?? '—';
 
-  // TTFV / activation — the value half of the funnel (T10).
-  const activation = summarizeActivation((actData ?? []) as ActivationEventLike[]);
+  // TTFV / activation — the value half of the funnel (T10). Every household
+  // created by the cutoff is a cohort, not only the ones that reached a milestone.
+  const activation = summarizeActivation((actData?.events ?? []) as ActivationEventLike[], { cohorts: actData?.cohorts ?? [] });
 
   return (
     <div className="space-y-5">
@@ -123,7 +126,7 @@ export default async function OnboardingFunnelPage() {
                 <li key={m.key}>
                   <div className="mb-1 flex items-center justify-between text-sm">
                     <span className="font-medium">{m.label}</span>
-                    <span className="text-muted">{m.cohorts} · {formatRate(m.rate)}</span>
+                    <span className="text-muted">{m.instrumented ? `${m.cohorts} · ${formatRate(m.rate)}` : t('dashboardOnboardingFunnel.notRecorded')}</span>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-muted/10">
                     <div className="h-full rounded-full bg-fuchsia-500" style={{ width: `${Math.round(m.rate * 100)}%` }} />

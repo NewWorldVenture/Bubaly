@@ -1,0 +1,30 @@
+name: Audit ledger
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'finalaudit.md'
+      - 'scripts/audit-register-counts.mjs'
+      - '.github/workflows/audit-ledger.yml'
+
+permissions:
+  contents: read
+
+# Ledger checkpoints must not cancel the product CI workflow on main.
+concurrency:
+  group: audit-ledger-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit-ledger-counts:
+    name: Audit register counts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Reconcile audit register and summary
+        run: node scripts/audit-register-counts.mjs

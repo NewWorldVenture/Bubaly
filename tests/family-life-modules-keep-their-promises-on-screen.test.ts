@@ -42,6 +42,20 @@ vi.mock('@/components/app/page-header', async () => (await import('./helpers/mod
 vi.mock('@/components/ai/ai-insight', async () => (await import('./helpers/module-harness')).ui);
 vi.mock('@/components/ai/why-this', () => ({ WhyThis: () => null }));
 vi.mock('@/components/wishlists/before-you-buy', () => ({ BeforeYouBuy: () => null }));
+// Close, Reopen and delete on a poll go through the checked voting actions
+// (app/(app)/dashboard/voting/actions.ts): run here for real, as the signed-in
+// parent, against the same in-memory database.
+vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => ({
+  user: { id: h.app.userId, email: null },
+  active: { familyId: h.app.familyId, role: (h.app as Record<string, unknown>).role, family: { name: 'Family', timezone: 'UTC' }, member: { id: 'member-1' } },
+}) }));
+vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db }));
+vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
+vi.mock('@/lib/i18n/server', async () => {
+  const { SOURCE_MESSAGES: messages } = await import('@/lib/i18n/messages');
+  const { translate: tr } = await import('@/lib/i18n/translate');
+  return { getTranslations: async () => (key: string, params?: Record<string, string | number>) => tr(messages, key, params) };
+});
 vi.mock('@/app/(app)/dashboard/relationship/actions', () => ({
   toggleDateOnCalendarAction: actions.toggle,
   syncDateOnCalendarAction: actions.sync,

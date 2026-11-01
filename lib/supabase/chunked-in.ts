@@ -1,5 +1,5 @@
 import 'server-only';
-import { readAll } from './read-all';
+import { readAll, readAllById } from './read-all';
 import { settleAll } from '@/lib/supabase/settle';
 
 /**
@@ -68,15 +68,46 @@ export async function readAllInChunks<Row, Err = { message: string }>(
   page: (chunk: string[], from: number, to: number) => PromiseLike<{ data: Row[] | null; error: Err | null }>,
   options: { chunkSize?: number } = {},
 ): Promise<{ data: Row[] | null; error: Err | { message: string } | null }> {
+  return readEveryChunk(ids, options.chunkSize ?? 100, (chunk) => readAll<Row, Err>((from, to) => page(chunk, from, to)));
+}
+
+/**
+ * `readAllInChunks` with each chunk paged on its key (`readAllById`, id past
+ * the last one read) instead of by offset, for rows that are counted or summed
+ * while the table may be written to.
+ *
+ * An offset page is a separate read of a live table. A row deleted ahead of
+ * the next offset between two pages (or one that stops matching the filter)
+ * moves every later row up one, and the row at the boundary is in neither
+ * page; a row added ahead of it is read twice. A hundred households'
+ * transactions or open chores are more than one page, so one family deleting
+ * an expense at the wrong moment dropped another family's from its sum. Each
+ * chunk is read in id order, each row at most once, and a row present for the
+ * whole read exactly once (read-all.ts, `readAllById`).
+ *
+ * `page(chunk, cursor, limit)` must filter `.gt('id', cursor)` when `cursor` is
+ * not null, order by `id` ascending, and `.limit(limit)`.
+ */
+export async function readAllByIdInChunks<Row extends { id: string }, Err = { message: string }>(
+  ids: readonly string[],
+  page: (chunk: string[], cursor: string | null, limit: number) => PromiseLike<{ data: Row[] | null; error: Err | null }>,
+  options: { chunkSize?: number } = {},
+): Promise<{ data: Row[] | null; error: Err | { message: string } | null }> {
+  return readEveryChunk(ids, options.chunkSize ?? 100, (chunk) => readAllById<Row, Err>((cursor, limit) => page(chunk, cursor, limit)));
+}
+
+/** Read every chunk of `ids` in parallel; the first failed chunk fails the whole read. */
+async function readEveryChunk<Row, Err>(
+  ids: readonly string[],
+  chunkSize: number,
+  read: (chunk: string[]) => PromiseLike<{ rows: Row[]; error: Err | { message: string } | null }>,
+): Promise<{ data: Row[] | null; error: Err | { message: string } | null }> {
   if (ids.length === 0) return { data: [], error: null };
-  const chunkSize = options.chunkSize ?? 100;
 
   const chunks: string[][] = [];
   for (let i = 0; i < ids.length; i += chunkSize) chunks.push(ids.slice(i, i + chunkSize));
 
-  const settled = await settleAll(
-    chunks.map((chunk) => readAll<Row, Err>((from, to) => page(chunk, from, to))),
-  );
+  const settled = await settleAll(chunks.map((chunk) => read(chunk)));
 
   const data: Row[] = [];
   for (const result of settled) {

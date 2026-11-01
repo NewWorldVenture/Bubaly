@@ -48,7 +48,8 @@ export async function GET(req: NextRequest) {
   try {
     const supabase = await createServer();
     // Identity comes from the session, never from `state`.
-    const { data: auth } = await supabase.auth.getUser();
+    const { data: auth, error: authError } = await supabase.auth.getUser();
+    if (authError) return redirect('error');
     const userId = auth.user?.id;
     if (!userId) return redirect('error');
 

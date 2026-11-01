@@ -24,6 +24,7 @@ import { familyInstant } from '@/lib/time/civil';
 import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
 import { mintSuggestionReminderKey, mintSuggestionSourceTag } from '@/lib/autopilot/reminder-key';
 import { scopeNow } from '../scope';
+import { getTranslations } from '@/lib/i18n/server';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { REMINDER_NOT_FOUND, requireShownReminder, shownReminders } from './shown';
 import { releaseReminderImage } from '@/lib/reminders/image';
@@ -91,11 +92,29 @@ function resolveRemindAt(value: string, tz: string): string | null {
   return at ? at.toISOString() : null;
 }
 
+/**
+ * A guest views the family's reminders and changes none of them: the permission
+ * matrix (supabase/seed.sql) gives a guest no create, update or delete on
+ * reminders, and the trust engine gives a guest's assistant `['view']`. RLS on
+ * family_reminders is plain `is_family_member` and no guest-write trigger
+ * covers it (0464 guards the legacy `reminders`), so it is decided here, for
+ * the page's actions and every assistant, approval and replay path alike — as
+ * lib/services/tasks decides it for to-dos. The database half needs a schema
+ * change. On an id, it is asked after the reminder is admitted, so a reminder
+ * the guest may not be shown still answers as an unknown id (./shown.ts).
+ */
+async function refuseGuestWrite(scope: ServiceScope): Promise<ServiceResult<never> | null> {
+  if (scope.role !== 'guest') return null;
+  return fail((await getTranslations())('actionRefusal.notAllowed'), { code: SERVICE_CODES.denied });
+}
+
 export async function createReminder(
   scope: ServiceScope,
   input: CreateReminderInput,
   opts: KeyedCreateOptions = {},
 ): Promise<ServiceResult<FamilyReminder>> {
+  const refused = await refuseGuestWrite(scope);
+  if (refused) return refused;
   const title = input.title?.trim() ?? '';
   if (!title) return fail('A reminder needs a title.', { code: SERVICE_CODES.invalidInput });
 
@@ -236,6 +255,8 @@ async function loadVisibleReminderForMutation(scope: ServiceScope, reminderId: s
 export async function completeReminder(scope: ServiceScope, reminderId: string): Promise<ServiceResult<FamilyReminder>> {
   const admitted = await loadVisibleReminderForMutation(scope, reminderId);
   if (!admitted.ok) return admitted;
+  const refused = await refuseGuestWrite(scope);
+  if (refused) return refused;
   const existing = admitted.data;
 
   const now = scopeNow(scope).toISOString();
@@ -275,6 +296,8 @@ export async function deleteReminder(scope: ServiceScope, reminderId: string): P
   // Only one its actor may be shown; any other id is unknown (./shown.ts).
   const shown = await requireShownReminder(scope, reminderId);
   if (!shown.ok) return shown;
+  const refused = await refuseGuestWrite(scope);
+  if (refused) return refused;
 
   const { data, error } = await scope.db
     .from('family_reminders')
@@ -308,6 +331,8 @@ export async function snoozeReminder(scope: ServiceScope, reminderId: string, mi
 
   const admitted = await loadVisibleReminderForMutation(scope, reminderId);
   if (!admitted.ok) return admitted;
+  const refused = await refuseGuestWrite(scope);
+  if (refused) return refused;
 
   const until = new Date(scopeNow(scope).getTime() + mins * 60_000).toISOString();
   const { data, error } = await scope.db

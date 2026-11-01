@@ -1,8 +1,8 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { automationSendKey, emailsSent, failedAttempt, recordedActionsJson, retryOf, stepsRecorded, runSteps, type SendAdmission, type Step } from '@/lib/marketing/automation-steps';
-import { EVENT_DEFAULT_COPY, type EventTrigger } from '@/lib/marketing/automation-triggers';
+import { automationSendKey, emailsSent, failedAttempt, recordedActionsJson, retryableShortfall, retryOf, stepsRecorded, runSteps, fellShort, worthRetrying, type SendAdmission, type Step } from '@/lib/marketing/automation-steps';
+import { EVENT_DEFAULT_COPY, hasRunnableStep, stepsAreRunnable, triggerFires, type EventTrigger } from '@/lib/marketing/automation-triggers';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
 type DB = SupabaseClient<Database>;
@@ -28,15 +28,29 @@ export type FireEventParams = {
 
 export type FireEventResult = {
   workflows: number; emails: number;
-  /** Workflows that ran and recorded a failed, skipped or unsupported step. */
+  /**
+   * Workflows that ran and recorded a failed or skipped step: a nudge a retry
+   * could still deliver. A step no runner executes is not one (`unrunnable`),
+   * and nor is a send this event gave no address to (unaddressedSend).
+   */
   failures: number;
   /**
    * What could not even be attempted: the workflows read answered an error, or
    * a run could not be reserved or claimed. Each used to be swallowed (`{ data:
    * flows }` alone; `if (reserveErr) continue`), so a cron that fired an event
-   * into a database that refused it counted the nudge as sent.
+   * into a database that refused it counted the nudge as sent. And an event on
+   * a trigger outside FIRED_TRIGGERS, refused before anything is read.
    */
   errors: number;
+  /**
+   * Matching workflows holding a step no runner executes, reported and never
+   * failed: one switched on before the console refused them. One with no step
+   * a runner executes is not run at all — no row, no run_count, no failure.
+   * Counted a failure, its first run for every new subject made the caller's
+   * cron answer 502 (checkout-abandoned also handed the session back), for a
+   * step no retry can do.
+   */
+  unrunnable: number;
 };
 
 /**
@@ -48,26 +62,49 @@ export type FireEventResult = {
  *
  * Best-effort by contract: callers wrap this in try/catch and never block the
  * user-facing response on it.
+ *
+ * Only on a trigger the app fires (FIRED_TRIGGERS, triggerFires), which is
+ * what the console decides a workflow's runnability and its card on. One
+ * outside the list is refused before anything is read: no workflow lookup, no
+ * run, no email, a logged error naming it and `errors: 1`. A static guard
+ * (tests/a-trigger-the-app-fires-is-one-a-workflow-can-run-on.test.ts) held
+ * the callers to the list, and each round found a new way to reach this
+ * function that it did not read (an alias, a namespace, a loader, a spread
+ * that overrides the literal it checked); this holds whatever reaches it.
+ * The trigger is read once, so what is checked is what runs.
  */
 export async function fireAutomationEvent(supabase: DB, params: FireEventParams): Promise<FireEventResult> {
-  const result: FireEventResult = { workflows: 0, emails: 0, failures: 0, errors: 0 };
+  const result: FireEventResult = { workflows: 0, emails: 0, failures: 0, errors: 0, unrunnable: 0 };
+  const trigger = params.trigger;
+  if (!triggerFires(trigger)) {
+    console.error('[marketing automation] refused an event on a trigger the app does not fire (FIRED_TRIGGERS)', { trigger });
+    result.errors++;
+    return result;
+  }
 
   const { data: flows, error: flowsError } = await supabase
     .from('marketing_automation_workflows')
     .select('id, trigger, steps, run_count')
     .eq('status', 'active')
-    .eq('trigger', params.trigger)
+    .eq('trigger', trigger)
     .is('deleted_at', null);
   if (flowsError) {
-    console.error('[marketing automation] could not read the workflows for an event', { trigger: params.trigger, error: flowsError });
+    console.error('[marketing automation] could not read the workflows for an event', { trigger, error: flowsError });
     result.errors++;
     return result;
   }
   if (!flows || flows.length === 0) return result;
 
-  const fallback = EVENT_DEFAULT_COPY[params.trigger];
+  const fallback = EVENT_DEFAULT_COPY[trigger];
 
   for (const flow of flows) {
+    // Reported, not failed; and not run at all when nothing in it would run.
+    if (!stepsAreRunnable(flow.steps)) {
+      result.unrunnable++;
+      const runnable = hasRunnableStep(flow.steps);
+      console.warn('[marketing automation] an active workflow holds a step no runner executes', { trigger, workflowId: flow.id, skipped: !runnable });
+      if (!runnable) continue;
+    }
     // Reserve the run first so duplicates short-circuit before any email sends.
     const { data: reserved, error: reserveErr } = await supabase
       .from('marketing_automation_runs')
@@ -76,7 +113,7 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
           workflow_id: flow.id,
           status: 'running',
           subject_key: params.subjectKey,
-          metadata: { trigger: params.trigger, ...(params.context ?? {}) } as unknown as Database['public']['Tables']['marketing_automation_runs']['Insert']['metadata'],
+          metadata: { trigger, ...(params.context ?? {}) } as unknown as Database['public']['Tables']['marketing_automation_runs']['Insert']['metadata'],
         },
         { onConflict: 'workflow_id,subject_key', ignoreDuplicates: true },
       )
@@ -84,12 +121,14 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
     // Best-effort event path — callers must not block user requests — but
     // counted: a reservation that was refused is a nudge that did not go out.
     if (reserveErr) {
-      console.error('[marketing automation] could not reserve an event-driven run', { trigger: params.trigger, workflowId: flow.id, error: reserveErr });
+      console.error('[marketing automation] could not reserve an event-driven run', { trigger, workflowId: flow.id, error: reserveErr });
       result.errors++;
       continue;
     }
 
     let runId = reserved?.[0]?.id ?? null;
+    // A run this event reserved, not a retry of an earlier one: only it counts in run_count.
+    const firstRun = runId !== null;
     // What a failed attempt already did, so its retry does not repeat a send.
     let steps = Array.isArray(flow.steps) ? (flow.steps as unknown as Step[]) : [];
     let previous: string[] = [];
@@ -97,11 +136,14 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
       const { data: existing, error: existingError } = await supabase.from('marketing_automation_runs')
         .select('id, status, metadata').eq('workflow_id', flow.id).eq('subject_key', params.subjectKey).maybeSingle();
       if (existingError) {
-        console.error('[marketing automation] could not read the existing event-driven run', { trigger: params.trigger, workflowId: flow.id, error: existingError });
+        console.error('[marketing automation] could not read the existing event-driven run', { trigger, workflowId: flow.id, error: existingError });
         result.errors++;
         continue;
       }
       if (!existing || existing.status !== 'failed') continue;
+      // A run that can only fail again (a step no runner executes, or a send
+      // to a recipient this event still gives no address) is left as it is.
+      if (!worthRetrying(existing.metadata, params.email)) continue;
       // Claimed only while its receipts are the ones just read: another sweep
       // may have claimed it, delivered an email and recorded that in between
       // (recordedActionsJson).
@@ -111,7 +153,7 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
       const fenced = stepsRecorded(existing.metadata) ? asRead : asRead.is('metadata->steps', null);
       const { data: claimed, error: claimError } = await fenced.eq('status', 'failed').select('id').maybeSingle();
       if (claimError) {
-        console.error('[marketing automation] could not claim the failed event-driven run', { trigger: params.trigger, workflowId: flow.id, error: claimError });
+        console.error('[marketing automation] could not claim the failed event-driven run', { trigger, workflowId: flow.id, error: claimError });
         result.errors++;
         continue;
       }
@@ -129,7 +171,11 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
       actions = failedAttempt(steps, previous);
     }
 
-    const failed = actions.some((action) => action.includes(':failed') || action.includes(':skipped') || action.includes(':unsupported'));
+    // Recorded `failed` for any shortfall, an unsupported step and a send with
+    // no address included (and worthRetrying leaves those alone); counted a
+    // failure only for one a retry could change, as the scheduled runner counts it.
+    const retryable = retryableShortfall(actions);
+    const failed = fellShort(actions);
     // The run row was reserved or claimed by this path above, so zero rows is a
     // result that was not recorded — the same situation the error already
     // throws for, and it takes the same path. Audit C1-S9-67.
@@ -138,22 +184,24 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
       .update({
         status: failed ? 'failed' : 'completed',
         // The results and the steps that produced them come last, so no context key can stand in for them (retryOf).
-        metadata: { trigger: params.trigger, ...(params.context ?? {}), actions, steps } as unknown as Database['public']['Tables']['marketing_automation_runs']['Update']['metadata'],
+        metadata: { trigger, ...(params.context ?? {}), actions, steps } as unknown as Database['public']['Tables']['marketing_automation_runs']['Update']['metadata'],
       })
       .eq('id', runId)
       .select('id');
     if (runError || wroteNoRows(recorded)) throw new Error('Could not record the event-driven automation result.');
-    // Rows deliberately not checked: zero rows is a workflow deleted mid-run,
-    // with no count left to keep. Audit C1-S9-67.
-    const { error: workflowError } = await supabase
-      .from('marketing_automation_workflows')
-      .update({ run_count: (flow.run_count ?? 0) + 1 })
-      .eq('id', flow.id);
-    if (workflowError) throw new Error('Could not update the automation run count.');
+    if (firstRun) {
+      // Rows deliberately not checked: zero rows is a workflow deleted mid-run,
+      // with no count left to keep. Audit C1-S9-67.
+      const { error: workflowError } = await supabase
+        .from('marketing_automation_workflows')
+        .update({ run_count: (flow.run_count ?? 0) + 1 })
+        .eq('id', flow.id);
+      if (workflowError) throw new Error('Could not update the automation run count.');
+    }
 
     result.workflows++;
     result.emails += emailsSent(actions, previous);
-    if (failed) result.failures++;
+    if (retryable) result.failures++;
   }
 
   return result;

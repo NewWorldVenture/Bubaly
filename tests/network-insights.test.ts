@@ -1,14 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import {
-  visibleInsights, isSuppressed, isContributing, K_ANONYMITY_FLOOR,
+  visibleInsights, publishableInsights, consentedInsights, isSuppressed, isContributing, K_ANONYMITY_FLOOR,
   type InsightCandidate, type ConsentState,
 } from '@/lib/network/insights';
 
+// `count` is the DP-noised figure a person reads; `cohortSize` the true one the
+// floor is checked on. They differ here so a test can tell which one was used.
 const cands: InsightCandidate[] = [
-  { id: 'a', scope: 'timing', title: 'Passport lead time', detail: '~6 months', cohortSize: 120 },
-  { id: 'b', scope: 'benchmarks', title: 'Load benchmark', detail: 'you’re typical', cohortSize: 40 },
-  { id: 'c', scope: 'timing', title: 'Rare pattern', detail: 'niche', cohortSize: 5 }, // below floor
-  { id: 'd', scope: 'recommendations', title: 'Top recipe', detail: 'highly rated', cohortSize: 300 },
+  { id: 'a', scope: 'timing', title: 'Passport lead time', detail: '~6 months', count: 118, cohortSize: 120 },
+  { id: 'b', scope: 'benchmarks', title: 'Load benchmark', detail: 'you’re typical', count: 41, cohortSize: 40 },
+  { id: 'c', scope: 'timing', title: 'Rare pattern', detail: 'niche', count: 6, cohortSize: 5 }, // below floor
+  { id: 'd', scope: 'recommendations', title: 'Top recipe', detail: 'highly rated', count: 302, cohortSize: 300 },
 ];
 
 const on = (scopes: ConsentState['scopes']): ConsentState => ({ enabled: true, scopes });
@@ -48,9 +50,41 @@ describe('visibleInsights', () => {
     expect(out.find((i) => i.id === 'b')!.confidence).toBe('medium'); // 40 in [20,60)
   });
 
-  it('sorts by cohort size descending', () => {
+  // The order a family sees is the noised count's, the only family count it is
+  // shown; ranked on the true size, the list told which of two close bands
+  // really held more families.
+  it('sorts by the noised count descending', () => {
     const out = visibleInsights(cands, on({ timing: true, benchmarks: true, recommendations: true }));
-    for (let i = 1; i < out.length; i++) expect(out[i - 1].cohortSize >= out[i].cohortSize).toBe(true);
+    expect(out.map((i) => i.id)).toEqual(['d', 'a', 'b']);
+    for (let i = 1; i < out.length; i++) expect(out[i - 1].count >= out[i].count).toBe(true);
+  });
+});
+
+describe('publishableInsights — the server half, and what reaches a browser', () => {
+  const close: InsightCandidate[] = [
+    { id: 'truly-bigger', scope: 'benchmarks', title: 'x', detail: 'x', count: 57, cohortSize: 59 },
+    { id: 'noised-bigger', scope: 'benchmarks', title: 'y', detail: 'y', count: 62, cohortSize: 58 },
+  ];
+
+  it('applies the floor to the TRUE size and then drops it', () => {
+    const out = publishableInsights([...cands, ...close]);
+    expect(out.some((i) => i.id === 'c')).toBe(false); // true size 5 < 20, whatever its noised count
+    for (const i of out) expect(Object.keys(i).sort()).toEqual(['confidence', 'count', 'detail', 'id', 'scope', 'title']);
+    expect(JSON.stringify(out)).not.toContain('cohortSize');
+  });
+
+  it('grades and ranks on the noised count, so neither the order nor the label reveals a true size', () => {
+    const out = publishableInsights(close);
+    expect(out.map((i) => i.id)).toEqual(['noised-bigger', 'truly-bigger']);
+    // 59 true families is under 3 × 20; the label follows the 62 a reader is shown
+    expect(out.find((i) => i.id === 'noised-bigger')!.confidence).toBe('high');
+    expect(out.find((i) => i.id === 'truly-bigger')!.confidence).toBe('medium');
+  });
+
+  it('consentedInsights re-applies consent on the client without needing the true size', () => {
+    const published = publishableInsights(cands);
+    expect(consentedInsights(published, { enabled: false, scopes: { timing: true } })).toEqual([]);
+    expect(consentedInsights(published, on({ benchmarks: true })).map((i) => i.id)).toEqual(['b']);
   });
 });
 

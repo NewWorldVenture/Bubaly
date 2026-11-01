@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import { PenSquare, Sparkles, Wand2 } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireSocialPage } from '@/lib/social/access';
+import { SOCIAL_SURFACES } from '@/lib/social/roles';
 import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { getPosts } from '@/lib/social/queries';
@@ -19,13 +20,17 @@ export const dynamic = 'force-dynamic';
 
 export default async function ContentStudioPage() {
   const tr = await getTranslations();
-  const ctx = await requireUserContext();
+  const { ctx, access } = await requireSocialPage(SOCIAL_SURFACES.pipeline);
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
+  const canCompose = SOCIAL_SURFACES.compose.some((p) => access.can(p));
 
   const [drafts, { data: generations }, { data: templates }] = await Promise.all([
     getPosts(familyId, ['draft']),
-    settle(supabase.from('social_ai_generations').select('id, kind, prompt, model, status, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(8)),
+    // The caller's own generations, and not what they asked for: the list
+    // renders the kind and the time alone, and the prompt was every member's
+    // topic (up to 2,000 characters), read family-wide.
+    settle(supabase.from('social_ai_generations').select('id, kind, model, status, created_at').eq('family_id', familyId).eq('user_id', ctx.user.id).order('created_at', { ascending: false }).limit(8)),
     settle(supabase.from('social_content_templates').select('id, name, kind').eq('family_id', familyId).is('deleted_at', null).limit(8)),
   ]);
 
@@ -36,9 +41,11 @@ export default async function ContentStudioPage() {
           <h2 className="text-sm font-semibold">{tr('dashboardSocialContentStudio.contentStudio')}</h2>
           <p className="text-xs text-muted">{tr('dashboardSocialContentStudio.draftOnceGenerateWithAiTailor')}</p>
         </div>
-        <Link href="/dashboard/social/content-studio/new" className="inline-flex h-9 items-center gap-2 rounded-lg bg-brand px-3 text-sm font-medium text-brand-fg">
-          <PenSquare className="h-4 w-4" /> {tr('dashboardSocialContentStudio.newPost')}
-        </Link>
+        {canCompose && (
+          <Link href="/dashboard/social/content-studio/new" className="inline-flex h-9 items-center gap-2 rounded-lg bg-brand px-3 text-sm font-medium text-brand-fg">
+            <PenSquare className="h-4 w-4" /> {tr('dashboardSocialContentStudio.newPost')}
+          </Link>
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">

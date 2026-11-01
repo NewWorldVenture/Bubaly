@@ -310,13 +310,25 @@ describe('finance stale bill and sibling query precedence', () => {
     expect(html).not.toContain('Synthetic bill');
     expect(html).not.toContain('9,000.00');
   });
-  it.each(siblingTables)('preserves actual loading precedence for %s even with another query error', table => {
+  it.each(siblingTables)('keeps refusal and retry actionable while %s also reports loading', table => {
     ui.bills = { data: rows, loading: false, stale: true, error: null };
     ui.siblings = { financial_accounts: { loading: false, error: 'synthetic sibling refusal' }, [table]: { loading: true, error: 'synthetic loading refusal' } };
+    const html = renderToStaticMarkup(React.createElement(FinancesModule));
+    expect(html).toContain('financesModule.couldNotLoadFinancialData');
+    expect(html).toContain('<button');
+    expect(html).not.toContain('animate-pulse');
+    expect(html).not.toContain('Synthetic bill');
+    expect(html).not.toContain('9,000.00');
+  });
+  it.each(siblingTables)('keeps genuinely pending %s without any error as loading, not refusal', table => {
+    // Bills are current here: only this sibling's pending read may hide them.
+    ui.bills = { data: rows, loading: false, stale: false, error: null };
+    ui.siblings = { [table]: { loading: true, error: null } };
     const html = renderToStaticMarkup(React.createElement(FinancesModule));
     expect(html).toContain('animate-pulse');
     expect(html).not.toContain('financesModule.couldNotLoadFinancialData');
     expect(html).not.toContain('Synthetic bill');
+    expect(html).not.toContain('9,000.00');
   });
   it('retains pending presentation for stale bills without any query error', () => {
     ui.bills = { data: rows, loading: false, stale: true, error: null };

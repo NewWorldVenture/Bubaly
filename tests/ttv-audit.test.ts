@@ -90,7 +90,9 @@ describe('analyzeOnboarding', () => {
     ]);
     expect(a).toMatchObject({ completed: 6, timedCompletions: 3, untimedCompletions: 3, under30MinCount: 2, under30MinRate: 66.7 });
     expect(analyzeOnboarding([row({ status: 'completed' })]).under30MinRate).toBeNull();
-    expect(analyzeOnboarding([row({ completed_at: '2026-07-01T01:00:00Z' })]).under30MinRate).toBe(0);
+    expect(analyzeOnboarding([row({ status: 'completed', completed_at: '2026-07-01T01:00:00Z' })]).under30MinRate).toBe(0);
+    // A run back in progress is open, whatever completion stamp it kept (N19).
+    expect(analyzeOnboarding([row({ completed_at: '2026-07-01T01:00:00Z' })])).toMatchObject({ completed: 0, under30MinRate: null });
   });
 });
 

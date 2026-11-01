@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireSocialPage } from '@/lib/social/access';
+import { SOCIAL_SURFACES } from '@/lib/social/roles';
 import { PLATFORMS, isProviderConfigured, type SocialPlatform } from '@/lib/social/capabilities';
 import { ConnectGrid } from '@/components/social/connect-grid';
 import { getTranslations } from '@/lib/i18n/server';
@@ -14,7 +15,8 @@ export const dynamic = 'force-dynamic';
 
 export default async function ConnectPage() {
   const t = await getTranslations();
-  await requireUserContext();
+  // Every control on this page connects an account, which is connect_accounts'.
+  await requireSocialPage(SOCIAL_SURFACES.connect);
   // Compute readiness server-side; never ship which env vars exist to the client.
   const readiness = Object.fromEntries(
     PLATFORMS.map((p) => [p, isProviderConfigured(p)]),

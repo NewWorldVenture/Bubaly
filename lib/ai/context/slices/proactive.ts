@@ -11,7 +11,7 @@
 // always returned.
 import 'server-only';
 import { fenceUntrusted, sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
-import { gatherSignalsResult, type FamilySignals } from '@/lib/family/signals';
+import { gatherSignalsResult, type FamilySignals, type SignalsViewer } from '@/lib/family/signals';
 import { detectLifeEvents, SCHOOL_START_WINDOW_DAYS, type LifeEventSuggestion } from '@/lib/life-events/detect';
 import { getMessages, translate } from '@/lib/i18n/messages';
 import type { LocaleCode } from '@/lib/i18n/locales';
@@ -74,9 +74,15 @@ const TERM_START_RE = /\b(term|semester|school year|first day|back[- ]to[- ]scho
 /** How many transitions reach the prompt; more than this is not proactive, it is noise. */
 const MAX_LIFE_EVENTS = 3;
 
-async function loadSignals(familyId: string, tz: string, now: Date): Promise<FamilySignals | null> {
+/**
+ * `viewer` is who the counts are for, as on the four pages that read the same
+ * bundle: for a guest the household's bills are not read, and the stress score
+ * is built without them. Read for nobody, a guest's prompt carried a stress
+ * score the bills had raised — one /dashboard/family-stress no longer shows them.
+ */
+async function loadSignals(familyId: string, tz: string, now: Date, viewer: SignalsViewer): Promise<FamilySignals | null> {
   try {
-    const result = await gatherSignalsResult(familyId, tz, now);
+    const result = await gatherSignalsResult(familyId, tz, now, viewer);
     if (result.error) {
       console.error('[ai-context:proactive] family signal counts failed', result.error);
       return null;
@@ -150,7 +156,7 @@ export const proactiveSlice: SliceDefinition = {
     const keep = (...parts: (string | null | undefined)[]): boolean => withhold(managerOnlyText(...parts));
 
     const [signals, report, liveSignals, autopilot, recommendations, terms, pets, projects, plans] = await Promise.all([
-      loadSignals(scope.familyId, env.tz, env.now),
+      loadSignals(scope.familyId, env.tz, env.now, { role: env.viewer.role }),
       // Composed for this reader (ReasoningViewer): for anyone who does not
       // read the household's money, its drift, its money and paperwork moves
       // and its money items are left out by where each comes from, as on the

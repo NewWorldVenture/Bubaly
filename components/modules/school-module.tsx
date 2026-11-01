@@ -466,8 +466,8 @@ export function SchoolModule() {
     void refreshEvents();
   }
 
+  if (error) return <ErrorState message={error} onRetry={() => { void refreshEvents(); void refreshClasses(); void refreshGrades(); }} />;
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message={error} />;
 
   return (
     <div className="module-with-sidebar">

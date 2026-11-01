@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createSearchIndexLoader, SEARCH_INDEX_MAX_ATTEMPTS, SEARCH_INDEX_RETRY_AFTER_MS, type SearchIndexState,
 } from '@/lib/blog/search-index-loader';
@@ -13,7 +13,7 @@ function harness(replies: Array<() => Promise<Response>>) {
   let clock = 0;
   const states: SearchIndexState[] = [];
   let posts: Post[] = [];
-  const fetchIndex = vi.fn(() => {
+  const fetchIndex = vi.fn((_signal?: AbortSignal) => {
     const next = replies.shift();
     if (!next) throw new Error('unexpected extra request');
     return next();
@@ -30,6 +30,8 @@ function harness(replies: Array<() => Promise<Response>>) {
 const ok = (body: unknown) => () => Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
 const unavailable = () => Promise.resolve(new Response(JSON.stringify({ error: 'unavailable' }), { status: 503 }));
 const offline = () => Promise.reject(new TypeError('Failed to fetch'));
+
+afterEach(() => { vi.useRealTimers(); });
 
 describe('the blog search index loader', () => {
   it('loads once, however many interactions arrive while the request is in flight', async () => {
@@ -77,5 +79,101 @@ describe('the blog search index loader', () => {
     }
     expect(h.fetchIndex).toHaveBeenCalledTimes(SEARCH_INDEX_MAX_ATTEMPTS);
     expect(h.loader.state).toBe('unavailable');
+  });
+
+  it('bounds a stalled fetch, aborts it, and permits a later successful interaction', async () => {
+    vi.useFakeTimers();
+    const h = harness([() => new Promise<Response>(() => {}), ok([POST])]);
+    h.loader.load(); await h.settle();
+    expect(h.loader.state).toBe('loading');
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(h.loader.state).toBe('unavailable');
+    expect(h.fetchIndex.mock.calls[0][0]?.aborted).toBe(true);
+    h.loader.load();
+    expect(h.fetchIndex).toHaveBeenCalledTimes(1);
+    h.advance(SEARCH_INDEX_RETRY_AFTER_MS);
+    h.loader.load(); await h.settle();
+    expect(h.loader.state).toBe('ready');
+    expect(h.posts()).toEqual([POST]);
+  });
+
+  it('keeps the same deadline through a stalled response body', async () => {
+    vi.useFakeTimers();
+    const response = { ok: true, json: () => new Promise<unknown>(() => {}) } as Response;
+    const h = harness([() => Promise.resolve(response)]);
+    h.loader.load(); await h.settle();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(h.loader.state).toBe('unavailable');
+    expect(h.fetchIndex.mock.calls[0][0]?.aborted).toBe(true);
+  });
+
+  it('ignores an old body that completes after a successful retry', async () => {
+    vi.useFakeTimers();
+    let finish!: (value: unknown) => void;
+    const body = new Promise<unknown>(resolve => { finish = resolve; });
+    const h = harness([() => Promise.resolve({ ok: true, json: () => body } as Response), ok([POST])]);
+    h.loader.load(); await h.settle();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(h.loader.state).toBe('unavailable');
+    h.advance(SEARCH_INDEX_RETRY_AFTER_MS);
+    h.loader.load(); await h.settle();
+    expect(h.loader.state).toBe('ready');
+    finish([{ ...POST, slug: 'old' }]); await h.settle();
+    expect(h.posts()).toEqual([POST]);
+    expect(h.states).toEqual(['loading', 'unavailable', 'loading', 'ready']);
+  });
+
+  it('reports a synchronous transport failure through the unavailable state', async () => {
+    const h = harness([() => { throw new TypeError('transport unavailable'); }]);
+    expect(() => h.loader.load()).not.toThrow();
+    await h.settle();
+    expect(h.loader.state).toBe('unavailable');
+  });
+
+  it('aborts on disposal without later state changes or another request', async () => {
+    vi.useFakeTimers();
+    let finish!: (value: unknown) => void;
+    const body = new Promise<unknown>(resolve => { finish = resolve; });
+    const h = harness([() => Promise.resolve({ ok: true, json: () => body } as Response)]);
+    h.loader.load(); await h.settle();
+    h.loader.dispose();
+    expect(h.fetchIndex.mock.calls[0][0]?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    finish([POST]); await h.settle();
+    h.loader.load(); await h.settle();
+    expect(h.states).toEqual(['loading']);
+    expect(h.fetchIndex).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not start a transport disposed before the scheduled call', async () => {
+    vi.useFakeTimers();
+    const h = harness([ok([POST])]);
+    h.loader.load(); h.loader.dispose(); await h.settle();
+    expect(h.fetchIndex).not.toHaveBeenCalled();
+    expect(h.states).toEqual(['loading']);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('clears the deadline on success instead of changing ready to unavailable later', async () => {
+    vi.useFakeTimers();
+    const h = harness([ok([POST])]);
+    h.loader.load(); await h.settle();
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(h.states).toEqual(['loading', 'ready']);
+    expect(h.posts()).toEqual([POST]);
+  });
+
+  it('keeps the existing attempt cap when every transport stalls', async () => {
+    vi.useFakeTimers();
+    const h = harness(Array.from({ length: SEARCH_INDEX_MAX_ATTEMPTS }, () => () => new Promise<Response>(() => {})));
+    for (let i = 0; i < SEARCH_INDEX_MAX_ATTEMPTS + 2; i++) {
+      h.loader.load(); await h.settle();
+      await vi.advanceTimersByTimeAsync(10_000);
+      h.advance(SEARCH_INDEX_RETRY_AFTER_MS);
+    }
+    expect(h.fetchIndex).toHaveBeenCalledTimes(SEARCH_INDEX_MAX_ATTEMPTS);
+    expect(h.loader.state).toBe('unavailable');
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

@@ -6,6 +6,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { AiRequestDuplicate, AiRequestNotFiled, withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, describeAIError, isAIConfigured, type AIMessage } from '@/lib/ai/provider';
+import type { TokenUsage } from '@/lib/ai/usage';
 import { ASSISTANT_STOPPED, finalizeAssistantContent, stoppedAssistantContent, summarizeToolResult } from '@/lib/ai/assistant-engine';
 import { chronologicalMessages } from '@/lib/ai/conversation-session';
 import { toStructuredContent } from '@/lib/ai/result-cards';
@@ -21,7 +22,7 @@ import { assistantTurnRequestKey, findPriorTurn } from '@/lib/ai/assistant-turn-
 import { answerPriorTurn } from '@/lib/ai/assistant-turn-answer';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
-import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { readCalendarOccurrences, readCountedRows } from '@/lib/calendar/occurrences';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 
 export const runtime = 'nodejs';
@@ -121,6 +122,11 @@ export async function POST(req: NextRequest) {
     // Conversation history (text turns), plus a live family snapshot.
     const nowIso = new Date().toISOString();
     const chatTimezone = ctx.active.family.timezone || 'UTC';
+    // The legacy toolbox matches names against this exact snapshot. Never
+    // hand it a server-capped prefix that can hide the requested exact member.
+    const roster = () => supabase.from('family_members')
+      .select('id, display_name, role', { count: 'exact' })
+      .eq('family_id', familyId).eq('is_active', true).order('id');
     const [
       { data: history, error: historyError },
       { data: members, error: membersError },
@@ -130,7 +136,9 @@ export async function POST(req: NextRequest) {
     ] = await settleAll([
       supabase.from('ai_messages').select('role, content, created_at').eq('conversation_id', conversationId)
         .eq('family_id', familyId).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(40),
-      supabase.from('family_members').select('id, display_name, role').eq('family_id', familyId).eq('is_active', true),
+      readCountedRows<Pick<Database['public']['Tables']['family_members']['Row'], 'id' | 'display_name' | 'role'>>(
+        () => roster().limit(1000), (from, to) => roster().range(from, to), 2000, 'active family members',
+      ),
       // The next twelve things on the calendar, series included; bounded to a
       // month ahead, which is as far as "what's coming up" reaches
       // (lib/calendar/occurrences.ts).
@@ -226,6 +234,12 @@ export async function POST(req: NextRequest) {
           async (obs) => {
         let content = '';
         let responseError: string | undefined;
+        // What the non-streaming fallback reports it cost: the stream reports
+        // no total. A turn the fallback answered is still settled 'failed' with
+        // the stream's error, and the Free allowance counts a failed row only
+        // for the model work it recorded (lib/server/ai-access.ts), so without
+        // this a Free family whose stream always broke chatted without limit.
+        let usage: TokenUsage | null | undefined;
         const actions: { name: string; args: Record<string, unknown>; result: unknown }[] = [];
         const pushAction = (name: string, args: Record<string, unknown>, result: unknown) => {
           actions.push({ name, args, result });
@@ -249,6 +263,7 @@ export async function POST(req: NextRequest) {
           if (!content && actions.length === 0 && !stopped.signal.aborted) {
             try {
               const result = await provider.runTools({ system, messages, tools, maxTokens: 1500, signal: stopped.signal });
+              usage = result.usage;
               // No actions existed before this fallback. Each returned entry
               // is one execution, even when two calls had identical arguments.
               for (const a of result.actions) pushAction(a.name, a.args, a.result);
@@ -274,7 +289,7 @@ export async function POST(req: NextRequest) {
         // whose actions were all refused must not sign off with "Done".
         if (stopped.signal.aborted) {
           responseError = ASSISTANT_STOPPED;
-          obs.failed(new Error(ASSISTANT_STOPPED), { partial: actions.length > 0 || Boolean(content) });
+          obs.failed(Object.defineProperty(new Error(ASSISTANT_STOPPED), 'publicErrorCode', { value: 'request_stopped' }), { partial: actions.length > 0 || Boolean(content) });
         }
         const assistantContent = stopped.signal.aborted ? stoppedAssistantContent(content) : finalizeAssistantContent(content, actions);
 
@@ -329,7 +344,7 @@ export async function POST(req: NextRequest) {
           send({ type: 'error', error: describeActionError(persistenceError, t('chat.iGeneratedAResponseBut')) });
         }
 
-        obs.used(provider.model, undefined);
+        obs.used(provider.model, usage);
         // The turn's request id, so a spoken answer rides on this exchange (F19).
         send({ type: 'done', content: assistantContent, persisted: !persistenceError, requestId: obs.requestId });
         if (connected) controller.close();

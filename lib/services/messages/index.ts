@@ -27,7 +27,7 @@ import type { Tables } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
 import { getMember, type FamilyMember } from '../family';
-import { withIdempotency } from '../idempotency';
+import { sameId, withIdempotency } from '../idempotency';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
 export type FamilyMessage = Tables<'family_messages'>;
@@ -225,6 +225,14 @@ export async function createAnnouncement(scope: ServiceScope, input: CreateAnnou
     {
       operation: 'messages.createAnnouncement',
       input: { title, body },
+      changedRetry: {
+        drift: (found) => [
+          ...(!sameId(found.author_id, scope.userId) ? ['author_id'] : []),
+          ...(!sameId(found.author_member_id, scope.memberId) ? ['author_member_id'] : []),
+        ],
+        message: () => 'An existing announcement with this headline does not match this request\'s author. Review the announcements before trying again.',
+        id: (found) => found.id,
+      },
       find: async () => {
         const since = new Date((scope.now ?? new Date()).getTime() - 24 * 3600_000).toISOString();
         const { data, error } = await scope.db

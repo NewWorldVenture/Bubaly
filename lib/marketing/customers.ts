@@ -20,12 +20,35 @@ export type MarketingCustomer = {
   lifecycle: Lifecycle;
   estLtvCents: number;
   createdAt: string;
+  /**
+   * families.updated_at: when the family ROW was last edited — a rename, a time
+   * zone, closing. Nothing a family does in the app touches it, so it is not
+   * activity, and no rule about inactivity reads it as one (`activityKnown`).
+   */
   lastActivityAt: string;
+  /**
+   * Whether `lastActivityAt` measures app activity. This view has no such
+   * signal and says so with `false`; the `customer_inactive` trigger and a
+   * segment's `inactiveForDays` rule then match no one, instead of every
+   * family that has not renamed itself lately — paying families who use the
+   * app every day were sent "We miss your family". Absent means the caller
+   * supplied a real activity time.
+   */
+  activityKnown?: boolean;
   /** families.closed_at — set when the family closed its account. */
   closedAt?: string | null;
 };
 
 const DAY = 86_400_000;
+/**
+ * Who a family's campaign and automation mail goes to, in order: an active
+ * parent, else an active adult (the roles that manage the household). The
+ * owner used to fall back to ANY member with an account, inactive rows
+ * included, so a family with no parent login mailed its teen, its caregiver
+ * or a guest it had removed. No such member, no owner: `ownerEmail` is null
+ * and the family is not mailed.
+ */
+const OWNER_ROLES = ['parent', 'adult'] as const;
 /** The families and subscriptions the view reads before it reports a prefix; the smallest of its ceilings. */
 export const CUSTOMER_FAMILY_CEILING = 2000;
 /** The members and profiles it joins on before it reports a prefix. */
@@ -108,8 +131,9 @@ export async function getMarketingCustomersWithError(supabase: DB): Promise<{
   // read was sorted by family and then id.
   const subByFamily = new Map((subs ?? []).map((s) => [s.family_id, s]));
 
-  // The owner is the first parent with an account in (user_id, id) order —
-  // the order the members were read in before they paged on the id alone.
+  // The owner is the first ACTIVE parent with an account in (user_id, id)
+  // order — the order the members were read in before they paged on the id
+  // alone — else the first active adult (OWNER_ROLES).
   const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
   const byUserThenId = [...(members ?? [])].sort((a, b) =>
     (a.user_id === null ? 1 : 0) - (b.user_id === null ? 1 : 0)
@@ -128,7 +152,7 @@ export async function getMarketingCustomersWithError(supabase: DB): Promise<{
   const customers = newestFirst.map((f) => {
     const fam = membersByFamily.get(f.id) ?? [];
     const active = fam.filter((m) => m.is_active);
-    const owner = fam.find((m) => m.role === 'parent' && m.user_id) ?? fam.find((m) => m.user_id);
+    const owner = OWNER_ROLES.map((role) => active.find((m) => m.role === role && m.user_id)).find(Boolean);
     const ownerEmail = owner?.user_id ? emailByUser.get(owner.user_id) ?? null : null;
 
     const sub = subByFamily.get(f.id);
@@ -161,6 +185,7 @@ export async function getMarketingCustomersWithError(supabase: DB): Promise<{
       estLtvCents,
       createdAt: f.created_at,
       lastActivityAt: f.updated_at,
+      activityKnown: false,
       closedAt: f.closed_at ?? null,
     };
   });
@@ -190,6 +215,7 @@ export function evaluateSegment(customers: MarketingCustomer[], rules: SegmentRu
       if (new Date(c.createdAt).getTime() < now - rules.createdWithinDays * DAY) return false;
     }
     if (typeof rules.inactiveForDays === 'number') {
+      if (c.activityKnown === false) return false;
       if (new Date(c.lastActivityAt).getTime() > now - rules.inactiveForDays * DAY) return false;
     }
     return true;

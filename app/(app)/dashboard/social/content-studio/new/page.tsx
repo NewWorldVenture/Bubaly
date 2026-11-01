@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireSocialPage } from '@/lib/social/access';
+import { SOCIAL_SURFACES } from '@/lib/social/roles';
 import { getAccounts } from '@/lib/social/queries';
 import { StudioForm } from '@/components/social/studio-form';
 import type { SocialPlatform } from '@/lib/social/capabilities';
@@ -17,7 +18,8 @@ export const dynamic = 'force-dynamic';
 
 export default async function NewContentPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  // The composer is for whoever can draft, schedule or publish from it.
+  const { ctx } = await requireSocialPage(SOCIAL_SURFACES.compose);
   const supabase = await createServer();
   const [accounts, settings] = await Promise.all([
     getAccounts(ctx.active.familyId),

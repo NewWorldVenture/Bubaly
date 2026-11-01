@@ -191,7 +191,7 @@ export function ExitIntent() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="exit-intent-title"
-        className="relative z-10 w-full max-w-md rounded-2xl bg-bg p-8 text-center shadow-2xl"
+        className="relative z-10 max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl bg-bg p-8 text-center shadow-2xl"
       >
         <button onClick={closeOffer} aria-label={t('exitIntent.close')} className="absolute right-3 top-3 text-muted hover:text-fg">
           <X className="h-5 w-5" />

@@ -179,6 +179,36 @@ test.describe('the phone sign-in form', () => {
     const axe = await new AxeBuilder({ page }).include('main').withRules(['color-contrast']).analyze();
     expect(axe.violations.flatMap((v) => v.nodes.map((n) => n.target.join(' ')))).toEqual([]);
   });
+
+  // UI-001: the number field could not shrink below its own width (a flex item's
+  // minimum is its content), so at 320 px it ran 50 px past the field's box,
+  // which hides overflow. With focus in it the browser scrolled that box, and
+  // the country button went out of view; at 390 px it was mostly hidden.
+  test.describe('on a 320 px phone', () => {
+    test.use({ viewport: { width: 320, height: 640 }, isMobile: true, hasTouch: true });
+    test('the country button and the number field both sit inside the field, unscrolled', async ({ page }) => {
+      for (const path of ['/login', '/signup']) {
+        await page.goto(path, { waitUntil: 'networkidle' });
+        const open = page.getByRole('button', { name: 'Continue with phone', exact: true });
+        await expect(open).toBeEnabled();
+        await open.focus();
+        await page.keyboard.press('Enter');
+        const number = page.getByRole('textbox', { name: 'Phone number' });
+        await expect(number).toBeFocused();
+        const fit = await number.evaluate((el) => {
+          const box = el.parentElement!;
+          const b = box.getBoundingClientRect();
+          const inside = (r: DOMRect) => r.left >= b.left - 0.5 && r.right <= b.right + 0.5;
+          return {
+            scrolled: box.scrollLeft,
+            button: inside(box.querySelector('button')!.getBoundingClientRect()),
+            number: inside(el.getBoundingClientRect()),
+          };
+        });
+        expect(fit, path).toEqual({ scrolled: 0, button: true, number: true });
+      }
+    });
+  });
 });
 
 function sourceString(file: string, pattern: RegExp, what: string): string {

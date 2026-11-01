@@ -235,15 +235,21 @@ export async function POST(req: NextRequest) {
     // Engagement workflows retain their existing best-effort contract. Their
     // own durable workflow/subject key prevents repeated completed runs.
     const trigger = EVENT_TRIGGER[event.type];
-    if (trigger && isEventTrigger(trigger) && !(trigger === 'email_clicked' && clickedUnsubscribe(event.data))) {
+    // Only an open or a click on CAMPAIGN mail (tagged by lib/marketing/send.ts)
+    // is marketing engagement. Every Bubaly email comes from the same sender and
+    // account with tracking on, so an untagged event used to enrol whoever
+    // opened a family invite, a digest or any other transactional mail — a teen
+    // invited by email who never signed up, a caregiver — in a marketing
+    // workflow.
+    if (trigger && isEventTrigger(trigger) && campaignId && !(trigger === 'email_clicked' && clickedUnsubscribe(event.data))) {
       const recipient = Array.isArray(event.data?.to) ? event.data?.to[0] : event.data?.to;
       if (recipient) {
         try {
           await fireAutomationEvent(supabase, {
             trigger,
             email: String(recipient).toLowerCase(),
-            subjectKey: eventSubjectKey(trigger, [campaignId ?? 'none', String(recipient)]),
-            context: { campaignId: campaignId ?? null },
+            subjectKey: eventSubjectKey(trigger, [campaignId, String(recipient)]),
+            context: { campaignId },
           });
         } catch {
           console.error('[resend webhook] engagement automation failed');

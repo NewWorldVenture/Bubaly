@@ -82,7 +82,7 @@ export function ContactsModule() {
 
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
-  const [selected, setSelected] = useState<Contact | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Contact | null>(null);
   const [addOpen, setAddOpen] = useState(false);
 
@@ -100,6 +100,12 @@ export function ContactsModule() {
         .order('name', { ascending: true })
         .order('id').range(from, to), { max: CONTACTS_MAX }),
   });
+
+  // A realtime refresh can update or remove a contact while its detail panel
+  // is open. Keep the selection, but display the row supplied by this read
+  // rather than a captured snapshot. Authorized last-synced rows still work.
+  const selected = contacts.find((contact) => contact.id === selectedId) ?? null;
+  const setSelected = (contact: Contact | null) => setSelectedId(contact?.id ?? null);
 
   const filtered = useMemo(() => {
     let rows = contacts;

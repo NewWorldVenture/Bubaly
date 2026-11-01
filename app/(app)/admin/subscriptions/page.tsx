@@ -5,14 +5,15 @@ import { settleAll } from '@/lib/supabase/settle';
 import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 import type Stripe from 'stripe';
-import { getStripe } from '@/lib/stripe';
+import { stripeFromKey } from '@/lib/stripe';
+import { resolveStripeSecretKey } from '@/lib/stripe/settings';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { PLANS, type Plan } from '@/lib/constants/plans';
 import { fmtDate, fmtMoney } from '@/lib/utils/format';
 import { GrowthChart } from '@/components/admin/growth-chart';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeActionError } from '@/lib/supabase/errors';
 import { getTranslations } from '@/lib/i18n/server';
 import { safeWebLink } from '@/lib/utils/safe-link';
 import { PartialReadBanner } from '@/components/ui/partial-read-banner';
@@ -183,11 +184,24 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
   let customerToFamily = new Map<string, string>();
   const customerOf = (inv: Stripe.Invoice) => (typeof inv.customer === 'string' ? inv.customer : inv.customer?.id);
   if (tab === 'billing') {
-    try {
-      const stripe = getStripe();
-      listed = (await stripe.invoices.list({ limit: 20 })).data;
-    } catch (err) {
-      stripeError = describeDbError(err, tr('subscriptions.stripeIsNotConfigured'));
+    // Listed through the key billing uses: Stripe Setup's, then the
+    // environment's (resolveStripeSecretKey). getStripe() read the environment
+    // alone, so a key saved only in Stripe Setup read "Stripe is not
+    // configured" while checkout worked, and a stale environment key listed
+    // another account's invoices. Unread settings are not the environment's.
+    const resolved = await resolveStripeSecretKey();
+    if (resolved.status === 'unreadable') {
+      console.error('[admin-subscriptions] stripe settings read failed', resolved.error);
+      stripeError = tr('adminIntegrations.stripeSetupUnreadable');
+    } else if (resolved.status === 'none') {
+      stripeError = tr('adminIntegrations.stripeNoKey');
+    } else {
+      try {
+        listed = (await stripeFromKey(resolved.key).invoices.list({ limit: 20 })).data;
+      } catch (err) {
+        console.error('[admin-subscriptions] stripe invoice list failed', err);
+        stripeError = describeActionError(err, tr('adminSubscriptions.stripeInvoicesUnavailable'));
+      }
     }
     // Only the customers these invoices name. The whole billing_customers table
     // was read unbounded, which PostgREST answers with at most `db-max-rows`

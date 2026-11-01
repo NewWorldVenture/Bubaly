@@ -83,9 +83,19 @@ async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US') {
     '@/components/i18n/locale-provider': { useTranslations: () => (key: string) => catalogue[key] ?? key },
     // The context carries the active family as the app does: the detail page
     // renders its dates in the family's zone, not the host's.
-    '@/lib/supabase/auth': { requireUserContext: async () => ({ active: { familyId: 'family', family: { timezone: 'UTC' } }, user: { id: 'user' } }) },
+    '@/lib/supabase/auth': {
+      requireUserContext: async () => ({ active: { familyId: 'family', family: { timezone: 'UTC' } }, user: { id: 'user' } }),
+      // The actions ask it only for a family without Social, which this fixture is not.
+      isSuperAdmin: async () => false,
+    },
     '@/lib/supabase/server': { createServer: async () => sdk },
-    '@/lib/social/access': { requireSocialPermission: async () => {} },
+    // The plan (the actions' feature check) and the page's social-role guard
+    // are controlled boundaries here, like the permission check beside them.
+    '@/lib/server/feature-entitlement': { resolveFeatureEntitlement: async () => ({ allowed: true, planLevel: 1 }) },
+    '@/lib/social/access': {
+      requireSocialPermission: async () => {},
+      requireSocialPage: async () => ({ ctx: { active: { familyId: 'family', family: { timezone: 'UTC' } }, user: { id: 'user' } }, access: { can: () => true } }),
+    },
     '@/lib/social/x-oauth': {}, '@/lib/social/account-tokens': {},
     '@/lib/social/scheduled-publish': {
       createScheduledPublishReceipt: async () => ({ receiptId: 'synthetic-schedule-receipt' }),

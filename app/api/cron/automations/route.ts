@@ -41,7 +41,9 @@ export async function GET(req: NextRequest) {
   // A failed run must be visible in the status code: nothing in this directory
   // writes a durable run record, so Vercel Cron's status is the only signal, and
   // a 200 with a non-zero failure count reads as a clean run. A subject the
-  // budget cut off (`unserved`) is a failed run for the same reason.
+  // budget cut off (`unserved`) is a failed run for the same reason. A legacy
+  // workflow with a step no runner executes is in the body (`unrunnable`) and
+  // not in the status: a 502 for it every day hid the failures above.
     const ok = summary.failures === 0 && summary.unserved === 0 && rateLimitsPruned && childLoginThrottlePruned;
     return NextResponse.json({ ...summary, rateLimitsPruned, childLoginThrottlePruned, ok }, { status: ok ? 200 : 502 });
   } catch (err) {

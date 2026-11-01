@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Plug } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
+import { getSocialAccess } from '@/lib/social/access';
 import { getAccounts } from '@/lib/social/queries';
 import { PROVIDERS, PLATFORMS, type SocialPlatform } from '@/lib/social/capabilities';
 import { AccountRow } from '@/components/social/account-row';
@@ -23,16 +24,25 @@ function cap(ok: boolean, limitation?: string) {
 
 export default async function AccountsPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
-  const accounts = await getAccounts(ctx.active.familyId);
+  // The plan, here as well as in the layout (household-roles N2-R1-payload).
+  // The layout shows a family without Social only the accounts it may still
+  // disconnect, but a page renders beside its layout, not inside it: the
+  // page's own data went out in the response all the same. A refusal here
+  // ships nothing of it; for a family with Social nothing changes.
+  const ctx = await requireFeature('/dashboard/social');
+  const [accounts, access] = await Promise.all([getAccounts(ctx.active.familyId), getSocialAccess(ctx.active.familyId)]);
+  // Connecting and disconnecting are connect_accounts' (the actions refuse anyone else).
+  const canConnect = access?.can('connect_accounts') ?? false;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold">{t('dashboardSocialAccounts.connectedAccounts')}</h2>
-        <Link href="/dashboard/social/accounts/connect" className="inline-flex h-9 items-center gap-2 rounded-lg bg-brand px-3 text-sm font-medium text-brand-fg">
-          <Plug className="h-4 w-4" /> {t('dashboardSocialAccounts.connect')}
-        </Link>
+        {canConnect && (
+          <Link href="/dashboard/social/accounts/connect" className="inline-flex h-9 items-center gap-2 rounded-lg bg-brand px-3 text-sm font-medium text-brand-fg">
+            <Plug className="h-4 w-4" /> {t('dashboardSocialAccounts.connect')}
+          </Link>
+        )}
       </div>
 
       {accounts.length === 0 ? (
@@ -40,7 +50,7 @@ export default async function AccountsPage() {
           icon={Plug}
           title={t('dashboardSocialAccounts.noAccountsYet')}
           description={t('accounts.connectASocialAccountTo')}
-          action={<Link href="/dashboard/social/accounts/connect" className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Plug className="h-4 w-4" /> {t('dashboardSocialAccounts.connectAnAccount')}</Link>}
+          action={canConnect ? <Link href="/dashboard/social/accounts/connect" className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Plug className="h-4 w-4" /> {t('dashboardSocialAccounts.connectAnAccount')}</Link> : undefined}
         />
       ) : (
         <div className="space-y-2">
@@ -53,6 +63,7 @@ export default async function AccountsPage() {
               status={a.status}
               lastError={a.last_error}
               lastSyncedAt={a.last_synced_at}
+              canDisconnect={canConnect}
             />
           ))}
         </div>

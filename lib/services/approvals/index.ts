@@ -59,7 +59,7 @@ import {
   appendEvent, ledgerClient, loadPlanSteps, loadRun, updateRequest, updateRun, updateRunWhereState, updateStep, type StepRow,
 } from '@/lib/ai/runs/store';
 import {
-  availableWriteBackKinds, matchesPlanSnapshot, readPlanSnapshot, reminderLeadAt, writeBackTitle, type WriteBackKind,
+  availableWriteBackKinds, conciergeRunKey, matchesPlanSnapshot, readPlanSnapshot, reminderLeadAt, writeBackTitle, type WriteBackKind,
 } from '@/lib/concierge/apply';
 import { runSummary } from '@/lib/autonomy/loop';
 import {
@@ -96,6 +96,8 @@ export type DecideResult = {
   status: string; executed: boolean; resumedRunId: string | null; summary: string;
   /** For a concierge plan: the write-backs THIS decision materialised. */
   applied?: WriteBackKind[];
+  /** For a concierge plan: the queued run this yes closed, or null when no run took it. */
+  closedRunId?: string | null;
 };
 export type EditResult = { status: 'modified' | 'pending'; resumedRunId: string | null; summary?: string };
 
@@ -623,7 +625,7 @@ async function runConciergePlan(
   row: ApprovalRow,
   planId: string,
   kinds: WriteBackKind[],
-): Promise<ServiceResult<{ summary: string; applied: WriteBackKind[] }>> {
+): Promise<ServiceResult<{ summary: string; applied: WriteBackKind[]; closedRunId: string | null }>> {
   if (!scope.userId) return fail('Bubaly could not tell who is approving.', { code: SERVICE_CODES.denied });
   const { data: plan, error } = await scope.db
     .from('concierge_plans')
@@ -675,21 +677,104 @@ async function runConciergePlan(
   // is when the parent said yes and is never a stand-in for completion — on
   // this path the two are one moment, so they are one clock read.
   //
-  // Rows deliberately not checked: not every approval has such a row, and zero
-  // is the ordinary case for those. Audit C1-S9-65.
+  // `completed` only when this yes applied something. A plan whose every kind
+  // was already in place was done — and recorded — by another path; closing
+  // its queued run(s) `completed` too counted the one plan again.
+  //
+  // ONE run takes the yes, and every other pending row naming the approval is
+  // cancelled. Closing all of them `completed` let a manager's own session
+  // plant runs for it — 0255/0329 accept a member INSERT with state 'queued',
+  // `status` defaulting to 'pending' and free metadata, and 0251's UPDATE pins
+  // no column — so one yes counted as many plans as there were rows: in the
+  // family's time saved and value cards, and in the public "handled by Bubaly"
+  // figure (0278 counts `state = 'completed'`). The run that takes it is the
+  // one the server queued (runThatTakesTheYes).
+  //
+  // Through the server's writer: a completion is Bubaly's record, and the
+  // member UPDATE policy (0251) pins no column, so it cannot stay the caller's.
   const now = scopeNow(scope).toISOString();
-  const { error: runError } = await scope.db
-    .from('family_automation_runs')
-    .update({
-      status: 'executed', state: 'completed', summary, result: { steps: applied } as unknown as Json,
-      approved_by: scope.userId, approved_at: now, completed_at: now,
-    })
-    .eq('family_id', scope.familyId)
-    .eq('status', 'pending')
-    .filter('metadata->>approval_id', 'eq', row.id);
-  if (runError) console.error('[service:approvals] could not close the concierge automation run', { approvalId: row.id, error: runError });
+  const closed = applied.length > 0 ? 'completed' as const : 'cancelled' as const;
+  const runWriter = await ledgerWriter(scope.db);
+  const target = await runThatTakesTheYes(runWriter, scope.familyId, row.id, conciergeRunKey(planId, row.id));
+  // Not knowing which run is the server's, cancelling "the rest" could cancel it.
+  if (!target.ok) return ok({ summary, applied, closedRunId: null });
+  let closedRunId: string | null = null;
+  let closeFailed = false;
+  if (target.id) {
+    const { data: closedRows, error: runError } = await runWriter
+      .from('family_automation_runs')
+      .update({
+        status: legacyStatusFor(closed), state: closed, summary, result: { steps: applied } as unknown as Json,
+        approved_by: scope.userId, approved_at: now, completed_at: now,
+      })
+      .eq('id', target.id).eq('family_id', scope.familyId).eq('status', 'pending').select('id');
+    if (runError) console.error('[service:approvals] could not close the concierge automation run', { approvalId: row.id, error: runError });
+    closeFailed = !!runError;
+    closedRunId = closedRows?.[0]?.id ?? null;
+  }
 
-  return ok({ summary, applied });
+  // The run that took the yes is no longer pending, so this reaches only the
+  // rest. After a close that failed it is skipped: the run that should have
+  // taken the yes still names the approval, and would be cancelled with them.
+  if (!closeFailed) {
+    // Rows deliberately not checked: not every approval has such a row, and
+    // zero is the ordinary case for those. Audit C1-S9-65.
+    const { error: restError } = await runWriter
+      .from('family_automation_runs')
+      .update({ status: legacyStatusFor('cancelled'), state: 'cancelled', completed_at: now })
+      .eq('family_id', scope.familyId)
+      .eq('status', 'pending')
+      .filter('metadata->>approval_id', 'eq', row.id);
+    if (restError) console.error('[service:approvals] could not cancel the other runs naming an approval', { approvalId: row.id, error: restError });
+  }
+
+  return ok({ summary, applied, closedRunId });
+}
+
+type RunWriter = ServiceScope['db'];
+
+/**
+ * The pending run a yes on this approval closes as its own. First the row
+ * holding the server's key for it (`conciergeRunKey` — no member INSERT can
+ * carry a key (0255), and the (family_id, idempotency_key) unique index (0250)
+ * lets one row hold it). Failing that, the earliest pending row naming the
+ * approval that is not member-shaped (0255 pins a member's INSERT to state
+ * 'queued'). planAcceptedAction writes the key only from the release that
+ * added this lookup on, so a run queued before that release is deployed has
+ * none. Approvals expire 48 hours after they are filed (0251's default) and an
+ * expired one cannot be decided, so for up to 48 hours after that deploy the
+ * fallback also serves runs queued before the key was written; after that, it
+ * serves only a run whose key was edited. Either way one yes completes at most
+ * one run. `id: null` is an approval with no such run.
+ *
+ * Which row that is can be steered, for any approval, keyed or not: 0251's
+ * member UPDATE pins no column and 0390 pins only metadata's approval_id and
+ * plan_id, so a manager's own session can move or strip a run's
+ * idempotency_key, or reshape a row it planted (state, created_at), and so
+ * choose which row is marked completed. The count stays one per yes. The
+ * owner's N10 trigger, which pins idempotency_key and metadata, closes this.
+ */
+async function runThatTakesTheYes(
+  db: RunWriter, familyId: string, approvalId: string, key: string,
+): Promise<{ ok: true; id: string | null } | { ok: false }> {
+  const { data: keyed, error: keyedError } = await db.from('family_automation_runs').select('id')
+    .eq('family_id', familyId).eq('idempotency_key', key).eq('status', 'pending')
+    .order('id', { ascending: true }).limit(1);
+  if (keyedError) {
+    console.error('[service:approvals] could not read the run an approval queued', { approvalId, error: keyedError });
+    return { ok: false };
+  }
+  if (keyed?.[0]?.id) return { ok: true, id: keyed[0].id };
+  const { data: legacy, error: legacyError } = await db.from('family_automation_runs').select('id')
+    .eq('family_id', familyId).eq('status', 'pending')
+    .or('state.is.null,state.neq.queued')
+    .filter('metadata->>approval_id', 'eq', approvalId)
+    .order('created_at', { ascending: true }).order('id', { ascending: true }).limit(1);
+  if (legacyError) {
+    console.error('[service:approvals] could not read the run an approval queued', { approvalId, error: legacyError });
+    return { ok: false };
+  }
+  return { ok: true, id: legacy?.[0]?.id ?? null };
 }
 
 async function dismissConciergeRun(scope: ServiceScope, row: ApprovalRow): Promise<void> {
@@ -959,7 +1044,10 @@ async function performApproved(
       }
       await stampExecution(scope, row.id, done.data.summary);
       await auditDecision(scope, row, 'approved_execution', done.data.summary, { applied: done.data.applied });
-      return ok({ status: decisionLabel, executed: done.data.applied.length > 0, resumedRunId: null, summary: done.data.summary, applied: done.data.applied });
+      return ok({
+        status: decisionLabel, executed: done.data.applied.length > 0, resumedRunId: null, summary: done.data.summary,
+        applied: done.data.applied, closedRunId: done.data.closedRunId,
+      });
     }
 
     case 'tool': {
@@ -1833,7 +1921,7 @@ const AI_APPROVAL_REMINDER_READER: NeedsReader = {
  *
  * "Once" is enforced twice over: the notify service refuses a second unread
  * row for the same `(type, related_id, user_id)`, and this sweep first checks
- * the dedupe key against every notification ever written for the family — so
+ * the dedupe key against every notification ever written to that manager — so
  * a reminder the parent already read is not sent again on the next tick.
  */
 export async function remindPendingApprovals(db: DB, now: Date = new Date()): Promise<{ reminded: number; families: number; failures: number }> {
@@ -1878,13 +1966,22 @@ export async function remindPendingApprovals(db: DB, now: Date = new Date()): Pr
     // Batched: a dedupe key is a composite string, not a uuid, so a few hundred
     // of them overflow the request line and the read fails `URI too long` —
     // which, per the branch below, skips the family every tick.
+    //
+    // Only the managers the candidates name: a row addressed to anyone else
+    // answers for nobody here (below), and the read is one unpaged page per
+    // chunk, so a teen's thousand rows of their own under a manager's key
+    // filled it and pushed the manager's reminder out, and the manager was
+    // reminded again at every sweep. A family's managers are a handful of ids.
+    // (aiApprovalReminders names only managers with a login.)
+    const managerUserIds = [...new Set(candidates.map((c) => c.user_id))];
     const { data: existing, error: existingError } = await readInChunks<
-      { related_id: string | null }, { message: string }
+      { related_id: string | null; user_id: string | null }, { message: string }
     >(candidates.map((c) => c.dedupe_key), (chunk) => db
       .from('notifications')
-      .select('related_id')
+      .select('related_id, user_id')
       .eq('family_id', familyId)
       .eq('related_type', 'approval_requests')
+      .in('user_id', managerUserIds)
       .in('related_id', chunk), 50);
     if (existingError) {
       // Without the dedupe read every manager would be re-notified; skip the
@@ -1893,12 +1990,19 @@ export async function remindPendingApprovals(db: DB, now: Date = new Date()): Pr
       failures += 1;
       continue;
     }
-    const seen = new Set((existing ?? []).map((n) => n.related_id));
+    // A reminder already sent is one addressed to the manager its key names.
+    // The key alone used to be enough, and 0388 lets any member file a
+    // notification addressed to themselves under any related_id, while every
+    // member may read the approvals and the members a key is built from: a
+    // child's own row under a parent's key stood in for the parent's reminder,
+    // so the parent was never told. A member's own row now answers for that
+    // member alone.
+    const seen = new Set((existing ?? []).map((n) => `${n.related_id}\u0000${n.user_id}`));
 
     const scope = scopeForSystem(db, { id: familyId, timezone: family?.timezone ?? null }, { now });
     let sent = 0;
     for (const c of candidates) {
-      if (seen.has(c.dedupe_key)) continue;
+      if (seen.has(`${c.dedupe_key}\u0000${c.user_id}`)) continue;
       const res = await notify(scope, {
         recipients: [c.member_id],
         type: c.type,

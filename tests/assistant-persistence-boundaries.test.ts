@@ -104,7 +104,7 @@ describe('assistant persistence boundaries', () => {
     expect(calls).toContainEqual({ table: 'chores', operation: 'delete', payload: undefined });
   });
 
-  it('rolls a recurring reminder back to active when the next occurrence fails', async () => {
+  it('keeps a recurring completion and reports a definite rejection of its next occurrence', async () => {
     const { db, calls } = fakeDb((table, operation, count) => {
       if (table === 'family_reminders' && operation === 'select') {
         return {
@@ -112,19 +112,19 @@ describe('assistant persistence boundaries', () => {
           error: null,
         };
       }
-      if (table === 'family_reminders' && operation === 'insert') return { error: new Error('next reminder failed') };
-      // Both updates now ask `.select()` (C1-S9-69); a matched update answers
-      // with its row, so the complete and the restore each return one.
+      if (table === 'family_reminders' && operation === 'insert') return { error: { code: '42501', message: 'new row violates row-level security policy' } };
+      // A confirmed completion returns its matched row; it is not reversed.
       if (table === 'family_reminders' && operation === 'update' && count === 1) return { data: [{ id: 'reminder-1' }], error: null };
-      if (table === 'family_reminders' && operation === 'update' && count === 2) return { data: [{ id: 'reminder-1' }], error: null };
       return { data: [], error: null };
     });
 
     const result = await tool(db, 'complete_reminder').execute({ title: 'plants' }) as { ok: boolean; error?: string };
 
-    expect(result).toEqual({ ok: false, error: 'Could not schedule the next reminder.' });
-    expect(calls.filter((call) => call.table === 'family_reminders' && call.operation === 'update')).toHaveLength(2);
-    expect(calls.at(-1)?.payload).toMatchObject({ status: 'active', completed_at: null });
+    expect(result).toEqual({ ok: false, error: 'Reminder completed, but we could not confirm the next occurrence. Check your reminders before adding another.' });
+    const updates = calls.filter((call) => call.table === 'family_reminders' && call.operation === 'update');
+    expect(updates).toHaveLength(1);
+    expect(updates[0].payload).toMatchObject({ status: 'completed' });
+    expect(calls.filter((call) => call.table === 'family_reminders' && call.operation === 'insert')).toHaveLength(1);
   });
 
   it('fails closed when a pending-decision source cannot be read', async () => {
