@@ -18,7 +18,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
+import { Skeleton, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { ProviderInfoSheet, CheckInSheet } from '@/components/medical/print-sheet';
@@ -86,6 +86,56 @@ function CardImage({ path, label }: { path: string | null; label: string }) {
         // eslint-disable-next-line @next/next/no-img-element
         ? <img src={current.url} alt={label} className="h-24 w-full object-cover" />
         : <div className="grid h-24 w-full place-items-center bg-surface/40 text-xs text-muted">{current?.failed ? t('installButton.unavailable') : label}</div>}
+    </div>
+  );
+}
+
+/**
+ * The module while its four reads load: the header, then each section at the
+ * size its empty state draws. A three-card list stood in for it, and the
+ * sections arriving pushed the visit history below them off the screen:
+ * CLS 0.24 on a 1280x800 screen, 0.40 on a phone (PERF-001).
+ */
+function RecordsSkeleton({ members, withAction }: { members: number; withAction: boolean }) {
+  const t = useTranslations();
+  const emptyState = (
+    <div className="flex flex-col items-center rounded-2xl border border-dashed border-border px-6 py-14">
+      <Skeleton className="mb-4 h-14 w-14 rounded-2xl" />
+      <Skeleton className="h-6 w-40" />
+      <Skeleton className="mt-1 h-5 w-64 max-w-full" />
+      {withAction && <Skeleton className="mt-5 h-10 w-36 rounded-xl" />}
+    </div>
+  );
+  return (
+    <div className="space-y-5" role="status" aria-label={t('states.loading')}>
+      <div className="mb-5 space-y-2 sm:mb-6">
+        <Skeleton className="h-7 w-48 sm:h-8 lg:h-9" />
+        <Skeleton className="h-4 w-72 max-w-full sm:h-5" />
+      </div>
+      {['insurance', 'providers'].map((section) => (
+        <section key={section} className="rounded-2xl border border-border bg-surface/40 p-5">
+          <Skeleton className="mb-4 h-6 w-40" />
+          {emptyState}
+        </section>
+      ))}
+      <section className="rounded-2xl border border-border bg-surface/40 p-5">
+        <Skeleton className="mb-4 h-6 w-40" />
+        <div className="grid max-h-[36rem] gap-3 overflow-hidden sm:grid-cols-2">
+          {Array.from({ length: members }, (_, i) => (
+            <div key={i} className="rounded-xl border border-border p-4">
+              <div className="mb-2 flex items-center gap-2.5">
+                <Skeleton className="h-8 w-8 rounded-full" />
+                <div className="space-y-1.5">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-3 w-16" />
+                </div>
+              </div>
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="mt-1.5 h-3 w-5/6" />
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
@@ -362,7 +412,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   }
 
   if (error) return <ErrorState message={error} onRetry={refresh} />;
-  if (loading) return <SkeletonList />;
+  if (loading) return <RecordsSkeleton members={members.length} withAction={canEdit} />;
 
   return (
     <div className="space-y-5">
