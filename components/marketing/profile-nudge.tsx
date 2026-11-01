@@ -4,10 +4,15 @@
 // household → kids → interests), saving each answer to the contact profile and
 // advancing to the next. Choice questions save on tap; multi-select saves on
 // confirm. Dismissible for the session; renders nothing once complete/hidden.
+//
+// `initial` is the state the settings page read on the server for a user who
+// already owns a contact (lib/marketing/profile-state-server.ts): the card is
+// in the first paint instead of arriving above the page a moment later
+// (PERF-001). Without it the card asks getProfileStateAction, as before.
 import { useEffect, useState, useTransition } from 'react';
 import { Sparkles, X, Check, ArrowRight } from 'lucide-react';
 import {
-  nextQuestion, profileCompleteness, type KnownProfile, type ProfileQuestion,
+  nextQuestion, profileCompleteness, type KnownProfile, type ProfileQuestion, type ProfileState,
 } from '@/lib/marketing/progressive-profile';
 import {
   getProfileStateAction, saveProfileAnswerAction, skipProfileFieldAction,
@@ -15,23 +20,24 @@ import {
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
-export function ProfileNudge() {
+export function ProfileNudge({ initial = null }: { initial?: ProfileState | null }) {
   const t = useTranslations();
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(initial !== null);
   const [hidden, setHidden] = useState(false);
-  const [known, setKnown] = useState<KnownProfile>({});
-  const [skipped, setSkipped] = useState<string[]>([]);
+  const [known, setKnown] = useState<KnownProfile>(initial?.known ?? {});
+  const [skipped, setSkipped] = useState<string[]>(initial?.skipped ?? []);
   const [multi, setMulti] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
+    if (initial) return; // the page read it
     let alive = true;
     getProfileStateAction()
       .then((s) => { if (alive) { setKnown(s.known); setSkipped(s.skipped); } })
       .catch(() => { /* best-effort */ })
       .finally(() => { if (alive) setLoaded(true); });
     return () => { alive = false; };
-  }, []);
+  }, [initial]);
 
   const q = nextQuestion(known, skipped);
 

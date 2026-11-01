@@ -82,6 +82,28 @@ export const PROFILE_QUESTIONS: ProfileQuestion[] = [
 
 export type KnownProfile = Partial<Record<ProfileField, string | number | string[] | null>>;
 
+/** What the nudge works from: the answers so far and the questions dismissed. */
+export type ProfileState = { known: KnownProfile; skipped: string[] };
+
+/** The crm_contact_profile columns the nudge reads. */
+export type ProfileRow = {
+  role: string | null; top_priority: string | null; household_size: number | null;
+  child_ages: string | null; interests: string[] | null; extra: unknown;
+};
+
+/** A contact's profile row as the nudge reads it; no row yet is nothing known or skipped. */
+export function profileStateFromRow(row: ProfileRow | null | undefined): ProfileState {
+  if (!row) return { known: {}, skipped: [] };
+  const extra = (row.extra && typeof row.extra === 'object' ? row.extra : {}) as { skipped?: unknown };
+  return {
+    known: {
+      role: row.role, top_priority: row.top_priority, household_size: row.household_size,
+      child_ages: row.child_ages, interests: row.interests ?? [],
+    },
+    skipped: Array.isArray(extra.skipped) ? extra.skipped.map(String) : [],
+  };
+}
+
 /** A field counts as answered when it has a real value (non-empty). */
 export function isAnswered(value: KnownProfile[ProfileField]): boolean {
   if (value == null) return false;

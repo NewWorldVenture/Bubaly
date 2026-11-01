@@ -5,14 +5,14 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import type { Database } from '@/lib/database.types';
 import {
-  normalizeAnswer, type ProfileField, type KnownProfile,
+  normalizeAnswer, profileStateFromRow, type ProfileField, type ProfileState as State,
 } from '@/lib/marketing/progressive-profile';
 import { literalCaseInsensitivePattern } from '@/lib/supabase/escape-like';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Admin = SupabaseClient<Database>;
 
-export type ProfileState = { known: KnownProfile; skipped: string[] };
+export type ProfileState = State;
 
 const FIELDS: ProfileField[] = ['role', 'top_priority', 'household_size', 'child_ages', 'interests'];
 
@@ -89,16 +89,7 @@ async function loadState(admin: Admin, contactId: string): Promise<ProfileState>
   // `extra.skipped` built from this state, so an empty stand-in would overwrite
   // every question the person already dismissed.
   if (error || !Array.isArray(rows)) throw unanswered('profile read failed', { contactId, error });
-  const data = rows[0];
-  if (!data) return { known: {}, skipped: [] };
-  const extra = (data.extra && typeof data.extra === 'object' ? data.extra : {}) as { skipped?: unknown };
-  return {
-    known: {
-      role: data.role, top_priority: data.top_priority, household_size: data.household_size,
-      child_ages: data.child_ages, interests: data.interests ?? [],
-    },
-    skipped: Array.isArray(extra.skipped) ? extra.skipped.map(String) : [],
-  };
+  return profileStateFromRow(rows[0]);
 }
 
 /** Hydrate the progressive-profiling card: what's known + what's been skipped. */
