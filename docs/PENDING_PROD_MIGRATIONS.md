@@ -152,6 +152,7 @@ source allocations are not evidence that production applied any migration.
 | 0528 proposed, held | `0528_a_budget_drift_signal_is_a_parents_or_adults.sql` | A RESTRICTIVE SELECT and `a_budget_drift_signal_is_written_by_a_parent_or_adult()` (BEFORE INSERT, UPDATE and DELETE) on `family_signals`: a budget-drift signal is read and written only by a parent or adult. OPSD-O05; requested on #771 (comment 6422105432), not yet confirmed. |
 | 0529 proposed, held | `0529_the_households_day_is_written_by_a_parent_or_adult.sql` | `a_household_day_is_written_by_a_parent_or_adult()`, BEFORE INSERT, UPDATE and DELETE on `family_operating_index`, `reasoning_snapshots` and `workload_snapshots`: only a parent or adult writes the household's day. OPSD-O06 and COORD-O01; requested on #771 (comment 6422372306), not yet confirmed. |
 | 0530 proposed, held | `0530_a_pending_recommendation_is_a_parents_or_adults_decision.sql` | `a_recommendation_is_decided_by_a_parent_or_adult()`, BEFORE INSERT, UPDATE and DELETE on `family_ai_recommendations`: only a parent or adult files, decides or removes a recommendation. CALHUB-O3; requested on #771 (comment 6422815707), not yet confirmed. |
+| 0531 proposed, held | `0531_a_households_document_renewal_and_autopilot_insights_are_a_parents_or_adults.sql` | A RESTRICTIVE SELECT on `daily_insights`: a row of the `document`, `renewal` or `autopilot` kind is read by a parent or adult of its family, or by the member whose reading it is; every other kind is unchanged. OPSD-O08 with the reviewer's corrected policy (OPSD-O09); requested on #771 (comment 6560944423), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4924,6 +4925,64 @@ applied twice.
 
 **After approved release:** as a test guest, try to insert a `utility_bills`
 row and confirm 42501.
+
+## `0531` (proposed, held) — a child read the household's document, renewal and Autopilot insights
+
+`supabase/reserved/0531_a_households_document_renewal_and_autopilot_insights_are_a_parents_or_adults.sql`
+— **held**: requested on #771 in comment 6560944423. Not yet confirmed.
+
+**Severity: low to medium (a child, a teen, a caregiver or a guest could read
+the parents' insight of the day for a document 0266 keeps from them, an
+insurance renewal and its amount, or a manager-only Autopilot suggestion).
+Deploy order: any.** OPSD-O08 (N9-S2-AT-REST), with the reviewer's corrected
+policy, OPSD-O09. `daily_insights` (0141) keeps one row per family, day and
+kind, and `daily_insights_select` is `is_family_member(family_id)`. Since N9-S2
+the insight of the day shows a non-manager only their own reading, but the
+household's rows (`member_id` null) are a parent's or adult's reading. Measured
+on a replay of main, as a child and as a guest, each read "Mum's passport
+expires in 6 days", "Car insurance renews in 3 days" ($1,240) and "Refinance the
+mortgage", and the child dismissed the household's document insight.
+
+**Database.** A RESTRICTIVE select policy for `authenticated`, "A document,
+renewal or Autopilot insight is a manager's": `kind not in ('document',
+'renewal', 'autopilot') or can_manage_family(family_id) or (member_id is not
+null and is_self_member(member_id))`. 0141's policies are untouched, so every
+other kind, inserts and the service role are as before. An UPDATE filtered on
+the table's columns is held to the select policies too, so a non-manager no
+longer dismisses the household's row of those kinds either (a slice of
+OPSD-O07). No function or trigger. No application change: a non-manager's own
+candidate of one of those kinds is not shown once the household has that day's
+row (their `ignoreDuplicates` insert conflicts silently, and the re-read finds
+no row of that kind), the degradation the finding's body accepts.
+
+**Proof:** `.github/workflows/daily-insight-reading-runtime.yml` requires the
+held probe `docs/audit/reserved/a-households-document-renewal-and-autopilot-insights-are-a-parents-or-adults-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0531 twice and requires it to pass, then re-runs five released probes
+(an-erasure-actually-erases, family-delete-cascade,
+family-erasure-leaves-nothing, gated-write-tables, rls-sweep). The passing run
+shows, as the teen, the child, the caregiver and the guest, each of the
+household's three rows reading as none, the child's own reading hidden from
+the teen, and the child's dismissal by kind and the guest's by id changing no
+row; parents and adults reading all six rows; every member still reading the
+household's meal and conflict insights; the child reading and dismissing their
+own reading and dismissing the household's meal insight; the app's writes as
+before (a parent's upsert keeps the household's row, the child's
+`ignoreDuplicates` insert of a kind the household has changes nothing and
+raises nothing, and a kind the child starts is theirs until a parent's upsert
+makes it the household's); the server reading all six; the wiring; **N1** (the
+policy dropped): the child reads the household's document insight; **M1**
+(autopilot left out): the child reads the household's Autopilot insight. Six
+hand mutants (renewal left out, no own-reading branch, no parent-or-adult
+branch, `is_family_member` for `can_manage_family`, permissive, for `anon`)
+are each caught.
+
+All 189 released probes pass with 0531 applied, and with every held file
+applied twice.
+
+**After approved release:** as a test child, read `daily_insights` for today
+and confirm no household row of the document, renewal or autopilot kind comes
+back; as a parent, confirm Home still shows the insight of the day.
 
 ## `0530` (proposed, held) — a child decided the parents' pending recommendations
 
