@@ -23,12 +23,15 @@
 --                       and comment_count 0, and no github_* link;
 --   both                author_name is one of the caller's own names, the ones
 --                       authorNameFor() picks: a family_members.display_name of
---                       theirs (trimmed), their email's local part, or the
---                       column default 'A Bubaly family'; and never the team's;
+--                       theirs (trimmed as JavaScript's trim() trims), their
+--                       email's local part, or the column default 'A Bubaly
+--                       family'; and never the team's, however spaced or cased;
 --   feedback_ideas      and no more than the board's own limits, five ideas a
 --                       minute and twenty a day per author (CALHUB-O5, the
 --                       per-author insert throttle "alongside N3's migration":
---                       each idea opens a GitHub issue with the bot token).
+--                       each idea opens a GitHub issue with the bot token),
+--                       counted on the database's clock (created_at is stamped
+--                       now()) and one admission at a time per author.
 --
 -- The service role and session-less writers are exempt (no auth.uid()), so the
 -- admin console, the step-up team reply, the GitHub sync and the seeds write as
@@ -44,7 +47,15 @@
 -- production by an agent; recorded in docs/PENDING_PROD_MIGRATIONS.md.
 
 -- Whose name this is: the signed-in caller's own, by the rule the board's
--- authorNameFor() follows. Not callable by a client; the guards below call it.
+-- authorNameFor() follows: a display name of theirs as JavaScript's trim()
+-- leaves it, their email's local part, or the default. Trimmed as the app trims:
+-- ECMAScript's WhiteSpace and LineTerminator characters (TAB, LF, VT, FF, CR,
+-- SPACE, NBSP, U+1680, U+2000 to U+200A, U+2028, U+2029, U+202F, U+205F, U+3000
+-- and U+FEFF), not btrim's default of spaces alone, so a name stored as
+-- E'\tAda\n' or between no-break spaces is still its member's own. The team's
+-- name is refused however it is spaced or cased: trimmed the same way, with each
+-- run of those characters inside it read as one space. Not callable by a
+-- client; the guards below call it.
 create or replace function public.feedback_name_is_the_callers_own(p_name text)
 returns boolean
 language sql
@@ -52,15 +63,19 @@ stable
 security definer
 set search_path = public, pg_temp
 as $$
+  with js(ws) as (
+    select E'\t\n\u000B\f\r \u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF'
+  )
   select p_name is not null
-     and lower(btrim(p_name)) <> 'bubaly team'
+     and lower(regexp_replace(btrim(p_name, js.ws), '[' || js.ws || ']+', ' ', 'g')) <> 'bubaly team'
      and (p_name = 'A Bubaly family'
           or exists (select 1 from public.family_members m
                       where m.user_id = auth.uid()
-                        and nullif(btrim(m.display_name), '') = p_name)
+                        and nullif(btrim(m.display_name, js.ws), '') = p_name)
           or exists (select 1 from auth.users u
                       where u.id = auth.uid()
-                        and nullif(split_part(u.email, '@', 1), '') = p_name));
+                        and nullif(split_part(u.email, '@', 1), '') = p_name))
+    from js;
 $$;
 
 -- One function per table: a body that names the other table's column would not
@@ -106,7 +121,14 @@ begin
   end if;
   -- The board's own limits (app/(app)/feedback/actions.ts IDEA_BURST and
   -- IDEAS_PER_DAY): each idea opens a GitHub issue with the bot token, so a
-  -- scripted loop of direct inserts spent its allowance (CALHUB-O5).
+  -- scripted loop of direct inserts spent its allowance (CALHUB-O5). Counted on
+  -- the database's own clock, and one admission at a time per author:
+  -- created_at is the caller's to send (0197's default does not stop it), so a
+  -- backdated idea would sit outside both windows; and two inserts in flight
+  -- would each count without the other, so an author's admissions queue on one
+  -- transaction-scoped lock (PostgREST's READ COMMITTED counts again after it).
+  new.created_at := now();
+  perform pg_advisory_xact_lock(hashtextextended('feedback idea admission ' || auth.uid()::text, 0));
   if (select count(*) from public.feedback_ideas i
        where i.author_id = auth.uid() and i.created_at > now() - interval '1 minute') >= 5 then
     raise exception 'Five ideas a minute is the board''s limit; try again in a moment' using errcode = '42501';
@@ -120,11 +142,11 @@ end
 $$;
 
 comment on function public.feedback_name_is_the_callers_own(text) is
-  'Whether a feedback author_name is the signed-in caller''s own (0527): one of their family_members display names (trimmed), their email''s local part, or the default ''A Bubaly family''; never ''Bubaly Team''. Called by the 0527 guards; not granted to clients.';
+  'Whether a feedback author_name is the signed-in caller''s own (0527): one of their family_members display names (trimmed of the whitespace JavaScript''s trim() removes), their email''s local part, or the default ''A Bubaly family''; never ''Bubaly Team'', however spaced or cased. Called by the 0527 guards; not granted to clients.';
 comment on function public.a_feedback_comment_is_the_callers_own() is
   'Refuses (42501) a signed-in caller''s feedback comment that claims a team reply or another name (0527). The service role is exempt.';
 comment on function public.a_feedback_idea_starts_as_the_callers_own() is
-  'Refuses (42501) a signed-in caller''s new idea that carries a roadmap status, note, pin, counts or tracker link, or another name, or that passes the board''s limits of five a minute and twenty a day (0527). The service role is exempt.';
+  'Refuses (42501) a signed-in caller''s new idea that carries a roadmap status, note, pin, counts or tracker link, or another name, or that passes the board''s limits of five a minute and twenty a day, counted on the database''s clock (created_at is stamped now()) one admission at a time per author (0527). The service role is exempt.';
 
 revoke all on function public.feedback_name_is_the_callers_own(text) from public, anon, authenticated;
 revoke all on function public.a_feedback_comment_is_the_callers_own() from public, anon;

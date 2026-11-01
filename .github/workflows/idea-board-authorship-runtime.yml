@@ -4,9 +4,13 @@ name: Idea Board authorship SQL runtime
 # caller's own: a BEFORE INSERT guard on feedback_comments and feedback_ideas
 # refuses a signed-in caller's team reply, an idea that arrives with a roadmap
 # status, note, pin, counts or tracker link, a post signed with anyone's name
-# but theirs, and ideas past the board's limits of five a minute and twenty a
-# day. 0197's insert policies checked only author_id, and the board
-# is shown to every family. Neither the Database job's replay nor
+# but theirs (a display name trimmed as JavaScript's trim() trims, never the
+# team's however it is spaced), and ideas past the board's limits of five a
+# minute and twenty a day, counted on the database's clock one admission at a
+# time per author. 0197's insert policies checked only author_id, and the board
+# is shown to every family. The probe sends one insert from a second session
+# (dblink, from the runner's PostgreSQL 16) to show an admission in flight
+# holds the next. Neither the Database job's replay nor
 # `supabase db push` reads supabase/reserved/, and the Database job's probe
 # glob does not read docs/audit/reserved/, so nothing else in CI exercises it.
 # This job replays every runnable migration with the Database job's bootstrap,
@@ -137,6 +141,13 @@ jobs:
             "Ada commented under another person's name (OK 1)" \
             "Ada posted a sixth idea within a minute (OK 1)" \
             "Ada posted a twenty-first idea within a day (OK 1)" \
+            "Ada posted a sixth idea within a minute, backdating each (OK 1)" \
+            "Ada posted a twenty-first idea within a day, backdating her last five (OK 1)" \
+            "Ada's idea kept the created_at she gave it" \
+            "a second insert of Ada's went ahead while her first was in flight" \
+            "Eve commented under her display name as stored" \
+            "Fay commented as \"Bubaly<NBSP>Team\", her own display name (OK 1)" \
+            "Gil commented as E'\tBubaly Team\n', the local part of Gil's email (OK 1)" \
             "0527's guard is not in place on feedback_comments, feedback_ideas"; do
             if ! grep -qF "$expected" <<<"$out"; then
               echo "::error::the held probe failed, but not on: $expected"

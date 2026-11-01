@@ -26,12 +26,31 @@ describe('a post on the Idea Board is the caller\'s own (0527)', () => {
     // the email's local part, the default.
     expect(actions).toContain("const name = ctx.active.member?.display_name?.trim();");
     expect(actions).toContain("return email ? email.split('@')[0] : 'A Bubaly family';");
-    expect(name).toContain("nullif(btrim(m.display_name), '') = p_name");
+    expect(name).toContain("nullif(btrim(m.display_name, js.ws), '') = p_name");
     expect(name).toContain("nullif(split_part(u.email, '@', 1), '') = p_name");
     expect(name).toContain("p_name = 'A Bubaly family'");
-    expect(name).toContain("and lower(btrim(p_name)) <> 'bubaly team'");
+    // The team's name however it is spaced or cased: trimmed the same way, each
+    // run of that whitespace inside it read as one space.
+    expect(name).toContain("and lower(regexp_replace(btrim(p_name, js.ws), '[' || js.ws || ']+', ' ', 'g')) <> 'bubaly team'");
     expect(name).toContain('where m.user_id = auth.uid()');
     expect(sql).toContain('revoke all on function public.feedback_name_is_the_callers_own(text) from public, anon, authenticated;');
+  });
+
+  it('trims exactly what JavaScript\'s trim() trims, not btrim()\'s spaces alone', () => {
+    // A display name stored as E'\tAda\n' is signed "Ada" by authorNameFor().
+    const literal = /with js\(ws\) as \(\n\s+select E'([^']*)'\n/.exec(name)?.[1];
+    expect(literal, 'the whitespace set').toBeDefined();
+    const named: Record<string, string> = { t: '\t', n: '\n', f: '\f', r: '\r' };
+    const decoded = literal!.replace(/\\u([0-9A-Fa-f]{4})|\\([tnfr])/g,
+      (_m, hex?: string, c?: string) => (hex ? String.fromCharCode(parseInt(hex, 16)) : named[c!]));
+    expect(decoded).not.toContain('\\');
+    const sqlSet = [...decoded].map((ch) => ch.codePointAt(0)!).sort((a, b) => a - b);
+    const jsSet: number[] = [];
+    for (let cp = 0; cp <= 0x10ffff; cp++) {
+      if (cp >= 0xd800 && cp <= 0xdfff) continue;
+      if (String.fromCodePoint(cp).trim() === '') jsSet.push(cp);
+    }
+    expect(sqlSet).toEqual(jsSet);
   });
 
   it('a signed-in caller posts no team reply and signs with their own name; the service role is exempt', () => {
@@ -57,6 +76,12 @@ describe('a post on the Idea Board is the caller\'s own (0527)', () => {
     expect(actions).toContain('const IDEAS_PER_DAY = 20;');
     expect(idea).toContain("where i.author_id = auth.uid() and i.created_at > now() - interval '1 minute') >= 5 then");
     expect(idea).toContain("where i.author_id = auth.uid() and i.created_at > now() - interval '1 day') >= 20 then");
+    // On the database's clock, one admission at a time per author: the caller
+    // sends created_at (0197's default does not stop it), and two inserts in
+    // flight would each count without the other.
+    expect(at(idea, 'new.created_at := now();')).toBeLessThan(at(idea, "interval '1 minute'"));
+    expect(at(idea, "perform pg_advisory_xact_lock(hashtextextended('feedback idea admission ' || auth.uid()::text, 0));"))
+      .toBeLessThan(at(idea, "interval '1 minute'"));
   });
 
   it('INSERT only: the counters and the admin console\'s updates are untouched', () => {
@@ -82,6 +107,19 @@ describe('the probe and its workflow', () => {
     expect(probe).toContain('-- M1. The name check answers yes to any name.');
     expect(probe).toContain("('posted a sixth idea within a minute', 5, interval '30 seconds', 'minute'),");
     expect(probe).toContain("('posted a twenty-first idea within a day', 20, interval '2 hours', 'day'),");
+    // The review on #1126: names wrapped in what JavaScript's trim() trims, the
+    // team's name however it is spaced, the caller's own created_at, and a
+    // second insert in flight.
+    expect(probe).toContain("E'\\tCleo\\n', 'adult', true),");
+    expect(probe).toContain("E'\\u00A0Dee\\u2003', 'teen', true),");
+    expect(probe).toContain("E'\\tBubaly Team\\n', 'adult', true),");
+    expect(probe).toContain("E'Bubaly\\u00A0Team', 'adult', true);");
+    expect(probe).toContain("('00000000-0000-4000-8527-0000000000a7',E'\\tBubaly Team\\n@example.com')");
+    expect(probe).toContain("('posted a sixth idea within a minute, backdating each', 0, 5, 'minute'),");
+    expect(probe).toContain("('posted a twenty-first idea within a day, backdating her last five', 16, 4, 'day')) v(what, earlier, own, want) loop");
+    expect(probe).toContain("elsif stamped is distinct from now() then");
+    expect(probe).toContain("perform dblink_send_query('c0527_other', format($q$");
+    expect(probe).toContain("perform set_config('lock_timeout', '20s', true);");
   });
 
   it('the workflow shows the failure, applies 0527 twice, and re-runs the released probes', () => {
@@ -90,6 +128,15 @@ describe('the probe and its workflow', () => {
     expect(wf.split(`psql -X -v ON_ERROR_STOP=1 -q -f ${M}\n`)).toHaveLength(3);
     expect(wf).toContain("grep -qE 'CONTROL|PRECONDITION'");
     expect(wf).toContain("grep -qF 'a-post-on-the-idea-board-is-the-callers-own: OK'");
+    for (const line of [
+      '"Ada posted a sixth idea within a minute, backdating each (OK 1)"',
+      '"Ada posted a twenty-first idea within a day, backdating her last five (OK 1)"',
+      '"Ada\'s idea kept the created_at she gave it"',
+      '"a second insert of Ada\'s went ahead while her first was in flight"',
+      '"Eve commented under her display name as stored"',
+      '"Fay commented as \\"Bubaly<NBSP>Team\\", her own display name (OK 1)"',
+      '"Gil commented as E\'\\tBubaly Team\\n\', the local part of Gil\'s email (OK 1)"',
+    ]) expect(wf, line).toContain(line);
     for (const probe of ['definer-functions-check-their-caller', 'privileged-rpc-grants', 'family-erasure-leaves-nothing', 'plpgsql-bodies-resolve']) {
       expect(wf, probe).toContain(`docs/audit/${probe}-check.sql`);
     }

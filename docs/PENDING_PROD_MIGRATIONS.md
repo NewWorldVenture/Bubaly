@@ -148,7 +148,7 @@ source allocations are not evidence that production applied any migration.
 | 0524 proposed, held | `0524_a_guest_adds_nothing_to_the_areas_withheld_from_them.sql` | 0464's guest guard on `auto_insurance_policies`, `driving_trips`, `family_communications`, `home_locations`, `utility_bills`, `vacation_medical_information`, `wallet_cards`, `wallet_passes` and `wallet_rewards`. Follows ROLE-M03 and ROLE-SCOPE-001; requested on #771 (comment 6402627160), not yet confirmed. |
 | 0525 proposed, held | `0525_a_closed_vote_takes_no_more_ballots.sql` | `a_meal_ballot_is_cast_while_its_vote_is_open()` and `a_poll_vote_is_cast_while_its_poll_is_open()`, BEFORE INSERT OR UPDATE on `meal_vote_ballots` and `family_poll_votes`: a ballot is cast or changed only while its vote is open, read in the row's family FOR SHARE. Support's database half of 6137789822; requested on #771 (comment 6402862474), not yet confirmed. |
 | 0526 proposed, held | `0526_what_the_library_streams_is_added_by_a_parent_or_adult.sql` | `a_library_feed_is_added_by_a_parent_or_adult()` and `a_library_items_audio_is_added_by_a_parent_or_adult()`, BEFORE INSERT OR UPDATE on `library_feeds` and `library_items`: only a parent or adult adds or changes a subscription's `feed_url` or family, or an item's `media_url`, `feed_id` or family; `created_by` names the writer. KIDS-O02; requested on #771 (comment 6420549131), not yet confirmed. |
-| 0527 proposed, held | `0527_a_post_on_the_idea_board_is_the_callers_own.sql` | `a_feedback_comment_is_the_callers_own()` and `a_feedback_idea_starts_as_the_callers_own()`, BEFORE INSERT on `feedback_comments` and `feedback_ideas`: a signed-in caller posts no team reply, a new idea starts under review with no note, pin, counts or tracker link, and `author_name` is the caller's own. CALHUB-O1; requested on #771 (comment 6421813855), not yet confirmed. |
+| 0527 proposed, held | `0527_a_post_on_the_idea_board_is_the_callers_own.sql` | `a_feedback_comment_is_the_callers_own()` and `a_feedback_idea_starts_as_the_callers_own()`, BEFORE INSERT on `feedback_comments` and `feedback_ideas`: a signed-in caller posts no team reply, a new idea starts under review with no note, pin, counts or tracker link, `author_name` is the caller's own, and an author files no more than five ideas a minute or twenty a day on the database's clock. CALHUB-O1 and CALHUB-O5; requested on #771 (comment 6421813855), not yet confirmed. |
 | 0528 proposed, held | `0528_a_budget_drift_signal_is_a_parents_or_adults.sql` | A RESTRICTIVE SELECT and `a_budget_drift_signal_is_written_by_a_parent_or_adult()` (BEFORE INSERT, UPDATE and DELETE) on `family_signals`: a budget-drift signal is read and written only by a parent or adult. OPSD-O05; requested on #771 (comment 6422105432), not yet confirmed. |
 | 0529 proposed, held | `0529_the_households_day_is_written_by_a_parent_or_adult.sql` | `a_household_day_is_written_by_a_parent_or_adult()`, BEFORE INSERT, UPDATE and DELETE on `family_operating_index`, `reasoning_snapshots` and `workload_snapshots`: only a parent or adult writes the household's day. OPSD-O06 and COORD-O01; requested on #771 (comment 6422372306), not yet confirmed. |
 
@@ -5060,12 +5060,19 @@ caller, `is_team` is false; a new idea's `status` is `under_review`, its
 `admin_note` null, `pinned` false, `vote_count` and `comment_count` 0 and its
 four `github_*` columns null; and `author_name` is one of the caller's own
 names by `authorNameFor()`'s rule (a `family_members.display_name` of theirs,
-trimmed; their email's local part; or the default `A Bubaly family`), checked
-by `feedback_name_is_the_callers_own(text)`, which no client may call, and
-never the team's name; and an author posts no more ideas than the board's own
-limits, five a minute and twenty a day (CALHUB-O5: each idea opens a GitHub
-issue with the bot token, so a scripted loop of direct inserts spent its
-allowance). The service role is exempt, so the admin console, the step-up team
+trimmed as JavaScript's `trim()` trims: TAB, LF, VT, FF, CR, space, NBSP and
+the other Unicode spaces and line separators, not `btrim()`'s spaces alone;
+their email's local part; or the default `A Bubaly family`), checked by
+`feedback_name_is_the_callers_own(text)`, which no client may call, and never
+the team's name, however it is spaced or cased (trimmed the same way, each run
+of that whitespace inside it read as one space); and an author posts no more
+ideas than the board's own limits, five a minute and twenty a day (CALHUB-O5:
+each idea opens a GitHub issue with the bot token, so a scripted loop of direct
+inserts spent its allowance), counted on the database's clock (the guard stamps
+`created_at` with `now()`, so a caller's backdated idea still counts) and one
+admission at a time per author (a transaction-scoped advisory lock on the
+author, so a second insert in flight waits and then counts the first). The
+service role is exempt, so the admin console, the step-up team
 reply, the GitHub sync and the seeds write as before. INSERT only:
 there is no client UPDATE or DELETE policy, and the counters move through
 0197's SECURITY DEFINER triggers. No application change.
@@ -5080,14 +5087,27 @@ rls-sweep). The passing run shows each forged column, a team reply, and posts
 signed as the team or as another person refused, the team's name refused even
 where the caller named herself that in another household; a sixth idea within a
 minute and a twenty-first within a day refused, one under each limit and one
-after thirty the day before landing; the caller still
-posting as her trimmed display name, her email's local part and the default; a
-user in no household commenting as himself; a vote moving the count; the
+after thirty the day before landing; the same two refused when the caller
+herself backdates each idea's `created_at`, and her idea stamped with the
+database's time; a second insert of hers, sent from another session while her
+first is in flight, waiting for it; the team's name refused however it is
+spaced, as a display name stored between a tab and a newline, trimmed, with a
+no-break space for its space, and as an email's local part between a tab and a
+newline; the caller still posting as her trimmed display name, her email's
+local part and the default, and two members whose display names are wrapped in
+a tab and a newline and in a no-break space and an em space posting under them
+as JavaScript's `trim()` leaves them; a user in no household commenting as
+himself; a vote moving the count; the
 server posting a team reply and shipping an idea; the wiring; **N1** (guards
 disabled): the team reply and the shipped idea land; **M1** (the name check
-answering yes): a comment signed as another person lands. Six hand mutants
-(no team-name clause, untrimmed display name, no email branch, one `github_*`
-column dropped, each limit one higher) are each caught.
+answering yes): a comment signed as another person lands. Thirteen hand
+mutants are each caught: no team-name clause, untrimmed display name, no email
+branch, one `github_*` column dropped, each limit one higher; and, after the
+review on #1126 (comment 6423282757), the display name trimmed with
+`btrim()`'s default, the team's name trimmed with it, no inner-whitespace
+collapse, no case folding, NBSP dropped from the whitespace set, `created_at`
+not stamped, and no admission lock. The probe also fails on the PR's earlier
+head, 53e9f3217, on both of that review's findings.
 
 All 189 released probes pass with 0527 applied, and with every held file
 applied twice.
