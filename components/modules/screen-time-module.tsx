@@ -103,6 +103,12 @@ export function ScreenTimeModule() {
         : await supabase.from('screen_time_entries').insert({ ...row, family_id: familyId, logged_by: userId }).select('id');
       if (error) return toastError(describeDbError(error));
       if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
+      // screen_time_entries and screen_time_limits are in no realtime
+      // publication: nothing tells this page about its own writes, so each
+      // confirmed one re-reads what it changed. Without it the logged time
+      // never appeared, the child's "today" stayed where it was, and the
+      // natural second try logged the same time twice.
+      void refreshEntries();
       success(form.id ? 'Updated' : 'Logged');
       setForm(null);
     } finally {
@@ -115,7 +121,7 @@ export function ScreenTimeModule() {
     const { data, error } = await createClient().from('screen_time_entries').delete().eq('id', id).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error));
     else if (!data?.length) toastError(t('errors.thatChangeWasNotSaved'));
-    else success(t('screenTimeModule.deleted'));
+    else { void refreshEntries(); success(t('screenTimeModule.deleted')); }
   }
 
   async function saveLimit(e: React.FormEvent) {
@@ -136,6 +142,7 @@ export function ScreenTimeModule() {
         .from('screen_time_limits')
         .upsert({ family_id: familyId, member_id: limitFor.memberId, daily_minutes: minutes, created_by: userId }, { onConflict: 'family_id,member_id' });
       if (error) return toastError(describeDbError(error));
+      void refreshLimits();
       success(t('screenTimeModule.dailyLimitSaved'));
       setLimitFor(null);
     } finally {

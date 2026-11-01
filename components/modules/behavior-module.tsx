@@ -134,6 +134,10 @@ function BehaviorLog() {
         : await supabase.from('behavior_logs').insert({ ...row, family_id: familyId, logged_by: userId }).select('id');
       if (error) return toastError(describeDbError(error));
       if (wroteNoRows(data)) return toastError(tr('errors.thatChangeWasNotSaved'));
+      // behavior_logs is in no realtime publication: nothing tells this page
+      // about its own writes, so each confirmed one re-reads the log. Without
+      // it a logged note never appeared and a deleted one stayed on screen.
+      void refresh();
       success(form.id ? tr('behaviorModule.noteUpdated') : tr('behaviorModule.noteLogged'));
       setForm(null);
     } finally {
@@ -150,7 +154,7 @@ function BehaviorLog() {
     const { data, error } = await createClient().from('behavior_logs').delete().eq('id', id).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(data)) toastError(tr('errors.thatChangeWasNotSaved'));
-    else success(tr('behaviorModule.deleted'));
+    else { void refresh(); success(tr('behaviorModule.deleted')); }
   }
 
   async function getInsight() {
