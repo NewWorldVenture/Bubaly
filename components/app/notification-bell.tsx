@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { IntentLink } from '@/components/ui/intent-link';
 import { Bell } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
@@ -58,7 +58,7 @@ export function NotificationBell() {
   }, [familyId, userId]);
 
   return (
-    <Link
+    <IntentLink
       href="/dashboard/notifications"
       className="relative inline-flex h-10 w-10 items-center justify-center rounded-full glass hover:bg-elevated focus-ring"
       aria-label={bellLabel(count)}
@@ -70,6 +70,6 @@ export function NotificationBell() {
           {badgeCount(count)}
         </span>
       )}
-    </Link>
+    </IntentLink>
   );
 }
