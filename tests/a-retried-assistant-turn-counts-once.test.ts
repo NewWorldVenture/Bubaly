@@ -268,8 +268,14 @@ beforeEach(() => {
   state.withTool = false;
   state.breakStream = false;
   vi.spyOn(console, 'error').mockImplementation(() => {});
+  // The rows are stamped by tick() from 2 October 2026, and the allowance counts
+  // the requests of the current UTC month: the month is the rows' month, not
+  // whichever one the suite runs in. Unpinned, 10 of 10 read as 0 of 10 from
+  // 1 November 2026 on, and the eleventh send went through.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(clock);
 });
-afterEach(() => { vi.restoreAllMocks(); });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 // Both routes' module graphs are loaded once, outside any one test's timeout: a
 // cold transform of /api/ai took most of the first test's 20 s on its own, and a
