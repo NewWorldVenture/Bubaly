@@ -70,6 +70,18 @@ describe.each(['medical', 'dental'] as const)('%s required read recovery', kind 
     q.loading[table] = true; const tree = screen();
     expect(skeletons(tree).length).toBeGreaterThan(0); expect(text(tree)).not.toContain('Insurance Cards'); expect(q.refreshes).toEqual([]);
   });
+  // PERF-001: the stand-in was a three-card list, and the sections arriving
+  // pushed the visit history below the module off the screen (CLS 0.24 at
+  // 1280x800, 0.40 on a phone). It is the module's own frame now, two
+  // sections the size of their empty states and a card per member, so the
+  // records arrive into the room they take.
+  it('draws its own frame while a read is pending: three sections, the last a card per member', () => {
+    q.loading.medical_profiles = true; const tree = screen();
+    const sections = nodes(tree).filter(n => n.type === 'section');
+    expect(sections).toHaveLength(3);
+    expect(nodes(sections[2]).filter(n => String(n.props.className) === 'rounded-xl border border-border p-4')).toHaveLength(h.app.members.length);
+    expect(text(tree)).not.toContain('No insurance on file');
+  });
   it('preserves populated authorized cached first paint without signing or uploading', () => {
     tables.forEach(t => { q.stale[t] = true; });
     q.rows.health_providers = [{ id: 'provider', family_id: 'synthetic-family', member_id: own.id, kind, name: 'Synthetic cached provider', is_primary: false }];
