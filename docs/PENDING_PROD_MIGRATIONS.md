@@ -155,6 +155,7 @@ source allocations are not evidence that production applied any migration.
 | 0531 proposed, held | `0531_a_households_document_renewal_and_autopilot_insights_are_a_parents_or_adults.sql` | A RESTRICTIVE SELECT on `daily_insights`: a row of the `document`, `renewal` or `autopilot` kind is read by a parent or adult of its family, or by the member whose reading it is; every other kind is unchanged. OPSD-O08 with the reviewer's corrected policy (OPSD-O09); requested on #771 (comment 6560944423), not yet confirmed. |
 | 0532 proposed, held | `0532_one_emergency_at_a_time_per_household.sql` | `one_emergency_at_a_time()`, BEFORE INSERT and UPDATE on `emergency_sessions`: a write that would open a second live session in a household is refused (23505), and a household's activations queue on one advisory lock. OPSD-O03; requested on #771 (comment 6561084910), not yet confirmed. |
 | 0533 proposed, held | `0533_invites_are_read_by_their_managers.sql` | `invites_select` becomes `can_manage_family(family_id)` or the invitee's own email (the register's owner action): only a household's managers, and the person invited, read an invite and its token. COVER-O1 and DB-TBL-194's read matrix; requested on #771 (comment 6561178776), not yet confirmed. |
+| 0534 proposed, held | `0534_telemetry_is_dated_by_the_server_and_written_by_its_signed_in_writer.sql` | `telemetry_row_is_stamped_by_the_server()` stamps `id` and `created_at` on `onboarding_events`, `activation_events` and `journey_events` for any role that does not bypass RLS; anon loses its writes to the first two; their insert policies name the signed-in writer (TEL-O1); `onboarding_events_per_account_limit()` caps an account at 200 rows a day (TEL-O8). TEL-O1, TEL-O10 and TEL-O8's limit as one file; requested on #771 (comment 6561275883), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4927,6 +4928,78 @@ applied twice.
 
 **After approved release:** as a test guest, try to insert a `utility_bills`
 row and confirm 42501.
+
+## `0534` (proposed, held) — telemetry took any date, user, step and family its writer sent
+
+`supabase/reserved/0534_telemetry_is_dated_by_the_server_and_written_by_its_signed_in_writer.sql`
+— **held**: requested on #771 in comment 6561275883. Not yet confirmed.
+
+**Severity: low to medium (the funnel, the TTFV clock and /dashboard/journeys
+count what a writer sent: a member could backdate their own household's
+milestone, forge `ms_since_signup`, file rows for a household they are not in,
+or date journey rows in the future so they stay in every window). Deploy
+order: any.** TEL-O1 (N1, N2, N4, N16), TEL-O10 (N17, corrected) and the limit
+half of TEL-O8, as one file: applied as the register writes them, TEL-O1 and
+TEL-O10 define `telemetry_row_is_stamped_by_the_server()` twice, with
+different bodies and under two sets of trigger names, which would leave two
+stamping triggers on a table each calling whichever body was created last.
+Measured on a replay of main, each landing as sent: anon filed an onboarding
+row and an activation row; a signed-in user filed an onboarding row with no
+user dated 2020, one with a step the wizard has not got and a `meta`, an
+activation for a household they are not in with `session_index` 9,
+`ms_since_signup` -5 and a 2020 date, and a journey row dated 2099.
+
+**Database.** `telemetry_row_is_stamped_by_the_server()` (SECURITY INVOKER, as
+the register writes it) sets `id` and `created_at` for any role that does not
+bypass row-level security, so the service role and the seeds keep theirs; one
+`<table>_stamped_by_the_server` BEFORE INSERT trigger on each of the three
+tables, and TEL-O10's `<table>_created_at_is_the_servers` is dropped if it is
+there. anon loses insert, update, delete and truncate on `onboarding_events`
+and `activation_events`. `onboarding_events_insert` and
+`activation_events_insert` become TEL-O1's, for `authenticated`: the writer's
+own `user_id`, one of the wizard's seven steps, no `meta`, a duration within a
+week; and the household the writer is in, `session_id = family_id`,
+`session_index` 1 to 3, no negative clock, no `meta`.
+`onboarding_events_per_account_limit()` (TEL-O8) refuses an account's 201st
+onboarding row within a day, with its `(user_id, created_at)` index. Not
+TEL-O8's second, restrictive insert policy: its one-day duration bound would
+refuse a wizard left open overnight, and TEL-O1's policy already names the
+writer. Reads are unchanged. No application change: the wizard, both
+activation writers and `useJourney` already send what this allows, and a row
+with no user is never counted.
+
+**Proof:** `.github/workflows/telemetry-writer-runtime.yml` requires the held
+probe `docs/audit/reserved/telemetry-is-dated-by-the-server-check.sql` to fail
+on the released schema on the defect, with no control failing, then applies
+0534 twice and requires it to pass, then re-runs eight released probes
+(an-erasure-actually-erases, definer-functions-check-their-caller,
+family-delete-cascade, family-erasure-leaves-nothing, family-scoped-index,
+plpgsql-bodies-resolve, privileged-rpc-grants, rls-sweep). The passing run
+shows anon's two rows and each of the fourteen out-of-bounds rows refused,
+the 201st onboarding row in a day refused, and onboarding and activation rows
+sent as 2020 and a journey row sent as 2099 stored with `now()`, the
+onboarding row under a new id; the wizard's row, both activation writers'
+rows (one read back) and `useJourney`'s row landing; the 200th row in a day
+landing beside another account's 200; the server keeping its own date; the
+wiring; **N1** (the stamp disabled): a 2020 activation row keeps its date;
+**M1** (the step list taken out): a made-up step lands. Eleven hand mutants
+are each caught (no journey stamp, stamping anon only, no `meta` clause, no
+duration bound, any family, any session, any `session_index`, a negative
+clock, no limit, the limit one higher, the client's `id` kept). Counting every
+account in the limit is not a mutant: the function runs as the writer, whose
+reads 0133 already confines to their own rows.
+
+All 189 released probes pass with 0534 applied, and with every held file
+applied twice.
+
+**After approved release:** sign up a test account and finish the wizard,
+then confirm its `onboarding_events` rows carry the server's time; open
+Outcomes in a test household and confirm its activation row lands; try an
+anon insert into `onboarding_events` and confirm it is refused. Optional
+owner step, not in the migration (it deletes production rows): `delete from
+public.onboarding_events where created_at < '2000-01-01' or created_at > now()
++ interval '1 day';` and the same for `activation_events` and
+`journey_events`.
 
 ## `0533` (proposed, held) — any member read every invite and its token
 
