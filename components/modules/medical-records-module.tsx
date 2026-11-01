@@ -120,7 +120,7 @@ function RecordsSkeleton({ members, withAction }: { members: number; withAction:
       ))}
       <section className="rounded-2xl border border-border bg-surface/40 p-5">
         <Skeleton className="mb-4 h-6 w-40" />
-        <div className="grid max-h-[36rem] gap-3 overflow-hidden sm:grid-cols-2">
+        <div className="grid max-h-[36rem] grid-cols-1 gap-3 overflow-hidden sm:grid-cols-2">
           {Array.from({ length: members }, (_, i) => (
             <div key={i} className="rounded-xl border border-border p-4">
               <div className="mb-2 flex items-center gap-2.5">
