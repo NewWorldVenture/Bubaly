@@ -154,6 +154,7 @@ source allocations are not evidence that production applied any migration.
 | 0530 proposed, held | `0530_a_pending_recommendation_is_a_parents_or_adults_decision.sql` | `a_recommendation_is_decided_by_a_parent_or_adult()`, BEFORE INSERT, UPDATE and DELETE on `family_ai_recommendations`: only a parent or adult files, decides or removes a recommendation. CALHUB-O3; requested on #771 (comment 6422815707), not yet confirmed. |
 | 0531 proposed, held | `0531_a_households_document_renewal_and_autopilot_insights_are_a_parents_or_adults.sql` | A RESTRICTIVE SELECT on `daily_insights`: a row of the `document`, `renewal` or `autopilot` kind is read by a parent or adult of its family, or by the member whose reading it is; every other kind is unchanged. OPSD-O08 with the reviewer's corrected policy (OPSD-O09); requested on #771 (comment 6560944423), not yet confirmed. |
 | 0532 proposed, held | `0532_one_emergency_at_a_time_per_household.sql` | `one_emergency_at_a_time()`, BEFORE INSERT and UPDATE on `emergency_sessions`: a write that would open a second live session in a household is refused (23505), and a household's activations queue on one advisory lock. OPSD-O03; requested on #771 (comment 6561084910), not yet confirmed. |
+| 0533 proposed, held | `0533_invites_are_read_by_their_managers.sql` | `invites_select` becomes `can_manage_family(family_id)` or the invitee's own email (the register's owner action): only a household's managers, and the person invited, read an invite and its token. COVER-O1 and DB-TBL-194's read matrix; requested on #771 (comment 6561178776), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4926,6 +4927,59 @@ applied twice.
 
 **After approved release:** as a test guest, try to insert a `utility_bills`
 row and confirm 42501.
+
+## `0533` (proposed, held) — any member read every invite and its token
+
+`supabase/reserved/0533_invites_are_read_by_their_managers.sql`
+— **held**: requested on #771 in comment 6561178776. Not yet confirmed.
+
+**Severity: low (both verifiers: the invitee's email and the household's
+invite roster, not an account takeover, since `accept_invite` pins the JWT
+email and the re-mail route refuses non-managers). Deploy order: any.**
+COVER-O1 (N9), with the per-role read matrix DB-TBL-194 leaves as Remaining.
+`invites_select` (0004, recreated by 0118) is `is_family_member(family_id)` or
+the invitee's own email. Measured on a replay of main, as a teen, a child, a
+caregiver and a guest: each read the household's invite to Nana and its
+invite to Olive, each with its bearer `token`. The app shows the list to
+managers only, and every user-client reader is a manager's: Home's referral
+count, `PendingInvites`, `/api/email/invite` and the invite form's
+insert-and-return; the join, onboarding, member-invite and admin paths read
+through the service client.
+
+**Database.** Exactly the register's owner action: `drop policy if exists
+invites_select on public.invites; create policy invites_select on
+public.invites for select using (public.can_manage_family(family_id) or
+lower(email) = lower(coalesce(auth.jwt()->>'email','')));`, with a self-check
+that the policy has that qual and is the only permissive read on `invites`.
+The invitee-email arm keeps the join preview working; `invites_insert`,
+`invites_update` and `invites_delete` are untouched. No application change.
+
+**Proof:** `.github/workflows/invite-reading-runtime.yml` requires the held
+probe `docs/audit/reserved/invites-are-read-by-their-managers-check.sql` to
+fail on the released schema on the defect, with no control failing, then
+applies 0533 twice and requires it to pass, then re-runs eight released probes
+(a-parent-is-made-unmade-and-invited-only-by-a-parent,
+an-erasure-actually-erases, family-delete-cascade,
+family-erasure-leaves-nothing, invite-cannot-rewrite-what-it-grants,
+invite-role-escalation, invite-terms-boundary, rls-sweep). The passing run
+records the per-role read matrix: the teen, the child, the caregiver and the
+guest each read neither Nana's nor Olive's invite; the parent and the adult
+read all three of the household's invites and none of another household's;
+the teen reads only the invite to their own address (matched
+case-insensitively); Olive, in no household, reads hers and no other (the join
+preview); Ned, invited nowhere, reads none; the server reads all four; the
+parent files an invite and reads it back, and revokes one; the wiring; **N1**
+(back to `is_family_member`): the child reads Nana's invite; **M1** (the
+invitee's arm dropped): Olive reads none. Four hand mutants (any member, the
+email matched case-sensitively, no invitee arm, parents only) are each caught.
+
+All 189 released probes pass with 0533 applied, and with every held file
+applied twice.
+
+**After approved release:** as a test child, select from `invites` for your
+household and confirm no rows; as a parent, open Settings and confirm the
+pending invites still list; open a join link while signed in as the invitee
+and confirm the preview shows.
 
 ## `0532` (proposed, held) — two managers could open two emergencies at once
 
