@@ -127,11 +127,11 @@ describe('SQL runtime workflow filters cover the bootstrap they execute', () => 
     expect(inputs).toEqual(['supabase/SEED_ALL.sql', 'supabase/migrations/*.sql']);
   });
 
-  it('finds all 36 filtered callers and both events, plus unfiltered main CI', () => {
-    expect(callers).toHaveLength(37);
+  it('finds all 37 filtered callers and both events, plus unfiltered main CI', () => {
+    expect(callers).toHaveLength(38);
     expect(callers.map(({ file }) => file)).toContain('ci.yml');
-    expect(new Set(filteredEvents.map(({ file }) => file)).size).toBe(36);
-    expect(filteredEvents).toHaveLength(72);
+    expect(new Set(filteredEvents.map(({ file }) => file)).size).toBe(37);
+    expect(filteredEvents).toHaveLength(74);
     for (const { file } of callers.filter(({ file }) => file !== 'ci.yml')) {
       expect(filteredEvents.filter((entry) => entry.file === file).map(({ event }) => event).sort())
         .toEqual(['pull_request', 'push']);

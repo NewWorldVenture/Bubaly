@@ -153,6 +153,7 @@ source allocations are not evidence that production applied any migration.
 | 0529 proposed, held | `0529_the_households_day_is_written_by_a_parent_or_adult.sql` | `a_household_day_is_written_by_a_parent_or_adult()`, BEFORE INSERT, UPDATE and DELETE on `family_operating_index`, `reasoning_snapshots` and `workload_snapshots`: only a parent or adult writes the household's day. OPSD-O06 and COORD-O01; requested on #771 (comment 6422372306), not yet confirmed. |
 | 0530 proposed, held | `0530_a_pending_recommendation_is_a_parents_or_adults_decision.sql` | `a_recommendation_is_decided_by_a_parent_or_adult()`, BEFORE INSERT, UPDATE and DELETE on `family_ai_recommendations`: only a parent or adult files, decides or removes a recommendation. CALHUB-O3; requested on #771 (comment 6422815707), not yet confirmed. |
 | 0531 proposed, held | `0531_a_households_document_renewal_and_autopilot_insights_are_a_parents_or_adults.sql` | A RESTRICTIVE SELECT on `daily_insights`: a row of the `document`, `renewal` or `autopilot` kind is read by a parent or adult of its family, or by the member whose reading it is; every other kind is unchanged. OPSD-O08 with the reviewer's corrected policy (OPSD-O09); requested on #771 (comment 6560944423), not yet confirmed. |
+| 0532 proposed, held | `0532_one_emergency_at_a_time_per_household.sql` | `one_emergency_at_a_time()`, BEFORE INSERT and UPDATE on `emergency_sessions`: a write that would open a second live session in a household is refused (23505), and a household's activations queue on one advisory lock. OPSD-O03; requested on #771 (comment 6561084910), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4925,6 +4926,64 @@ applied twice.
 
 **After approved release:** as a test guest, try to insert a `utility_bills`
 row and confirm 42501.
+
+## `0532` (proposed, held) — two managers could open two emergencies at once
+
+`supabase/reserved/0532_one_emergency_at_a_time_per_household.sql`
+— **held**: requested on #771 in comment 6561084910. Not yet confirmed.
+
+**Severity: low to medium (two live emergency sessions elevate the union of
+their domains while the console names one; emergency elevation outranks every
+deny, policy and risk tier). Deploy order: any.** OPSD-O03 (N10).
+`activateEmergencyAction` keeps one emergency at a time with a read and then an
+insert, and `emergency_sessions` (0093, 0260) carries no rule of its own.
+Measured on a replay of main, `OK 1` each beside a parent's open emergency: an
+adult's second activation, an adult reopening yesterday's ended emergency by
+PATCHing `ended_at` back to null, and the service role opening a second; and an
+adult's activation sent from another session while the parent's was still in
+flight went straight through.
+
+**Database.** `one_emergency_at_a_time()`, SECURITY DEFINER with a pinned
+search_path, BEFORE INSERT and UPDATE: when the new row is open (`ended_at`
+null, `expires_at` after `now()`) and the old row was not the same open
+session, the household's activations queue on one transaction-scoped advisory
+lock, and an open session already there refuses the write (23505, "Emergency
+mode is already on for this household"). PostgREST runs READ COMMITTED and the
+guard is VOLATILE, so the check after the lock sees an earlier activation once
+it commits. Every writer is held to it, the service role too: it is a rule of
+the data, not a permission. Ending a session, an expired session, a change
+that keeps the same session open, reads and the rows already there are
+unchanged, and nothing in the data changes. Not the partial unique index the
+register suggested: an index predicate cannot read `now()`, so an
+expired-but-unended session would block every new activation unless production
+rows were ended first, and the index would not build where the race has
+already left two open sessions. No application change: a racing second
+activation is refused instead of opening a second session.
+
+**Proof:** `.github/workflows/emergency-session-runtime.yml` requires the held
+probe `docs/audit/reserved/one-emergency-at-a-time-per-household-check.sql` to
+fail on the released schema on the defect, with no control failing, then
+applies 0532 twice and requires it to pass, then re-runs ten released probes
+(an-erasure-actually-erases, definer-functions-check-their-caller,
+family-delete-cascade, family-erasure-leaves-nothing, family-scoped-index,
+gated-write-tables, plpgsql-bodies-resolve, privileged-rpc-grants,
+realtime-anon-stream, rls-sweep). The passing run shows the three writes above
+refused by 0532's guard, and the second session's activation waiting while the
+parent's is in flight (dblink); the parent activating beside an ended, an
+expired and another household's open emergency; the adult ending the parent's
+emergency and activating a new one; the parent changing their open emergency's
+reason; the server activating where none is open; the wiring; **N1** (guard
+disabled): the adult's second activation lands; **M1** (the guard on INSERT
+only): the adult's reopening lands. Five hand mutants (no advisory lock, an
+expired session counted, the service role exempt, any household's session
+counted, no same-session pass for an update) are each caught.
+
+All 189 released probes pass with 0532 applied, and with every held file
+applied twice.
+
+**After approved release:** with emergency mode on in a test household, try to
+insert a second `emergency_sessions` row as another parent and confirm 23505;
+end the first, activate again and confirm it lands.
 
 ## `0531` (proposed, held) — a child read the household's document, renewal and Autopilot insights
 
