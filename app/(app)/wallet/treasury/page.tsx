@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Landmark } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { refuseGuest } from '@/lib/auth/guest-scope';
 import { settleAll } from '@/lib/supabase/settle';
@@ -9,7 +9,8 @@ import { balanceFromLedger, bucketBalances, type LedgerEntry, type BucketKind } 
 import { WalletActivation } from '@/components/wallet/wallet-activation';
 import { readFamilyWalletIsActive } from '@/lib/wallet/family-wallet-status';
 import { TreasuryView, type TreasuryChild } from '@/components/wallet/treasury-view';
-import { ErrorState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
+import { readsEveryWallet } from '@/lib/wallet/own-wallets';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
@@ -36,6 +37,13 @@ export default async function WalletTreasuryPage() {
     return <ErrorState message={tr('treasury.couldNotLoadTheFamily')} />;
   }
   if (!wallet || !wallet.is_active) return <WalletActivation canActivate={isManager(ctx.active.role)} />;
+  // The treasury totals every child's wallet. A child's money is read by a
+  // parent or adult and by that child (the held 0515), so for anyone else this
+  // page would be their own wallet under a family label; they are told whose it
+  // is, and their own wallet stays on /wallet/children/<theirs>.
+  if (!readsEveryWallet(ctx.active.role)) {
+    return <EmptyState icon={Landmark} title={tr('householdMoney.keptByParents')} description={tr('householdMoney.keptByParentsBody')} />;
+  }
 
   const [{ data: childWallets, error: childWalletsError }, { data: buckets, error: bucketsError }, { data: txns, error: txnsError }, { data: members, error: membersError }, { data: goals, error: goalsError }, { data: rules, error: rulesError }] = await settleAll([
     supabase.from('child_wallets').select('id, member_id, is_active').eq('family_id', familyId).eq('is_active', true),

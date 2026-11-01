@@ -54,7 +54,10 @@ export function benchmarkRows(aggregates: NetworkAggregate[], minCohort: number 
       valueKey: bandLabelKey(a.metric, a.value), childBands: cohort.childBands, sizeBand: cohort.sizeBand,
     });
   }
-  return out.sort((x, y) => y.cohortSize - x.cohortSize || x.cohortKey.localeCompare(y.cohortKey) || x.value.localeCompare(y.value));
+  // Ordered by the NOISED count, the number the reader is shown. Ordered by the
+  // true size, the list itself said which of two close bands really holds
+  // more families — the comparison the noise is there to blur.
+  return out.sort((x, y) => y.count - x.count || x.cohortKey.localeCompare(y.cohortKey) || x.value.localeCompare(y.value));
 }
 
 /** Rows grouped per metric, in catalogue order (unknown metrics last). */
@@ -81,20 +84,24 @@ function csvCell(value: string | number): string {
 
 export const BENCHMARK_CSV_COLUMNS = [
   'metric', 'metric_label', 'cohort_key', 'kids_age_bands', 'household_size_band',
-  'value', 'families_reported', 'cohort_n', 'k_floor', 'computed_at',
+  'value', 'families_reported', 'k_floor', 'computed_at',
 ] as const;
 
 /**
- * The content-marketing export. `families_reported` is the DP-noised count and
- * `cohort_n` the distinct families behind the row (always ≥ k_floor); there is
- * no per-family column because there is no per-family row anywhere in this data.
+ * The content-marketing export. `families_reported` is the DP-noised count —
+ * the only family count in the file — and `k_floor` the floor every row
+ * clears. There is no per-family column because there is no per-family row
+ * anywhere in this data, and no `cohort_n` either: the file exists to be
+ * quoted, and the true band size beside the noised count is the exact number
+ * the noise hides (two exports a night apart then differ by exactly who joined
+ * or left).
  */
 export function benchmarksCsv(aggregates: NetworkAggregate[], computedAt: string, minCohort: number = K_ANONYMITY_FLOOR): string {
   const lines = [BENCHMARK_CSV_COLUMNS.join(',')];
   for (const r of benchmarkRows(aggregates, minCohort)) {
     lines.push([
       r.metric, r.label, r.cohortKey, r.childBands.join(' ') || 'none', r.sizeBand,
-      r.value, r.count, r.cohortSize, minCohort, computedAt,
+      r.value, r.count, minCohort, computedAt,
     ].map(csvCell).join(','));
   }
   return `${lines.join('\r\n')}\r\n`;

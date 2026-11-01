@@ -22,7 +22,7 @@
 --      (0481's sweep; listed in the probe), in behavior_logs where the held
 --      0510 is installed (a note is read by a manager, its author or a
 --      caregiver) and in medications and their schedules where the held 0511
---      is (likewise the tables the held 0514, 0516 and 0517 close), and 0509
+--      is (likewise the tables the held 0514-0517 close), and 0509
 --      never takes a guest's own rows away (compared with the 59 policies
 --      dropped);
 --   3. control: the caregiver and the parent read exactly what they read with
@@ -231,6 +231,15 @@ declare
                                                   and p.policyname = 'Household money is read by a parent or adult')
                                   then array['financial_accounts', 'family_wallets', 'transactions', 'stripe_connected_accounts',
                                              'stripe_financial_accounts', 'billing_customers', 'babysitter_payments', 'auto_insurance_policies']
+                                  else '{}'::text[] end
+                          -- The held 0515: a child's money is read by a manager
+                          -- or that child.
+                          || case when exists (select 1 from pg_policies p
+                                                where p.schemaname = 'public' and p.tablename = 'child_wallets'
+                                                  and p.policyname = 'A child''s money is read by a manager or that child')
+                                  then array['allowance_rules', 'child_wallets', 'invest_holdings', 'invest_orders', 'pay_handles',
+                                             'stripe_authorizations', 'stripe_cardholders', 'stripe_issuing_cards', 'wallet_buckets',
+                                             'wallet_cards', 'wallet_goals', 'wallet_passes', 'wallet_rewards', 'wallet_rules', 'wallet_transactions']
                                   else '{}'::text[] end;
   installed boolean := to_regprocedure('public.is_family_guest(uuid)') is not null
                        and exists (select 1 from pg_policies p where p.schemaname = 'public'

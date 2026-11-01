@@ -1,6 +1,6 @@
 'use client';
 
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input, Field } from '@/components/ui/input';
@@ -30,6 +30,13 @@ export function LoginForm() {
   const [ready, setReady] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
   const [recoveryLink, setRecoveryLink] = useState(false);
+  // Back from the phone form unmounts it: focus returns to the button that
+  // opened it, not to the page (found with a screen reader).
+  const phoneButton = useRef<HTMLButtonElement>(null);
+  const refocusPhoneButton = useRef(false);
+  useEffect(() => {
+    if (!showPhone && refocusPhoneButton.current) { refocusPhoneButton.current = false; phoneButton.current?.focus(); }
+  }, [showPhone]);
   const mounted = useRef(false);
   const attempt = useRef(0);
   const phase = useRef<'idle' | 'pending' | 'complete'>('idle');
@@ -144,7 +151,7 @@ export function LoginForm() {
 
       {showPhone ? (
         <div className="mt-6">
-          <PhoneAuth next={redirectDest ?? '/dashboard'} onBack={() => { if (retirePasswordAttempt()) setShowPhone(false); }} />
+          <PhoneAuth next={redirectDest ?? '/dashboard'} onBack={() => { if (retirePasswordAttempt()) { refocusPhoneButton.current = true; setShowPhone(false); } }} />
         </div>
       ) : (
       <>
@@ -154,6 +161,7 @@ export function LoginForm() {
           handler whose retirePasswordAttempt() refuses an unmounted form), so
           a tap on a slow phone was silently dropped and nothing happened. */}
       <button
+        ref={phoneButton}
         type="button"
         disabled={!ready}
         onClick={() => { if (retirePasswordAttempt()) setShowPhone(true); }}

@@ -142,7 +142,7 @@ export async function resolveMemberByName(
   name: string | null | undefined,
 ): Promise<ServiceResult<FamilyMember | null>> {
   if (!name || !name.trim()) return ok(null);
-  const members = await getMembers(scope);
+  const members = await getMembers(scope, { requireComplete: true });
   if (!members.ok) return members;
   return ok(matchMemberByName(members.data, name));
 }

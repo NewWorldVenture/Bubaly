@@ -8,6 +8,7 @@ import { isManager } from '@/lib/constants/roles';
 import { balanceFromLedger, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
 import { WalletActivation } from '@/components/wallet/wallet-activation';
 import { readFamilyWalletIsActive } from '@/lib/wallet/family-wallet-status';
+import { inWalletScope, ownMemberOnly, readWalletScope } from '@/lib/wallet/own-wallets';
 import { SendMoneyView, type SendChild } from '@/components/wallet/send-money-view';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
@@ -33,15 +34,23 @@ export default async function SendMoneyPage() {
   }
   if (!wallet || !wallet.is_active) return <WalletActivation canActivate={isManager(ctx.active.role)} />;
 
+  // The held 0515: a child's balance is read by a parent or adult and by that
+  // child, so anyone else's page reads their own wallet's, narrowed in the query.
+  const { scope, error: scopeError } = await readWalletScope(supabase, ctx);
+  if (scopeError) {
+    console.error('[wallet-send] Own wallet read failed', scopeError);
+    return <ErrorState message={tr('send.couldNotLoadTheFamily')} />;
+  }
+
   const [{ data: childWallets, error: childWalletsError }, { data: buckets, error: bucketsError }, { data: txns, error: txnsError }, { data: members, error: membersError }] = await settleAll([
-    supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
-    supabase.from('wallet_buckets').select('id, child_wallet_id, kind').eq('family_id', familyId),
+    ownMemberOnly(supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true), scope, ctx.active.member.id),
+    inWalletScope(supabase.from('wallet_buckets').select('id, child_wallet_id, kind').eq('family_id', familyId), scope),
     // Balances are summed from these rows, so a capped read is a wrong balance —
     // and `.limit(N)` above 1,000 never applied, because PostgREST caps a
     // response at db-max-rows whatever the client asked for.
-    readAllAsQuery((from, to) => supabase.from('wallet_transactions')
+    readAllAsQuery((from, to) => inWalletScope(supabase.from('wallet_transactions')
       .select('child_wallet_id, bucket_id, direction, amount_cents, status')
-      .eq('family_id', familyId).order('id').range(from, to), { max: 3000 }),
+      .eq('family_id', familyId), scope).order('id').range(from, to), { max: 3000 }),
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId),
   ]);
   if (childWalletsError) { console.error('[wallet-send] Child wallets read failed', childWalletsError); dataWarnings.push('Child wallets'); }
@@ -80,6 +89,7 @@ export default async function SendMoneyPage() {
           <p>{tr('walletSend.someWalletDetailsAreTemporarilyUnavailable')} {dataWarnings.join(', ')}.</p>
         </div>
       )}
+      {!scope.all && <p className="mb-3 text-xs text-muted">{tr('childMoney.onlyYourOwnWallet')}</p>}
       <SendMoneyView wallets={children} canManage={isManager(ctx.active.role)} />
     </div>
   );

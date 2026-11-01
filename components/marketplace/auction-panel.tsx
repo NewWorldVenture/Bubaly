@@ -89,6 +89,14 @@ export function AuctionPanel({
   const minNext = minNextBidCents(a);
   const ladder = useMemo(() => quickBidLadder(a), [a]);
   const resMet = a.reserveMet;
+  // A retracted bid no longer stands. 0183 allows the status, and the
+  // circle-boundary SQL proposed after 0483 uses it: when a family can no
+  // longer see the auction (removed, left, or the listing unshared), its bids
+  // are retracted and the auction is re-priced from the bids left. Listed as
+  // "A bidder $X", a retracted bid read as a live bid above the re-priced
+  // current one. The page and the refetch read the history with no status
+  // filter, so it is dropped here.
+  const standingBids = bids.filter((b) => b.status !== 'retracted');
 
   function bid(maxCents: number) {
     if (isOwner) return;
@@ -207,11 +215,11 @@ export function AuctionPanel({
       )}
 
       {/* Bid history */}
-      {bids.length > 0 && (
+      {standingBids.length > 0 && (
         <div className="mt-4 border-t border-border/50 pt-3">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">{tr('auction.bidHistory')}</p>
           <ul className="max-h-40 space-y-1 overflow-y-auto">
-            {bids.map((b) => (
+            {standingBids.map((b) => (
               <li key={b.id} className="flex items-center justify-between text-xs">
                 <span className="text-muted">
                   {b.bidder_family_id === myFamilyId ? 'You' : 'A bidder'}{b.is_auto ? ' (auto)' : ''}

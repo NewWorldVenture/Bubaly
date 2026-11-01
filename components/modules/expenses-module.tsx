@@ -24,6 +24,7 @@ import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { categoryLabel } from '@/lib/finance/category-label';
 import { todayInZone } from '@/lib/schedule/zoned';
+import { isManager } from '@/lib/constants/roles';
 
 type SplitRow = Tables<'expense_splits'>;
 type Share = Tables<'expense_split_shares'>;
@@ -39,7 +40,30 @@ export function ExpensesModule() {
   // Money follows the reader; the currency stays the money's own.
   const locale = useLocale();
   const usd = (cents: number) => usdIn(cents, locale.code);
-  const { familyId, userId, members, family } = useApp();
+  const { familyId, userId, members, family, role, selfMember } = useApp();
+  // 0481 refuses a caregiver every share write: expense_split_shares_insert,
+  // _update and _delete all exclude 'caregiver'. A split a caregiver started was
+  // rolled back with an RLS error, and a settle came back "not saved", on every
+  // try. So the screen offers a caregiver only reading the household's splits:
+  // no Split, no Settle, no Trash. (Whether a caregiver should settle a share
+  // they owe or paid is the owner's call on that policy.)
+  const writesShares = role !== 'caregiver';
+  // Deleting a split is a share delete too: its shares go with it
+  // (expense_split_shares.split_id is ON DELETE CASCADE). 0481 lets a share be
+  // deleted only by a manager or by the member who created its split
+  // (expense_split_shares_delete), but still lets any member but a guest
+  // delete the split itself, so the cascade did for a caregiver, a teen or a
+  // child what 0481 refuses them directly. The Trash follows the share rule.
+  // (Narrowing expense_splits to match is the owner's SQL.)
+  const removesSplit = (sp: SplitRow) => writesShares && (isManager(role) || sp.created_by === userId);
+  // Settling is a share update, and 0481's expense_split_shares_update lets a
+  // member who is not a manager settle only their own share, or a share of a
+  // split they created or paid. A teen or a child was offered the toggle on
+  // every share, and one on anyone else's came back "not saved" on every try.
+  // The toggle follows that rule; any other share reads as it does for a
+  // caregiver.
+  const settlesShare = (sp: SplitRow, s: Share) => writesShares && (isManager(role)
+    || s.member_id === selfMember?.id || sp.created_by === userId || sp.paid_by === selfMember?.id);
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
   const [saving, setSaving] = useState(false);
@@ -134,7 +158,7 @@ export function ExpensesModule() {
         // no shares it says never happens, and said nothing.
         // A refused rollback is also no error and zero rows, which is the same
         // orphan and said nothing either. Audit C1-S9-82.
-        const { data: rolledBack, error: rollbackError } = await supabase.from('expense_splits').delete().eq('id', split.id).select('id');
+        const { data: rolledBack, error: rollbackError } = await supabase.from('expense_splits').delete().eq('id', split.id).eq('family_id', familyId).select('id');
         if (rollbackError) console.error('[expenses] split rollback failed; a split without shares remains', { splitId: split.id, error: rollbackError });
         else if (wroteNoRows(rolledBack)) console.error('[expenses] split rollback matched no row; a split without shares remains', { splitId: split.id });
         toastError(describeDbError(sErr));
@@ -163,7 +187,7 @@ export function ExpensesModule() {
   function removeSplit(id: string) {
     if (!confirm(tr('expensesModule.deleteThisExpenseAndIts'))) return;
     return run(`remove:${id}`, async () => {
-      const { data: removed, error } = await createClient().from('expense_splits').delete().eq('id', id).select('id');
+      const { data: removed, error } = await createClient().from('expense_splits').delete().eq('id', id).eq('family_id', familyId).select('id');
       if (error) throw error;
       if (wroteNoRows(removed)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
       success(tr('expensesModule.deleted'));
@@ -185,7 +209,7 @@ export function ExpensesModule() {
         <h1 className="flex items-center gap-2 text-base font-semibold"><Split className="h-4 w-4 text-brand-text" /> {tr('expenses.expenseSplitting')}</h1>
         <div className="flex items-center gap-2">
           <AiInsight kind="expenses" />
-          <Button onClick={() => setForm(blank(family?.timezone ?? 'UTC'))}><Plus className="h-4 w-4" /> {tr('expenses.splitAnExpense')}</Button>
+          {writesShares && <Button onClick={() => setForm(blank(family?.timezone ?? 'UTC'))}><Plus className="h-4 w-4" /> {tr('expenses.splitAnExpense')}</Button>}
         </div>
       </div>
 
@@ -225,12 +249,18 @@ export function ExpensesModule() {
                   <p className="font-medium">{sp.description} <span className="text-muted">· {usd(sp.total_cents)}</span></p>
                   <p className="text-xs text-muted">{categoryLabel(tr, sp.category)} {tr('expenses.paidBy')} {memberName(sp.paid_by)} · {fmtDate(sp.spent_on)}</p>
                 </div>
-                <button onClick={() => removeSplit(sp.id)} disabled={isPending(`remove:${sp.id}`)} className="text-muted transition hover:text-danger disabled:opacity-50" aria-label={tr('expenses.delete')}>
-                  {isPending(`remove:${sp.id}`) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                </button>
+                {removesSplit(sp) && (
+                  <button onClick={() => removeSplit(sp.id)} disabled={isPending(`remove:${sp.id}`)} className="text-muted transition hover:text-danger disabled:opacity-50" aria-label={tr('expenses.delete')}>
+                    {isPending(`remove:${sp.id}`) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  </button>
+                )}
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {sh.map((s) => (
+                {sh.map((s) => !settlesShare(sp, s) ? (
+                  <span key={s.id} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${s.settled ? 'bg-success/15 text-success' : 'bg-border/40 text-muted'}`}>
+                    {s.settled && <Check className="h-3 w-3" />} {memberName(s.member_id)} {usd(s.share_cents)}
+                  </span>
+                ) : (
                   <button
                     key={s.id}
                     onClick={() => toggleSettled(s)}

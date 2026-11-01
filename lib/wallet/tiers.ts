@@ -65,6 +65,14 @@ export const AI_COACH_DAILY_LIMIT: Record<WalletTier, number> = {
   plus: Infinity,
 };
 
+/**
+ * The `ai_requests.feature` values the coach's daily cap counts: the family
+ * coach and a child's coach share one counter. Those rows are filed by
+ * withAiRequest on the server's ledger client, which a member cannot write
+ * as (household-roles N6-R1-WALLET-METERS-FORGEABLE).
+ */
+export const AI_COACH_REQUEST_FEATURES = ['wallet.coach', 'wallet.coach.child'] as const;
+
 /** Map the app's billing plan level (0/1/2) to a wallet tier. */
 export function walletTierForPlanLevel(level: number): WalletTier {
   return level >= 2 ? 'plus' : level === 1 ? 'basic' : 'free';

@@ -57,6 +57,7 @@ class Query {
   private counted = false;
   private ordered: { col: string; asc: boolean } | null = null;
   private max: number | null = null;
+  private page: [number, number] | null = null;
   constructor(private readonly name: string) {}
   // A requested exact count is answered for every select, not only a head-only
   // one: the calendar read (lib/calendar/occurrences) refuses a window whose
@@ -78,6 +79,7 @@ class Query {
   neq(col: string, v: unknown) { this.filters.push((r) => r[col] != null && r[col] !== v); return this; }
   order(col: string, opts?: { ascending?: boolean }) { this.ordered = { col, asc: opts?.ascending !== false }; return this; }
   limit(n: number) { this.max = n; return this; }
+  range(from: number, to: number) { this.page = [from, to]; return this; }
   async maybeSingle() { const r = await this.run(); return { data: r.data?.[0] ?? null, error: r.error }; }
   async single() {
     const r = await this.run();
@@ -131,6 +133,7 @@ class Query {
       const { col, asc } = this.ordered;
       hit = [...hit].sort((a, b) => (String(a[col]) < String(b[col]) ? -1 : String(a[col]) > String(b[col]) ? 1 : 0) * (asc ? 1 : -1));
     }
+    if (this.page) hit = hit.slice(this.page[0], this.page[1] + 1);
     if (this.max !== null) hit = hit.slice(0, this.max);
     return this.counted ? { data: hit, error: null, count: total } : { data: hit, error: null };
   }

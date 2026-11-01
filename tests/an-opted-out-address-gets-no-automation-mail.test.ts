@@ -62,7 +62,10 @@ function seed(trigger: string) {
 
 function clicked(recipient: string, id: string, link?: string) {
   const timestamp = String(Math.floor(Date.now() / 1000));
-  const body = JSON.stringify({ type: 'email.clicked', data: link ? { to: [recipient], click: { link } } : { to: [recipient] } });
+  // A click on campaign mail: only a campaign-tagged event is marketing
+  // engagement (app/api/webhooks/resend/route.ts), so that is what these model.
+  const tags = [{ name: 'campaign', value: 'cmp-fixture' }];
+  const body = JSON.stringify({ type: 'email.clicked', data: link ? { to: [recipient], click: { link }, tags } : { to: [recipient], tags } });
   const signature = createHmac('sha256', signingKey).update(`${id}.${timestamp}.${body}`).digest('base64');
   return new Request('https://bubaly.test/api/webhooks/resend', {
     method: 'POST', body,

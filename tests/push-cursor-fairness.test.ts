@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { dispatchPendingPushes } from '@/lib/server/push';
+import { dispatchPendingPushes, PUSH_ROWS_PER_FAMILY, PUSH_ROWS_PER_RECIPIENT } from '@/lib/server/push';
 import { notificationId, pushDispatchDb, type PushFixtureRow } from './helpers/push-dispatch-db';
 
 const provider = vi.hoisted(() => ({ send: vi.fn() }));
@@ -24,17 +24,17 @@ const storedCursor = (id: number, createdAt = NOW.toISOString()) => ({
   ...cursor(id, createdAt),
   generation: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
 });
-function fixture(rows: PushFixtureRow[]) {
+function fixture(rows: PushFixtureRow[], unconfigured = ['unconfigured'], families: string[] = []) {
   return pushDispatchDb({
     notifications: rows,
     push_devices: [
       { id: 'web', user_id: 'healthy', enabled: true, provider: 'webpush', endpoint: 'https://push.example.test/device', p256dh: 'key', auth: 'auth' },
-      { id: 'native', user_id: 'unconfigured', enabled: true, provider: 'fcm', token: 'fixture-token' },
+      ...unconfigured.map((user_id, i) => ({ id: i === 0 ? 'native' : `native-${i}`, user_id, enabled: true, provider: 'fcm', token: 'fixture-token' })),
     ],
     // These delivery fixtures represent eligible recipients. Missing or
     // revoked membership is independently tested in push-family-membership.
-    family_members: ['family-a', 'family-b'].flatMap(family_id =>
-      ['healthy', 'unconfigured'].map(user_id => ({ family_id, user_id, role: 'parent', is_active: true }))),
+    family_members: ['family-a', 'family-b', ...families].flatMap(family_id =>
+      ['healthy', ...unconfigured].map(user_id => ({ family_id, user_id, role: 'parent', is_active: true }))),
     family_ai_settings: [], user_preferences: [],
   });
 }
@@ -50,7 +50,16 @@ afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe('bounded pending-push traversal', () => {
   it('reaches a healthy notification beyond 200 unresolved native deliveries and wraps to retry earlier rows', async () => {
-    const f = fixture(Array.from({ length: 201 }, (_, index) => row(index + 1, { user_id: index < 200 ? 'unconfigured' : 'healthy' })).reverse());
+    // Twenty recipients in five families, each within its share of a batch
+    // (PUSH_ROWS_PER_RECIPIENT, PUSH_ROWS_PER_FAMILY), so this pins the cursor
+    // alone. One recipient's 200 is the next case.
+    const twenty = Array.from({ length: 20 }, (_, i) => `unconfigured-${i}`);
+    const five = Array.from({ length: 5 }, (_, i) => `family-u${i}`);
+    expect(200 / twenty.length).toBeLessThanOrEqual(PUSH_ROWS_PER_RECIPIENT);
+    expect(200 / five.length).toBeLessThanOrEqual(PUSH_ROWS_PER_FAMILY);
+    const f = fixture(Array.from({ length: 201 }, (_, index) => row(index + 1, index < 200
+      ? { user_id: twenty[index % 20], family_id: five[index % 5] }
+      : { user_id: 'healthy' })).reverse(), twenty, five);
     expect(await dispatchPendingPushes(f.db, { now: NOW })).toMatchObject({ notifications: 200, result: { skipped: 200, sent: 0 } });
     expect(f.tables.app_settings[0].value).toEqual(storedCursor(200));
     const second = await dispatchPendingPushes(f.db, { now: NOW });
@@ -62,6 +71,29 @@ describe('bounded pending-push traversal', () => {
     expect(provider.send).toHaveBeenCalledTimes(1);
     expect(f.tables.notifications.filter(item => item.pushed_at === null)).toHaveLength(200);
     expect(f.calls.filter(call => call.table === 'notifications' && call.operation === 'select').map(call => call.count)).toEqual([200, 1, 199, 1, 199]);
+  });
+
+  it('reaches a healthy notification behind ONE recipient\'s 200 unresolved rows on the first run, and still wraps to retry them', async () => {
+    // A member may plant any number of rows addressed to themselves (0388), so
+    // one recipient's backlog no longer fills the batch while anyone else's
+    // row is waiting: it takes its share, the healthy row goes out now rather
+    // than a run later, and the room left is filled from the backlog.
+    const f = fixture(Array.from({ length: 201 }, (_, index) => row(index + 1, { user_id: index < 200 ? 'unconfigured' : 'healthy' })).reverse());
+    expect(await dispatchPendingPushes(f.db, { now: NOW })).toMatchObject({ notifications: 200, result: { skipped: 199, sent: 1 } });
+    expect(f.stamps).toEqual([notificationId(201)]);
+    expect(f.tables.app_settings[0].value).toEqual(storedCursor(201));
+    // Row 200 fell past the batch, before the cursor: the wrap retries it with the rest.
+    const second = await dispatchPendingPushes(f.db, { now: NOW });
+    expect(second).toMatchObject({ notifications: 200, result: { skipped: 200, sent: 0 } });
+    expect(f.tables.app_settings[0].value).toEqual(storedCursor(200));
+    const third = await dispatchPendingPushes(f.db, { now: NOW });
+    expect(third).toMatchObject({ notifications: 200, result: { skipped: 200, sent: 0 } });
+    expect(provider.send).toHaveBeenCalledTimes(1);
+    expect(f.tables.notifications.filter(item => item.pushed_at === null)).toHaveLength(200);
+    // Run 1: the page, the read past the held share, the fill. Runs 2 and 3:
+    // an empty forward page, then the same three reads on the wrap.
+    expect(f.calls.filter(call => call.table === 'notifications' && call.operation === 'select').map(call => call.count))
+      .toEqual([200, 1, 200, 0, 200, 0, 200, 0, 200, 0, 200]);
   });
 
   it('orders by full timestamp then ID, preserving PostgreSQL microseconds and retrying each row after wrap', async () => {

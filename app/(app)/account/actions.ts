@@ -12,6 +12,7 @@ import { isAdmin } from '@/lib/constants/roles';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { stripeFromKey } from '@/lib/stripe';
 import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
+import { recordAccountReopened } from '@/lib/family/account-reopened';
 
 type Result =
   | { ok: true; notice?: string }
@@ -163,6 +164,11 @@ export async function reopenAccountAction(): Promise<Result> {
     .eq('id', familyId).select('id');
   if (error) return actionFailure('reopen the account', t('account.couldNotReopenTheAccount'), error);
   if (wroteNoRows(reopened)) return { ok: false, error: t('account.couldNotReopenTheAccount') };
+  // When it reopened, in the family's audit trail and the server's ledger: the social drain holds a
+  // post that came due before it rather than send it late, and no other trace
+  // says when (lib/family/account-reopened.ts). A family that was open already
+  // reopened nothing, and records nothing.
+  if (family?.closed_at) await recordAccountReopened(admin, { familyId, reopenedBy: ctx.user.id, closedAt: family.closed_at });
   revalidatePath('/', 'layout');
   // The account is open either way; billing is resumed second and reported, so
   // a Stripe hiccup cannot keep the family locked out of their own data.

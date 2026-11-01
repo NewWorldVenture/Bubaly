@@ -23,6 +23,8 @@ import {
 // but a guard against runaway cost / abuse.
 const RELATIONSHIP_AI_DAILY_LIMIT = 20;
 const AI_AUDIT_ACTION = 'relationship_ai_digest';
+/** The `feature` the digest's request row is filed under (withAiRequest below): what the daily cap counts. */
+const AI_REQUEST_FEATURE = 'relationship.digest';
 
 // POST /api/ai/relationship — the Relationship Helper digest. Reads upcoming
 // dates + partner preferences + wishlist + recorded gift outcomes, then asks the AI for
@@ -49,23 +51,33 @@ export async function POST() {
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
-    // Per-day metering (per family), counted from the family audit log.
-    // The family's midnight, not the host's. This bound is the daily AI
+    // Per-day metering (per family), counted from the server's own record of
+    // each digest. The family's midnight, not the host's. This bound is the daily AI
     // quota window: on a UTC host `setHours(0,0,0,0)` rolls over at 17:00 in
     // California and 11:00 in Sydney, so a household's allowance reset in the
     // middle of their afternoon and calls made after it were counted against
     // tomorrow. Same defect and same fix as the kitchen display
     // (app/(app)/display/page.tsx:122).
     const startOfDay = new Date(zonedDayBoundsMs(dayKeyInTz(new Date(), ctx.active.family.timezone || 'UTC'), ctx.active.family.timezone || 'UTC').start);
-    // Counted with the service client, scoped to this family and this action.
-    // The meter's rows are `audit_logs`, which RLS lets only a manager read
-    // (0118's `audit_select`): through a teen's, a child's, a caregiver's or a
-    // guest's own client the count came back 0 with no error, so the family's
-    // daily cap never applied to them — while every call they made still
-    // wrote a row the parents' count kept climbing on.
+    // Counted with the service client, scoped to this family and this helper.
+    // Through a teen's, a child's, a caregiver's or a guest's own client the
+    // meter's rows were hidden (audit_logs reads for a manager only, 0118's
+    // `audit_select`) and the count came back 0 with no error, so the family's
+    // daily cap never applied to them.
+    //
+    // The rows are the `ai_requests` rows withAiRequest files below, of kind
+    // 'feature' and settled 'completed' when a digest came back. The meter
+    // counted `audit_logs` rows with this action from ANY actor, and any member
+    // may append to that trail as themselves with any action and any
+    // created_at (audit_insert, 0380), so a child or a guest could plant twenty
+    // and the parents were refused for the day (household-roles
+    // N5-R1-RELATIONSHIP-METER-FORGEABLE). A member may file only a 'concierge'
+    // request, 'queued' (0255's ai_requests_insert), and nothing lets a member
+    // update one, so no row a member writes is counted — nor one whose author's
+    // login is later deleted, as a null-actor audit row would be (on delete set null).
     const { count: usedToday, error: meterError } = await createServiceClient()
-      .from('audit_logs').select('id', { count: 'exact', head: true })
-      .eq('family_id', familyId).eq('action', AI_AUDIT_ACTION)
+      .from('ai_requests').select('id', { count: 'exact', head: true })
+      .eq('family_id', familyId).eq('kind', 'feature').eq('feature', AI_REQUEST_FEATURE).eq('status', 'completed')
       .gte('created_at', startOfDay.toISOString());
     // An unreadable meter is not "none used": that answer lifted the daily
     // limit, and every call behind it is a paid model call.
@@ -202,7 +214,8 @@ export async function POST() {
     if (!digest) {
       return NextResponse.json({ error: t('relationship.couldNotGenerateSuggestionsRight') }, { status: 502 });
     }
-    // Best-effort metering record (never blocks the response).
+    // The household trail's record of the digest, best-effort (never blocks the
+    // response). It is not the meter: the request row above is.
     await logAudit(supabase, { familyId, actorId: ctx.user.id, action: AI_AUDIT_ACTION, resource: 'relationship' });
     const context: RelationshipDigestContext = {
       familyId, userId: ctx.user.id, memberId: ctx.active.member.id,

@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Star } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
-import { ratingStats, PUBLIC_STATUSES, stars } from '@/lib/marketing/reviews';
+import { settleAll } from '@/lib/supabase/settle';
+import { PUBLIC_STATUSES, stars } from '@/lib/marketing/reviews';
 import { getTranslations } from '@/lib/i18n/server';
 
 // The tab title is copy like any other: it was English in every locale.
@@ -16,6 +17,17 @@ export const dynamic = 'force-dynamic';
 export default async function ReviewsWallPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
+  // The headline is over EVERY public review: one exact count per star (a
+  // rating is 1-5, 0041), so the total and the average are the whole set's.
+  // It was computed from the 200 cards listed below — featured first, then
+  // newest — so past 200 the page said "from 200 reviews", and which reviews a
+  // moderator featured decided the published average.
+  const starCounts = settleAll([1, 2, 3, 4, 5].map((star) => supabase
+    .from('reviews')
+    .select('id', { count: 'exact', head: true })
+    .in('status', PUBLIC_STATUSES)
+    .is('deleted_at', null)
+    .eq('rating', star)));
   // `ratingStats` is computed from this list, so a refused read did not just
   // hide the reviews — it published a rating derived from none of them on the
   // page whose whole job is social proof. Audit C1-S9-45.
@@ -39,7 +51,14 @@ export default async function ReviewsWallPage() {
   }
 
   const rows = reviews ?? [];
-  const s = ratingStats(rows.map((r) => r.rating));
+  // A count that did not come back costs the headline, not the page: no
+  // rating is shown rather than one taken from part of the set.
+  const counted = await starCounts;
+  const countFailed = counted.find((r) => r.error || typeof r.count !== 'number');
+  if (countFailed) console.error('[reviews] rating count failed', { error: countFailed.error?.message ?? 'no count returned' });
+  const total = countFailed ? 0 : counted.reduce((n, r) => n + (r.count ?? 0), 0);
+  const sum = countFailed ? 0 : counted.reduce((n, r, i) => n + (i + 1) * (r.count ?? 0), 0);
+  const s = { total, average: total > 0 ? Math.round((sum / total) * 10) / 10 : 0 };
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-12">

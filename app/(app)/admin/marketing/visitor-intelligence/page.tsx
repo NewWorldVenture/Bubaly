@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 import { describeActionError } from '@/lib/supabase/errors';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Visitor Intelligence', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -27,6 +28,46 @@ async function count(
   }
 }
 
+/** Consent events the posture tiles fold before they say the figure cannot be shown. */
+const CONSENT_EVENT_CEILING = 50_000;
+const POSTURE_CATEGORIES = ['analytics', 'marketing_email', 'marketing_sms'] as const;
+
+type ConsentRow = { id: string; anonymous_id: string; category: string; decision: string; created_at: string };
+
+/**
+ * Visitors whose CURRENT consent is a grant: analytics, and email or SMS
+ * marketing. The tiles used to count `granted` EVENTS, and the log is
+ * append-only with one row per category on every save, so a visitor who
+ * accepted and later withdrew still counted, each re-save counted again, and
+ * one "Accept all" counted twice as a marketing opt-in. The latest decision
+ * per visitor and category wins, as the resolver and the contact score read it
+ * (lib/marketing/consent.ts resolveConsent).
+ */
+async function consentPosture(admin: SupabaseAdmin): Promise<{ analytics: number; marketing: number; truncated: boolean; error: string | null }> {
+  const { data, error, truncated } = await readAllByIdAsQuery<ConsentRow>((after, limit) => {
+    let query = admin.from('mkt_consent_events').select('id, anonymous_id, category, decision, created_at')
+      .in('category', [...POSTURE_CATEGORIES]);
+    if (after) query = query.gt('id', after);
+    return query.order('id').limit(limit);
+  }, { max: CONSENT_EVENT_CEILING });
+  if (truncated) return { analytics: 0, marketing: 0, truncated: true, error: null };
+  if (error || !data) return { analytics: 0, marketing: 0, truncated: false, error: error ? describeActionError(error) : 'Consent events were not returned' };
+  const latest = new Map<string, ConsentRow>();
+  for (const row of data) {
+    const key = `${row.anonymous_id}|${row.category}`;
+    const held = latest.get(key);
+    if (!held || row.created_at > held.created_at || (row.created_at === held.created_at && row.id > held.id)) latest.set(key, row);
+  }
+  const analytics = new Set<string>();
+  const marketing = new Set<string>();
+  for (const row of latest.values()) {
+    if (row.decision !== 'granted') continue;
+    if (row.category === 'analytics') analytics.add(row.anonymous_id);
+    else marketing.add(row.anonymous_id);
+  }
+  return { analytics: analytics.size, marketing: marketing.size, truncated: false, error: null };
+}
+
 export default async function VisitorIntelligencePage() {
   const t = await getTranslations();
   const admin = createServiceClient();
@@ -34,7 +75,7 @@ export default async function VisitorIntelligencePage() {
   const [
     visitors, identified, profiled, scored, engaged,
     cold, warm, hot, qualified,
-    analyticsGrants, marketingGrants,
+    posture,
   ] = await Promise.all([
     count(admin, (a) => a.from('mkt_visitors').select('*', { count: 'exact', head: true })),
     count(admin, (a) => a.from('mkt_visitors').select('*', { count: 'exact', head: true }).not('contact_id', 'is', null)),
@@ -45,13 +86,14 @@ export default async function VisitorIntelligencePage() {
     count(admin, (a) => a.from('crm_lead_scores').select('*', { count: 'exact', head: true }).eq('band', 'warm')),
     count(admin, (a) => a.from('crm_lead_scores').select('*', { count: 'exact', head: true }).eq('band', 'hot')),
     count(admin, (a) => a.from('crm_lead_scores').select('*', { count: 'exact', head: true }).eq('band', 'qualified')),
-    count(admin, (a) => a.from('mkt_consent_events').select('*', { count: 'exact', head: true }).eq('category', 'analytics').eq('decision', 'granted')),
-    count(admin, (a) => a.from('mkt_consent_events').select('*', { count: 'exact', head: true }).in('category', ['marketing_email', 'marketing_sms']).eq('decision', 'granted')),
+    consentPosture(admin).catch((error: unknown) => ({
+      analytics: 0, marketing: 0, truncated: false, error: error instanceof Error ? error.message : 'Unknown consent read failure',
+    })),
   ]);
 
   const failedMetric = [
     visitors, identified, profiled, scored, engaged,
-    cold, warm, hot, qualified, analyticsGrants, marketingGrants,
+    cold, warm, hot, qualified, posture,
   ].find((metric) => metric.error);
   if (failedMetric) {
     console.error('[visitor-intelligence] analytics read failed', failedMetric.error);
@@ -73,8 +115,9 @@ export default async function VisitorIntelligencePage() {
   const warmCount = warm.value;
   const hotCount = hot.value;
   const qualifiedCount = qualified.value;
-  const analyticsGrantCount = analyticsGrants.value;
-  const marketingGrantCount = marketingGrants.value;
+  // Past the ceiling the figures are not shown rather than folded from part of the log.
+  const analyticsGrantCount = posture.truncated ? '—' : posture.analytics.toLocaleString();
+  const marketingGrantCount = posture.truncated ? '—' : posture.marketing.toLocaleString();
 
   const counts: FunnelCounts = {
     visitors: visitorCount,
@@ -160,14 +203,17 @@ export default async function VisitorIntelligencePage() {
           </h2>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-border bg-bg/40 p-3">
-              <p className="text-2xl font-black tabular-nums">{analyticsGrantCount.toLocaleString()}</p>
-              <p className="text-xs text-muted">{t('adminMarketingVisitorIntelligence.analyticsGrants')}</p>
+              <p className="text-2xl font-black tabular-nums">{analyticsGrantCount}</p>
+              <p className="text-xs text-muted">{t('adminMarketingVisitorIntelligence.visitorsAllowingAnalytics')}</p>
             </div>
             <div className="rounded-xl border border-border bg-bg/40 p-3">
-              <p className="text-2xl font-black tabular-nums">{marketingGrantCount.toLocaleString()}</p>
-              <p className="text-xs text-muted">{t('adminMarketingVisitorIntelligence.marketingOptIns')}</p>
+              <p className="text-2xl font-black tabular-nums">{marketingGrantCount}</p>
+              <p className="text-xs text-muted">{t('adminMarketingVisitorIntelligence.visitorsOptedInToMarketing')}</p>
             </div>
           </div>
+          {posture.truncated && (
+            <p className="mt-3 text-xs text-muted">{t('adminMarketingVisitorIntelligence.consentPostureTooLarge', { n: CONSENT_EVENT_CEILING.toLocaleString() })}</p>
+          )}
           <p className="mt-3 text-[11px] leading-relaxed text-muted">
             Consent is append-only and revocable; analytics is legitimate-interest until denied or a
             GPC signal is present, and marketing is strict opt-in. Identity linking carries each

@@ -9,6 +9,7 @@ import { getMoneyCapabilities } from '@/lib/stripe/capabilities';
 import { syncConnectedAccount } from '@/lib/stripe/connect';
 import { WalletActivation } from '@/components/wallet/wallet-activation';
 import { readConnectedAccountStatus, readFamilyWalletIsActive } from '@/lib/wallet/family-wallet-status';
+import { inWalletScope, ownMemberOnly, readWalletScope } from '@/lib/wallet/own-wallets';
 import { MoneyCardsView, type CardChild, type IssuedCard } from '@/components/wallet/money-cards-view';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
@@ -56,15 +57,23 @@ export default async function WalletCardsPage({
     }
   }
 
+  // The held 0515: a child's cards are read by a parent or adult and by that
+  // child, so anyone else's page reads their own wallet's, narrowed in the query.
+  const { scope, error: scopeError } = await readWalletScope(supabase, ctx);
+  if (scopeError) {
+    console.error('[wallet-cards] Own wallet read failed', scopeError);
+    return <ErrorState message={t('cards.couldNotLoadTheFamily')} />;
+  }
+
   const [{ data: account, error: accountError }, { data: childWallets, error: childWalletsError }, { data: members, error: membersError }, { data: cards, error: cardsError }] = await settleAll([
     // The account's status flags, read by the server: the row is a parent's
     // or adult's (the held 0514), and every member's cards page turns on them.
     readConnectedAccountStatus(familyId),
-    supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
+    ownMemberOnly(supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true), scope, ctx.active.member.id),
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId),
-    supabase.from('stripe_issuing_cards')
+    inWalletScope(supabase.from('stripe_issuing_cards')
       .select('id, child_wallet_id, type, status, last4, brand, is_frozen, spend_limit_cents, spend_window, blocked_categories')
-      .eq('family_id', familyId),
+      .eq('family_id', familyId), scope),
   ]);
   if (accountError) { console.error('[wallet-cards] Connected account status read failed', accountError); dataWarnings.push('Connected account status'); }
   if (childWalletsError) { console.error('[wallet-cards] Child wallets read failed', childWalletsError); dataWarnings.push('Child wallets'); }
@@ -90,6 +99,7 @@ export default async function WalletCardsPage({
           <p>{t('walletCards.someCardDetailsAreTemporarilyUnavailable')} {dataWarnings.join(', ')}.</p>
         </div>
       )}
+      {!scope.all && <p className="mb-3 text-xs text-muted">{t('childMoney.onlyYourOwnWallet')}</p>}
       <MoneyCardsView
         capabilities={{
           connectOnboarding: caps.connectOnboarding, issuing: caps.issuing, physicalCards: caps.physicalCards,

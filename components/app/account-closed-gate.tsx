@@ -29,7 +29,13 @@ import { reportRefusal } from '@/lib/auth/step-up-client';
 
 export type OpenFamily = { id: string; name: string };
 
-export function AccountClosedGate({ canReopen = true, otherFamilies = [] }: { canReopen?: boolean; otherFamilies?: OpenFamily[] }) {
+/**
+ * `children`: what the (app) layout puts inside the gate, which is the social
+ * accounts a member may still disconnect (household-roles N2-R1). Closing
+ * deletes nothing, X's tokens included, and the gate replaces every (app)
+ * route, so nothing else could reach them.
+ */
+export function AccountClosedGate({ canReopen = true, otherFamilies = [], children }: { canReopen?: boolean; otherFamilies?: OpenFamily[]; children?: React.ReactNode }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   useDialogBehavior(dialogRef, true, { lockScroll: false });
   const t = useTranslations();
@@ -109,6 +115,7 @@ export function AccountClosedGate({ canReopen = true, otherFamilies = [] }: { ca
           <SignOutForm className="mt-4">
             {({ signingOut }) => <button type="submit" disabled={signingOut} className="text-sm text-muted hover:text-fg">{t('accountClosedGate.logOut')}</button>}
           </SignOutForm>
+          {children && <div className="mt-6 text-left">{children}</div>}
         </div>
       )}
     </div>

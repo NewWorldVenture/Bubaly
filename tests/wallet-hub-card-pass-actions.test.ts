@@ -25,7 +25,14 @@ const cases = [
 ];
 let db: InMemorySupabase;
 
+// Whose a new record is (the held 0515): what a parent or adult adds stays the
+// household's; what anyone else adds is filed on their own member, from the
+// session and never from the form.
+let sessionRole = 'parent';
+const sessionOwner = () => (sessionRole === 'parent' || sessionRole === 'adult' ? null : 'session-member');
+
 function asRole(role: string) {
+  sessionRole = role;
   mocks.requireUserContext.mockResolvedValue({
     user: { id: USER }, active: { familyId: FAMILY, role, member: { id: 'session-member' } },
   });
@@ -37,7 +44,7 @@ async function expectInsert(table: string, payload: Row) {
   expect(mocks.createServer).toHaveBeenCalledTimes(1);
   const { data, error } = await db.from(table).select('*').eq('family_id', FAMILY).single();
   expect(error).toBeNull();
-  expect(data).toEqual({ ...payload, family_id: FAMILY, created_by: USER,
+  expect(data).toEqual({ ...payload, family_id: FAMILY, created_by: USER, member_id: sessionOwner(),
     id: expect.any(String), created_at: expect.any(String), updated_at: expect.any(String) });
   expect(db.table(table)).toHaveLength(2);
   expect(db.table(table).find((row) => row.id === OTHER.id)).toEqual(OTHER);

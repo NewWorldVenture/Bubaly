@@ -132,8 +132,10 @@ function seedNetwork(db: InMemorySupabase, total: number, withdrawn: number) {
   // The consent read inner-joins families to skip closed accounts, as the
   // foreign key guarantees a consent row's family exists.
   db.seed('families', all.map((id) => ({ id, closed_at: null })));
+  // Consenting to the benchmarks scope: a family that joined with no scope on
+  // contributes nothing, so its row is one the prune removes too (N14).
   db.seed('network_consent', all.map((id, i) => ({
-    family_id: id, enabled: i < total - withdrawn, scopes: {},
+    family_id: id, enabled: i < total - withdrawn, scopes: { benchmarks: true },
   })));
   db.seed('network_contributions', all.map((id) => ({
     family_id: id, cohort_key: 'k', features: {}, metrics: {}, scopes: {},

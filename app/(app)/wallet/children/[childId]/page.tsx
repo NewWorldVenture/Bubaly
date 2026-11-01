@@ -11,6 +11,7 @@ import { ChildDetailView } from '@/components/wallet/child-detail-view';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 import { AppNotFound } from '@/components/app/app-not-found';
+import { readsEveryWallet } from '@/lib/wallet/own-wallets';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -30,7 +31,11 @@ export default async function ChildWalletPage({ params }: { params: Promise<{ ch
     console.error('[wallet-child] Child wallet read failed', childWalletError);
     return <ErrorState message={tr('children.couldNotLoadThisChild')} />;
   }
-  if (!cw) return <AppNotFound title={tr('notFound.thatWalletIsnTHere')} description={tr('notFound.thisChildWalletMayHave')} backHref="/wallet" backLabel={tr('appNotFound.backToWallet')} />;
+  // The held 0515: a child's wallet is read by a parent or adult and by that
+  // child. A sibling's wallet answers anyone else as one that is not there,
+  // which is what the database will answer them.
+  const seesEveryWallet = readsEveryWallet(ctx.active.role);
+  if (!cw || (!seesEveryWallet && cw.member_id !== ctx.active.member.id)) return <AppNotFound title={tr('notFound.thatWalletIsnTHere')} description={tr('notFound.thisChildWalletMayHave')} backHref="/wallet" backLabel={tr('appNotFound.backToWallet')} />;
 
   const [{ data: member, error: memberError }, { data: buckets, error: bucketsError }, { data: ledger, error: ledgerError }, { data: txns, error: txnsError }, { data: goals, error: goalsError }, { data: rule, error: ruleError }, { data: allChildWallets, error: allChildWalletsError }, { data: members, error: membersError }] = await settleAll([
     supabase.from('family_members').select('display_name, color').eq('id', cw.member_id).maybeSingle(),
@@ -59,7 +64,10 @@ export default async function ChildWalletPage({ params }: { params: Promise<{ ch
     supabase.from('wallet_rules')
       .select('split, require_approval_over_cents')
       .eq('family_id', familyId).eq('child_wallet_id', cw.id).maybeSingle(),
-    supabase.from('child_wallets').select('id, member_id, is_active').eq('family_id', familyId).eq('is_active', true),
+    // Siblings are for a manager's Send Money; anyone else is asked for none.
+    seesEveryWallet
+      ? supabase.from('child_wallets').select('id, member_id, is_active').eq('family_id', familyId).eq('is_active', true)
+      : Promise.resolve({ data: [] as { id: string; member_id: string; is_active: boolean }[], error: null }),
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId),
   ]);
   if (bucketsError || ledgerError || txnsError || ruleError) {

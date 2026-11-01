@@ -37,6 +37,18 @@ export function SignupForm() {
   const [showEmail, setShowEmail] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
   const [checkEmail, setCheckEmail] = useState(false);
+  // Back from the phone form unmounts it: focus returns to the button that
+  // opened it ("Continue with phone" or "Continue without email"), not to the
+  // page (found with a screen reader).
+  const phoneButton = useRef<HTMLButtonElement>(null);
+  const noEmailButton = useRef<HTMLButtonElement>(null);
+  const phoneOpener = useRef<'phone' | 'noEmail' | null>(null);
+  const refocusPhoneOpener = useRef(false);
+  useEffect(() => {
+    if (showPhone || !refocusPhoneOpener.current) return;
+    refocusPhoneOpener.current = false;
+    (phoneOpener.current === 'noEmail' ? noEmailButton : phoneButton).current?.focus();
+  }, [showPhone]);
   const [unconfirmed, setUnconfirmed] = useState(false);
   const mounted = useRef(false);
   const phase = useRef<'idle' | 'pending' | 'complete' | 'unconfirmed'>('idle');
@@ -194,7 +206,7 @@ export function SignupForm() {
       <fieldset disabled={loading} className="min-w-0">
       {showPhone ? (
         <div className="mt-7">
-          <PhoneAuth next={nextDest} onBack={() => { if (mounted.current && phase.current === 'idle') setShowPhone(false); }} />
+          <PhoneAuth next={nextDest} onBack={() => { if (mounted.current && phase.current === 'idle') { refocusPhoneOpener.current = true; setShowPhone(false); } }} />
         </div>
       ) : (
       <>
@@ -212,9 +224,10 @@ export function SignupForm() {
       {!showEmail ? (
         <div className="space-y-3">
           <button
+            ref={phoneButton}
             type="button"
             disabled={!ready}
-            onClick={() => { if (mounted.current && phase.current === 'idle') setShowPhone(true); }}
+            onClick={() => { if (mounted.current && phase.current === 'idle') { phoneOpener.current = 'phone'; setShowPhone(true); } }}
             className={authButtonClass}
           >
             <Smartphone className="h-[18px] w-[18px]" /> {t('signup.continueWithPhone')}
@@ -228,9 +241,10 @@ export function SignupForm() {
             <Mail className="h-[18px] w-[18px]" /> {t('signup.continueWithEmail')}
           </button>
           <button
+            ref={noEmailButton}
             type="button"
             disabled={!ready}
-            onClick={() => { if (mounted.current && phase.current === 'idle') setShowPhone(true); }}
+            onClick={() => { if (mounted.current && phase.current === 'idle') { phoneOpener.current = 'noEmail'; setShowPhone(true); } }}
             className="mx-auto block pt-1 text-center text-sm font-medium text-muted underline-offset-4 hover:text-fg hover:underline"
           >
             {t('signup.continueWithoutEmail')}

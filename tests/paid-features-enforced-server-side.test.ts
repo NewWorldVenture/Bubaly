@@ -69,6 +69,30 @@ describe('every paid feature is enforced on the server, not only in the nav', ()
     expect(unguarded).toEqual([]);
   });
 
+  it('guards every page BELOW a paid feature too, not only its own', () => {
+    // household-roles N2: /dashboard/social's own page called requireFeature,
+    // and its layout and fifteen pages below it did not, so a Free family (or
+    // any family once Social was switched off) opened every one of them by URL.
+    // The case above looks at the feature's page and the layouts ABOVE it, never
+    // at what sits under it, so it passed. Every page.tsx under a paid
+    // feature's directory is held to the same guard here (its own, or a layout
+    // between it and the root). The three KNOWN pages predate this case and
+    // are their features' owners' to guard; the list may only shrink.
+    const KNOWN = new Set([
+      'app/(app)/dashboard/concierge/runs/[id]/page.tsx',
+      'app/(app)/dashboard/memories/create/page.tsx',
+      'app/(app)/missions/new/page.tsx',
+    ]);
+    const below = (dir: string): string[] => fs.readdirSync(path.join(process.cwd(), dir), { withFileTypes: true })
+      .flatMap((entry) => entry.isDirectory() ? below(path.join(dir, entry.name)) : entry.name === 'page.tsx' ? [path.join(dir, entry.name)] : []);
+    const pages = new Set(paidHrefs.flatMap((h) => { const p = pageFor(h); return p ? below(path.dirname(p)) : []; }));
+    const unguarded = [...pages].filter((p) => !isGuarded(p)).sort();
+    expect(unguarded.filter((p) => !KNOWN.has(p))).toEqual([]);
+    expect([...KNOWN].filter((p) => !unguarded.includes(p)), 'guarded now: remove it from KNOWN').toEqual([]);
+    // The sweep reaches the pages the defect was in.
+    expect([...pages]).toEqual(expect.arrayContaining(['app/(app)/dashboard/social/posts/[id]/page.tsx', 'app/(app)/dashboard/social/media-library/page.tsx']));
+  });
+
   it('counts enough features that the sweep is actually sweeping', () => {
     // A resolution bug that silently matched nothing would pass the case above
     // with an empty list. 62 hrefs were paid when this was written and 24 of

@@ -156,6 +156,7 @@ describe('a sanitizer returns what it checked (SEC-014)', () => {
       'lib/auth/guest-scope.ts|GUEST_LANDING': "the constant '/dashboard/grandparent-portal', a guest's landing page (held 0509's route gate)",
       'app/(app)/admin/layout.tsx|SUPER_ADMIN_STEP_UP_PATH': "stepUpPath('/admin') — a constant path, in lib/auth/super-admin-assurance.ts",
       'app/(app)/admin/onboarding/page.tsx|SUPER_ADMIN_STEP_UP_PATH': "stepUpPath('/admin') — a constant path, in lib/auth/super-admin-assurance.ts",
+      'lib/auth/super-admin-page.ts|SUPER_ADMIN_STEP_UP_PATH': "stepUpPath('/admin') — a constant path, in lib/auth/super-admin-assurance.ts (the /admin layout's gate, asked by a page)",
       'lib/services/onboarding-calendar/oauth.ts|url': 'the provider authorization URL — deliberately external',
       'lib/services/onboarding-calendar/oauth.ts|authUrl': 'the provider authorization URL — deliberately external',
     };

@@ -167,6 +167,45 @@ describe('policy scan reconciliation', () => {
     expect(policyRows(db)[0]).toMatchObject({ status: 'dismissed', confidence: 70 });
   });
 
+  // household-roles round 9 (R8-RV5-SWEEP-OMISSIONS). The scan read its own
+  // offers as one unordered `.limit(200)` page of every 'policy' card, and any
+  // member may file one (0085's permissive policy; 0327 guards only
+  // resolved_by). Two hundred of a child's dismissed cards filled the page: the
+  // scan missed its open offer, inserted it again, and failed on the unique key
+  // every scan. Its offers are now read by key.
+  it('a member’s two hundred and fifty policy cards do not hide the scan’s own offer from it', async () => {
+    db.seed('autopilot_suggestions', Array.from({ length: 250 }, (_, i) => ({
+      id: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, family_id: 'family-1', member_id: null, kind: 'policy',
+      title: 'Filed by a child', detail: null, confidence: 50, urgency: 1, status: 'dismissed', action_type: 'accept_policy',
+      payload: {}, source_kind: null, source_id: null, dedupe_key: `policy:planted:automate:tool-${i}`, expires_at: null,
+      resolved_at: null, resolved_by: null, created_by: 'child-user', updated_at: '2026-09-01T00:00:00Z',
+    })));
+    seedStreak(db, 'family-1', 3);
+    await runPolicyScan(db as never, 'family-1', 'user-1', { now: NOW });
+    db.seed('approval_requests', [approvalRow('family-1', { decided_at: '2026-09-05T10:00:00Z' })]);
+
+    const result = await runPolicyScan(db as never, 'family-1', 'user-1', { now: NOW });
+
+    expect(result).toEqual({ candidates: 1, inserted: 0, refreshed: 1, cleared: 0 });
+    const offers = policyRows(db).filter((row) => row.dedupe_key === KEY);
+    expect(offers).toHaveLength(1);
+    expect(offers[0]).toMatchObject({ status: 'open', confidence: 74 });
+  });
+
+  it('control (the verdict on a dismissal filed ahead): a member’s dismissed card under the key is respected like their dismissal', async () => {
+    // Every member may dismiss a card the family is shown (resolveSuggestion),
+    // so filing the dismissal before the offer exists does nothing a child
+    // could not do the moment it was made. Recorded, not changed.
+    db.seed('autopilot_suggestions', [{
+      family_id: 'family-1', member_id: null, kind: 'policy', title: 'Filed by a child', detail: null, confidence: 50, urgency: 1,
+      status: 'dismissed', action_type: 'accept_policy', payload: {}, dedupe_key: KEY, resolved_by: 'child-user', created_by: 'child-user',
+    }]);
+    seedStreak(db, 'family-1', 3);
+
+    expect(await runPolicyScan(db as never, 'family-1', 'user-1', { now: NOW })).toEqual({ candidates: 1, inserted: 0, refreshed: 0, cleared: 0 });
+    expect(policyRows(db)).toHaveLength(1);
+  });
+
   it('withdraws an open offer when a rejection breaks the streak', async () => {
     seedStreak(db, 'family-1', 3);
     await runPolicyScan(db as never, 'family-1', 'user-1', { now: NOW });

@@ -110,6 +110,10 @@ const REFRESH_TOO_OFTEN = 'That feed was just refreshed. Give it a few minutes.'
 
 export async function refreshFeedAction(feedId: string): Promise<LibraryResult> {
   const ctx = await requireUserContext();
+  // A guest views the library and does not change it (ROLE-M03). Refuse
+  // before reading or fetching; the caller's database write guards also stay
+  // in force if membership or role changes while the feed is being fetched.
+  if (ctx.active.role === 'guest') return { ok: false, error: (await getTranslations())('actionRefusal.notAllowed') };
   if (!rateLimit(`library-refresh-feed:${feedId}`, { limit: 5, windowMs: 10 * 60_000 }).ok
     || !rateLimit(`library-refresh-family:${ctx.active.familyId}`, { limit: 30, windowMs: 10 * 60_000 }).ok) {
     return { ok: false, error: REFRESH_TOO_OFTEN };
@@ -131,6 +135,11 @@ export async function refreshFeedAction(feedId: string): Promise<LibraryResult> 
     return { ok: false, error: (await getTranslations())('library.feedNotAddedByAnAdult') };
   }
 
+  // Human Refresh keeps the caller's write boundary after the external fetch:
+  // a removed member or newly downgraded guest must not publish through a
+  // service client using admission cached before the fetch. Trusted background
+  // ingest keeps its own client. Held 0526 may refuse a child's publication;
+  // surface that refusal until a separately approved atomic refresh exists.
   const result = await ingestFeed(supabase, ctx.active.familyId, ctx.user.id, feed.id, feed.feed_url);
   revalidatePath(PAGE);
   if ('error' in result) {

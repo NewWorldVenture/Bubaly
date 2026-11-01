@@ -40,15 +40,62 @@ describe('aggregateContributions — launch gate (#5)', () => {
 
 describe('aggregateContributions — k-anonymity (#1)', () => {
   it('suppresses cohorts/values with fewer than K families', () => {
-    // 120 families total (clears gate); 110 report value A, 10 report value B.
+    // 130 families total (clears gate); 110 report value A, 10 value B, 10 value C.
+    // B and C together hide 20, so nothing beyond them needs withholding (the
+    // complementary rule below) and A is published.
+    const contributions: Contribution[] = [
+      ...cohortOf(110, 'a', 'often (4–5)'),
+      ...cohortOf(10, 'b', 'rarely (0–1)'),
+      ...cohortOf(10, 'c', 'sometimes (2–3)'),
+    ];
+    const agg = aggregateContributions(contributions);
+    expect(agg.some((a) => a.value === 'often (4–5)')).toBe(true);   // 110 >= 20
+    expect(agg.some((a) => a.value === 'rarely (0–1)')).toBe(false); // 10 < 20 → suppressed
+    expect(agg.some((a) => a.value === 'sometimes (2–3)')).toBe(false); // 10 < 20 → suppressed
+    for (const a of agg) expect(a.cohortSize).toBeGreaterThanOrEqual(AGG_DEFAULTS.minCohort);
+  });
+
+  // N10 — the floor was per band only. With every other band of a metric
+  // published, what was withheld was "the cohort's total minus the rest": the
+  // probe read reminders "none" 41 beside activities "none" 40 and learned that
+  // exactly one family in that cohort had an activity.
+  it('never leaves a withheld remainder under K: the smallest published band is withheld with it', () => {
     const contributions: Contribution[] = [
       ...cohortOf(110, 'a', 'often (4–5)'),
       ...cohortOf(10, 'b', 'rarely (0–1)'),
     ];
     const agg = aggregateContributions(contributions);
-    expect(agg.some((a) => a.value === 'often (4–5)')).toBe(true);   // 110 >= 20
-    expect(agg.some((a) => a.value === 'rarely (0–1)')).toBe(false); // 10 < 20 → suppressed
-    for (const a of agg) expect(a.cohortSize).toBeGreaterThanOrEqual(AGG_DEFAULTS.minCohort);
+    // 110 shown would say "the other 10 plan rarely"; so dinner is withheld whole.
+    expect(agg.filter((a) => a.metric === 'dinner_habit')).toEqual([]);
+  });
+
+  it('the probe: 40 of 41 share a band and one does not — the band is not published beside its complement', () => {
+    const feature = feat(['0–2'], '3–4');
+    const probe: Contribution[] = Array.from({ length: 41 }, (_, i) => ({
+      familyId: `p-${i}`, features: feature,
+      metrics: { reminders_per_week: 'none', activities: i === 0 ? '1–2' : 'none' },
+    }));
+    // Enough other families to pass the launch gate, in another cohort.
+    const others = cohortOf(100, 'o');
+    const agg = aggregateContributions([...probe, ...others]);
+    const cohort = 'kids:0–2|size:3–4';
+    expect(agg.find((a) => a.cohortKey === cohort && a.metric === 'reminders_per_week')?.cohortSize).toBe(41);
+    // activities "none" (40) would have said the 41st family has one
+    expect(agg.filter((a) => a.cohortKey === cohort && a.metric === 'activities')).toEqual([]);
+  });
+
+  it('withholds only as much as it must: a remainder already of K or more costs no published band', () => {
+    const contributions: Contribution[] = [
+      ...cohortOf(80, 'a', 'often (4–5)'),
+      ...cohortOf(25, 'b', 'sometimes (2–3)'),
+      ...cohortOf(8, 'c', 'rarely (0–1)'),
+      ...cohortOf(12, 'd', 'most nights (6–7)'),
+    ];
+    // c and d hide 20 together: a and b are both shown.
+    expect(aggregateContributions(contributions).map((a) => a.value).sort()).toEqual(['often (4–5)', 'sometimes (2–3)']);
+    // with d at 11 they hide 19, so the smallest shown band (b, 25) goes too
+    const short = [...cohortOf(80, 'a', 'often (4–5)'), ...cohortOf(25, 'b', 'sometimes (2–3)'), ...cohortOf(8, 'c', 'rarely (0–1)'), ...cohortOf(11, 'd', 'most nights (6–7)')];
+    expect(aggregateContributions(short).map((a) => a.value)).toEqual(['often (4–5)']);
   });
 
   it('counts DISTINCT families, not rows', () => {

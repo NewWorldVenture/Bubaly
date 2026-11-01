@@ -61,6 +61,10 @@ export async function recordOnboardingProgress(admin: DB, p: RecordProgressInput
     if (p.marketingOptIn !== undefined) row.marketing_opt_in = p.marketingOptIn;
     if (p.completeness !== undefined) row.completeness = p.completeness;
     if (p.status === 'completed') row.completed_at = new Date().toISOString();
+    // A run that is open again has no completion: left in place, a reset or a
+    // re-adopted run still read as a completed setup on /admin/onboarding,
+    // and its next completion was timed from the first run's row.
+    else if (p.status === 'reset' || p.status === 'in_progress') row.completed_at = null;
     if (p.status === 'reset') row.reset_at = new Date().toISOString();
 
     const { error } = await admin.from('onboarding_progress').upsert(row as never, { onConflict: 'user_id' });

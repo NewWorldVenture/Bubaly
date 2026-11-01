@@ -6,6 +6,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { WalletActivation } from '@/components/wallet/wallet-activation';
 import { readFamilyWalletIsActive } from '@/lib/wallet/family-wallet-status';
+import { inWalletScope, ownMemberOnly, readWalletScope } from '@/lib/wallet/own-wallets';
 import { WalletActivityView } from '@/components/wallet/activity-view';
 import { isManager } from '@/lib/constants/roles';
 import { ErrorState } from '@/components/ui/states';
@@ -31,12 +32,20 @@ export default async function WalletActivityPage() {
   }
   if (!wallet || !wallet.is_active) return <WalletActivation canActivate={isManager(ctx.active.role)} />;
 
+  // The held 0515: a child's money is read by a parent or adult and by that
+  // child, so anyone else's page reads their own wallet's, narrowed in the query.
+  const { scope, error: scopeError } = await readWalletScope(supabase, ctx);
+  if (scopeError) {
+    console.error('[wallet-activity] Own wallet read failed', scopeError);
+    return <ErrorState message={tr('activity.couldNotLoadTheFamily')} />;
+  }
+
   const [{ data: childWallets, error: childWalletsError }, { data: txns, error: txnsError }, { data: members, error: membersError }] = await settleAll([
-    supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId),
+    ownMemberOnly(supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId), scope, ctx.active.member.id),
     // Balances are summed from these rows, so a capped read is a wrong balance —
     // and `.limit(N)` above 1,000 never applied, because PostgREST caps a
     // response at db-max-rows whatever the client asked for.
-    readAllAsQuery((from, to) => supabase.from('wallet_transactions').select('id, child_wallet_id, type, status, direction, amount_cents, description, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).order('id').range(from, to),
+    readAllAsQuery((from, to) => inWalletScope(supabase.from('wallet_transactions').select('id, child_wallet_id, type, status, direction, amount_cents, description, created_at').eq('family_id', familyId), scope).order('created_at', { ascending: false }).order('id').range(from, to),
       // `failOnMax: false`: this page LISTS recent transactions newest-first
       // rather than summing them, so the 2,000 most recent ARE the answer for a
       // family with more than 2,000. Erroring here would replace a correct
@@ -67,6 +76,7 @@ export default async function WalletActivityPage() {
           <p>{tr('walletActivity.someWalletDetailsAreTemporarilyUnavailable')} {dataWarnings.join(', ')}.</p>
         </div>
       )}
+      {!scope.all && <p className="mb-3 text-xs text-muted">{tr('childMoney.onlyYourOwnWallet')}</p>}
       <WalletActivityView rows={rows} childOptions={childOptions} />
     </div>
   );

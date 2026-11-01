@@ -318,6 +318,15 @@ function parseOr(expression: string, mode: 'or' | 'and' = 'or'): Predicate {
     const second = body.indexOf('.', first + 1);
     if (first < 0 || second < 0) throw new Error(`[in-memory-supabase] cannot parse or() clause "${part}"`);
     const column = body.slice(0, first);
+    // `col.not.op.value`, PostgREST's own negation of one filter. Like SQL's
+    // NOT, it is NULL, so not true, on a NULL column (except `not.is`): an OR
+    // that keeps NULL rows says so with its own `col.is.null` branch.
+    if (body.slice(first + 1, second) === 'not') {
+      const inner = parseOr(`${column}.${body.slice(second + 1)}`);
+      const isTest = body.slice(second + 1).startsWith('is.');
+      const keep = (row: Row) => !inner(row) && (isTest || (row[column] ?? null) !== null);
+      return negated ? (row: Row) => !keep(row) : keep;
+    }
     const op = body.slice(first + 1, second);
     const raw = body.slice(second + 1);
     // An array operator's value is a PostgreSQL array literal (`tags.cs.{beach}`),

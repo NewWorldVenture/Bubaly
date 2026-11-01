@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
-import { createServer } from '@/lib/supabase/server';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { isWithheldFromGuest } from '@/lib/auth/guest-scope';
@@ -16,6 +16,10 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { logWalletAudit } from '@/lib/server/audit';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readsEveryWallet } from '@/lib/wallet/own-wallets';
+
+/** The `feature` the mentor's request row is filed under (withAiRequest below): what the daily cap counts. */
+const AI_REQUEST_FEATURE = 'invest.mentor';
 
 // POST /api/ai/invest — the kids' EDUCATIONAL Money Mentor. Same tier gating +
 // per-day metering as the wallet coach. Explains an investing concept; never
@@ -54,9 +58,20 @@ export async function POST(req: NextRequest) {
       // tomorrow. Same defect and same fix as the kitchen display
       // (app/(app)/display/page.tsx:122).
       const startOfDay = new Date(zonedDayBoundsMs(dayKeyInTz(new Date(), ctx.active.family.timezone || 'UTC'), ctx.active.family.timezone || 'UTC').start);
-      const { count, error: meterError } = await supabase
-        .from('wallet_audit_logs').select('id', { count: 'exact', head: true })
-        .eq('family_id', familyId).eq('action', 'ai_invest_call').gte('created_at', startOfDay.toISOString());
+      // Counted from the server's own record of each explainer: the
+      // `ai_requests` row withAiRequest files below, of kind 'feature' and
+      // settled 'completed' when an explainer came back. The meter counted
+      // `wallet_audit_logs` rows with action 'ai_invest_call' from ANY actor,
+      // which any member may write as themselves with any created_at
+      // (wallet_audit_logs_insert, 0380), so five planted rows refused the
+      // family the mentor for the day (household-roles
+      // N6-R1-WALLET-METERS-FORGEABLE). A member may file only a 'concierge'
+      // request, 'queued' (0255), and may not update one. The service client,
+      // because a non-manager's own client sees only their own requests (the held 0493).
+      const { count, error: meterError } = await createServiceClient()
+        .from('ai_requests').select('id', { count: 'exact', head: true })
+        .eq('family_id', familyId).eq('kind', 'feature').eq('feature', AI_REQUEST_FEATURE).eq('status', 'completed')
+        .gte('created_at', startOfDay.toISOString());
       // An unreadable meter is not "none used": that answer lifted the daily
       // limit, and every call behind it is a paid model call.
       if (meterError || count === null) {
@@ -76,6 +91,17 @@ export async function POST(req: NextRequest) {
     // The two name lookups degrade honestly: "your child" instead of a first
     // name is a blander answer, not a wrong one, so a failed read is logged and
     // the fallback stands.
+    // The held 0515: a sibling's wallet and holdings answer anyone but a parent
+    // or adult as not there, which is what the database will answer them.
+    if (body.childWalletId && !readsEveryWallet(ctx.active.role)) {
+      const { data: own, error: ownError } = await supabase.from('child_wallets').select('id')
+        .eq('id', body.childWalletId).eq('family_id', familyId).eq('member_id', ctx.active.member.id).maybeSingle();
+      if (ownError) {
+        console.error('[ai/invest] own wallet read failed', { familyId, error: ownError.message });
+        return NextResponse.json({ error: t('ai.recommendationsAreTemporarilyUnavailable') }, { status: 503 });
+      }
+      if (!own) return NextResponse.json({ error: t('child.childWalletNotFound') }, { status: 404 });
+    }
     let childName = 'your child';
     if (body.childWalletId) {
       const { data: cw, error: cwError } = await supabase.from('child_wallets').select('member_id').eq('id', body.childWalletId).eq('family_id', familyId).maybeSingle();
@@ -146,6 +172,7 @@ export async function POST(req: NextRequest) {
     );
     if (!coaching.explainer) return NextResponse.json({ error: t('invest.couldNotGenerateAnExplanation') }, { status: 502 });
 
+    // The wallet trail's record of the call, best-effort. It is not the meter: the request row above is.
     await logWalletAudit(supabase, {
       family_id: familyId, actor_user_id: ctx.user.id, action: 'ai_invest_call', entity_type: 'ai_invest_mentor', detail: 'Money Mentor explainer',
     }, 'AI invest mentor call');

@@ -32,6 +32,7 @@ const CLASSIFIED: Record<string, { count: number; how: string }> = {
   'lib/planning/prep-server.ts': { count: 1, how: 'idempotent regeneration; reports plans, not steps' },
   'lib/contact-center/urgent-delivery.ts': { count: 1, how: 'readback: verifies the notification identity' },
   'lib/marketing/automation-events.ts': { count: 1, how: '.select() claim, then reads the existing run on a duplicate' },
+  'lib/marketing/platform.ts': { count: 1, how: '.select(): an embedding counts and checks only the chunks it inserted; one an overlapping run inserted first is reported skipped and left to that run (RV62-EMBED-OVERLAP-DUPLICATE-KEY)' },
   'lib/server/feature-tiers.ts': { count: 1, how: '.select(): an empty result is a lost insert race, so the save re-reads and retries' },
   'lib/server/push.ts': { count: 1, how: 'delivery receipt (0440): a duplicate IS the goal state — already recorded; reports nothing' },
 };

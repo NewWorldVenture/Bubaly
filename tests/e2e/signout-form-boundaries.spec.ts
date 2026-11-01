@@ -63,7 +63,7 @@ async function fixture(page: Page, control: Control = 'plain', locale = 'en-US')
       '@/lib/marketing/value': { PLAN_CURRENCY: 'USD' },
       '@/lib/utils/cn': { cn: (...values) => values.filter(value => typeof value === 'string').join(' ') },
       '@/components/ui/toast': { useToast: () => ({ success() {}, error() {} }) },
-      '@/components/app/app-context': { useApp: () => ({ role: 'child', members: [], userEmail: 'fixture@example.invalid' }) },
+      '@/components/app/app-context': { useApp: () => ({ role: 'child', members: [], userEmail: 'fixture@example.invalid', userId: 'fixture-user', familyId: 'synthetic-family' }) },
       '@/app/(app)/account/actions': { reopenAccountAction: async () => { throw new Error('Unrelated action'); }, closeAccountAction: async () => { throw new Error('Unrelated action'); } },
       // account-closed-gate offers a member's other, open families through the
       // family switcher's action; no family is offered in this fixture.

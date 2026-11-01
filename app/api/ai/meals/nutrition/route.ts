@@ -84,6 +84,15 @@ export async function POST(req: Request) {
     if (cached) return NextResponse.json({ nutrition: cached, cached: true });
   }
 
+  // A guest reads the family's saved estimates (served just above), but 0481's
+  // meal_nutrition insert and update policies keep the cache write to the
+  // other members. On a guest's session the model was asked and billed, the
+  // upsert below was refused, and the estimate was thrown away with a 500,
+  // once per retry. A guest is answered before anything is spent.
+  if (ctx.active.role === 'guest') {
+    return NextResponse.json({ error: t('nutrition.aGuestSeesSavedEstimatesOnly') }, { status: 403 });
+  }
+
   // A model call from here on, so the Free plan's monthly AI allowance applies
   // as it does at /api/ai and on the Habits, Journal and Notes helpers: these
   // rows count toward the limit the assistant refuses on. A cached estimate

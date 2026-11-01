@@ -8,9 +8,10 @@ import { createInMemorySupabase, type Row } from './helpers/in-memory-supabase';
 import { completeReminder, createReminder, snoozeReminder } from '@/lib/services/reminders';
 import { nowAndNext } from '@/lib/display/ambient';
 import Page from '@/app/(app)/display/page';
+import { suggestionReminderKey, suggestionSourceTag } from '@/lib/services/autopilot';
 
-const state = vi.hoisted(() => ({ db: null as unknown, timezone: 'UTC' as unknown, failServer: false }));
-vi.mock('@/lib/supabase/auth', () => ({ requireFeature: async () => ({ user: { id: 'user-1' }, active: { familyId: 'family-1', family: { name: 'Fixture family', timezone: state.timezone } } }) }));
+const state = vi.hoisted(() => ({ db: null as unknown, timezone: 'UTC' as unknown, failServer: false, role: 'parent' }));
+vi.mock('@/lib/supabase/auth', () => ({ requireFeature: async () => ({ user: { id: 'user-1' }, active: { familyId: 'family-1', role: state.role, member: { id: 'member-1' }, family: { name: 'Fixture family', timezone: state.timezone } } }) }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => { if (state.failServer) throw new Error('Fixture offline'); return state.db; } }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key, getLocaleContext: async () => ({ locale: { code: 'en-US' }, source: 'default' }) }));
 vi.mock('next/navigation', () => ({ unstable_rethrow: () => {} }));
@@ -78,12 +79,59 @@ function fixture() {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-09-12T02:00:00Z'));
-  state.timezone = 'UTC'; state.failServer = false;
+  state.timezone = 'UTC'; state.failServer = false; state.role = 'parent';
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('actual kitchen page family-calendar loading', () => {
+  it.each(['child', 'parent'])('keeps %s card-dependent reminder failures unavailable and recovers the same audience', async role => {
+    state.role = role;
+    const f = fixture();
+    const cards = ['member-1', 'member-2'].map((memberId, index) => ({
+      id: `insurance-card-${index}`, family_id: 'family-1', kind: 'insurance', source_kind: 'family_insurance_policies',
+      source_id: `policy-${index}`, member_id: memberId, action_type: 'create_reminder', title: `Insurance ${index}`,
+      detail: null, urgency: 1, payload: {},
+    }));
+    f.db.seed('autopilot_suggestions', cards);
+    f.db.seed('family_reminders', cards.map(card => ({
+      id: `reminder-${card.id}`, family_id: 'family-1', title: card.title, remind_at: iso('2026-09-12T05:00:00Z'), status: 'active',
+      idempotency_key: suggestionReminderKey('family-1', card.id), tags: [suggestionSourceTag(card)],
+    })));
+    f.db.seed('calendar_events', [event('still-readable', '2026-09-12T03:00:00Z', '2026-09-12T04:00:00Z')]);
+    f.db.seed('family_members', [{ id: 'member-1', family_id: 'family-1', is_active: true, display_name: 'Ada', birthday: '2001-09-12' }]);
+    f.db.seed('notes', [{ id: 'note-1', family_id: 'family-1', title: 'Readable note', body: 'Synthetic note', is_pinned: true }]);
+    const healthy = await f.read();
+    expect(healthy.loadStatus).toEqual(ALL_LOADED);
+    expect(healthy.reminders.map(row => row.title)).toEqual(role === 'child' ? ['Insurance 0'] : ['Insurance 0', 'Insurance 1']);
+    expect(healthy.events).toHaveLength(1); expect(healthy.members).toHaveLength(1);
+    expect(healthy.notes).toEqual([{ id: 'note-1', title: 'Readable note', body: 'Synthetic note' }]);
+    for (const failure of [f.failed, f.thrown]) {
+      failure.add('autopilot_suggestions');
+      const failed = await f.read();
+      expect(failed.loadStatus).toEqual({ ...ALL_LOADED, reminders: 'error' });
+      expect(failed.reminders).toEqual([]);
+      expect(failed.events).toEqual(healthy.events); expect(failed.members).toEqual(healthy.members);
+      expect(failed.notes).toEqual(healthy.notes); expect(failed.birthdays).toEqual(healthy.birthdays);
+      failure.clear();
+      const recovered = await f.read();
+      expect(recovered.loadStatus).toEqual(ALL_LOADED);
+      expect(recovered.reminders).toEqual(healthy.reminders);
+    }
+  });
+
+  it('keeps successful empty and manual-only reminders healthy without consulting an unrelated failed card store', async () => {
+    state.role = 'child';
+    const f = fixture(); f.failed.add('autopilot_suggestions');
+    const empty = await f.read();
+    expect(empty.loadStatus).toEqual(ALL_LOADED); expect(empty.reminders).toEqual([]);
+    f.db.seed('family_reminders', [{ id: 'manual', family_id: 'family-1', title: 'Bring a book', remind_at: iso('2026-09-12T05:00:00Z'), status: 'active', tags: [] }]);
+    const manual = await f.read();
+    expect(manual.loadStatus).toEqual(ALL_LOADED);
+    expect(manual.reminders.map(row => row.title)).toEqual(['Bring a book']);
+    expect(f.calls.some(call => call.table === 'autopilot_suggestions')).toBe(false);
+  });
+
   it('uses the family day for timed/all-day events, meals, handled count and calendar marks', async () => {
     state.timezone = 'America/Los_Angeles';
     const f = fixture();

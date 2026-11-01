@@ -23,6 +23,8 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { formatCents } from '@/lib/wallet/ledger';
+import { isManager } from '@/lib/constants/roles';
+import { deletePollAction, setPollStatusAction } from '@/app/(app)/dashboard/voting/actions';
 
 type Poll = Tables<'family_polls'>;
 type Option = Tables<'family_poll_options'>;
@@ -67,7 +69,7 @@ export function VotingModule() {
   const tr = useTranslations();
   const locale = useLocale();
   const money = (cents: number) => formatCents(cents, CURRENCY, locale.code);
-  const { familyId, userId, selfMember } = useApp();
+  const { familyId, userId, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
   const meId = selfMember?.id ?? null;
 
@@ -236,25 +238,37 @@ export function VotingModule() {
     }
   }
 
-  async function setStatus(poll: Poll, status: string) {
-    // A poll closed by its deadline stays closed whatever its status says, so
-    // reopening one also clears the deadline — writing status alone was a
-    // click that changed nothing.
-    const reopenPastDeadline = status === 'open' && !!poll.closes_at && isPollClosed('open', poll.closes_at, new Date());
-    const patch = reopenPastDeadline ? { status, closes_at: null } : { status };
-    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
-    const { data: updated, error } = await createClient().from('family_polls').update(patch).eq('id', poll.id).eq('family_id', familyId).select('id, status, closes_at');
-    if (error) toastError(describeDbError(error));
-    else if (wroteNoRows(updated)) toastError(tr('errors.thatChangeWasNotSaved'));
-    else if (status === 'open' && updated?.[0] && isPollClosed(updated[0].status, updated[0].closes_at, new Date())) toastError(tr('errors.thatChangeWasNotSaved'));
-    // family_polls is not in the realtime publication: the screen re-reads, so
-    // its own Close takes effect here without a reload.
-    void refreshPolls();
+  // A poll is run — closed, reopened, removed — by the person who asked it or
+  // by a parent or another adult, and only through the checked server actions
+  // (app/(app)/dashboard/voting/actions.ts). Written from here, any member
+  // could close or delete anyone's poll; RLS on family_polls still allows it
+  // (the database half needs a schema change).
+  const mayRun = (poll: Poll) => isManager(role) || (!!poll.created_by && poll.created_by === userId);
+
+  async function setStatus(poll: Poll, status: 'open' | 'closed') {
+    // The action clears a past deadline on a reopen and confirms the row it
+    // changed (Audit C1-S9-81).
+    try {
+      const result = await setPollStatusAction(poll.id, status);
+      if (!result.ok) toastError(result.error);
+    } catch (cause) {
+      toastError(describeDbError(cause));
+    } finally {
+      // family_polls is not in the realtime publication: the screen re-reads,
+      // so its own Close takes effect here without a reload.
+      void refreshPolls();
+    }
   }
   async function remove(id: string) {
     if (!confirm(tr('votingModule.deleteThisPoll'))) return;
-    const { data: removed, error } = await createClient().from('family_polls').delete().eq('id', id).select('id');
-    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed)) toastError(tr('errors.thatChangeWasNotSaved')); else success(tr('votingModule.deleted'));
+    try {
+      const result = await deletePollAction(id);
+      if (!result.ok) toastError(result.error); else success(tr('votingModule.deleted'));
+    } catch (cause) {
+      toastError(describeDbError(cause));
+    } finally {
+      void refreshPolls();
+    }
   }
 
   if (loading) return <SkeletonList />;
@@ -330,10 +344,12 @@ export function VotingModule() {
                 </p>
                 {p.description && <p className="mt-1 text-sm text-muted">{p.description}</p>}
               </div>
-              <div className="flex shrink-0 items-center gap-2 text-xs">
-                <button onClick={() => setStatus(p, closed ? 'open' : 'closed')} className="text-muted hover:text-fg hover:underline">{closed ? 'Reopen' : 'Close'}</button>
-                <button onClick={() => remove(p.id)} className="text-muted hover:text-danger" aria-label={tr('voting.delete')}><Trash2 className="h-4 w-4" /></button>
-              </div>
+              {mayRun(p) && (
+                <div className="flex shrink-0 items-center gap-2 text-xs">
+                  <button onClick={() => setStatus(p, closed ? 'open' : 'closed')} className="text-muted hover:text-fg hover:underline">{closed ? 'Reopen' : 'Close'}</button>
+                  <button onClick={() => remove(p.id)} className="text-muted hover:text-danger" aria-label={tr('voting.delete')}><Trash2 className="h-4 w-4" /></button>
+                </div>
+              )}
             </div>
 
             {/* AI consensus */}

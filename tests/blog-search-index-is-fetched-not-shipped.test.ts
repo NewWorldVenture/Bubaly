@@ -21,7 +21,7 @@ describe('the blog typeahead index', () => {
   it('is fetched on first interaction, from both focus and typing', () => {
     // Focus fires first for a mouse user; a keyboard user tabbing in and
     // typing immediately must not race past the load either.
-    expect(component).toContain("fetch('/api/blog/search-index')");
+    expect(component).toContain("fetch('/api/blog/search-index', { signal })");
     expect(component).toMatch(/onFocus=\{\(\) => \{ loadIndex\(\);/);
     expect(component).toMatch(/onChange=\{\(e\) => \{ loadIndex\(\);/);
   });
@@ -33,7 +33,7 @@ describe('the blog typeahead index', () => {
     // uses that loader and keeps one per mount.
     expect(component).toContain("import { createSearchIndexLoader, type SearchIndexState } from '@/lib/blog/search-index-loader';");
     expect(component).toMatch(/loader\.current \?\?= createSearchIndexLoader</);
-    expect(component).toContain("fetchIndex: () => fetch('/api/blog/search-index')");
+    expect(component).toContain("fetchIndex: (signal) => fetch('/api/blog/search-index', { signal })");
   });
 
   it('says the index is unavailable instead of "no articles found" when it cannot be loaded', () => {

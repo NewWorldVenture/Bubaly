@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
-import { createServer } from '@/lib/supabase/server';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { isWithheldFromGuest } from '@/lib/auth/guest-scope';
@@ -9,12 +9,13 @@ import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext, dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
-import { walletTierForPlanLevel, aiCoachLevel, AI_COACH_DAILY_LIMIT } from '@/lib/wallet/tiers';
+import { walletTierForPlanLevel, aiCoachLevel, AI_COACH_DAILY_LIMIT, AI_COACH_REQUEST_FEATURES } from '@/lib/wallet/tiers';
 import { balanceFromLedger, bucketBalances, weeksToGoal, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
 import { buildWalletCoachPrompt, parseWalletCoach, type CoachChild, type CoachGoal } from '@/lib/wallet/coach';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { logWalletAudit } from '@/lib/server/audit';
+import { readsEveryWallet } from '@/lib/wallet/own-wallets';
 
 // POST /api/ai/wallet — the AI Family Financial Coach. Gated by wallet tier
 // (Free has no coach; Basic limited; Plus unlimited). Computes balances + goal
@@ -32,6 +33,12 @@ export async function POST() {
     }
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
+    // The family coach reads every child's wallet, and a child's money is read
+    // by a parent or adult and by that child (the held 0515). Anyone else has
+    // the coach on their own wallet (/api/ai/wallet/child/<theirs>).
+    if (!readsEveryWallet(ctx.active.role)) {
+      return NextResponse.json({ error: tr('householdMoney.keptByParentsBody') }, { status: 403 });
+    }
 
     const tier = walletTierForPlanLevel(await effectivePlanLevel(await resolveFamilyPlanLevel(supabase, familyId)));
     if (aiCoachLevel(tier) === 'none') {
@@ -47,7 +54,7 @@ export async function POST() {
     );
 
     // Per-day metering: the limited (Basic) tier is capped at AI_COACH_DAILY_LIMIT
-    // calls/day. We count today's `ai_coach_call` audit rows for this family.
+    // calls/day, counted from the server's own record of each coaching.
     const dailyLimit = AI_COACH_DAILY_LIMIT[tier];
     if (Number.isFinite(dailyLimit)) {
       // The family's midnight, not the host's. This bound is the daily AI
@@ -57,11 +64,25 @@ export async function POST() {
       // tomorrow. Same defect and same fix as the kitchen display
       // (app/(app)/display/page.tsx:122).
       const startOfDay = new Date(zonedDayBoundsMs(dayKeyInTz(new Date(), ctx.active.family.timezone || 'UTC'), ctx.active.family.timezone || 'UTC').start);
-      const { count: usedToday, error: meterError } = await supabase
-        .from('wallet_audit_logs')
+      // The rows are the `ai_requests` rows withAiRequest files below (and the
+      // child coach's, which shares this counter), of kind 'feature' and
+      // settled 'completed' when coaching came back. The meter counted
+      // `wallet_audit_logs` rows with action 'ai_coach_call' from ANY actor,
+      // and any member may append to that trail as themselves with any action
+      // and any created_at (wallet_audit_logs_insert, 0380), so a child, a teen,
+      // a caregiver or a guest could plant five and the parents were refused
+      // the coach for the day (household-roles N6-R1-WALLET-METERS-FORGEABLE).
+      // A member may file only a 'concierge' request, 'queued' (0255), and
+      // nothing lets a member update one, so no row a member writes is counted.
+      // Read with the service client: a non-manager's own client sees only
+      // their own requests (the held 0493), which would lift the family's cap for them.
+      const { count: usedToday, error: meterError } = await createServiceClient()
+        .from('ai_requests')
         .select('id', { count: 'exact', head: true })
         .eq('family_id', familyId)
-        .eq('action', 'ai_coach_call')
+        .eq('kind', 'feature')
+        .in('feature', [...AI_COACH_REQUEST_FEATURES])
+        .eq('status', 'completed')
         .gte('created_at', startOfDay.toISOString());
       // An unreadable meter is not "none used": that answer lifted the daily
       // limit, and every call behind it is a paid model call.
@@ -163,8 +184,9 @@ export async function POST() {
       return NextResponse.json({ error: tr('wallet.couldNotGenerateCoachingRight') }, { status: 502 });
     }
 
-    // Record this call for per-day metering (only matters for the metered tier,
-    // but logging always keeps the count honest if the plan changes mid-day).
+    // The wallet trail's record of the call, best-effort. It is not the meter:
+    // the request row above is, on every tier, so a plan changed mid-day still
+    // finds the day's calls counted.
     await logWalletAudit(supabase, {
       family_id: familyId, actor_user_id: ctx.user.id, action: 'ai_coach_call',
       entity_type: 'ai_wallet_coach', detail: 'AI Money Coach generated',

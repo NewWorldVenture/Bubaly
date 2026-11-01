@@ -18,7 +18,7 @@
 // adult's feed, or change the media_url of an adult's book in place, and every
 // one of those is fetched. The durable rule is a database trigger on
 // library_items (media_url, feed_id, created_by) and library_feeds (feed_url,
-// created_by), an owner migration.
+// created_by), an owner migration: the held 0526 (supabase/reserved/).
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { MANAGER_ROLES } from '@/lib/constants/roles';

@@ -87,6 +87,9 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
   currentScreen.current = screenOwner;
   // Imports belong to a user/family lifetime, independent of the billing query.
   const calendarOwner = useMemo(() => ({ userId: expectedOwner?.userId, familyId: expectedOwner?.familyId }), [expectedOwner?.userId, expectedOwner?.familyId]);
+  // The wizard is signed in; its telemetry says whose run it is, so the admin
+  // funnel can tell it from a row anyone with the anon key can file.
+  const telemetryUser = expectedOwner?.userId ?? null;
   const currentCalendarOwner = useRef(calendarOwner);
   currentCalendarOwner.current = calendarOwner;
   const mounted = useRef(true);
@@ -163,7 +166,7 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
     if (!familyNameTouched) setDraft((d) => ({ ...d, familyName: suggestFamilyName(d.name) }));
   }, [hydrated, draft.name, familyNameTouched]);
 
-  useEffect(() => { trackOnboarding('profile', 'started'); }, []);
+  useEffect(() => { trackOnboarding('profile', 'started', telemetryUser); }, [telemetryUser]);
 
   const canGo = canAdvance(step, draft);
   const { current, total } = stepCounter(step);
@@ -194,7 +197,7 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
     if (!mounted.current || currentScreen.current !== screenOwner) return;
     if (!res.ok) { toastError(res.error ?? tr('actions.couldNotFinishSettingUp2')); return; }
     setDoneResult({ owner: calendarOwner, brief: res.data?.brief ?? null, unsentInvites: res.data?.unsentInvites ?? [] });
-    trackOnboarding('done', 'completed');
+    trackOnboarding('done', 'completed', telemetryUser);
     try { sessionStorage.removeItem(DRAFT_STORAGE_KEY); } catch { /* ignore */ }
     setStep('done');
     } catch { if (mounted.current && currentScreen.current === screenOwner) toastError(tr('actions.couldNotFinishSettingUp2')); }
@@ -208,7 +211,7 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
     if (!canGo) return;
     if (isLastFormStep(step)) { void finish(); return; }
     const next = nextStep(step);
-    trackOnboarding(next, 'step');
+    trackOnboarding(next, 'step', telemetryUser);
     setStep(next);
   }
 
@@ -284,7 +287,7 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
                 // Skip bypasses the step's advance gate. On PIN, finish directly —
                 // buildFinalizePayload already drops any partial/invalid PIN.
                 if (step === 'pin') { void finish(); return; }
-                const next = nextStep(step); trackOnboarding(next, 'step'); setStep(next);
+                const next = nextStep(step); trackOnboarding(next, 'step', telemetryUser); setStep(next);
               }}
               className="mt-3 w-full text-center text-sm font-medium text-muted transition hover:text-fg disabled:opacity-50">
               {step === 'pin' ? tr('onboardingCopy.skipPin')
@@ -402,6 +405,7 @@ function ValuePanel({ draft, update, calendarProviders, calendarAccountId, calen
   const previewRequest = useRef(0);
   const previewMounted = useRef(true);
   const pendingRequest = useRef<number | null>(null);
+  const telemetryUser = expectedOwner?.userId ?? null;
   useEffect(() => { previewMounted.current = true; return () => { previewMounted.current = false; }; }, []);
   const onConnectedPreview = useCallback((preview: { events: import('@/lib/onboarding/first-brief').BriefEvent[]; receipt: string; calendarName: string; brief: FirstBrief }) => {
     if (!previewMounted.current || currentScope.current !== scope || currentConsentScope.current !== consentScope) return;
@@ -411,8 +415,8 @@ function ValuePanel({ draft, update, calendarProviders, calendarAccountId, calen
     onDisclosure(preview.events);
     setBrief(preview.brief); setCalendarName(preview.calendarName);
     update({ importedEvents: preview.events, importSource: 'url', calendarReceipt: preview.receipt });
-    trackOnboarding('value', 'step');
-  }, [update, onDisclosure, scope, consentScope]);
+    trackOnboarding('value', 'step', telemetryUser);
+  }, [update, onDisclosure, scope, consentScope, telemetryUser]);
 
   async function run(source: 'paste' | 'demo') {
     if (!previewMounted.current || currentScope.current !== scope || pendingRequest.current !== null) return;
@@ -428,7 +432,7 @@ function ValuePanel({ draft, update, calendarProviders, calendarAccountId, calen
     setBrief(res.data.brief);
     update({ importedEvents: res.data.events, importSource: res.data.source, calendarReceipt: undefined });
     onDisclosure(res.data.events, res.data.disclosure);
-    trackOnboarding('value', 'step');
+    trackOnboarding('value', 'step', telemetryUser);
     } catch {
       if (current()) toastError(tr('onboardingWizard.couldNotReadThatCalendar'));
     } finally {

@@ -10,6 +10,7 @@ import { GoalsView, type GoalView, type ChildOption } from '@/components/wallet/
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { inWalletScope, ownMemberOnly, readWalletScope } from '@/lib/wallet/own-wallets';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -26,19 +27,27 @@ export default async function WalletGoalsPage() {
   // Fetch goals, wallets, members, and recent save-bucket credits (last 8 weeks)
   // to compute a per-child weekly save rate for goal forecasts.
   const since = new Date(Date.now() - 56 * 86400000).toISOString();
+  // The held 0515: a child's goals are read by a parent or adult and by that
+  // child (a family goal, on no wallet, is the parents'), so anyone else's
+  // page reads their own wallet's, narrowed in the query.
+  const { scope, error: scopeError } = await readWalletScope(supabase, ctx);
+  if (scopeError) {
+    console.error('[wallet-goals] Own wallet read failed', scopeError);
+    return <ErrorState message={tr('goals.couldNotLoadWalletGoals')} />;
+  }
   const [{ data: goals, error: goalsError }, { data: childWallets, error: childWalletsError }, { data: members, error: membersError }, { data: walletBuckets, error: walletBucketsError }, { data: recentTxns, error: recentTxnsError }] = await settleAll([
-    supabase.from('wallet_goals').select('id, child_wallet_id, title, kind, target_cents, saved_cents, target_date, status').eq('family_id', familyId).order('created_at', { ascending: false }),
-    supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
+    inWalletScope(supabase.from('wallet_goals').select('id, child_wallet_id, title, kind, target_cents, saved_cents, target_date, status').eq('family_id', familyId), scope).order('created_at', { ascending: false }),
+    ownMemberOnly(supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true), scope, ctx.active.member.id),
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
-    supabase.from('wallet_buckets').select('id, kind, child_wallet_id').eq('family_id', familyId).eq('kind', 'save'),
+    inWalletScope(supabase.from('wallet_buckets').select('id, kind, child_wallet_id').eq('family_id', familyId).eq('kind', 'save'), scope),
     // `readAllAsQuery` rather than a bare select: this total drives the savings
     // progress a family reads, and PostgREST caps a response at db-max-rows
     // whatever the client asks for — so an unbounded read of a busy ledger
     // shows progress computed from part of it. Keeps the { data, error } shape
     // settleAll expects.
     readAllAsQuery<{ child_wallet_id: string | null; bucket_id: string | null; amount_cents: number }>(
-      (from, to) => supabase.from('wallet_transactions').select('child_wallet_id, bucket_id, amount_cents')
-        .eq('family_id', familyId).eq('direction', 'credit').eq('status', 'completed')
+      (from, to) => inWalletScope(supabase.from('wallet_transactions').select('child_wallet_id, bucket_id, amount_cents')
+        .eq('family_id', familyId), scope).eq('direction', 'credit').eq('status', 'completed')
         .gte('created_at', since).order('id').range(from, to),
     ),
   ]);
@@ -89,6 +98,7 @@ export default async function WalletGoalsPage() {
           <p>{tr('walletGoals.someGoalDetailsAreTemporarilyUnavailable')} {dataWarnings.join(', ')}.</p>
         </div>
       )}
+      {!scope.all && <p className="mb-3 text-xs text-muted">{tr('childMoney.onlyYourOwnWallet')}</p>}
       <GoalsView goals={goalViews} childOptions={childOptions} canManage={isManager(ctx.active.role)} />
     </div>
   );

@@ -9,13 +9,25 @@ export type HealthInput = {
   lifecycle: Lifecycle;
   memberCount: number;
   lastActivityAt: string;
+  /**
+   * Whether `lastActivityAt` measures app activity (MarketingCustomer
+   * `activityKnown`). The customer view's date is families.updated_at, the
+   * family ROW's last edit, and it says so with `false`. Read as activity, a
+   * paying family that uses the app daily but has not renamed itself in sixty
+   * days lost 25 points, read "inactive 60d" and was counted churn risk, beside
+   * a "Launch win-back" link. Unknown, recency neither lifts nor drags the
+   * score, sets no churn risk, and `inactiveDays` is null. Absent means the
+   * caller supplied a real activity time.
+   */
+  activityKnown?: boolean;
 };
 
 export type Health = {
   score: number;        // 0–100
   band: HealthBand;
   churnRisk: boolean;
-  inactiveDays: number;
+  /** Days since the last activity; null when there is no activity signal (`activityKnown: false`). */
+  inactiveDays: number | null;
 };
 
 const DAY = 86_400_000;
@@ -36,13 +48,15 @@ export const HEALTH_BAND_LABEL: Record<HealthBand, string> = {
 };
 
 export function customerHealth(input: HealthInput, now: number = Date.now()): Health {
+  const known = input.activityKnown !== false;
   const t = new Date(input.lastActivityAt).getTime();
-  const inactiveDays = Number.isNaN(t) ? 999 : Math.max(0, Math.floor((now - t) / DAY));
+  const inactiveDays = !known ? null : Number.isNaN(t) ? 999 : Math.max(0, Math.floor((now - t) / DAY));
 
   let score = LIFECYCLE_BASE[input.lifecycle] ?? 50;
 
-  // Recency: fresh activity lifts, long silence drags.
-  if (inactiveDays <= 3) score += 15;
+  // Recency: fresh activity lifts, long silence drags. No signal, no adjustment.
+  if (inactiveDays === null) score += 0;
+  else if (inactiveDays <= 3) score += 15;
   else if (inactiveDays <= 7) score += 8;
   else if (inactiveDays <= 14) score += 0;
   else if (inactiveDays <= 30) score -= 10;
@@ -53,7 +67,7 @@ export function customerHealth(input: HealthInput, now: number = Date.now()): He
 
   score = clamp(Math.round(score));
   const band = bandFor(score);
-  const churnRisk = input.lifecycle === 'churned' || input.lifecycle === 'lapsed' || score < 40 || inactiveDays > 30;
+  const churnRisk = input.lifecycle === 'churned' || input.lifecycle === 'lapsed' || score < 40 || (inactiveDays !== null && inactiveDays > 30);
   return { score, band, churnRisk, inactiveDays };
 }
 

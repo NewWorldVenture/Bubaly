@@ -30,6 +30,16 @@
 //   chunk. A chunk the page needs that only a stale row holds is ready again,
 //   and one deleted before it could be is embedded afresh. All three cases
 //   fail on eb7281f1e.
+// - RV62-F5-SAME-VERSION-REWRITE. That check compared the text only once the
+//   version had moved. The regeneration rewrites a page's text at the version
+//   it read and queues that version's embedding, so a run that read the page
+//   between a save and its regeneration kept the raw saved text ready beside
+//   the regenerated one.
+// - RV62-EMBED-OVERLAP-DUPLICATE-KEY. Two overlapping runs needing the same
+//   chunk: the second insert hit 0237's unique key, and the cron answered 502
+//   for a superseded job until a retry. These three cases fail on 7137727.
+//   The round-6 reviewer's revert probe (S3) pins the restore above; it fails
+//   on 6c2da65e8 and eb7281f1e.
 //
 // Driven through the REAL legacy and platform actions, the job worker behind
 // the REAL /api/cron/marketing route (CRON_SECRET stubbed), the public /lp
@@ -262,8 +272,19 @@ async function aPublishedConsolePage(slug: string, fields: Record<string, string
   expect(page).toMatchObject({ status: 'published', version: 2 });
   return page;
 }
-/** The console's edit form, posted with what it renders for the page now, and `changes`. */
-function theConsoleSaves(page: Row, changes: Record<string, string> = {}) {
+/**
+ * The console's edit form, posted with what it renders for the page now, and
+ * `changes`. The form stamps a published page's `published_at` afresh, so it
+ * is posted after the millisecond of the last stamp: a save inside that same
+ * millisecond changes no column 0237 compares, which no admin's next save does.
+ * Under a faked clock that millisecond never passes on its own, so the clock is
+ * stepped one millisecond past the stamp instead.
+ */
+async function theConsoleSaves(page: Row, changes: Record<string, string> = {}) {
+  while (page.published_at && Date.now() <= Date.parse(String(page.published_at))) {
+    if (vi.isFakeTimers()) vi.setSystemTime(Date.parse(String(page.published_at)) + 1);
+    else await new Promise((resolve) => setTimeout(resolve, 1));
+  }
   return anAdminSaves(() => updatePlatformPage(form({
     id: page.id, page_type: 'landing', slug: page.slug, title: page.title, summary: page.summary ?? '', body: page.body ?? '', status: page.status, ...changes,
   })));
@@ -308,6 +329,7 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { errors.push(args); });
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
@@ -572,5 +594,115 @@ describe('F5-EMBED-STALE-CHUNKS: only the page as it now stands keeps ready chun
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
     for (const run of runs) expect(run).toEqual(cleanRun);
     expect(workerFailures()).toEqual([]);
+  });
+
+  // RV62-F5-SAME-VERSION-REWRITE. One cron run claims a page's questions and
+  // embedding jobs; a save lands while it is on the questions job, so its
+  // embedding reads the page at the saved version holding the saved text, not
+  // yet regenerated. Inside that embedding's model call the queue drains: the
+  // save's regeneration fills the text back IN PLACE, at the same version, and
+  // that version's embedding inserts the filled text's chunk. The older run
+  // then inserts the chunk of the text it read. The version never moved.
+  it('a legacy save read before its regeneration leaves only the regenerated text ready', async () => {
+    const { legacy, mirror } = await aPublishedLegacyPage('s1');
+    expect(await theCronRuns()).toEqual(cleanRun);
+    expect(queued(mirror.id)).toEqual(['generate_questions', 'embed_page']);
+    beforeTheNextAnswerDelete(() => anAdminSaves(() => updateLandingPage(form({ id: legacy.id, title: 'Spring', slug: 's1', headline: 'Legacy spring' }))));
+    let read = '';
+    let inner: Awaited<ReturnType<typeof theCronDrainsTheQueue>> = [];
+    h.duringEmbedding = async () => {
+      read = embeddedText(pageById(mirror.id)!);
+      inner = await theCronDrainsTheQueue();
+    };
+
+    const outer = await theCronRuns();
+
+    const page = pageById(mirror.id)!;
+    expect(page).toMatchObject({ version: 3, status: 'published', deleted_at: null });
+    expect(read).toBe('Legacy spring');
+    expect(embeddedText(page)).not.toBe(read);
+    expect(chunksOf(mirror.id, 'ready').map((row) => row.content)).toEqual([embeddedText(page)]);
+    expect(chunksOf(mirror.id, 'stale').map((row) => row.content)).toEqual([read]);
+    for (const run of [...inner, outer]) expect(run).toEqual(cleanRun);
+    expect(queued(mirror.id)).toEqual([]);
+    expect(workerFailures()).toEqual([]);
+    const [olderJob, newerJob] = jobsFor(mirror.id).filter((row) => row.job_type === 'embed_page');
+    expect(olderJob).toMatchObject({ status: 'succeeded', error: null, payload: { version: 2 }, result: { pageId: mirror.id, embedded: 1, superseded: true, staled: 1 } });
+    expect(newerJob).toMatchObject({ status: 'succeeded', error: null, payload: { version: 3 }, result: { pageId: mirror.id, embedded: 1, reused: 0 } });
+    expect(await visit('s1')).toBe('legacy page');
+  });
+
+  it('a console save with the body cleared, read before its regeneration, leaves only the regenerated text ready', async () => {
+    const page = await aPublishedConsolePage('s2');
+    expect(await theCronRuns()).toEqual(cleanRun);
+    expect(queued(page.id)).toEqual(['generate_questions', 'embed_page']);
+    beforeTheNextAnswerDelete(() => theConsoleSaves(page, { summary: 'Winter planning, revised.', body: '' }));
+    let read = '';
+    let inner: Awaited<ReturnType<typeof theCronDrainsTheQueue>> = [];
+    h.duringEmbedding = async () => {
+      read = embeddedText(page);
+      inner = await theCronDrainsTheQueue();
+    };
+
+    const outer = await theCronRuns();
+
+    expect(page).toMatchObject({ version: 3, summary: 'Winter planning, revised.' });
+    expect(read).toBe('Winter\n\nWinter planning, revised.');
+    expect(embeddedText(page)).not.toBe(read);
+    expect(chunksOf(page.id, 'ready').map((row) => row.content)).toEqual([embeddedText(page)]);
+    expect(chunksOf(page.id, 'stale').map((row) => row.content)).toEqual([read]);
+    for (const run of [...inner, outer]) expect(run).toEqual(cleanRun);
+    expect(workerFailures()).toEqual([]);
+  });
+
+  // RV62-EMBED-OVERLAP-DUPLICATE-KEY. A save that leaves the text as it is
+  // lands inside an embedding's model call, and an overlapping cron run drains
+  // the queue: the save's version embeds that very chunk first.
+  it('an overlapping run that inserts the same chunk first leaves the older run nothing to fail on', async () => {
+    const page = await aPageWhoseNextEmbeddingIsQueued();
+    const read = embeddedText(page);
+    const olderJob = jobsFor(page.id).find((row) => row.job_type === 'embed_page' && row.status === 'queued')!;
+    let inner: Awaited<ReturnType<typeof theCronDrainsTheQueue>> = [];
+    h.duringEmbedding = async () => {
+      await theConsoleSaves(page);
+      inner = await theCronDrainsTheQueue();
+    };
+
+    const outer = await theCronRuns();
+
+    expect(page).toMatchObject({ version: 4 });
+    expect(embeddedText(page)).toBe(read);
+    expect(chunksOf(page.id, 'ready').map((row) => row.content)).toEqual([read]);
+    expect(db.table('marketing_embeddings').filter((row) => row.content === read)).toHaveLength(1);
+    for (const run of [...inner, outer]) expect(run).toEqual(cleanRun);
+    expect(workerFailures()).toEqual([]);
+    expect(olderJob).toMatchObject({ status: 'succeeded', error: null, attempts: 1, result: { pageId: page.id, chunks: 1, embedded: 0, reused: 0, skipped: 1 } });
+    expect(olderJob.result).not.toHaveProperty('superseded');
+    const newerJob = jobsFor(page.id).filter((row) => row.job_type === 'embed_page').at(-1)!;
+    expect(newerJob).toMatchObject({ status: 'succeeded', payload: { version: 4 }, result: { pageId: page.id, chunks: 1, embedded: 1 } });
+    expect(newerJob.result).not.toHaveProperty('skipped');
+    expect(queued(page.id)).toEqual([]);
+  });
+
+  // The round-6 reviewer's probe S3, kept as a case: no race at all. The
+  // revert's embedding reused the stale row by hash before 7137727.
+  it('control: a console page edited to new text and back keeps exactly one ready chunk', async () => {
+    const page = await aPublishedConsolePage('s3', { body: 'First body.' });
+    const runs = await theCronDrainsTheQueue();
+    const first = embeddedText(page);
+    await theConsoleSaves(page, { body: 'Second body.' });
+    runs.push(...await theCronDrainsTheQueue());
+    const second = embeddedText(page);
+    await theConsoleSaves(page, { body: 'First body.' });
+    runs.push(...await theCronDrainsTheQueue());
+
+    expect(page).toMatchObject({ version: 4, body: 'First body.' });
+    expect(embeddedText(page)).toBe(first);
+    expect(chunksOf(page.id, 'ready').map((row) => row.content)).toEqual([first]);
+    expect(chunksOf(page.id, 'stale').map((row) => row.content)).toEqual([second]);
+    for (const run of runs) expect(run).toEqual(cleanRun);
+    expect(workerFailures()).toEqual([]);
+    expect(jobsFor(page.id).filter((row) => row.job_type === 'embed_page').at(-1))
+      .toMatchObject({ status: 'succeeded', result: { pageId: page.id, chunks: 1, embedded: 0, reused: 1, restored: 1 } });
   });
 });

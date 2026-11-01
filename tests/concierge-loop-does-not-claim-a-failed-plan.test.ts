@@ -259,6 +259,8 @@ describe('approving a queued run', () => {
   it('a plan that landed stamps the run executed', async () => {
     const updates: Record<string, unknown>[] = [];
     createServer.mockResolvedValue(userClient({ run: RUN }, updates));
+    // The completion is the server's write; it lands in the same run's log.
+    createServiceClient.mockReturnValue(userClient({ run: RUN }, updates));
     materializeConciergePlan.mockResolvedValue({ applied: ['calendar'], failed: [] });
     const res = await (await actions()).executeQueuedRunAction('run-1');
     expect(res.ok).toBe(true);

@@ -75,7 +75,7 @@ function loader(locale: string): string {
   const tree=React.createElement(load(roots.locale).LocaleProvider,{
     locale:load(roots.locales).localeOrDefault(${JSON.stringify(locale)}),source:'cookie',messages:${JSON.stringify(catalogues[locale])}},
     React.createElement(load(roots.toast).ToastProvider,null,
-      React.createElement(load(roots.account).AccountRow,{id:'synthetic-account',platform:'instagram',name:'Family',status:'connected',lastError:null,lastSyncedAt:${JSON.stringify(samples.summer)}}),React.createElement(Controls)));`;
+      React.createElement(load(roots.account).AccountRow,{id:'synthetic-account',platform:'instagram',name:'Family',status:'connected',lastError:null,lastSyncedAt:${JSON.stringify(samples.summer)},canDisconnect:true}),React.createElement(Controls)));`;
 }
 
 const rendered = new Map<string, string>();

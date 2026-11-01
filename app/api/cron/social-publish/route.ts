@@ -16,6 +16,8 @@ export async function GET(req: NextRequest) {
     // `app/api/cron/guardian-sms-recovery/route.ts` already does, which is what
     // made the omission visible. Audit C1-S9-13.
     const summary = await runScheduledPublishDrain({ signal: req.signal });
+    // `held` (a post held for the family's plan or closed account) is the
+    // family's state, not a fault: reported, and it leaves the run ok.
     const ok = summary.failed === 0 && summary.unknown === 0;
     return NextResponse.json({ ok, ...summary }, { status: ok ? 200 : 503 });
   } catch { return NextResponse.json({ ok: false, failed: 1 }, { status: 503 }); }

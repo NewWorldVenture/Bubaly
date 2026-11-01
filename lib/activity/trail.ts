@@ -94,26 +94,113 @@ function titleOf(metadata: unknown): string | null {
 }
 
 /**
+ * The server's ledger record of an account reopen (social_audit_logs, which no
+ * member writes; lib/family/account-reopened.ts): the columns /family/activity
+ * selects.
+ */
+export type ReopenRecordRow = { metadata?: unknown; created_at: string };
+
+/**
+ * Whether the row has the shape of the server's account-reopen entry: no
+ * actor, action 'update', resource 'family', metadata.change 'reopened'
+ * (lib/family/account-reopened.ts writes it with no actor and keeps the parent
+ * who reopened, and the close it ended, in its metadata).
+ *
+ * A row with no actor is not, by that alone, the server's. A member's own row
+ * must name the member when it is written (0380), but audit_logs.actor_id is
+ * `references auth.users(id) on delete set null` (0002), so it ends with no
+ * actor once that member's login is deleted (removeChildLoginAction deletes a
+ * PIN child's; an erasure or a dashboard deletion anyone's). Read as the reopen on
+ * any null-actor row, a child's row that named a parent there and a title of
+ * the child's choosing became that parent's line once the child's login went
+ * (household-roles N5-R1-NULL-ACTOR-TRAIL-ATTRIBUTION). Nor is the exact shape
+ * enough: a member can write that too, and once their login goes it is this
+ * row to the letter, so the shape is believed only beside a ledger record of
+ * the same reopen (vouchedReopens, N6-R1-REOPEN-RESIDUAL-HAS-A-CODE-ONLY-LEDGER).
+ */
+function isReopenEntry(row: TrailRow): boolean {
+  if (row.actor_id || row.action !== 'update' || row.resource !== 'family') return false;
+  if (!row.metadata || typeof row.metadata !== 'object') return false;
+  return (row.metadata as { change?: unknown }).change === 'reopened';
+}
+
+/** The parent and the close a reopen-shaped entry names, or null. */
+function reopenOf(row: TrailRow): { reopenedBy: string; closedAt: string } | null {
+  if (!isReopenEntry(row)) return null;
+  const { reopened_by: reopenedBy, closed_at: closedAt } = row.metadata as { reopened_by?: unknown; closed_at?: unknown };
+  return typeof reopenedBy === 'string' && reopenedBy && typeof closedAt === 'string' ? { reopenedBy, closedAt } : null;
+}
+
+/** How far apart the server's two records of one reopen may be dated: they are written one after the other. */
+const REOPEN_RECORDS_APART_MS = 60_000;
+
+/**
+ * The trail's reopen entries the ledger vouches for. The server writes one of
+ * each per reopen, in the same request, naming the same parent and the same
+ * close, so each ledger record vouches for at most one entry: of those naming
+ * its parent and close and dated within a minute of it, the nearest. A copy of
+ * a real entry that a member planted beside it, or dated elsewhere, is not
+ * credited too.
+ */
+function vouchedReopens(rows: TrailRow[], records: ReopenRecordRow[]): Set<string> {
+  const vouched = new Set<string>();
+  for (const record of records) {
+    const meta = (record.metadata && typeof record.metadata === 'object' ? record.metadata : {}) as { reopened_by?: unknown; closed_at?: unknown };
+    const at = Date.parse(record.created_at);
+    let nearest: { id: string; gap: number } | null = null;
+    for (const row of rows) {
+      const reopen = vouched.has(row.id) ? null : reopenOf(row);
+      if (!reopen || reopen.reopenedBy !== meta.reopened_by || reopen.closedAt !== meta.closed_at) continue;
+      const gap = Math.abs(Date.parse(row.created_at) - at);
+      if (gap <= REOPEN_RECORDS_APART_MS && gap < (nearest?.gap ?? Infinity)) nearest = { id: row.id, gap };
+    }
+    if (nearest) vouched.add(nearest.id);
+  }
+  return vouched;
+}
+
+/**
+ * The person a row is by: its actor, or, on a reopen entry the ledger vouches
+ * for, the parent the server recorded as reopening the account. Every other
+ * row with no actor names no one ("Someone"), and a member who writes the key
+ * on their own row is still the one named.
+ */
+function personOf(row: TrailRow, vouched: boolean): string | null {
+  if (row.actor_id) return row.actor_id;
+  return vouched ? reopenOf(row)?.reopenedBy ?? null : null;
+}
+
+/**
  * Turn one stored row into a line.
  *
  * `nameByUserId` maps `auth.users` ids to member display names; a row whose
  * actor is not in it reads "Someone" rather than showing a raw uuid, because a
  * former member's changes are still part of the household's history.
  */
-export function describeTrailRow(row: TrailRow, nameByUserId: Map<string, string>): TrailLine {
+export function describeTrailRow(row: TrailRow, nameByUserId: Map<string, string>, vouchedReopen = false): TrailLine {
   const byAssistant = byAssistantOf(row.metadata);
-  const named = row.actor_id ? nameByUserId.get(row.actor_id) : undefined;
+  const person = personOf(row, vouchedReopen);
+  const named = person ? nameByUserId.get(person) : undefined;
+  // The server writes no title on the reopen entry, so a line in that shape
+  // says only what the server says ("updated family"): a title in it is
+  // someone else's words.
+  const title = isReopenEntry(row) ? null : titleOf(row.metadata);
 
   return {
     id: row.id,
     who: byAssistant ? 'Bubaly' : named ?? 'Someone',
-    what: titleOf(row.metadata) ?? `${TRAIL_VERBS[row.action as TrailAction] ?? row.action} ${row.resource.replace(/_/g, ' ')}`,
+    what: title ?? `${TRAIL_VERBS[row.action as TrailAction] ?? row.action} ${row.resource.replace(/_/g, ' ')}`,
     at: row.created_at,
     byAssistant,
   };
 }
 
-/** The whole trail, newest first, in the order the rows arrived. */
-export function describeTrail(rows: TrailRow[], nameByUserId: Map<string, string>): TrailLine[] {
-  return rows.map((r) => describeTrailRow(r, nameByUserId));
+/**
+ * The whole trail, newest first, in the order the rows arrived. `reopens` are
+ * the ledger's reopen records (ReopenRecordRow); without them no reopen entry
+ * is credited to a parent.
+ */
+export function describeTrail(rows: TrailRow[], nameByUserId: Map<string, string>, reopens: ReopenRecordRow[] = []): TrailLine[] {
+  const vouched = vouchedReopens(rows, reopens);
+  return rows.map((r) => describeTrailRow(r, nameByUserId, vouched.has(r.id)));
 }

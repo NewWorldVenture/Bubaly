@@ -35,7 +35,7 @@ export function BlogSearch() {
 
   const loadIndex = () => {
     loader.current ??= createSearchIndexLoader<SearchablePost>({
-      fetchIndex: () => fetch('/api/blog/search-index'),
+      fetchIndex: (signal) => fetch('/api/blog/search-index', { signal }),
       onChange: (state, loaded) => { setIndexState(state); if (state === 'ready') setPosts(loaded); },
     });
     loader.current.load();
@@ -61,7 +61,11 @@ export function BlogSearch() {
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      loader.current?.dispose();
+      loader.current = null;
+    };
   }, []);
 
   const showDropdown = focused && query.length >= 2;
@@ -89,6 +93,10 @@ export function BlogSearch() {
           {indexState === 'unavailable' ? (
             <div role="status" className="px-4 py-6 text-center text-sm text-white/60">
               {t('blogBlogSearch.searchUnavailable')}
+            </div>
+          ) : indexState !== 'ready' ? (
+            <div role="status" className="px-4 py-6 text-center text-sm text-white/60">
+              {t('states.loadingEllipsis')}
             </div>
           ) : results.length === 0 ? (
             <div className="px-4 py-6 text-center text-sm text-white/40">

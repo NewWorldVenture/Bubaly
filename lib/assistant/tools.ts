@@ -348,7 +348,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         if (!q) return { ok: false, error: 'title is required' };
         // The soonest match this reader may be shown (visibleReminderLookup).
         const { data: rows, error: lookupError } = await readVisibleReminders((from, to) => supabase.from('family_reminders')
-          .select('id, title, notes, kind, priority, recurrence, remind_at, member_id, location_name, idempotency_key, tags')
+          .select('id, title, notes, kind, priority, recurrence, remind_at, member_id, location_name, idempotency_key, tags, created_by')
           .eq('family_id', ctx.familyId).eq('status', 'active').ilike('title', `%${escapeLike(q)}%`)
           .order('remind_at', { ascending: true, nullsFirst: false }).order('id').range(from, to), visibleReminderLookup());
         if (lookupError) return toolFailure('find the reminder', lookupError);
@@ -361,7 +361,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         // `status = 'active'` predicate lets exactly one completion win, and
         // `.select()` is what tells the loser it lost. Audit C1-S9-69.
         const { data: completed, error } = await supabase.from('family_reminders')
-          .update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', r.id).eq('status', 'active').select('id');
+          .update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', r.id).eq('family_id', ctx.familyId).eq('status', 'active').select('id');
         if (error) return toolFailure('complete the reminder', error);
         if (wroteNoRows(completed)) return toolFailure('complete the reminder', 'no rows updated');
         // Recurring → schedule the next occurrence (core columns only, so it's
@@ -371,20 +371,20 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         // readers' (lib/autopilot/reminder-cards.ts). Dropped, a repeating
         // "Renew dental insurance (Smile Co)" came back linked to no card, and
         // was Kit's to list and to move though the policy does not name him.
+        // And it keeps its author: written as the asker, a child who completed
+        // a parent's daily reminder became the author of the next one, and an
+        // author may delete their own (deleteReminderAction).
         const next = r.remind_at && r.recurrence !== 'none' ? nextRemindAt(r.remind_at, r.recurrence, familyTz) : null;
         if (next) {
-          const { error: nextError } = await supabase.from('family_reminders').insert({
-            family_id: ctx.familyId, created_by: ctx.userId, title: r.title, notes: r.notes,
+          try {
+            const { error: nextError } = await supabase.from('family_reminders').insert({
+            family_id: ctx.familyId, created_by: r.created_by ?? null, title: r.title, notes: r.notes,
             kind: r.kind, priority: r.priority, recurrence: r.recurrence, location_name: r.location_name,
             member_id: r.member_id, remind_at: next, status: 'active', tags: r.tags ?? [],
-          });
-          if (nextError) {
-            // Restoring the reminder this call just completed; zero rows is a
-            // failed restore. Logged. Audit C1-S9-69.
-            const { data: restored, error: rollbackError } = await supabase.from('family_reminders')
-              .update({ status: 'active', completed_at: null }).eq('id', r.id).select('id');
-            if (rollbackError || wroteNoRows(restored)) console.error('[assistant] reminder rollback failed:', rollbackError ?? 'no rows updated');
-            return toolFailure('schedule the next reminder', nextError);
+            });
+            if (nextError) return { ok: false, error: MODEL_READER.t('remindersModule.completedNextUnconfirmed') };
+          } catch {
+            return { ok: false, error: MODEL_READER.t('remindersModule.completedNextUnconfirmed') };
           }
         }
         return { ok: true, summary: `Completed “${r.title}”${next ? ' — next one scheduled' : ''}.` };

@@ -18,7 +18,7 @@ import type { ServiceScope } from '@/lib/services/types';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
 type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'delete'; filters: Record<string, unknown>; payload?: unknown };
-type Reply = { data: unknown; error: unknown };
+type Reply = { data: unknown; error: unknown; count?: number };
 
 function makeDb(respond: (call: Call) => Reply) {
   const calls: Call[] = [];
@@ -33,11 +33,19 @@ function makeDb(respond: (call: Call) => Reply) {
     // paged read it has reached the end. A fake that ignored the window would
     // hand `readAll` the same page forever, so model it.
     let window: { from: number; to: number } | null = null;
-    const paged = (reply: Reply): Reply => (window && Array.isArray(reply.data)
-      ? { ...reply, data: reply.data.slice(window.from, window.to + 1) }
-      : reply);
+    let counted = false;
+    let maximum: number | null = null;
+    const paged = (reply: Reply): Reply => {
+      if (call.kind !== 'select' || !Array.isArray(reply.data)) return reply;
+      const count = reply.data.length;
+      const data = window ? reply.data.slice(window.from, window.to + 1)
+        : maximum === null ? reply.data : reply.data.slice(0, maximum);
+      return { ...reply, data, ...(counted ? { count } : {}) };
+    };
     Object.assign(b, {
-      select: chain, order: chain, limit: chain, or: chain,
+      select: (_columns?: string, opts?: { count?: string }) => { counted = opts?.count === 'exact'; return b; },
+      limit: (count: number) => { maximum = count; return b; },
+      order: chain, or: chain,
       range: (from: number, to: number) => { window = { from, to }; return b; },
       eq: filter, is: filter, in: filter,
       ilike: (c: string, v: unknown) => filter(`ilike:${c}`, v),
@@ -264,7 +272,12 @@ describe('memory.remember', () => {
 
   it('resolves a member name and stores an explicit preference as a confirmed fact', async () => {
     const { db, calls } = makeDb((call) => {
-      if (call.table === 'family_members') return { data: MEMBERS, error: null };
+      if (call.table === 'family_members') {
+        const data = 'id' in call.filters
+          ? MEMBERS.find((member) => member.id === call.filters.id && member.family_id === call.filters.family_id) ?? null
+          : MEMBERS;
+        return { data, error: null };
+      }
       if (call.table === 'family_facts' && call.kind === 'insert') {
         return { data: { ...(call.payload as Record<string, unknown>), id: 'fact-1', created_at: '', updated_at: '' }, error: null };
       }

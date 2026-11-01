@@ -36,7 +36,8 @@ export default async function FamilyOperationsPage() {
   const t = await getTranslations();
   const ctx = await requireFeature('/dashboard/family-operations');
   // The family's zone, not the server's: every count below is a day key.
-  const result = await gatherSignalsResult(ctx.active.familyId, ctx.active.family.timezone || 'UTC');
+  // The viewer goes with it: a guest is not read the household's bills.
+  const result = await gatherSignalsResult(ctx.active.familyId, ctx.active.family.timezone || 'UTC', undefined, { role: ctx.active.role });
   if (result.error || !result.data) {
     console.error('[dashboard-family-operations] required read failed', result.error);
     return <ReadFailure />;
@@ -57,7 +58,7 @@ export default async function FamilyOperationsPage() {
             <ScoreRing pct={completion} label={t('dashboardFamilyOperations.onTrack')} />
             <ul className="space-y-2 text-sm">
               <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-400" /> {counts.doneTasks}/{counts.totalTasks} {t('dashboardFamilyOperations.tasksDone')}</li>
-              <li className="flex items-center gap-2"><CreditCard className="h-4 w-4 text-blue-400" /> {counts.billsPaid}/{counts.billsTotal} {t('dashboardFamilyOperations.billsPaid')}</li>
+              {!counts.billsWithheld && <li className="flex items-center gap-2"><CreditCard className="h-4 w-4 text-blue-400" /> {counts.billsPaid}/{counts.billsTotal} {t('dashboardFamilyOperations.billsPaid')}</li>}
               <li className="flex items-center gap-2"><Activity className="h-4 w-4 text-violet-400" /> {counts.routinesTotal} {t('dashboardFamilyOperations.activeRoutines')}</li>
             </ul>
           </div>
@@ -104,7 +105,7 @@ export default async function FamilyOperationsPage() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile href="/dashboard/calendar" label={t('dashboardFamilyOperations.eventsToday')} value={counts.eventsToday} icon={Calendar} accent="bg-violet-600" sublabel="Calendar" />
         <StatTile href="/dashboard/family-coo" label={t('dashboardFamilyOperations.tasksOpen')} value={counts.openTasks} icon={ListChecks} accent="bg-emerald-600" sublabel="Operations" />
-        <StatTile href="/dashboard/family-cfo" label={t('dashboardFamilyOperations.billsDueSoon')} value={counts.overdueBills + counts.billsDueSoon} icon={CreditCard} accent="bg-blue-600" sublabel="Finances" />
+        {!counts.billsWithheld && <StatTile href="/dashboard/family-cfo" label={t('dashboardFamilyOperations.billsDueSoon')} value={counts.overdueBills + counts.billsDueSoon} icon={CreditCard} accent="bg-blue-600" sublabel="Finances" />}
         <StatTile href="/dashboard/family-health" label={t('dashboardFamilyOperations.apptsToday')} value={counts.appointmentsToday} icon={Stethoscope} accent="bg-rose-500" sublabel="Health" />
         <StatTile href="/dashboard/family-school" label={t('dashboardFamilyOperations.schoolDeadlines')} value={counts.homeworkDueSoon} icon={GraduationCap} accent="bg-amber-500" sublabel="School" />
         <StatTile href="/dashboard/family-sports" label={t('dashboardFamilyOperations.sportsThisWeek')} value={counts.sportsThisWeek} icon={Trophy} accent="bg-teal-600" sublabel="Sports" />

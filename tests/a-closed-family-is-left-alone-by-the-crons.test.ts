@@ -347,7 +347,8 @@ describe('a closed family is left alone by the scheduled jobs', () => {
   });
 
   it('network aggregation takes nothing from a closed family, and prunes what it gave before closing', async () => {
-    for (const family of FAMILIES) db.seed('network_consent', [{ family_id: family, enabled: true, scopes: {} }]);
+    // Both consent to benchmarks: with no scope on, an open family contributes nothing either (N14).
+    for (const family of FAMILIES) db.seed('network_consent', [{ family_id: family, enabled: true, scopes: { benchmarks: true } }]);
     db.seed('network_contributions', [{ family_id: CLOSED, cohort_key: 'x', features: {}, metrics: {}, scopes: {} }]);
     await runNetworkAggregation(asDb(), new Date(NOW_ISO));
     expect(db.table('network_contributions').map((c) => c.family_id)).toEqual([OPEN]);
@@ -370,7 +371,11 @@ describe('a closed family is left alone by the scheduled jobs', () => {
   });
 
   it('marketing automations do not email a closed family', async () => {
-    db.seed('marketing_automation_workflows', [{ id: 'wf-1', trigger: 'customer_inactive', steps: [], run_count: 0, status: 'active', deleted_at: null }]);
+    // A trigger both families meet but for the closure: nine months of Family+
+    // is high value. (customer_inactive matches no one from the customer view,
+    // which has no activity signal — lib/marketing/customers.ts activityKnown.)
+    // One email step: a workflow with no step a runner executes is not run at all.
+    db.seed('marketing_automation_workflows', [{ id: 'wf-1', trigger: 'high_value_detected', steps: [{ action: 'send_email' }], run_count: 0, status: 'active', deleted_at: null }]);
     await runAutomations(asDb());
     expect(harness.emailedTo).toEqual([`${OPEN}@bubaly.test`]);
     expect(db.table('marketing_automation_runs').map((r) => r.subject_key)).toEqual([OPEN]);

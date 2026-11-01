@@ -75,7 +75,7 @@ describe('a surface that fails leaves the diagnosis', () => {
   it('records the error and rethrows unchanged — this observes, it does not handle', async () => {
     const boom = new Error('provider exploded');
     await expect(withAiRequest(scope, { feature: 'f', text: 't' }, async () => { throw boom; })).rejects.toBe(boom);
-    expect(closing()).toMatchObject({ status: 'failed', error: 'provider exploded' });
+    expect(closing()).toMatchObject({ status: 'failed', error: 'AI request failed.' });
   });
 
   it('records a failure the surface HANDLED itself', async () => {
@@ -86,7 +86,7 @@ describe('a surface that fails leaves the diagnosis', () => {
       obs.failed(new Error('stream died'));
       return 'fell back';
     });
-    expect(closing()).toMatchObject({ status: 'failed', error: 'stream died' });
+    expect(closing()).toMatchObject({ status: 'failed', error: 'AI request failed.' });
   });
 
   it('calls a broken-but-answered turn partially_completed', async () => {
@@ -100,10 +100,10 @@ describe('a surface that fails leaves the diagnosis', () => {
     // A surface that falls back and then fails again is still explained by what
     // broke first; the fallback's error is a consequence.
     await withAiRequest(scope, { feature: 'f', text: 't' }, async (obs) => {
-      obs.failed(new Error('the real cause'));
-      obs.failed(new Error('the fallback also failed'));
+      obs.failed(Object.defineProperty(new Error('the real cause'), 'status', { value: 500 }));
+      obs.failed(Object.defineProperty(new Error('the fallback also failed'), 'status', { value: 429 }));
     });
-    expect(closing()).toMatchObject({ error: 'the real cause' });
+    expect(closing()).toMatchObject({ error: 'Provider request failed (HTTP 500).' });
   });
 
   it('still records latency when no model call was reported', async () => {
@@ -120,7 +120,9 @@ describe('a surface that fails leaves the diagnosis', () => {
   });
 
   it('truncates a long provider error rather than storing it whole', async () => {
-    await withAiRequest(scope, { feature: 'f', text: 't' }, async (obs) => { obs.failed(new Error('x'.repeat(5000))); });
+    await withAiRequest(scope, { feature: 'f', text: 't' }, async (obs) => { obs.failed(new Error('PRIVATE_PROVIDER_RESPONSE'.repeat(5000))); });
+    expect(closing().error).toBe('AI request failed.');
+    expect(String(closing().error)).not.toContain('PRIVATE_PROVIDER_RESPONSE');
     expect(String(closing().error).length).toBeLessThanOrEqual(500);
   });
 });

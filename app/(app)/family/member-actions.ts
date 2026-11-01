@@ -10,6 +10,7 @@ import {
 import { memberHasAKidLogin, revokeRemovedChildLogin, type ChildLoginRevocation } from '@/lib/server/child-account';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { forgetMemberLocation } from '@/lib/location/retention';
+import { releaseRemovedMembersGiftClaims } from '@/lib/wishlists/release-claims';
 import { closePendingInvitesFor, revokeInvitesIssuedBy } from '@/lib/server/member-invites';
 import { recordTrustChange } from '@/lib/trust/ledger';
 import { logAudit } from '@/lib/server/audit';
@@ -79,6 +80,10 @@ export async function removeFamilyMemberAction(input: { memberId: string }): Pro
   // into the one answer the screen already reports.
   const invitesByThemRevoked = await revokeInvitesIssuedBy(service, familyId, target.user_id);
   const invitesRevoked = invitesToThemClosed && invitesByThemRevoked;
+  // A gift they had claimed goes back to the list: nobody else can release a
+  // removed member's claim (lib/wishlists/release-claims.ts). The removal
+  // stands if this fails; the helper logs it and the audit row records it.
+  const giftClaims = await releaseRemovedMembersGiftClaims(service, familyId, target.id);
   // The household's record of the removal: who removed whom, and whether each
   // follow-up landed. The admin console's removal writes one; this path wrote
   // none, so a partially failed removal survived only as a toast. Best-effort,
@@ -88,6 +93,7 @@ export async function removeFamilyMemberAction(input: { memberId: string }): Pro
     metadata: {
       removed: true, previous_role: target.role, login_revocation: loginRevocation,
       location_forgotten: forgotten.ok, invites_revoked: invitesRevoked, invites_they_issued_revoked: invitesByThemRevoked,
+      gift_claims_released: giftClaims.ok,
     },
   });
   return { ok: true, loginRevocation, locationForgotten: forgotten.ok, invitesRevoked };

@@ -13,7 +13,9 @@ import { guardianSmsScope, notifyGuardianSms } from './sms-notification';
 import { smsStep } from './sms-deadline';
 import { escalateGuardianEmergency } from './escalate';
 import { guardianEscalationDescription } from './escalation';
-import { GUARDIAN_INBOUND_CAP_REASON, GUARDIAN_INBOUND_FAMILY_CAP, GUARDIAN_INBOUND_SENDER_CAP, GUARDIAN_INBOUND_WINDOW_MS } from './inbound-caps';
+import {
+  GUARDIAN_INBOUND_CAP_REASON, GUARDIAN_INBOUND_CLOCK_SKEW_MS, GUARDIAN_INBOUND_FAMILY_CAP, GUARDIAN_INBOUND_SENDER_CAP, GUARDIAN_INBOUND_WINDOW_MS,
+} from './inbound-caps';
 import { runUnderLearningLease } from './learning-lease';
 
 type Client = SupabaseClient<Database>;
@@ -138,12 +140,22 @@ const UNREADABLE_CAP: InboundCap = { sender: false, family: false, unreadable: t
  * pipeline said otherwise, still announced.
  */
 async function overInboundCap(client: Client, input: GuardianSmsReceiptInput, signal: AbortSignal): Promise<InboundCap> {
-  const since = new Date(Date.now() - GUARDIAN_INBOUND_WINDOW_MS).toISOString();
+  // The last hour, and nothing dated after now. Only the provider webhooks
+  // write this table (service role, started_at defaulting to now()), but 0453
+  // still lets a parent or an adult insert a record with any started_at, and a
+  // record dated in the future counted in every window until that date: a
+  // family cap's worth dated 2100 held every routine text to the family,
+  // unannounced, for good. "Now" with the clock-skew allowance: the message's
+  // own record was dated by the database's clock, which may run ahead of this
+  // host's (GUARDIAN_INBOUND_CLOCK_SKEW_MS).
+  const nowMs = Date.now();
+  const since = new Date(nowMs - GUARDIAN_INBOUND_WINDOW_MS).toISOString();
+  const until = new Date(nowMs + GUARDIAN_INBOUND_CLOCK_SKEW_MS).toISOString();
   const count = async (sender: boolean): Promise<number | null> => {
     try {
       const result = resultEnvelope(await smsStep(signal, current => {
         let query = table(client, 'guardian_communications').select('id', { count: 'exact', head: true })
-          .eq('family_id', input.familyId).eq('comm_type', 'sms_inbound').gte('started_at', since);
+          .eq('family_id', input.familyId).eq('comm_type', 'sms_inbound').gte('started_at', since).lte('started_at', until);
         if (sender) query = input.from === null ? query.is('from_number', null) : query.eq('from_number', input.from);
         return query.retry(false).abortSignal(current);
       }));

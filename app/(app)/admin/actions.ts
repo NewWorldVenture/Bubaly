@@ -21,6 +21,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { isValidTimezone } from '@/lib/time/zoned';
 import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
 import { forgetMemberLocation } from '@/lib/location/retention';
+import { releaseRemovedMembersGiftClaims } from '@/lib/wishlists/release-claims';
 import { closePendingInvitesFor, revokeInvitesIssuedBy } from '@/lib/server/member-invites';
 import { recordTrustChange } from '@/lib/trust/ledger';
 import { isFamilyDocumentPath } from '@/lib/storage/documents';
@@ -278,8 +279,11 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result<
   const invitesToThemClosed = await closePendingInvitesFor(supabase, member.family_id, member, 'revoked');
   const invitesByThemRevoked = await revokeInvitesIssuedBy(supabase, member.family_id, member.user_id);
   const invitesRevoked = invitesToThemClosed && invitesByThemRevoked;
+  // A gift they had claimed goes back to the list, as on the family screen's
+  // removal (lib/wishlists/release-claims.ts). Stands if it fails; logged and audited.
+  const giftClaims = await releaseRemovedMembersGiftClaims(supabase, member.family_id, memberId);
 
-  await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name, login_revocation: loginRevocation, location_forgotten: forgotten.ok, invites_revoked: invitesRevoked, invites_they_issued_revoked: invitesByThemRevoked } });
+  await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name, login_revocation: loginRevocation, location_forgotten: forgotten.ok, invites_revoked: invitesRevoked, invites_they_issued_revoked: invitesByThemRevoked, gift_claims_released: giftClaims.ok } });
   revalidatePath('/admin/users');
   const warning = loginRevocation === 'failed'
     ? t('familyModule.removedButLoginStillActive')
@@ -579,9 +583,17 @@ export async function adminRevokeInviteAction(inviteId: string): Promise<Result>
   if (!guard.ok) return guard;
 
   const supabase = createServiceClient();
+  // Only while it is still pending (R5-AW-REVOKED-ACCEPTED-INVITE). The users
+  // page offers Revoke on the rows that were pending when it rendered, so a
+  // stale page reached an invite accepted since: its status was overwritten
+  // to 'revoked' with accepted_by kept, the screen said it was revoked, and
+  // the log recorded a revoke of someone already in the family. 0482 holds a
+  // client to pending -> revoked; this is the same rule for the service role.
+  // No row changed is an invite that is no longer pending, or is gone.
   const { data: invite, error } = await supabase.from('invites')
-    .update({ status: 'revoked' }).eq('id', inviteId).select('family_id, email').single();
+    .update({ status: 'revoked' }).eq('id', inviteId).eq('status', 'pending').select('family_id, email').maybeSingle();
   if (error) return actionFailure(error, t('actions.couldNotRevokeThatInvite'));
+  if (!invite) return { ok: false, error: t('actions.inviteIsNoLongerPending') };
 
   await adminAuditLog({ familyId: invite.family_id, action: 'revoke', resource: 'invites', resourceId: inviteId, metadata: { email: invite.email } });
   revalidatePath('/admin/users');

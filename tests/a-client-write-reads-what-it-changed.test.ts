@@ -57,7 +57,9 @@ const FIXED = [
   'components/vacations/trip-packing.tsx',
   'components/vacations/trip-budget.tsx',
   'components/vacations/trip-overview.tsx',
-  'components/family/play-dates-view.tsx',
+  // The play-date writes left the browser for server actions (household-roles
+  // N9): the confirmed write, and its read, are held where they now live.
+  'app/(app)/dashboard/family/play-dates/actions.ts',
   'components/family/check-in-view.tsx',
   'components/family/driving-safety-view.tsx',
   'components/meals/favorites-view.tsx',
@@ -77,7 +79,9 @@ const FIXED = [
   'components/modules/celebrations-module.tsx',
   'components/modules/concierge-module.tsx',
   'components/modules/insurance-module.tsx',
-  'components/modules/life-events-module.tsx',
+  // The checklist tick left the browser for a server action (household-roles
+  // N4-R1-SIBLING): the confirmed write, and its read, are held where it now lives.
+  'app/(app)/dashboard/life-events/actions.ts',
   'components/modules/screen-time-module.tsx',
   'components/modules/security-module.tsx',
   'components/modules/tax-vault-module.tsx',
@@ -224,7 +228,9 @@ describe('a row that licenses the next write is confirmed before it (C1-S9-82)',
 
   it('expenses: a split rollback that matched nothing is logged, not silent', () => {
     const src = readFileSync('components/modules/expenses-module.tsx', 'utf8');
-    expect(src).toContain(".from('expense_splits').delete().eq('id', split.id).select('id')");
+    // Within the family too (N4-sibling), so the rollback stays scoped and
+    // confirmed once expense_splits is a gated table.
+    expect(src).toContain(".from('expense_splits').delete().eq('id', split.id).eq('family_id', familyId).select('id')");
     expect(at(src, 'if (rollbackError)')).toBeLessThan(at(src, 'else if (wroteNoRows(rolledBack)) console.error('));
   });
 

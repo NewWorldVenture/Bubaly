@@ -20,7 +20,7 @@ const NO_MODEL: Record<string, string> = {
 
 function routes(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
-    const path = join(dir, name);
+    const path = join(dir, name).replace(/\\/g, '/');
     return statSync(path).isDirectory() ? routes(path) : name === 'route.ts' ? [path] : [];
   });
 }

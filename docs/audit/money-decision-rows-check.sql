@@ -51,6 +51,15 @@ declare
   goal     uuid;
   leak     text;
   payid    uuid;
+  own_goal uuid;
+  -- The held 0515 makes a child's goals that child's and a manager's to read.
+  -- Read from its policy, by name and exact predicate, so this holds on the
+  -- released schema and on one with 0515 installed.
+  held_0515 boolean := exists (
+    select 1 from pg_policy
+     where polrelid = 'public.wallet_goals'::regclass and polcmd = 'r' and polpermissive
+       and polname = 'A child''s money is read by a manager or that child'
+       and pg_get_expr(polqual, polrelid) = '(is_family_member(family_id) AND (can_manage_family(family_id) OR is_own_child_wallet_in_family(child_wallet_id, family_id)))');
 begin
   -- ── 0. structure: what a money function reads, a non-manager cannot rewrite ──
   -- The general form of this finding. Every SECURITY DEFINER function that
@@ -259,7 +268,30 @@ begin
   exception when insufficient_privilege then null;
   end;
   select count(*) into n from public.wallet_goals where id = goal;
-  if n <> 1 then
+  if held_0515 then
+    -- Under 0515 the sister's goal is not the brother's to read, so the
+    -- refusals above are visibility as well. The same forgery is tried on a
+    -- goal of his own, which he reads, and the write rule must refuse it.
+    if n <> 0 then
+      raise warning 'the held 0515 is installed, yet a child reads a sibling''s goal';
+      failures := failures + 1;
+    end if;
+    reset role;
+    insert into public.wallet_goals (family_id, child_wallet_id, title, target_cents, created_by)
+      values (fam, w_bro, 'Skateboard', 20000, par) returning id into own_goal;
+    set local role authenticated;
+    select count(*) into n from public.wallet_goals where id = own_goal;
+    if n <> 1 then
+      raise warning 'CONTROL FAILED: a child cannot see their own goal under 0515';
+      failures := failures + 1;
+    end if;
+    begin
+      update public.wallet_goals set saved_cents = 20000, status = 'reached' where id = own_goal;
+      get diagnostics n = row_count;
+      if n > 0 then raise warning 'BREACH: a child marked their own $200 goal saved and reached with no ledger behind it (rows: %)', n; failures := failures + 1; end if;
+    exception when insufficient_privilege then null;
+    end;
+  elsif n <> 1 then
     raise warning 'CONTROL FAILED: a child cannot see the family''s goals';
     failures := failures + 1;
   end if;

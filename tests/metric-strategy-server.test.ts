@@ -15,7 +15,9 @@ afterEach(() => { vi.restoreAllMocks(); });
 const seed = (table: string, rows: Row[]) => db.seed(table, rows.map((row) => ({ created_at: CREATED, ...row })));
 function seedPaid(familyId: string) {
   seed('subscriptions', [{ id: 'sub-' + familyId, family_id: familyId, plan: 'family', status: 'active', updated_at: PAID }]);
-  seed('activation_events', [{ id: 'act-' + familyId, family_id: familyId, milestone: 'first_outcome_viewed', created_at: REACHED }]);
+  // As the real writers record it: the household's own member, cohort keyed by the household.
+  seed('family_members', [{ id: 'member-' + familyId, family_id: familyId, user_id: 'user-' + familyId }]);
+  seed('activation_events', [{ id: 'act-' + familyId, family_id: familyId, user_id: 'user-' + familyId, session_id: familyId, milestone: 'first_outcome_viewed', created_at: REACHED }]);
 }
 const note = (id: string, familyId: string, createdAt = PAID): Row => ({
   id, kind: 'subscription', related_type: 'subscription', related_id: familyId,
@@ -156,7 +158,8 @@ describe('complete strategy reads', () => {
     seed('invites', [{ id: 'future', status: 'accepted', created_at: future }]);
     seedPaid('f1');
     seed('admin_notifications', [note('future', 'f1', future)]);
-    seed('activation_events', [{ id: 'future', family_id: 'future', milestone: 'first_outcome_viewed', created_at: future }]);
+    seed('family_members', [{ id: 'member-future', family_id: 'future', user_id: 'user-future' }]);
+    seed('activation_events', [{ id: 'future', family_id: 'future', user_id: 'user-future', session_id: 'future', milestone: 'first_outcome_viewed', created_at: future }]);
     const result = await loadStrategyMetrics(db, NOW);
     expect(result.rework?.terminal).toBe(1);
     expect(result.compression).toMatchObject({ rawSignals: 1, humanDecisions: 1 });

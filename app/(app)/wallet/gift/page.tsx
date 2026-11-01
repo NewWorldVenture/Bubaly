@@ -9,6 +9,7 @@ import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { GiftView, type GiftLinkRow, type PendingGift, type ChildOpt } from '@/components/wallet/gift-view';
 import { PayHandleManager, type PayHandleRow } from '@/components/wallet/pay-handle-manager';
+import { inWalletScope, ownMemberOnly, readWalletScope } from '@/lib/wallet/own-wallets';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -24,15 +25,22 @@ export default async function WalletGiftPage() {
   // no parent has reviewed yet, so they are loaded for parents and adults
   // only. A child sees a gift once it is approved, in their wallet.
   const canManage = isManager(ctx.active.role);
+  // The held 0515: a child's gift links and Pay-IDs are read by a parent or
+  // adult and by that child, so anyone else's page reads their own wallet's.
+  const { scope, error: scopeError } = await readWalletScope(supabase, ctx);
+  if (scopeError) {
+    console.error('[wallet-gift] Own wallet read failed', scopeError);
+    return <ErrorState message={t('gift.couldNotLoadWalletGifts')} />;
+  }
 
   const [{ data: links, error: linksError }, { data: pending, error: pendingError }, { data: childWallets, error: childWalletsError }, { data: members, error: membersError }, { data: handles, error: handlesError }] = await settleAll([
-    supabase.from('gift_links').select('id, child_wallet_id, token, occasion, is_active, created_at').eq('family_id', familyId).order('created_at', { ascending: false }),
+    inWalletScope(supabase.from('gift_links').select('id, child_wallet_id, token, occasion, is_active, created_at').eq('family_id', familyId), scope).order('created_at', { ascending: false }),
     canManage
       ? supabase.from('gift_payments').select('id, child_wallet_id, giver_name, amount_cents, message, occasion, status, created_at').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false })
       : Promise.resolve({ data: [], error: null }),
-    supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
+    ownMemberOnly(supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true), scope, ctx.active.member.id),
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
-    supabase.from('pay_handles').select('id, handle, child_wallet_id').eq('family_id', familyId).order('created_at', { ascending: false }),
+    inWalletScope(supabase.from('pay_handles').select('id, handle, child_wallet_id').eq('family_id', familyId), scope).order('created_at', { ascending: false }),
   ]);
   if (linksError || pendingError || childWalletsError || membersError || handlesError) {
     console.error('[wallet-gift] Read failed', linksError ?? pendingError ?? childWalletsError ?? membersError ?? handlesError);
@@ -65,6 +73,7 @@ export default async function WalletGiftPage() {
 
   return (
     <div className="space-y-4">
+      {!scope.all && <p className="text-xs text-muted">{t('childMoney.onlyYourOwnWallet')}</p>}
       <PayHandleManager handles={payHandles} childOptions={childOptions} canManage={canManage} baseUrl={baseUrl} />
       <GiftView links={linkRows} pending={canManage ? pendingGifts : []} childOptions={childOptions} canManage={canManage} />
     </div>

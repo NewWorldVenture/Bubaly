@@ -7,13 +7,17 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { createAutomation, setAutomationStatus } from '../actions';
 import { getTranslations } from '@/lib/i18n/server';
 import { SubmitButton } from '@/components/ui/submit-button';
+import { CONSOLE_TRIGGERS, RUNNABLE_ACTIONS, hasRunnableStep, isRunnableStep, triggerFires, workflowCanBeSwitchedOn, workflowIsRunnable } from '@/lib/marketing/automation-triggers';
 
 export const metadata: Metadata = { title: 'Marketing · Automation', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring';
-const TRIGGERS = ['customer_created', 'joins_segment', 'form_submitted', 'payment_completed', 'payment_failed', 'email_opened', 'email_clicked', 'checkout_abandoned', 'customer_inactive', 'high_value_detected'];
-const ACTIONS = ['send_email', 'send_sms', 'add_to_segment', 'remove_from_segment', 'apply_tag', 'create_task', 'notify_admin', 'update_lead_score'];
+// What a runner executes, and nothing it does not: the builder used to offer
+// seven actions that do nothing and two triggers that never fire or cannot be
+// decided (lib/marketing/automation-triggers.ts).
+const TRIGGERS = CONSOLE_TRIGGERS;
+const ACTIONS = RUNNABLE_ACTIONS;
 
 export default async function AutomationPage() {
   const tr = await getTranslations();
@@ -42,6 +46,9 @@ export default async function AutomationPage() {
                   <span className="text-xs text-muted">{w.run_count} runs</span>
                 </div>
                 <p className="text-xs text-muted">{tr('automation.when')}{' '}<span className="text-fg">{w.trigger.replace(/_/g, ' ')}</span> → {steps.map((s) => s.action.replace(/_/g, ' ')).join(' → ') || 'no steps'}</p>
+                {!workflowIsRunnable(w.trigger, w.steps) && (
+                  <p className="text-xs text-warning">{notRunnableNote(tr, w.status, w.trigger, w.steps)}</p>
+                )}
                 <div className="flex gap-2 pt-1">
                   {['active', 'paused', 'draft'].map((st) => (
                     <form key={st} action={setAutomationStatus}>
@@ -82,6 +89,29 @@ export default async function AutomationPage() {
       </Card>
     </div>
   );
+}
+
+/**
+ * Why a workflow does not do everything it says, in what the runners do with
+ * it. One that is not active cannot be switched on (setAutomationStatus). One
+ * switched on before that rule is still active, and the runners neither stop
+ * it nor fail it: its email steps send and the rest are recorded unsupported,
+ * or, when nothing in it would run (or nothing fires its trigger), it is
+ * skipped whole (automation-runner.ts). Whether a trigger fires is
+ * FIRED_TRIGGERS, not the builder's list: the app fires onboarding_completed,
+ * onboarding_abandoned and demo_abandoned too, and a workflow on one of them
+ * sends.
+ * Telling the admin such a workflow "cannot be turned on" beside its Active
+ * badge described neither. A paused or draft one the console still switches
+ * on (workflowCanBeSwitchedOn: an email step on an app event the builder does
+ * not offer) says what will run, as an active one does.
+ */
+function notRunnableNote(tr: Awaited<ReturnType<typeof getTranslations>>, status: string, trigger: string, steps: unknown): string {
+  if (status !== 'active' && !workflowCanBeSwitchedOn(trigger, steps)) return tr('adminMarketingAutomation.notRunnable');
+  if (!triggerFires(trigger) || !hasRunnableStep(steps)) return tr('adminMarketingAutomation.activeNothingRuns');
+  const skipped = (steps as unknown[]).filter((step) => !isRunnableStep(step))
+    .map((step) => String((step as { action?: unknown } | null)?.action ?? 'step').replace(/_/g, ' '));
+  return tr('adminMarketingAutomation.activeOnlyEmailRuns', { steps: skipped.join(', ') });
 }
 
 async function AdminAutomationReadError() {

@@ -21,6 +21,94 @@ export function isEventTrigger(trigger: string): trigger is EventTrigger {
   return (EVENT_TRIGGERS as readonly string[]).includes(trigger);
 }
 
+/**
+ * The one step either runner executes (automation-steps.ts runSteps). Every
+ * other action is recorded `<action>:unsupported` and does nothing, so the
+ * console offers only this one.
+ */
+export const RUNNABLE_ACTIONS = ['send_email'] as const;
+
+/**
+ * The triggers the console may build a workflow on, each of which something
+ * fires: the scheduled sweep (automation-runner.ts SCHEDULED_TRIGGERS) or an
+ * app event (EVENT_TRIGGERS above). Not `joins_segment`, which nothing fires,
+ * and not `customer_inactive`, whose rule needs an activity signal the
+ * customer view does not have (lib/marketing/customers.ts `activityKnown`).
+ * This is what the builder offers; whether a workflow can run is decided on
+ * FIRED_TRIGGERS below, which also holds the app events the builder does not.
+ */
+export const CONSOLE_TRIGGERS = [
+  'customer_created', 'form_submitted', 'payment_completed', 'payment_failed',
+  'email_opened', 'email_clicked', 'checkout_abandoned', 'high_value_detected',
+] as const;
+
+/**
+ * Every trigger something fires: the console's, and the app events the builder
+ * does not offer — onboarding_completed (app/onboarding/actions.ts),
+ * onboarding_abandoned and demo_abandoned (app/api/cron/journey-recovery).
+ * fireAutomationEvent runs any active workflow on them, and the onboarding
+ * welcome is one operators are told to switch on (docs/onboarding-supabase.md).
+ * Deciding runnability on CONSOLE_TRIGGERS refused to resume such a workflow
+ * once paused, and its card said nothing in it runs while it emailed every
+ * family. Not `demo_started`, which nothing fires.
+ */
+export const FIRED_TRIGGERS = [
+  ...CONSOLE_TRIGGERS, 'onboarding_completed', 'onboarding_abandoned', 'demo_abandoned',
+] as const;
+
+/** Whether something fires this trigger (FIRED_TRIGGERS), so a workflow on it can run at all. */
+export function triggerFires(trigger: string): boolean {
+  return (FIRED_TRIGGERS as readonly string[]).includes(trigger);
+}
+
+/**
+ * Whether a workflow does everything it says: a trigger something fires and
+ * only steps a runner executes. One that does not is refused activation — it
+ * read `active` in the console while it sent nothing, or never ran at all.
+ */
+export function workflowIsRunnable(trigger: string, steps: unknown): boolean {
+  if (!triggerFires(trigger)) return false;
+  return stepsAreRunnable(steps);
+}
+
+/**
+ * Whether the console switches this workflow on (setAutomationStatus): one
+ * that does everything it says, or one on a trigger the app fires that the
+ * builder does not offer (onboarding_completed, onboarding_abandoned,
+ * demo_abandoned) with an email step. The runners send its email steps and
+ * skip the rest, which is what its card says ("Only its email steps run").
+ * On a builder trigger the console can make the email-only workflow instead;
+ * on these it cannot, so refusing it left a paused onboarding welcome that
+ * also held a tag step off for good, with no way back but SQL.
+ */
+export function workflowCanBeSwitchedOn(trigger: string, steps: unknown): boolean {
+  if (workflowIsRunnable(trigger, steps)) return true;
+  return triggerFires(trigger) && !(CONSOLE_TRIGGERS as readonly string[]).includes(trigger) && hasRunnableStep(steps);
+}
+
+/** Whether a runner executes this step (RUNNABLE_ACTIONS); any other is recorded `<action>:unsupported`. */
+export function isRunnableStep(step: unknown): boolean {
+  return !!step && typeof step === 'object'
+    && (RUNNABLE_ACTIONS as readonly string[]).includes(String((step as { action?: unknown }).action));
+}
+
+/** Whether a runner executes every one of a workflow's steps, and there is at least one. */
+export function stepsAreRunnable(steps: unknown): boolean {
+  return Array.isArray(steps) && steps.length > 0 && steps.every(isRunnableStep);
+}
+
+/**
+ * Whether a workflow's steps would do anything at all. A workflow switched on
+ * before the console refused unrunnable ones (setAutomationStatus) can hold
+ * only steps no runner executes — a lone send_sms, apply_tag, or nothing.
+ * Run, it reserved a row per subject, recorded each `failed`, added each to
+ * run_count and answered the cron 502, every day a new subject matched, while
+ * sending nothing. Both runners skip such a workflow and report it instead.
+ */
+export function hasRunnableStep(steps: unknown): boolean {
+  return Array.isArray(steps) && steps.some(isRunnableStep);
+}
+
 export type Copy = { subject: string; body: string };
 
 /** Fallback email copy when a workflow's send_email step omits its own. */

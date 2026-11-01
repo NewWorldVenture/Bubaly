@@ -16,11 +16,11 @@ const performUpload = (request: UploadRequest & { folderFallback: string }, effe
 // apart; spies can.
 
 function effects(overrides: Partial<UploadEffects> = {}) {
+  const prepare = vi.fn(() => 'family-1/legal/passport.pdf');
   const store = vi.fn(async () => ({ path: 'family-1/legal/passport.pdf', error: null }));
   const record = vi.fn(async () => ({ error: null as string | null }));
-  const discard = vi.fn(async () => {});
-  return { store, record, discard, ...overrides } as UploadEffects & {
-    store: typeof store; record: typeof record; discard: typeof discard;
+  return { prepare, store, record, ...overrides } as UploadEffects & {
+    prepare: typeof prepare; store: typeof store; record: typeof record;
   };
 }
 
@@ -37,7 +37,7 @@ describe('a refused upload performs no effect at all', () => {
     });
     expect(fx.store, 'the bytes must not reach the bucket').not.toHaveBeenCalled();
     expect(fx.record, 'no documents row may be written').not.toHaveBeenCalled();
-    expect(fx.discard).not.toHaveBeenCalled();
+    expect(fx.prepare).not.toHaveBeenCalled();
   });
 
   it.each(['legal', 'Medical', ' passport ', 'INSURANCE', 'tax'])(
@@ -74,9 +74,10 @@ describe('an allowed upload honours the destination it was asked for', () => {
     );
 
     expect(outcome).toEqual({ ok: true, storagePath: 'family-1/legal/passport.pdf', isSecure: true });
-    expect(fx.store).toHaveBeenCalledWith('passport');
+    expect(fx.prepare).toHaveBeenCalledWith('passport');
+    expect(fx.store).toHaveBeenCalledWith('family-1/legal/passport.pdf');
     expect(fx.record).toHaveBeenCalledWith({ storagePath: 'family-1/legal/passport.pdf', isSecure: true });
-    expect(fx.discard).not.toHaveBeenCalled();
+    expect(fx.record.mock.invocationCallOrder[0]).toBeLessThan(fx.store.mock.invocationCallOrder[0]);
   });
 
   it('never quietly downgrades a Vault upload to Shared', async () => {
@@ -105,33 +106,29 @@ describe('an allowed upload honours the destination it was asked for', () => {
   it('falls back to the view folder when no category is typed', async () => {
     const fx = effects();
     await performUpload({ view: 'cloud', category: '   ', manager: true, folderFallback: 'cloud' }, fx);
-    expect(fx.store).toHaveBeenCalledWith('cloud');
+    expect(fx.prepare).toHaveBeenCalledWith('cloud');
   });
 });
 
-describe('a stored object never outlives a failed row', () => {
-  it('discards the upload when the insert is rejected, and reports the reason', async () => {
+describe('a row must protect the object before bytes move', () => {
+  it('does not upload when the insert is rejected, and reports the reason', async () => {
     const fx = effects({ record: vi.fn(async () => ({ error: 'new row violates row-level security policy' })) });
     const outcome = await performUpload(
       { view: 'vault', category: 'legal', manager: true, folderFallback: 'vault' }, fx,
     );
 
     expect(outcome).toEqual({ ok: false, reason: 'new row violates row-level security policy' });
-    // 0266 can reject an insert the client did not anticipate. Leaving the
-    // object behind would consume the family's storage with a file the app
-    // cannot show them.
-    expect(fx.discard).toHaveBeenCalledWith('family-1/legal/passport.pdf');
+    expect(fx.store).not.toHaveBeenCalled();
   });
 
-  it('does not try to discard anything when the store itself failed', async () => {
+  it('retains the protective reservation when the store response fails', async () => {
     const fx = effects({ store: vi.fn(async () => ({ path: null, error: 'Network error' })) });
     const outcome = await performUpload(
       { view: 'shared', category: '', manager: true, folderFallback: 'shared' }, fx,
     );
 
     expect(outcome).toEqual({ ok: false, reason: 'Network error' });
-    expect(fx.record).not.toHaveBeenCalled();
-    expect(fx.discard).not.toHaveBeenCalled();
+    expect(fx.record).toHaveBeenCalledWith({ storagePath: 'family-1/legal/passport.pdf', isSecure: false });
   });
 });
 

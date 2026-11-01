@@ -96,6 +96,16 @@ export async function addAccountAction(input: Record<string, unknown>): Promise<
   return error ? actionFailure('add the account', t('hubActions.couldNotAddTheAccount'), error) : { ok: true };
 }
 
+/**
+ * Whose a new card, pass or reward is. A child's money is read by a parent or
+ * adult and by that child (the held 0515), and one filed on nobody is the
+ * parents', so what a teen or child adds is filed on them and stays theirs to
+ * see; what a parent or adult adds stays the household's.
+ */
+function ownerOfNew(ctx: { active: { role: string; member: { id: string } } }): string | null {
+  return isManager(ctx.active.role) ? null : ctx.active.member.id;
+}
+
 export async function addCardAction(input: Record<string, unknown>): Promise<Result> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
@@ -103,7 +113,7 @@ export async function addCardAction(input: Record<string, unknown>): Promise<Res
   if (!name) return { ok: false, error: t('hubActions.cardNameIsRequired') };
   const supabase = await createServer();
   const { error } = await supabase.from('wallet_cards').insert({
-    family_id: ctx.active.familyId, name,
+    family_id: ctx.active.familyId, member_id: ownerOfNew(ctx), name,
     brand: CARD_BRANDS.includes(String(input.brand)) ? String(input.brand) : 'other',
     kind: CARD_KINDS.includes(String(input.kind)) ? String(input.kind) : 'credit',
     last_four: str(input.last_four, 4) || null,
@@ -122,7 +132,7 @@ export async function addPassAction(input: Record<string, unknown>): Promise<Res
   if (!name) return { ok: false, error: t('hubActions.passNameIsRequired') };
   const supabase = await createServer();
   const { error } = await supabase.from('wallet_passes').insert({
-    family_id: ctx.active.familyId, name,
+    family_id: ctx.active.familyId, member_id: ownerOfNew(ctx), name,
     kind: PASS_KINDS.includes(String(input.kind)) ? String(input.kind) : 'membership',
     status: str(input.status, 60) || null,
     detail: str(input.detail, 120) || null,
@@ -141,7 +151,7 @@ export async function addRewardAction(input: Record<string, unknown>): Promise<R
   const unit = kind === 'miles' ? 'miles' : kind === 'cashback' ? '$' : 'points';
   const supabase = await createServer();
   const { error } = await supabase.from('wallet_rewards').insert({
-    family_id: ctx.active.familyId, name, kind, unit,
+    family_id: ctx.active.familyId, member_id: ownerOfNew(ctx), name, kind, unit,
     balance: dollars(input.balance),
     value_cents: cents(input.value),
     program: str(input.program, 80) || null,

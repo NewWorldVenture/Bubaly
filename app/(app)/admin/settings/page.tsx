@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { CheckCircle2, CircleAlert, XCircle, Server, Plug, ShieldCheck, Database, UsersRound, Sparkles, CreditCard, Share2 } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getAIConfigView } from '@/lib/ai/settings';
+import { resolveStripeSecretKey } from '@/lib/stripe/settings';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
@@ -49,9 +50,21 @@ export default async function AdminSettingsPage() {
       ? `${ai.model ?? 'default model'} · key from ${ai.openaiFromEnv ? 'env (OPENAI_API_KEY)' : 'admin console'}`
       : 'OPENAI_API_KEY not set';
 
+  // Stripe is ready on the key BILLING uses — Stripe Setup's, then the
+  // environment's — and says which. `!!process.env.STRIPE_SECRET_KEY` read a
+  // deployment configured in Stripe Setup as Not set while checkout worked.
+  // Settings that could not be read are Unavailable, not the env signal.
+  const stripe = await resolveStripeSecretKey();
+  if (stripe.status === 'unreadable') console.error('[admin-settings] stripe settings read failed', stripe.error);
+  const stripeReady: boolean | null = stripe.status === 'unreadable' ? null : stripe.status === 'resolved';
+  const stripeDetail = stripe.status === 'unreadable' ? '—'
+    : stripe.status === 'resolved'
+      ? t(stripe.source === 'setup' ? 'adminSettings.stripeKeyFromSetup' : 'adminSettings.stripeKeyFromEnvironment')
+      : 'STRIPE_SECRET_KEY';
+
   const providers: { name: string; ready: boolean | null; detail: string }[] = [
     { name: 'Supabase (database, auth, storage)', ready: !!process.env.NEXT_PUBLIC_SUPABASE_URL, detail: host(process.env.NEXT_PUBLIC_SUPABASE_URL) },
-    { name: 'Stripe (payments)', ready: !!process.env.STRIPE_SECRET_KEY, detail: 'STRIPE_SECRET_KEY' },
+    { name: 'Stripe (payments)', ready: stripeReady, detail: stripeDetail },
     { name: 'Resend (email)', ready: !!process.env.RESEND_API_KEY, detail: 'RESEND_API_KEY' },
     { name: 'OpenAI (AI)', ready: openaiReady, detail: openaiDetail },
     { name: 'Google OAuth (sign-in + calendar)', ready: !!process.env.GOOGLE_CLIENT_ID, detail: 'GOOGLE_CLIENT_ID' },

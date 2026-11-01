@@ -46,6 +46,54 @@ export type OnboardingFunnel = {
   biggestDropStep: string | null;
 };
 
+/** An onboarding event as the admin funnel reads it: with the account that filed it. */
+export type AccountOnboardingEvent = OnboardingEventLike & { user_id: string | null };
+
+/**
+ * One wizard run per account: the funnel counts people, not session ids.
+ *
+ * 0133 lets a signed-in account file any number of rows under its own
+ * user_id, each with any session_id and any duration, and the funnel keys runs
+ * by session — so one free signup inserting {session_id: 'x'+i, step: 'done',
+ * phase: 'completed'} in a loop moved Sessions started, Completed, the
+ * completion rate, the median time and the biggest drop. Each account now
+ * contributes one session: the earliest it finished, otherwise the earliest it
+ * started, otherwise its earliest. A real person's second tab is the same
+ * person. Rows that name no account are not a run (the loader already
+ * refuses them; this does not rely on it).
+ */
+export function oneRunPerAccount<T extends AccountOnboardingEvent>(
+  events: T[],
+  steps: { key: string; label: string }[] = ONBOARDING_STEPS,
+): T[] {
+  const terminalKey = steps[steps.length - 1]?.key;
+  type Run = { session: string; firstAt: number; started: boolean; finished: boolean };
+  const runs = new Map<string, Map<string, Run>>();
+  for (const e of events) {
+    if (typeof e.user_id !== 'string' || !e.user_id) continue;
+    const at = Date.parse(e.created_at);
+    const byUser = runs.get(e.user_id) ?? new Map<string, Run>();
+    runs.set(e.user_id, byUser);
+    const run = byUser.get(e.session_id) ?? { session: e.session_id, firstAt: Number.POSITIVE_INFINITY, started: false, finished: false };
+    byUser.set(e.session_id, run);
+    if (Number.isFinite(at) && at < run.firstAt) run.firstAt = at;
+    if (e.phase === 'started') run.started = true;
+    if (e.phase === 'completed' || (terminalKey !== undefined && e.step === terminalKey)) run.finished = true;
+  }
+  const kept = new Map<string, string>();
+  for (const [user, byUser] of runs) {
+    const [chosen] = [...byUser.values()].sort((a, b) =>
+      Number(b.finished) - Number(a.finished) || Number(b.started) - Number(a.started)
+      || a.firstAt - b.firstAt || (a.session < b.session ? -1 : a.session > b.session ? 1 : 0));
+    if (chosen) kept.set(user, chosen.session);
+  }
+  // Keyed by the account from here on: a session id is the writer's free text,
+  // and one account naming another's session id must not merge into that run.
+  return events
+    .filter((e) => typeof e.user_id === 'string' && kept.get(e.user_id) === e.session_id)
+    .map((e) => ({ ...e, session_id: e.user_id as string }));
+}
+
 export function median(nums: number[]): number | null {
   if (nums.length === 0) return null;
   const s = [...nums].sort((a, b) => a - b);

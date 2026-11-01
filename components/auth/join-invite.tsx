@@ -10,6 +10,7 @@ import { createClient } from '@/lib/supabase/client';
 import { resolveLandingPathAction } from '@/app/(auth)/actions';
 import { previewInviteAction, settleOtherInvitesAction } from '@/app/join/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { isRetryableAuthError } from '@/lib/auth/session';
 import { isChildLoginEmail } from '@/lib/onboarding/child-login';
 
 type State =
@@ -64,9 +65,13 @@ function JoinInviteAttempt({ token }: { token: string }) {
     }
     const supabase = createClient();
     (async () => {
-      const { data: auth } = await supabase.auth.getUser();
+      const { data: auth, error: authError } = await supabase.auth.getUser();
       if (!current()) return;
-      if (!auth.user) {
+      if (authError && isRetryableAuthError(authError)) {
+        setState({ phase: 'error', message: t('joinInvite.couldNotJoinTryAgain') });
+        return;
+      }
+      if (authError || !auth.user) {
         setState({ phase: 'needs-auth', token });
         return;
       }

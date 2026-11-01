@@ -81,9 +81,12 @@ export function MealsModule() {
   const tr = useTranslations();
   const locale = useLocale().code;
   const { fmtDate } = useFormat();
-  const { familyId, userId, family, members, selfMember } = useApp();
+  const { familyId, userId, family, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
   const selfId = selfMember?.id ?? null;
+  // A guest views the family vote and does not cast in it: 0481's
+  // meal_vote_ballots_not_a_guest refuses their ballot.
+  const canVote = role !== 'guest';
 
   const [tab, setTab] = useState<TabId>('plan');
   const [weekOffset, setWeekOffset] = useState(0);
@@ -325,6 +328,10 @@ export function MealsModule() {
 
   async function castVote(optionId: string) {
     if (!voteData || !selfId) return;
+    // Before the clear, not after it: 0481 refuses a guest's INSERT and UPDATE
+    // on meal_vote_ballots but not their DELETE, so the clear below withdrew a
+    // guest's earlier ballot and the refused insert then left them none.
+    if (!canVote) return toastError(tr('mealsModule.guestsSeeTheVoteOnly'));
     const sb = createClient();
     // One ballot per member: clear any prior pick, then record this one.
     //
@@ -634,7 +641,7 @@ export function MealsModule() {
 
         {/* Family Vote */}
         {voteData && voteData.options.length > 0 && (
-          <FamilyVoteCard data={voteData} selfId={selfId} memberById={new Map(members.map((m) => [m.id, m]))} onVote={castVote} />
+          <FamilyVoteCard data={voteData} selfId={selfId} canVote={canVote} memberById={new Map(members.map((m) => [m.id, m]))} onVote={castVote} />
         )}
 
         {/* Grocery List */}
@@ -726,9 +733,10 @@ function RecipeGrid({ recipes, onToggleFavorite }: { recipes: Recipe[]; onToggle
   );
 }
 
-function FamilyVoteCard({ data, selfId, memberById, onVote }: {
+function FamilyVoteCard({ data, selfId, canVote, memberById, onVote }: {
   data: { vote: Vote; options: VoteOption[]; ballots: Ballot[] };
   selfId: string | null;
+  canVote: boolean;
   memberById: Map<string, ReturnType<typeof useApp>['members'][number]>;
   onVote: (optionId: string) => void;
 }) {
@@ -751,7 +759,7 @@ function FamilyVoteCard({ data, selfId, memberById, onVote }: {
           const pct = Math.round((n / total) * 100);
           const mine = myPick === opt.id;
           return (
-            <button key={opt.id} onClick={() => onVote(opt.id)} disabled={!selfId}
+            <button key={opt.id} onClick={() => onVote(opt.id)} disabled={!selfId || !canVote}
               className="block w-full text-left disabled:opacity-60">
               <div className="flex items-center gap-2">
                 {opt.photo_url
@@ -768,6 +776,7 @@ function FamilyVoteCard({ data, selfId, memberById, onVote }: {
           );
         })}
       </div>
+      {!canVote && <p className="mt-2 text-[11px] text-muted">{tr('mealsModule.guestsSeeTheVoteOnly')}</p>}
     </div>
   );
 }

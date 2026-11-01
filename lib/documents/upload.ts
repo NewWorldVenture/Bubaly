@@ -66,12 +66,12 @@ export function decideUpload(request: UploadRequest, t: UploadTranslator): Uploa
 }
 
 export type UploadEffects = {
-  /** Put the bytes in the bucket. Returns the stored path, or why not. */
-  store: (folder: string) => Promise<{ path: string | null; error: string | null }>;
-  /** Write the row. Returns a message to show, or null on success. */
+  /** Allocate a stable path; this must not send bytes to storage. */
+  prepare: (folder: string) => string;
+  /** Confirm a matching protective documents row before any file bytes move. */
   record: (row: { storagePath: string; isSecure: boolean }) => Promise<{ error: string | null }>;
-  /** Delete a stored object whose row did not land, so the bucket keeps no orphan. */
-  discard: (path: string) => Promise<void>;
+  /** Upload exactly the reserved path. Retries must use the same file and reservation. */
+  store: (path: string) => Promise<{ error: string | null }>;
 };
 
 export type UploadOutcome =
@@ -79,7 +79,12 @@ export type UploadOutcome =
   | { ok: true; storagePath: string; isSecure: boolean };
 
 /**
- * Decide, then store, then record — and unwind the store if the record fails.
+ * Decide, reserve metadata, then store the bytes. Storage policy 0303 uses
+ * the documents row to restrict a private object; an unmatched object is
+ * readable by the family. Neither deleting bytes after an unanswered insert
+ * nor retaining an unmatched private object is safe. Reserving first means a
+ * lost row response sends no bytes, and a lost upload response retains its
+ * protective row. An incomplete upload can leave metadata for a safe retry.
  *
  * `folderFallback` is the view's default folder, used when the person left the
  * category blank.
@@ -93,17 +98,28 @@ export async function performUpload(
   if (!decision.allowed) return { ok: false, reason: decision.reason };
 
   const folder = request.category.trim() || request.folderFallback;
-  const { path, error: storeError } = await effects.store(folder);
-  if (storeError || !path) return { ok: false, reason: storeError ?? t('avatarPicker.uploadFailed') };
+  let path: string;
+  try {
+    path = effects.prepare(folder);
+  } catch {
+    return { ok: false, reason: t('avatarPicker.uploadFailed') };
+  }
+  if (!path) return { ok: false, reason: t('avatarPicker.uploadFailed') };
 
-  const { error: recordError } = await effects.record({ storagePath: path, isSecure: decision.isSecure });
-  if (recordError) {
-    // The row is what makes the file findable; a stored object with no row is
-    // invisible to the app and still occupies the family's storage. 0266 can
-    // reject this insert for a reason the client did not anticipate, so the
-    // unwind is not dead code.
-    await effects.discard(path);
-    return { ok: false, reason: recordError };
+  let recorded: Awaited<ReturnType<UploadEffects['record']>>;
+  try {
+    recorded = await effects.record({ storagePath: path, isSecure: decision.isSecure });
+  } catch {
+    return { ok: false, reason: t('quickCapture.saveUncertain') };
+  }
+  if (recorded.error) return { ok: false, reason: recorded.error };
+
+  try {
+    const stored = await effects.store(path);
+    if (stored.error) return { ok: false, reason: stored.error };
+  } catch {
+    // Keep the protective row: a lost storage reply may hide committed bytes.
+    return { ok: false, reason: t('quickCapture.saveUncertain') };
   }
   return { ok: true, storagePath: path, isSecure: decision.isSecure };
 }
