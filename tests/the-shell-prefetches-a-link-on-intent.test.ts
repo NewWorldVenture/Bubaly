@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { at, between } from './helpers/source-order';
 
 // PERF-001. The app shell's own links are on screen on every page, and a Next
 // <Link> prefetches every link on screen: over ten member pages, 40 prefetch
@@ -28,13 +29,10 @@ describe('the shell prefetches a link on intent, not on sight', () => {
   it("keeps the app shell's Links to its two menus, drawn only while one is open", () => {
     const shell = src('components/app/app-shell.tsx');
     const menus = [
-      shell.slice(shell.indexOf('function FamilySwitcher('), shell.indexOf('function UserMenu(')),
-      shell.slice(shell.indexOf('function UserMenu('), shell.indexOf('function SidebarDashboardLinks(')),
+      between(shell, 'function FamilySwitcher(', 'function UserMenu('),
+      between(shell, 'function UserMenu(', 'function SidebarDashboardLinks('),
     ];
-    for (const menu of menus) {
-      expect(menu.indexOf('{open && (')).toBeGreaterThan(0);
-      expect(menu.indexOf('<Link')).toBeGreaterThan(menu.indexOf('{open && ('));
-    }
+    for (const menu of menus) expect(at(menu, '<Link')).toBeGreaterThan(at(menu, '{open && ('));
     expect(links(menus.reduce((rest, menu) => rest.replace(menu, ''), shell))).toBe(0);
     // The top bar's logo and share-an-idea links, and the phone's tab bar.
     expect(shell).toContain('<IntentLink href="/home" aria-label={t(\'nav.home\')} className="lg:hidden">');
