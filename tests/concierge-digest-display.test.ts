@@ -10,7 +10,8 @@ const snapshot: ConciergeSnapshot = {
   bills: [{ name: 'Bill {amount} <raw>', amount: 12.5, dueDate: '2026-09-08' }, { name: 'No amount', dueDate: '2026-09-09' }],
   medications: [{ name: 'Medicine {raw}', member: 'Sam {raw}', timeOfDay: '08:30' }, { name: 'Unassigned medicine' }],
   maintenance: [{ title: 'Filter {raw}', dueAt: '2026-09-11' }],
-  warranties: [{ name: 'Washer warranty {raw}', expiresOn: '2026-09-07' }],
+  // Ending in two days: a warranty that has run out is not in the digest.
+  warranties: [{ name: 'Washer warranty {raw}', expiresOn: '2026-09-11' }],
   trips: [{ title: 'Current trip', startDate: '2026-09-08', endDate: '2026-09-10', destination: 'Porto {raw}' }, { title: 'Next trip', startDate: '2026-09-12', destination: 'Roma <raw>' }],
   pantry: [{ name: 'Milk', expiresAt: '2026-09-10' }, { name: 'Expired food', expiresAt: '2026-09-06' }],
 };

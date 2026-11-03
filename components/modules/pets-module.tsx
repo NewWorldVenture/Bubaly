@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import {
   PET_SPECIES, CARE_KINDS, speciesMeta, careKindMeta,
-  petAgeLabel, careUrgency, upcomingCare, careSummary, recommendedCare,
+  petAgeLabel, careUrgency, upcomingCare, careSummary, recommendedCare, supersededCareIds,
   type CareUrgency,
 } from '@/lib/pets/care';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -370,6 +370,8 @@ function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
   const meta = speciesMeta(pet.species);
   const age = petAgeLabel(pet.birthday, familyToday);
   const sorted = [...records].sort((a, b) => (a.record_date < b.record_date ? 1 : -1));
+  // A booster logged again answers the old one's date: that one is history.
+  const replaced = supersededCareIds(records);
 
   async function deleteRecord(id: string) {
     if (!(await askConfirm({ title: t('pets.deleteRecordQ'), body: t('confirm.cannotBeUndone') }))) return;
@@ -415,7 +417,7 @@ function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
             <ul className="space-y-1.5">
               {sorted.map((r) => {
                 const Icon = CARE_ICON[r.kind] ?? PawPrint;
-                const u = careUrgency(r.next_due, familyToday);
+                const u = replaced.has(r.id) ? 'ok' : careUrgency(r.next_due, familyToday);
                 return (
                   <li key={r.id} className="group flex items-center gap-3 rounded-xl border border-border px-3 py-2">
                     <Icon className="h-4 w-4 shrink-0 text-brand-text" />

@@ -8,6 +8,7 @@ import {
   DEFAULT_CADENCES, TYPICAL_LIFESPAN_YEARS,
 } from '@/lib/home/maintenance';
 import { MaintenanceClient, type AssetView } from '@/components/home/maintenance-client';
+import { isManager } from '@/lib/constants/roles';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -35,5 +36,6 @@ export default async function MaintenancePage() {
     };
   });
 
-  return <MaintenanceClient assets={views} season={season} seasonTasks={SEASONAL_CHECKLIST[season]} />;
+  // Offered to whoever `scheduleRecommendedTasksAction` accepts: a parent or adult.
+  return <MaintenanceClient assets={views} season={season} seasonTasks={SEASONAL_CHECKLIST[season]} canSchedule={isManager(ctx.active.role)} />;
 }

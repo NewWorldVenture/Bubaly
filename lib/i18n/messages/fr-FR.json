@@ -17248,5 +17248,6 @@
   "socialActions.couldNotConfirmYourPlan": "Bubaly n'a pas pu confirmer votre forfait pour le moment. Réessayez dans un instant.",
   "socialLeftConnected.title": "Les outils de réseaux sociaux ne sont pas disponibles pour votre famille pour le moment",
   "socialLeftConnected.body": "Ces comptes sont toujours connectés à Bubaly. Quel que soit votre forfait, vous pouvez les déconnecter : déconnecter un compte le retire et efface la connexion que Bubaly conserve pour lui.",
-  "socialLeftConnected.seePlans": "Voir les forfaits"
+  "socialLeftConnected.seePlans": "Voir les forfaits",
+  "actions.onlyAParentOrAdultCanScheduleMaintenance": "Seul un parent ou adulte peut planifier l’entretien de la maison."
 }

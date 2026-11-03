@@ -41,7 +41,7 @@ import {
   replanDisruption,
   type DisruptionKind, type DisruptionPlan, type ItineraryLike, type ReservationLike,
 } from '@/lib/vacations/disruption';
-import { dateRange, tripNights } from '@/lib/vacations/dates';
+import { dateRange, tripNights, tripNotOverFilter } from '@/lib/vacations/dates';
 import { suggestPacking } from '@/lib/vacations/packing';
 import { computeReadiness as scoreReadiness, type ReadinessResult } from '@/lib/vacations/readiness';
 import { forecastDaysWithin } from '@/lib/vacations/weather';
@@ -75,6 +75,21 @@ const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 86_400_000;
 const KINDS: VacationKind[] = ['road_trip', 'flight', 'cruise', 'theme_park', 'international', 'domestic', 'staycation', 'camping', 'other'];
 const LIVE_STATUSES: VacationStatus[] = ['planning', 'booked', 'active'];
+
+/**
+ * A trip whose last day — its end date, else its start date — is before the
+ * family's today is over, whatever its status. Nothing in the app moves
+ * `status` past 'planning' (no editor, RPC or cron completes a trip), so a
+ * status filter alone kept every trip ever made "live": last July's trip
+ * reached the assistant as "(under way)", and the prepare-vacation template,
+ * which takes the soonest `daysUntil`, prepared the OLDEST one. An undated
+ * trip is still being planned.
+ */
+function tripIsOver(trip: Pick<VacationRow, 'start_date' | 'end_date'>, today: string): boolean {
+  const lastDay = trip.end_date ?? trip.start_date;
+  return lastDay !== null && lastDay < today;
+}
+
 const BUDGET_CATEGORIES = ['flights', 'lodging', 'transportation', 'activities', 'food', 'shopping', 'insurance', 'fees', 'misc'] as const;
 const DAY_PARTS = ['morning', 'afternoon', 'evening', 'all_day'] as const;
 const ITEM_KINDS = ['activity', 'meal', 'travel', 'reservation', 'free_time', 'note', 'reminder'] as const;
@@ -177,7 +192,9 @@ export async function listTrips(scope: ServiceScope, input: { includeFinished?: 
     .eq('family_id', scope.familyId)
     .order('start_date', { ascending: true, nullsFirst: false })
     .limit(Math.min(Math.max(input.limit ?? 50, 1), 200));
-  if (!input.includeFinished) query = query.in('status', LIVE_STATUSES);
+  if (!input.includeFinished) {
+    query = query.in('status', LIVE_STATUSES).or(tripNotOverFilter(dayKeyInTz(scopeNow(scope), scope.tz)));
+  }
   const { data, error } = await query;
   if (error) {
     console.error('[service:trips] trips read failed', error);
@@ -256,7 +273,10 @@ export async function findOrCreateVacation(scope: ServiceScope, input: FindOrCre
     console.error('[service:trips] complete trip lookup failed', live.error);
     return fail('Could not check all your trips. Please try again.', { code: SERVICE_CODES.db });
   }
+  // Last year's Florida trip is not the one "our Florida trip" means.
+  const today = dayKeyInTz(scopeNow(scope), scope.tz);
   const match = live.data.find((trip) => {
+    if (tripIsOver(trip, today)) return false;
     const hay = `${trip.title} ${trip.destination ?? ''}`.toLowerCase();
     const named = needles.some((n) => hay.includes(n.toLowerCase()));
     return named && datesOverlap(trip, input.startDate ?? null, input.endDate ?? null);
