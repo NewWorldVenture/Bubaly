@@ -81,6 +81,9 @@ export function CelebrationsModule() {
     });
     setSaving(false);
     if (error) return toastError(describeDbError(error));
+    // family_dates is not in the realtime publication, so nothing else re-reads
+    // this list: without this the new date did not appear until a reload.
+    void refresh();
     success(t('celebrationsModule.celebrationAdded'));
     setTitle(''); setDate(''); setKind('birthday'); setShowAdd(false);
   }
@@ -90,7 +93,9 @@ export function CelebrationsModule() {
     const supabase = createClient();
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
     const { data: removed2, error } = await supabase.from('family_dates').delete().eq('id', c.id.replace(/^d-/, '')).eq('family_id', familyId).select('id');
-    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed2)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('celebrationsModule.removed'));
+    if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(removed2)) toastError(t('errors.thatChangeWasNotSaved'));
+    else { void refresh(); success(t('celebrationsModule.removed')); }
   }
 
   return (
