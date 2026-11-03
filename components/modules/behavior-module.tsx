@@ -166,6 +166,15 @@ function BehaviorLog() {
         body: JSON.stringify({ memberId: memberFilter === 'all' ? undefined : memberFilter }),
       });
       const d = await res.json();
+      // A refusal is not an empty insight. The route answers its refusals —
+      // the monthly AI allowance used up, too many requests, a behaviour log it
+      // could not read — with a reason in the reader's language, and reading
+      // only `insight` turned every one into a blank card the parent could not
+      // tell from a coach with nothing to say.
+      if (!res.ok) {
+        setAi({ loading: false, insight: typeof d.error === 'string' && d.error ? d.error : tr('aiInsight.aiIsUnavailableRightNow'), tips: [] });
+        return;
+      }
       setAi({ loading: false, insight: d.insight ?? '', tips: Array.isArray(d.tips) ? d.tips : [] });
     } catch {
       setAi({ loading: false, insight: 'Could not generate an insight right now.', tips: [] });
