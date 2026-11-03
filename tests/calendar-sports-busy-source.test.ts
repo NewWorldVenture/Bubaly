@@ -179,17 +179,23 @@ describe('complete sports series busy intervals through actual SDK', () => {
     expect(result.note).not.toContain('whole day is free');
   });
   it.each(['duration', 'missing-end', 'point'] as const)('AI scheduling HTTP consumes qualified sports recurrence: %s', async mode => {
-    const starts_at = mode === 'point' ? '2026-10-25T13:00:00.000Z' : '2026-10-25T12:00:00.000Z';
-    const { db } = transport([weekly('practice', { starts_at, ends_at: mode === 'missing-end' ? null : mode === 'point' ? starts_at : '2026-10-25T13:00:00.000Z', member_id: 'sam' })]);
-    seams.db = db;
-    const response = await POST(new NextRequest('https://synthetic.invalid/api/ai/schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-      windowStartISO: '2026-11-01T13:00:00.000Z', windowEndISO: '2026-11-01T15:00:00.000Z', durationMin: mode === 'point' ? 120 : 60,
-      memberIds: ['sam'], workingHours: { startHour: 8, endHour: 10 }, maxSuggestions: 1,
-    }) }));
-    expect(response.status).toBe(200);
-    const result = await response.json();
-    expect(result.busyCount).toBe(1);
-    expect(result.slots).toEqual([{ startISO: mode === 'point' ? '2026-11-01T13:00:00.000Z' : '2026-11-01T14:00:00.000Z', endISO: '2026-11-01T15:00:00.000Z' }]);
+    // The route offers no slot in the past, and the window is a fixed date: the
+    // clock is pinned the day before it. Unpinned, this failed from the window's
+    // end, 15:00 UTC on 1 November 2026, on.
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-31T12:00:00.000Z'));
+    try {
+      const starts_at = mode === 'point' ? '2026-10-25T13:00:00.000Z' : '2026-10-25T12:00:00.000Z';
+      const { db } = transport([weekly('practice', { starts_at, ends_at: mode === 'missing-end' ? null : mode === 'point' ? starts_at : '2026-10-25T13:00:00.000Z', member_id: 'sam' })]);
+      seams.db = db;
+      const response = await POST(new NextRequest('https://synthetic.invalid/api/ai/schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        windowStartISO: '2026-11-01T13:00:00.000Z', windowEndISO: '2026-11-01T15:00:00.000Z', durationMin: mode === 'point' ? 120 : 60,
+        memberIds: ['sam'], workingHours: { startHour: 8, endHour: 10 }, maxSuggestions: 1,
+      }) }));
+      expect(response.status).toBe(200);
+      const result = await response.json();
+      expect(result.busyCount).toBe(1);
+      expect(result.slots).toEqual([{ startISO: mode === 'point' ? '2026-11-01T13:00:00.000Z' : '2026-11-01T14:00:00.000Z', endISO: '2026-11-01T15:00:00.000Z' }]);
+    } finally { clock.mockRestore(); }
   });
 });
 

@@ -5,7 +5,7 @@
 // circular import between those two components.
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { IntentLink } from '@/components/ui/intent-link';
 import { usePathname } from 'next/navigation';
 import { Lock, Sparkles, ChevronDown } from 'lucide-react';
 import { type NavItem, isNavItemVisibleToRole } from '@/lib/constants/navigation';
@@ -30,7 +30,7 @@ export function AiAssistantNavButton({ onNavigate }: { onNavigate?: () => void }
   const pathname = usePathname() ?? '';
   const active = isActive(pathname, '/dashboard/assistant');
   return (
-    <Link
+    <IntentLink
       href="/dashboard/assistant"
       onClick={onNavigate}
       aria-current={active ? 'page' : undefined}
@@ -43,7 +43,7 @@ export function AiAssistantNavButton({ onNavigate }: { onNavigate?: () => void }
     >
       <Sparkles className={cn('h-5 w-5 shrink-0', active ? 'text-brand-text' : 'text-brand-text/90')} />
       {t('navShared.aiAssistant')}
-    </Link>
+    </IntentLink>
   );
 }
 
@@ -111,14 +111,14 @@ export function NavEntry({ item, variant, locked, onLocked, badge }: {
   }
 
   return (
-    <Link
+    <IntentLink
       href={item.href}
       className={cn(base, active ? 'bg-brand/15 text-brand-text shadow-sm' : 'text-muted hover:bg-elevated hover:text-fg')}
     >
       <item.icon className="h-5 w-5 shrink-0" />
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {Badge}
-    </Link>
+    </IntentLink>
   );
 }
 
@@ -142,10 +142,10 @@ function ExpandableNavEntry({ item }: { item: NavItem }) {
   return (
     <div>
       <div className={cn(row, 'pr-1', parentActive ? 'bg-brand/15 text-brand-text shadow-sm' : 'text-muted hover:bg-elevated hover:text-fg')}>
-        <Link href={item.href} className="flex min-w-0 flex-1 items-center gap-3">
+        <IntentLink href={item.href} className="flex min-w-0 flex-1 items-center gap-3">
           <item.icon className="h-5 w-5 shrink-0" />
           <span className="min-w-0 flex-1 truncate">{label}</span>
-        </Link>
+        </IntentLink>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
@@ -162,7 +162,7 @@ function ExpandableNavEntry({ item }: { item: NavItem }) {
           {(item.children ?? []).map((child) => {
             const active = isActive(pathname, child.href);
             return (
-              <Link
+              <IntentLink
                 key={child.href}
                 href={child.href}
                 aria-current={active ? 'page' : undefined}
@@ -173,7 +173,7 @@ function ExpandableNavEntry({ item }: { item: NavItem }) {
               >
                 <child.icon className="h-4 w-4 shrink-0" />
                 <span className="min-w-0 flex-1 truncate">{navLabel(t, child.label)}</span>
-              </Link>
+              </IntentLink>
             );
           })}
         </div>
