@@ -7,7 +7,7 @@ import {
   buildGrandparentDigest, digestSummary, celebrationCountdown, orderHouseholds,
   type HouseholdRef,
 } from '@/lib/grandparent/digest';
-import { daysUntilNextOn } from '@/lib/celebrations/dates';
+import { daysUntilNextOn, nextOccurrenceOn } from '@/lib/celebrations/dates';
 import { dayKeyInTz } from '@/lib/services/scope';
 import { fmtDate } from '@/lib/utils/format';
 import { Avatar } from '@/components/ui/avatar';
@@ -144,14 +144,17 @@ async function householdBody(supabase: Supabase, t: Translate, household: Househ
 
   const memberById = new Map((members ?? []).map((m) => [m.id, m]));
 
+  // Each is dated on the day it next falls on, the day its countdown counts
+  // to. The stored date is the year it began, and printing it gave that year's
+  // weekday ("Sun, Nov 20" for a 2016 birthday on a Friday this year).
   const celebrationInputs = [
     ...(members ?? []).filter((m) => m.birthday).map((m) => ({
       title: t('dashboardGrandparentPortal.someonesBirthday', { name: m.display_name }),
-      date: m.birthday as string,
+      date: nextOccurrenceOn(m.birthday as string, todayKey) ?? (m.birthday as string),
       daysUntil: daysUntilNextOn(m.birthday as string, todayKey) ?? 999,
     })),
     ...(dates ?? []).map((d) => ({
-      title: d.title, date: d.event_date,
+      title: d.title, date: nextOccurrenceOn(d.event_date, todayKey) ?? d.event_date,
       daysUntil: daysUntilNextOn(d.event_date, todayKey) ?? 999,
     })),
   ];
