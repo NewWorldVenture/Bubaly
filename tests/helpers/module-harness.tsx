@@ -400,6 +400,7 @@ export const ui = {
   Field: ({ label, children }: Props) => createElement('label', null, label as ReactNode,
     typeof children === 'function' ? (children as (id: string) => ReactNode)('field') : (children as ReactNode)),
   SkeletonList: () => null,
+  Skeleton: () => null,
   ErrorState: ({ message }: Props) => createElement('div', { role: 'alert' }, message as ReactNode),
   EmptyState: ({ title, description, action }: Props) => createElement('div', null, title as ReactNode, description as ReactNode, action as ReactNode),
   PageHeader: ({ title, description, action }: Props) => createElement('header', null, title as ReactNode, description as ReactNode, action as ReactNode),

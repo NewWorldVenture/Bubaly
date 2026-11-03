@@ -11,22 +11,23 @@ import { describe, expect, it } from 'vitest';
 describe('the app shell on a phone', () => {
   it("names the top bar's logo link", () => {
     const shell = readFileSync('components/app/app-shell.tsx', 'utf8');
-    expect(shell).toContain('<Link href="/home" aria-label={t(\'nav.home\')} className="lg:hidden">');
+    expect(shell).toContain('<IntentLink href="/home" aria-label={t(\'nav.home\')} className="lg:hidden">');
   });
 
   // The admin area has a top bar of its own (components/admin/admin-shell.tsx),
   // and the re-crawl found the same nameless logo link on all 79 /admin pages
   // after the app shell's was fixed. Any link whose only content is the logo
-  // mark is held to it, wherever it is drawn.
+  // mark is held to it, wherever it is drawn, an IntentLink (a Link that
+  // prefetches on intent) as much as a Link.
   it('names every link whose only content is the logo mark', () => {
     const files = (dir: string): string[] => readdirSync(dir).flatMap((e) => {
       const p = join(dir, e);
       return statSync(p).isDirectory() ? files(p) : p.endsWith('.tsx') ? [p] : [];
     });
     const bare = [...files('app'), ...files('components')].flatMap((file) =>
-      [...readFileSync(file, 'utf8').matchAll(/<Link\b([^>]*)>\s*<LogoMark\b[^>]*\/>\s*<\/Link>/g)]
-        .filter((m) => !/aria-label=/.test(m[1]))
-        .map((m) => `${file}: <Link${m[1]}>`));
+      [...readFileSync(file, 'utf8').matchAll(/<((?:Intent)?Link)\b([^>]*)>\s*<LogoMark\b[^>]*\/>\s*<\/\1>/g)]
+        .filter((m) => !/aria-label=/.test(m[2]))
+        .map((m) => `${file}: <${m[1]}${m[2]}>`));
     expect(bare).toEqual([]);
   });
 

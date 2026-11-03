@@ -584,6 +584,15 @@ export function CalendarModule() {
                     /api/sync/microsoft/auth resolves every case itself —
                     signed out, unconfigured, or ready — which is why this needs
                     no branching beyond connected vs not. */}
+                {/* Until a probe answers, an invisible stand-in holds its
+                    control's place: nothing to press or read, and the header
+                    does not grow when the control arrives. The two arriving
+                    moved the week down 120 px on a 1280 px screen (PERF-001). */}
+                {outlookStatus === null && (
+                  <span aria-hidden="true" className="btn-inline invisible">
+                    <OutlookGlyph /> {tr('calendar.connectOutlook')}
+                  </span>
+                )}
                 {outlookStatus?.connected === false && (
                   <a
                     href="/api/sync/microsoft/auth"
@@ -599,6 +608,11 @@ export function CalendarModule() {
                   <Link href="/dashboard/sync/accounts/microsoft" className="btn-inline">
                     <OutlookGlyph /> {tr('calendar.outlookConnected')}
                   </Link>
+                )}
+                {gcalConnected === null && (
+                  <span aria-hidden="true" className="btn-inline invisible">
+                    <GoogleGlyph /> {tr('calendar.connectGoogle')}
+                  </span>
                 )}
                 {gcalConnected === false && (
                   <a href="/api/google/calendar/auth" className="btn-inline">
@@ -705,7 +719,16 @@ export function CalendarModule() {
           </div>
         </div>
 
-        {loading ? <SkeletonList /> : gridError ? <ErrorState message={gridError} onRetry={query.refresh} /> : <>
+        {/* While the window loads, its stand-in takes about the room the view
+            will, so the footer and the busyness map below do not jump
+            (PERF-001): below md one card, about an empty day; from md the week
+            grid's 24 hours. A three-card list stood in for both. */}
+        {loading ? <>
+          <SkeletonList count={1} className="flex-1 p-4 md:hidden" />
+          <div className="hidden flex-1 md:block" style={{ minHeight: HOURS.length * HOUR_HEIGHT }}>
+            <SkeletonList className="p-4" />
+          </div>
+        </> : gridError ? <ErrorState message={gridError} onRetry={query.refresh} /> : <>
         {/* ===== MOBILE DAY VIEW (below md) ===== */}
         <div className="flex flex-1 flex-col overflow-y-auto md:hidden">
           {/* Mobile day selector */}
