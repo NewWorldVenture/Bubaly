@@ -68,12 +68,17 @@ export function ScreenTimeModule() {
   const all = useMemo(() => entries ?? [], [entries]);
   const limitByMember = useMemo(() => new Map((limits ?? []).map((l) => [l.member_id, l.daily_minutes])), [limits]);
 
+  // A card for each member on the roster. Removal is a soft `is_active =
+  // false` that leaves the removed child's entries and limit behind, and the
+  // roster is the active one: a card built from an entry's member id kept a
+  // removed child on screen for good, headed "Member", with their minutes and
+  // a limit to set. Their entries stay in the list below.
   const memberIds = useMemo(() => {
     const ids = new Set<string>();
-    for (const e of all) if (e.member_id) ids.add(e.member_id);
+    for (const e of all) if (e.member_id && memberById.has(e.member_id)) ids.add(e.member_id);
     for (const m of members) ids.add(m.id);
     return [...ids];
-  }, [all, members]);
+  }, [all, members, memberById]);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();

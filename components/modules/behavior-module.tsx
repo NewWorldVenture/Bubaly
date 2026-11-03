@@ -95,11 +95,16 @@ function BehaviorLog() {
   );
 
   // Per-child summary cards (only members with at least one log, or all kids).
+  // Only for members on the roster. Removal is a soft `is_active = false` that
+  // leaves the removed child's notes behind, and the roster is the active one:
+  // a card built from a note's member id kept a removed child's balance score,
+  // streak and trend on screen for good, headed "Member". Their notes stay in
+  // the log below.
   const memberIds = useMemo(() => {
     const ids = new Set<string>();
-    for (const l of all) if (l.member_id) ids.add(l.member_id);
+    for (const l of all) if (l.member_id && memberById.has(l.member_id)) ids.add(l.member_id);
     return [...ids];
-  }, [all]);
+  }, [all, memberById]);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
