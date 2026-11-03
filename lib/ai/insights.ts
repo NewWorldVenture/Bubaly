@@ -997,7 +997,10 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     buildUser: (d) => {
       const events = r(d, 'sports_events').slice(0, 10);
       const teams = r(d, 'teams').slice(0, 5);
-      const eList = events.map((e) => `- ${e.title || 'Game'} (${String(e.starts_at || e.event_date || '').slice(0, 10)}, ${e.home_away || ''} at ${e.location || 'TBD'})`).join('\n') || 'No events.';
+      // The day and time on the family's clock: `starts_at` sliced is
+      // Greenwich's day, and a 5:30 pm Saturday game in Los Angeles is Sunday
+      // there.
+      const eList = events.map((e) => `- ${e.title || 'Game'} (${familyDue(e.starts_at, d.timeZone)}, ${e.home_away || ''} at ${e.location || 'TBD'})`).join('\n') || 'No events.';
       // `teams` keeps no win/loss columns — asking for them produced "W:0 L:0"
       // for every team, which reads as a record rather than as no data.
       const tList = teams.map((t) => `- ${t.team_name || 'Team'} (${t.sport || 'sport'}${t.season ? `, ${t.season}` : ''}${t.coach ? `, coach ${t.coach}` : ''})`).join('\n') || 'No teams.';
