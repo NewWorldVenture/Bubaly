@@ -51,6 +51,30 @@ export function daysUntilNext(date: string, from: Date = new Date()): number | n
  * forward to 1 Mar, as `new Date(y, m - 1, d)` always has.
  */
 export function daysUntilNextOn(date: string, todayKey: string): number | null {
+  const at = nextOnKey(date, todayKey);
+  return at ? Math.round((at.next - at.today) / 86400000) : null;
+}
+
+/**
+ * The day a date next falls on, on or after the day key `todayKey`, as a day
+ * key: the day `daysUntilNextOn` counts to, normalised the same way (29 Feb in
+ * a common year is 1 Mar).
+ *
+ * A surface that prints a coming celebration prints THIS, not the stored date.
+ * The stored date is the year it began, so its weekday is that year's: the
+ * grandparent portal read "Sun, Nov 20" for a 2016 birthday that falls on a
+ * Friday in 2026.
+ */
+export function nextOccurrenceOn(date: string, todayKey: string): string | null {
+  const at = nextOnKey(date, todayKey);
+  if (!at) return null;
+  // Date.UTC is zone-free calendar arithmetic here, read back with getUTC*.
+  const d = new Date(at.next);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
+/** `todayKey` and the next occurrence of `date` on or after it, as UTC-midnight milliseconds. */
+function nextOnKey(date: string, todayKey: string): { today: number; next: number } | null {
   const p = parseMonthDay(date);
   const t = /^(\d{4})-(\d{2})-(\d{2})$/.exec(todayKey);
   if (!p || !t) return null;
@@ -58,7 +82,7 @@ export function daysUntilNextOn(date: string, todayKey: string): number | null {
   let next = Date.UTC(Number(t[1]), p.m - 1, p.d);
   if (next < today) next = Date.UTC(Number(t[1]) + 1, p.m - 1, p.d);
   if (!Number.isFinite(today) || !Number.isFinite(next)) return null;
-  return Math.round((next - today) / 86400000);
+  return { today, next };
 }
 
 /** Resolve a list of inputs into upcoming celebrations within `withinDays`. */
@@ -79,7 +103,11 @@ export function upcomingCelebrations(
     const turning = p.y != null ? next.getFullYear() - p.y : null;
     out.push({
       ...it,
-      nextDate: `${next.getFullYear()}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`,
+      // Read from `next` itself, which the Date constructor has normalised: a
+      // 29 Feb in a common year is 1 Mar, the day `daysUntil` counts to.
+      // "2027-02-29" is not a date; its label fell back to a parse at
+      // Greenwich and read 28 February west of it.
+      nextDate: `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`,
       daysUntil: days,
       turning: turning != null && turning > 0 ? turning : null,
     });
