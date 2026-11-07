@@ -151,6 +151,11 @@ source allocations are not evidence that production applied any migration.
 | 0527 proposed, held | `0527_a_post_on_the_idea_board_is_the_callers_own.sql` | `a_feedback_comment_is_the_callers_own()` and `a_feedback_idea_starts_as_the_callers_own()`, BEFORE INSERT on `feedback_comments` and `feedback_ideas`: a signed-in caller posts no team reply, a new idea starts under review with no note, pin, counts or tracker link, `author_name` is the caller's own, and an author files no more than five ideas a minute or twenty a day on the database's clock. CALHUB-O1 and CALHUB-O5; requested on #771 (comment 6421813855), not yet confirmed. |
 | 0528 proposed, held | `0528_a_budget_drift_signal_is_a_parents_or_adults.sql` | A RESTRICTIVE SELECT and `a_budget_drift_signal_is_written_by_a_parent_or_adult()` (BEFORE INSERT, UPDATE and DELETE) on `family_signals`: a budget-drift signal is read and written only by a parent or adult. OPSD-O05; requested on #771 (comment 6422105432), not yet confirmed. |
 | 0529 proposed, held | `0529_the_households_day_is_written_by_a_parent_or_adult.sql` | `a_household_day_is_written_by_a_parent_or_adult()`, BEFORE INSERT, UPDATE and DELETE on `family_operating_index`, `reasoning_snapshots` and `workload_snapshots`: only a parent or adult writes the household's day. OPSD-O06 and COORD-O01; requested on #771 (comment 6422372306), not yet confirmed. |
+| 0530 proposed, held | `0530_a_pending_recommendation_is_a_parents_or_adults_decision.sql` | `a_recommendation_is_decided_by_a_parent_or_adult()`, BEFORE INSERT, UPDATE and DELETE on `family_ai_recommendations`: only a parent or adult files, decides or removes a recommendation. CALHUB-O3; requested on #771 (comment 6422815707), not yet confirmed. |
+| 0531 proposed, held | `0531_a_households_document_renewal_and_autopilot_insights_are_a_parents_or_adults.sql` | A RESTRICTIVE SELECT on `daily_insights`: a row of the `document`, `renewal` or `autopilot` kind is read by a parent or adult of its family, or by the member whose reading it is; every other kind is unchanged. OPSD-O08 with the reviewer's corrected policy (OPSD-O09); requested on #771 (comment 6560944423), not yet confirmed. |
+| 0532 proposed, held | `0532_one_emergency_at_a_time_per_household.sql` | `one_emergency_at_a_time()`, BEFORE INSERT and UPDATE on `emergency_sessions`: a write that would open a second live session in a household is refused (23505), and a household's activations queue on one advisory lock. OPSD-O03; requested on #771 (comment 6561084910), not yet confirmed. |
+| 0533 proposed, held | `0533_invites_are_read_by_their_managers.sql` | `invites_select` becomes `can_manage_family(family_id)` or the invitee's own email (the register's owner action): only a household's managers, and the person invited, read an invite and its token. COVER-O1 and DB-TBL-194's read matrix; requested on #771 (comment 6561178776), not yet confirmed. |
+| 0534 proposed, held | `0534_telemetry_is_dated_by_the_server_and_written_by_its_signed_in_writer.sql` | `telemetry_row_is_stamped_by_the_server()` stamps `id` and `created_at` on `onboarding_events`, `activation_events` and `journey_events` for any role that does not bypass RLS; anon loses its writes to the first two; their insert policies name the signed-in writer (TEL-O1); `onboarding_events_per_account_limit()` caps an account at 200 rows a day (TEL-O8). TEL-O1, TEL-O10 and TEL-O8's limit as one file; requested on #771 (comment 6561275883), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4923,6 +4928,302 @@ applied twice.
 
 **After approved release:** as a test guest, try to insert a `utility_bills`
 row and confirm 42501.
+
+## `0534` (proposed, held) — telemetry took any date, user, step and family its writer sent
+
+`supabase/reserved/0534_telemetry_is_dated_by_the_server_and_written_by_its_signed_in_writer.sql`
+— **held**: requested on #771 in comment 6561275883. Not yet confirmed.
+
+**Severity: low to medium (the funnel, the TTFV clock and /dashboard/journeys
+count what a writer sent: a member could backdate their own household's
+milestone, forge `ms_since_signup`, file rows for a household they are not in,
+or date journey rows in the future so they stay in every window). Deploy
+order: any.** TEL-O1 (N1, N2, N4, N16), TEL-O10 (N17, corrected) and the limit
+half of TEL-O8, as one file: applied as the register writes them, TEL-O1 and
+TEL-O10 define `telemetry_row_is_stamped_by_the_server()` twice, with
+different bodies and under two sets of trigger names, which would leave two
+stamping triggers on a table each calling whichever body was created last.
+Measured on a replay of main, each landing as sent: anon filed an onboarding
+row and an activation row; a signed-in user filed an onboarding row with no
+user dated 2020, one with a step the wizard has not got and a `meta`, an
+activation for a household they are not in with `session_index` 9,
+`ms_since_signup` -5 and a 2020 date, and a journey row dated 2099.
+
+**Database.** `telemetry_row_is_stamped_by_the_server()` (SECURITY INVOKER, as
+the register writes it) sets `id` and `created_at` for any role that does not
+bypass row-level security, so the service role and the seeds keep theirs; one
+`<table>_stamped_by_the_server` BEFORE INSERT trigger on each of the three
+tables, and TEL-O10's `<table>_created_at_is_the_servers` is dropped if it is
+there. anon loses insert, update, delete and truncate on `onboarding_events`
+and `activation_events`. `onboarding_events_insert` and
+`activation_events_insert` become TEL-O1's, for `authenticated`: the writer's
+own `user_id`, one of the wizard's seven steps, no `meta`, a duration within a
+week; and the household the writer is in, `session_id = family_id`,
+`session_index` 1 to 3, no negative clock, no `meta`.
+`onboarding_events_per_account_limit()` (TEL-O8) refuses an account's 201st
+onboarding row within a day, with its `(user_id, created_at)` index. Not
+TEL-O8's second, restrictive insert policy: its one-day duration bound would
+refuse a wizard left open overnight, and TEL-O1's policy already names the
+writer. Reads are unchanged. No application change: the wizard, both
+activation writers and `useJourney` already send what this allows, and a row
+with no user is never counted.
+
+**Proof:** `.github/workflows/telemetry-writer-runtime.yml` requires the held
+probe `docs/audit/reserved/telemetry-is-dated-by-the-server-check.sql` to fail
+on the released schema on the defect, with no control failing, then applies
+0534 twice and requires it to pass, then re-runs eight released probes
+(an-erasure-actually-erases, definer-functions-check-their-caller,
+family-delete-cascade, family-erasure-leaves-nothing, family-scoped-index,
+plpgsql-bodies-resolve, privileged-rpc-grants, rls-sweep). The passing run
+shows anon's two rows and each of the fourteen out-of-bounds rows refused,
+the 201st onboarding row in a day refused, and onboarding and activation rows
+sent as 2020 and a journey row sent as 2099 stored with `now()`, the
+onboarding row under a new id; the wizard's row, both activation writers'
+rows (one read back) and `useJourney`'s row landing; the 200th row in a day
+landing beside another account's 200; the server keeping its own date; the
+wiring; **N1** (the stamp disabled): a 2020 activation row keeps its date;
+**M1** (the step list taken out): a made-up step lands. Eleven hand mutants
+are each caught (no journey stamp, stamping anon only, no `meta` clause, no
+duration bound, any family, any session, any `session_index`, a negative
+clock, no limit, the limit one higher, the client's `id` kept). Counting every
+account in the limit is not a mutant: the function runs as the writer, whose
+reads 0133 already confines to their own rows.
+
+All 189 released probes pass with 0534 applied, and with every held file
+applied twice.
+
+**After approved release:** sign up a test account and finish the wizard,
+then confirm its `onboarding_events` rows carry the server's time; open
+Outcomes in a test household and confirm its activation row lands; try an
+anon insert into `onboarding_events` and confirm it is refused. Optional
+owner step, not in the migration (it deletes production rows): `delete from
+public.onboarding_events where created_at < '2000-01-01' or created_at > now()
++ interval '1 day';` and the same for `activation_events` and
+`journey_events`.
+
+## `0533` (proposed, held) — any member read every invite and its token
+
+`supabase/reserved/0533_invites_are_read_by_their_managers.sql`
+— **held**: requested on #771 in comment 6561178776. Not yet confirmed.
+
+**Severity: low (both verifiers: the invitee's email and the household's
+invite roster, not an account takeover, since `accept_invite` pins the JWT
+email and the re-mail route refuses non-managers). Deploy order: any.**
+COVER-O1 (N9), with the per-role read matrix DB-TBL-194 leaves as Remaining.
+`invites_select` (0004, recreated by 0118) is `is_family_member(family_id)` or
+the invitee's own email. Measured on a replay of main, as a teen, a child, a
+caregiver and a guest: each read the household's invite to Nana and its
+invite to Olive, each with its bearer `token`. The app shows the list to
+managers only, and every user-client reader is a manager's: Home's referral
+count, `PendingInvites`, `/api/email/invite` and the invite form's
+insert-and-return; the join, onboarding, member-invite and admin paths read
+through the service client.
+
+**Database.** Exactly the register's owner action: `drop policy if exists
+invites_select on public.invites; create policy invites_select on
+public.invites for select using (public.can_manage_family(family_id) or
+lower(email) = lower(coalesce(auth.jwt()->>'email','')));`, with a self-check
+that the policy has that qual and is the only permissive read on `invites`.
+The invitee-email arm keeps the join preview working; `invites_insert`,
+`invites_update` and `invites_delete` are untouched. No application change.
+
+**Proof:** `.github/workflows/invite-reading-runtime.yml` requires the held
+probe `docs/audit/reserved/invites-are-read-by-their-managers-check.sql` to
+fail on the released schema on the defect, with no control failing, then
+applies 0533 twice and requires it to pass, then re-runs eight released probes
+(a-parent-is-made-unmade-and-invited-only-by-a-parent,
+an-erasure-actually-erases, family-delete-cascade,
+family-erasure-leaves-nothing, invite-cannot-rewrite-what-it-grants,
+invite-role-escalation, invite-terms-boundary, rls-sweep). The passing run
+records the per-role read matrix: the teen, the child, the caregiver and the
+guest each read neither Nana's nor Olive's invite; the parent and the adult
+read all three of the household's invites and none of another household's;
+the teen reads only the invite to their own address (matched
+case-insensitively); Olive, in no household, reads hers and no other (the join
+preview); Ned, invited nowhere, reads none; the server reads all four; the
+parent files an invite and reads it back, and revokes one; the wiring; **N1**
+(back to `is_family_member`): the child reads Nana's invite; **M1** (the
+invitee's arm dropped): Olive reads none. Four hand mutants (any member, the
+email matched case-sensitively, no invitee arm, parents only) are each caught.
+
+All 189 released probes pass with 0533 applied, and with every held file
+applied twice.
+
+**After approved release:** as a test child, select from `invites` for your
+household and confirm no rows; as a parent, open Settings and confirm the
+pending invites still list; open a join link while signed in as the invitee
+and confirm the preview shows.
+
+## `0532` (proposed, held) — two managers could open two emergencies at once
+
+`supabase/reserved/0532_one_emergency_at_a_time_per_household.sql`
+— **held**: requested on #771 in comment 6561084910. Not yet confirmed.
+
+**Severity: low to medium (two live emergency sessions elevate the union of
+their domains while the console names one; emergency elevation outranks every
+deny, policy and risk tier). Deploy order: any.** OPSD-O03 (N10).
+`activateEmergencyAction` keeps one emergency at a time with a read and then an
+insert, and `emergency_sessions` (0093, 0260) carries no rule of its own.
+Measured on a replay of main, `OK 1` each beside a parent's open emergency: an
+adult's second activation, an adult reopening yesterday's ended emergency by
+PATCHing `ended_at` back to null, and the service role opening a second; and an
+adult's activation sent from another session while the parent's was still in
+flight went straight through.
+
+**Database.** `one_emergency_at_a_time()`, SECURITY DEFINER with a pinned
+search_path, BEFORE INSERT and UPDATE: when the new row is open (`ended_at`
+null, `expires_at` after `now()`) and the old row was not the same open
+session, the household's activations queue on one transaction-scoped advisory
+lock, and an open session already there refuses the write (23505, "Emergency
+mode is already on for this household"). PostgREST runs READ COMMITTED and the
+guard is VOLATILE, so the check after the lock sees an earlier activation once
+it commits. Every writer is held to it, the service role too: it is a rule of
+the data, not a permission. Ending a session, an expired session, a change
+that keeps the same session open, reads and the rows already there are
+unchanged, and nothing in the data changes. Not the partial unique index the
+register suggested: an index predicate cannot read `now()`, so an
+expired-but-unended session would block every new activation unless production
+rows were ended first, and the index would not build where the race has
+already left two open sessions. No application change: a racing second
+activation is refused instead of opening a second session.
+
+**Proof:** `.github/workflows/emergency-session-runtime.yml` requires the held
+probe `docs/audit/reserved/one-emergency-at-a-time-per-household-check.sql` to
+fail on the released schema on the defect, with no control failing, then
+applies 0532 twice and requires it to pass, then re-runs ten released probes
+(an-erasure-actually-erases, definer-functions-check-their-caller,
+family-delete-cascade, family-erasure-leaves-nothing, family-scoped-index,
+gated-write-tables, plpgsql-bodies-resolve, privileged-rpc-grants,
+realtime-anon-stream, rls-sweep). The passing run shows the three writes above
+refused by 0532's guard, and the second session's activation waiting while the
+parent's is in flight (dblink); the parent activating beside an ended, an
+expired and another household's open emergency; the adult ending the parent's
+emergency and activating a new one; the parent changing their open emergency's
+reason; the server activating where none is open; the wiring; **N1** (guard
+disabled): the adult's second activation lands; **M1** (the guard on INSERT
+only): the adult's reopening lands. Five hand mutants (no advisory lock, an
+expired session counted, the service role exempt, any household's session
+counted, no same-session pass for an update) are each caught.
+
+All 189 released probes pass with 0532 applied, and with every held file
+applied twice.
+
+**After approved release:** with emergency mode on in a test household, try to
+insert a second `emergency_sessions` row as another parent and confirm 23505;
+end the first, activate again and confirm it lands.
+
+## `0531` (proposed, held) — a child read the household's document, renewal and Autopilot insights
+
+`supabase/reserved/0531_a_households_document_renewal_and_autopilot_insights_are_a_parents_or_adults.sql`
+— **held**: requested on #771 in comment 6560944423. Not yet confirmed.
+
+**Severity: low to medium (a child, a teen, a caregiver or a guest could read
+the parents' insight of the day for a document 0266 keeps from them, an
+insurance renewal and its amount, or a manager-only Autopilot suggestion).
+Deploy order: any.** OPSD-O08 (N9-S2-AT-REST), with the reviewer's corrected
+policy, OPSD-O09. `daily_insights` (0141) keeps one row per family, day and
+kind, and `daily_insights_select` is `is_family_member(family_id)`. Since N9-S2
+the insight of the day shows a non-manager only their own reading, but the
+household's rows (`member_id` null) are a parent's or adult's reading. Measured
+on a replay of main, as a child and as a guest, each read "Mum's passport
+expires in 6 days", "Car insurance renews in 3 days" ($1,240) and "Refinance the
+mortgage", and the child dismissed the household's document insight.
+
+**Database.** A RESTRICTIVE select policy for `authenticated`, "A document,
+renewal or Autopilot insight is a manager's": `kind not in ('document',
+'renewal', 'autopilot') or can_manage_family(family_id) or (member_id is not
+null and is_self_member(member_id))`. 0141's policies are untouched, so every
+other kind, inserts and the service role are as before. An UPDATE filtered on
+the table's columns is held to the select policies too, so a non-manager no
+longer dismisses the household's row of those kinds either (a slice of
+OPSD-O07). No function or trigger. No application change: a non-manager's own
+candidate of one of those kinds is not shown once the household has that day's
+row (their `ignoreDuplicates` insert conflicts silently, and the re-read finds
+no row of that kind), the degradation the finding's body accepts.
+
+**Proof:** `.github/workflows/daily-insight-reading-runtime.yml` requires the
+held probe `docs/audit/reserved/a-households-document-renewal-and-autopilot-insights-are-a-parents-or-adults-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0531 twice and requires it to pass, then re-runs five released probes
+(an-erasure-actually-erases, family-delete-cascade,
+family-erasure-leaves-nothing, gated-write-tables, rls-sweep). The passing run
+shows, as the teen, the child, the caregiver and the guest, each of the
+household's three rows reading as none, the child's own reading hidden from
+the teen, and the child's dismissal by kind and the guest's by id changing no
+row; parents and adults reading all six rows; every member still reading the
+household's meal and conflict insights; the child reading and dismissing their
+own reading and dismissing the household's meal insight; the app's writes as
+before (a parent's upsert keeps the household's row, the child's
+`ignoreDuplicates` insert of a kind the household has changes nothing and
+raises nothing, and a kind the child starts is theirs until a parent's upsert
+makes it the household's); the server reading all six; the wiring; **N1** (the
+policy dropped): the child reads the household's document insight; **M1**
+(autopilot left out): the child reads the household's Autopilot insight. Six
+hand mutants (renewal left out, no own-reading branch, no parent-or-adult
+branch, `is_family_member` for `can_manage_family`, permissive, for `anon`)
+are each caught.
+
+All 189 released probes pass with 0531 applied, and with every held file
+applied twice.
+
+**After approved release:** as a test child, read `daily_insights` for today
+and confirm no household row of the document, renewal or autopilot kind comes
+back; as a parent, confirm Home still shows the insight of the day.
+
+## `0530` (proposed, held) — a child decided the parents' pending recommendations
+
+`supabase/reserved/0530_a_pending_recommendation_is_a_parents_or_adults_decision.sql`
+— **held**: requested on #771 in comment 6422815707. Not yet confirmed.
+
+**Severity: low to medium (a non-manager could take a decision off every
+parent's Needs You queue unseen, or plant one there). Deploy order: any.**
+CALHUB-O3, the database half of CALHUB-02. `family_ai_recommendations` (0022)
+has one policy, FOR ALL `is_family_member(family_id)`. The app makes every
+write a parent's or adult's, or the server's: `setRecommendationStatus`
+refuses anyone but `isManager`, the generic record actions list the table in
+`MANAGER_ONLY`, and the planner files its cards through the run ledger's
+service client. Measured on a replay of main, as the teen, the child, the
+caregiver and a guest (`is_family_member` admits every active member), `OK n`
+each: dismissing the parents' pending card by id and unfiltered, deleting it,
+and planting a high-priority pending card.
+`sameAppHref` already keeps a planted `cta_href` inside the app.
+
+**Database.** `a_recommendation_is_decided_by_a_parent_or_adult()`, SECURITY
+DEFINER with a pinned search_path, BEFORE INSERT, UPDATE and DELETE: for a
+signed-in caller, a write needs `can_manage_family` of the row's family, old
+and new (42501). INSERT is covered as well as the finding's UPDATE and DELETE,
+since the app never files one as a non-manager. The service role is exempt,
+and so are two cascades that may run in a signed-in session: the household's
+deletion once its family row is gone (Postgres runs the cascades from
+`families` in constraint-trigger-name order, which is not fixed, so its members
+may be gone first), and a member's removal emptying `member_id` (`on delete set
+null`) once their row is gone and nothing else changes. Reads are unchanged. A trigger, as
+0464 reasoned, so `gated-write-tables` and the client guard keep their
+inventory. No application change.
+
+**Proof:** `.github/workflows/recommendation-decision-runtime.yml` requires the
+held probe `docs/audit/reserved/a-pending-recommendation-is-a-parents-or-adults-decision-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0530 twice and requires it to pass, then re-runs six released probes
+(an-erasure-actually-erases, family-delete-cascade,
+family-erasure-leaves-nothing, gated-write-tables, plpgsql-bodies-resolve,
+rls-sweep). The passing run shows every write above refused by 0530's guard;
+parents and adults dismissing, accepting, deleting and filing; the teen, the
+child and the caregiver still reading; the server filing; a child's member row removed in their session and
+the household deleted in the parent's session, and in a session that is not
+its parent's (which forces the cascade order that leaves no parent); the
+wiring; **N1** (guard disabled): the child's dismiss and planted card land;
+**M1** (the guard checking the new row only): the child's delete lands. Four
+hand mutants (no household exemption, no member-removal exemption, no new-row
+clause, the new-row clause loosened to any member but a guest) are each
+caught.
+
+All 189 released probes pass with 0530 applied, and with every held file
+applied twice.
+
+**After approved release:** as a test child, try to update a pending
+`family_ai_recommendations` row and confirm 42501; as a parent, accept one from
+Needs You and confirm it leaves the queue.
 
 ## `0529` (proposed, held) — a child rewrote the household's day
 
