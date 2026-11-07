@@ -97,6 +97,13 @@ describe('every wallet page reads a non-manager\'s own wallet, in the query', ()
     expect(src).toContain(": Promise.resolve({ data: [] as { id: string; member_id: string; is_active: boolean }[], error: null }),");
   });
 
+  it('a spend request answers a sibling\'s wallet as one that is not there, before it reads a balance', () => {
+    const src = read('app/(app)/wallet/actions.ts');
+    const fn = src.slice(at(src, 'export async function requestSpendAction('));
+    expect(fn).toContain("if (!cw || (!readsEveryWallet(ctx.active.role) && cw.member_id !== ctx.active.member.id)) return { ok: false, error: t('actions.thatWalletWasNotFound') };");
+    expect(at(fn, 'cw.member_id !== ctx.active.member.id')).toBeLessThan(at(fn, 'await bucketBalanceCents('));
+  });
+
   it('the treasury, which totals every child, is a parent\'s or adult\'s, decided before it reads', () => {
     const src = read('app/(app)/wallet/treasury/page.tsx');
     expect(at(src, 'if (!readsEveryWallet(ctx.active.role)) {')).toBeLessThan(at(src, "supabase.from('child_wallets')"));

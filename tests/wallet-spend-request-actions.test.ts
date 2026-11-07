@@ -103,9 +103,10 @@ beforeEach(() => {
   harness.revalidatePath.mockClear();
   harness.evaluateTrust.mockClear();
   // wallet-a is the caller's own wallet, so every accepted request below is a
-  // request against one's own wallet. wallet-b is another member's. Whether a
-  // child or teen may file a request against a sibling's wallet is policy that
-  // is not settled, and no case here asserts either answer.
+  // request against one's own wallet. wallet-b is another member's. A teen,
+  // child or caregiver naming a sibling's wallet is answered as one that is not
+  // there (the held 0515's rule): that answer is asserted in
+  // a-spend-request-on-a-siblings-wallet-is-answered-as-not-there.test.ts.
   db.seed('child_wallets', [
     { id: 'wallet-a', family_id: FAMILY, member_id: 'member-self' },
     { id: 'wallet-b', family_id: FAMILY, member_id: 'member-b' },

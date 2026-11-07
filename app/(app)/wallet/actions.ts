@@ -18,6 +18,7 @@ import { evaluateTrust, roleOf } from '@/lib/trust/server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { logWalletAudit } from '@/lib/server/audit';
 import { isWithheldFromGuest } from '@/lib/auth/guest-scope';
+import { readsEveryWallet } from '@/lib/wallet/own-wallets';
 
 const WALLET_TERMS_VERSION = '2026-06-25';
 
@@ -1036,7 +1037,13 @@ export async function requestSpendAction(input: {
   ]);
   if (walletError) return actionFailure(walletError, t('actions.couldNotLoadThatWallet'));
   if (ruleError) return actionFailure(ruleError, t('actions.couldNotLoadTheWallet3'));
-  if (!cw) return { ok: false, error: t('actions.thatWalletWasNotFound') };
+  // A child's money is read by a parent or adult and by that child (the held
+  // 0515; lib/wallet/own-wallets.ts). The read above binds the wallet to the
+  // family only, and the balance check below prints the balance it read, so a
+  // teen, child or caregiver who named a sibling's wallet was told that
+  // sibling's Spend balance. Their own wallet is theirs to ask from; another
+  // child's answers as the child wallet page and the child coach answer it.
+  if (!cw || (!readsEveryWallet(ctx.active.role) && cw.member_id !== ctx.active.member.id)) return { ok: false, error: t('actions.thatWalletWasNotFound') };
 
   // Can't request more than is available in Spend.
   const { available, error: balanceError } = await bucketBalanceCents(supabase, { familyId, childWalletId: cw.id, kind: 'spend' });
