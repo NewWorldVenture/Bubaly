@@ -95,11 +95,16 @@ function BehaviorLog() {
   );
 
   // Per-child summary cards (only members with at least one log, or all kids).
+  // Only for members on the roster. Removal is a soft `is_active = false` that
+  // leaves the removed child's notes behind, and the roster is the active one:
+  // a card built from a note's member id kept a removed child's balance score,
+  // streak and trend on screen for good, headed "Member". Their notes stay in
+  // the log below.
   const memberIds = useMemo(() => {
     const ids = new Set<string>();
-    for (const l of all) if (l.member_id) ids.add(l.member_id);
+    for (const l of all) if (l.member_id && memberById.has(l.member_id)) ids.add(l.member_id);
     return [...ids];
-  }, [all]);
+  }, [all, memberById]);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -134,6 +139,10 @@ function BehaviorLog() {
         : await supabase.from('behavior_logs').insert({ ...row, family_id: familyId, logged_by: userId }).select('id');
       if (error) return toastError(describeDbError(error));
       if (wroteNoRows(data)) return toastError(tr('errors.thatChangeWasNotSaved'));
+      // behavior_logs is in no realtime publication: nothing tells this page
+      // about its own writes, so each confirmed one re-reads the log. Without
+      // it a logged note never appeared and a deleted one stayed on screen.
+      void refresh();
       success(form.id ? tr('behaviorModule.noteUpdated') : tr('behaviorModule.noteLogged'));
       setForm(null);
     } finally {
@@ -150,7 +159,7 @@ function BehaviorLog() {
     const { data, error } = await createClient().from('behavior_logs').delete().eq('id', id).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(data)) toastError(tr('errors.thatChangeWasNotSaved'));
-    else success(tr('behaviorModule.deleted'));
+    else { void refresh(); success(tr('behaviorModule.deleted')); }
   }
 
   async function getInsight() {
@@ -162,6 +171,15 @@ function BehaviorLog() {
         body: JSON.stringify({ memberId: memberFilter === 'all' ? undefined : memberFilter }),
       });
       const d = await res.json();
+      // A refusal is not an empty insight. The route answers its refusals —
+      // the monthly AI allowance used up, too many requests, a behaviour log it
+      // could not read — with a reason in the reader's language, and reading
+      // only `insight` turned every one into a blank card the parent could not
+      // tell from a coach with nothing to say.
+      if (!res.ok) {
+        setAi({ loading: false, insight: typeof d.error === 'string' && d.error ? d.error : tr('aiInsight.aiIsUnavailableRightNow'), tips: [] });
+        return;
+      }
       setAi({ loading: false, insight: d.insight ?? '', tips: Array.isArray(d.tips) ? d.tips : [] });
     } catch {
       setAi({ loading: false, insight: 'Could not generate an insight right now.', tips: [] });

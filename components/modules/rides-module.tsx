@@ -20,7 +20,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
-  groupByDate, assessDriverSchedule, upcomingRides, needsDriverCount, shortTime,
+  groupByDate, assessDriverSchedule, upcomingRides, needsDriverCount, shortTime, activeDriverId,
   RIDE_STATUS_LABELS, type RideLike,
 } from '@/lib/rides/schedule';
 import type { Tables, RideStatus } from '@/lib/database.types';
@@ -71,13 +71,19 @@ export function RidesModule() {
   });
 
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
+  // The family as it is now: the app's roster is the ACTIVE members, and an
+  // empty one has not loaded (a family always has its viewer). A ride whose
+  // driver has been removed has no driver (activeDriverId): it counts among
+  // the rides that need one, its card says Unassigned, and Edit offers it as
+  // needing a driver instead of quietly saving the removed member back.
+  const activeIds = useMemo(() => (members.length > 0 ? new Set(members.map((m) => m.id)) : null), [members]);
 
   const rideLikes = useMemo<RideLike[]>(() =>
     (rides ?? []).map((r) => ({
       id: r.id, title: r.title, ride_date: r.ride_date, pickup_time: r.pickup_time,
       dropoff_time: r.dropoff_time,
-      driver_id: r.driver_id, rider_ids: r.rider_ids, status: r.status,
-    })), [rides]);
+      driver_id: activeDriverId(r.driver_id, activeIds), rider_ids: r.rider_ids, status: r.status,
+    })), [rides, activeIds]);
 
   // The FAMILY's today (TIME-003): which rides are upcoming, and a new ride's
   // default date, follow the family's calendar, not the phone's.
@@ -101,7 +107,7 @@ export function RidesModule() {
       pickup_time: r.pickup_time ? shortTime(r.pickup_time) : '',
       dropoff_time: r.dropoff_time ? shortTime(r.dropoff_time) : '',
       pickup_location: r.pickup_location ?? '', dropoff_location: r.dropoff_location ?? '',
-      driver_id: r.driver_id ?? '', rider_ids: r.rider_ids ?? [], status: r.status, notes: r.notes ?? '',
+      driver_id: activeDriverId(r.driver_id, activeIds) ?? '', rider_ids: r.rider_ids ?? [], status: r.status, notes: r.notes ?? '',
     });
     setModalOpen(true);
   }
@@ -221,6 +227,7 @@ export function RidesModule() {
               <div className="space-y-2.5">
                 {dayRides.map((rl) => {
                   const r = rideById.get(rl.id)!;
+                  const driverId = activeDriverId(r.driver_id, activeIds);
                   const conflicted = conflicts.has(r.id);
                   return (
                     <div key={r.id} className={cn('rounded-2xl border p-4', conflicted ? 'border-amber-500/40 bg-amber-500/[0.03]' : 'border-border bg-surface/50')}>
@@ -245,8 +252,8 @@ export function RidesModule() {
                             <div className="mt-2 flex flex-wrap items-center gap-3">
                               <span className="inline-flex items-center gap-1.5 text-xs">
                                 <span className="text-muted">Driver:</span>
-                                {r.driver_id ? (
-                                  <span className="inline-flex items-center gap-1 text-fg"><Avatar name={memberName(r.driver_id) ?? '?'} size={16} />{memberName(r.driver_id)}</span>
+                                {driverId ? (
+                                  <span className="inline-flex items-center gap-1 text-fg"><Avatar name={memberName(driverId) ?? '?'} size={16} />{memberName(driverId)}</span>
                                 ) : <span className="text-rose-400">{t('rides.unassigned')}</span>}
                               </span>
                               {r.rider_ids.length > 0 && (

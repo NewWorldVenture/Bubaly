@@ -144,6 +144,20 @@ export function upcomingRides<T extends RideLike>(rides: T[], todayKey: string):
   );
 }
 
+/**
+ * The driver a ride can count on. Removing a member is a soft delete
+ * (REMOVED_MEMBER_PATCH: is_active = false), so `rides.driver_id`'s
+ * `on delete set null` never fires and the ride keeps the id of someone who
+ * is no longer in the family: that ride has no driver. `activeMemberIds` is
+ * the family's active roster, or null when it is not known (not loaded, or
+ * the read failed); then the stored driver stands, rather than every ride
+ * being declared driverless.
+ */
+export function activeDriverId(driverId: string | null, activeMemberIds: ReadonlySet<string> | null): string | null {
+  if (!driverId) return null;
+  return activeMemberIds === null || activeMemberIds.has(driverId) ? driverId : null;
+}
+
 /** Count of rides still needing a driver assigned (and not cancelled). */
 export function needsDriverCount(rides: RideLike[]): number {
   return rides.filter((r) => !r.driver_id && r.status !== 'cancelled' && r.status !== 'completed').length;
