@@ -51,7 +51,10 @@ export function KnowledgeBaseModule() {
   const [saving, setSaving] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const { data: facts, loading, error } = useRealtimeQuery<Fact>({
+  // `family_facts` is not in the realtime publication, and the fact actions'
+  // revalidatePath does not re-run this read, so nothing else brings a write
+  // back to this list: every confirmed write below re-reads it.
+  const { data: facts, loading, error, refresh } = useRealtimeQuery<Fact>({
     table: 'family_facts', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_facts').select('*').eq('family_id', familyId),
   });
@@ -96,6 +99,7 @@ export function KnowledgeBaseModule() {
     if (!res.ok) { toastError(res.error); return; }
     success(form.id ? 'Updated' : 'Saved to family memory');
     setModalOpen(false);
+    void refresh();
   }
 
   async function remove(f: Fact) {
@@ -104,11 +108,13 @@ export function KnowledgeBaseModule() {
     const res = await forgetFactAction(f.id);
     if (!res.ok) { toastError(res.error); return; }
     success(t('knowledgeBaseModule.removed'));
+    void refresh();
   }
 
   async function togglePin(f: Fact) {
     const res = await setFactPinnedAction(f.id, !f.is_pinned);
-    if (!res.ok) toastError(res.error);
+    if (!res.ok) { toastError(res.error); return; }
+    void refresh();
   }
 
   async function copyValue(f: Fact) {
