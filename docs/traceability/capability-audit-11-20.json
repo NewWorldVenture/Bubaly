@@ -1,6 +1,14 @@
 {
   "audit_id": "bubaly-capability-audit-11-20",
   "audit_type": "read_only_requirement_audit",
+  "historical_record": {
+    "note": "Historical record of a static audit as of its baseline; not current guidance. Paths, line numbers and gap findings describe the baseline commit and have not been re-verified since.",
+    "audit_date": "2026-09-05",
+    "baseline_commit": "01881fb279589d7a90acb8302817bb385fbe036d",
+    "basis": "Added 2026-11-10; the original record carried neither field. The date is the one its sibling reports capability-audit-01-10.json and capability-audit-21-29.json record, and the commit is the audited code baseline named in docs/traceability/README.md.",
+    "known_drift": "app/(app)/parent/page.tsx (cited under Parent Copilot) existed at the baseline and has since been removed; /parent is now a permanent redirect to /dashboard/family-operations in next.config.mjs.",
+    "current_guidance": "docs/traceability/README.md"
+  },
   "source_sha256": "9d279dd1d614ffd6376492b6f8d3b3d44fa4e5dfe6516ea51e2100c91e2441c3",
   "source_sha256_basis": "Provided by the parent; not independently rechecked during persistence.",
   "source_document_handling": "Private blueprint; source_sha256 and section references identify it.",
