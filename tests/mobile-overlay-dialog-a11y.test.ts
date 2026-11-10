@@ -24,6 +24,15 @@ const labelIds: Record<keyof typeof dialogs, string> = {
   contactEditor: 'contact-editor-title',
 };
 
+// The opening tag of the element named by `aria-labelledby="<id>"`. Comments in
+// these files quote `role="dialog" aria-modal="true"` too, so a whole-file search
+// stays green after the attributes leave the markup; the tag itself cannot.
+function dialogTag(src: string, id: string): string {
+  const at = src.indexOf(`aria-labelledby="${id}"`);
+  expect(at).toBeGreaterThan(-1);
+  return src.slice(src.lastIndexOf('<', at), src.indexOf('>', at) + 1);
+}
+
 describe('hand-rolled full-screen overlays expose dialog semantics to screen readers', () => {
   for (const [name, file] of Object.entries(dialogs)) {
     it(`${name} (${file}) is a labeled modal dialog`, () => {
@@ -34,6 +43,10 @@ describe('hand-rolled full-screen overlays expose dialog semantics to screen rea
       // Named via aria-labelledby pointing at a heading that carries the same id.
       expect(src).toContain(`aria-labelledby="${id}"`);
       expect(src).toContain(`id="${id}"`);
+      // ...and it is that same element that is the modal dialog.
+      const tag = dialogTag(src, id);
+      expect(tag).toMatch(/\srole="dialog"\s/);
+      expect(tag).toMatch(/\saria-modal="true"\s/);
     });
   }
 
@@ -42,6 +55,11 @@ describe('hand-rolled full-screen overlays expose dialog semantics to screen rea
     // Escape now comes from the shared hook, along with the Tab trap and focus
     // restore this overlay never had.
     expect(src).toMatch(/useDialogBehavior/);
+    // Imported and called with the offer's own close handler, on the ref the
+    // dialog element carries: a comment mentioning the hook is none of those.
+    expect(src).toMatch(/^import \{ useDialogBehavior \} from '@\/lib\/a11y\/use-dialog-behavior';$/m);
+    expect(src).toMatch(/^\s*useDialogBehavior\(dialogRef,[^\n]*\bonClose: closeOffer\b/m);
+    expect(dialogTag(src, labelIds.exitIntent)).toMatch(/\sref=\{dialogRef\}\s/);
     expect(fs.readFileSync('lib/a11y/use-dialog-behavior.ts', 'utf8')).toMatch(/e\.key === 'Escape'/);
   });
 });
