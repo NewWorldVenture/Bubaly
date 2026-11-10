@@ -33,5 +33,16 @@ describe('gallery/feed grid thumbnails lazy-load on mobile', () => {
     const src = fs.readFileSync(files.photos, 'utf8');
     const lightbox = src.split('\n').find((l) => l.includes('lightboxIdx') && l.includes('<img')) ?? '';
     expect(lightbox).not.toContain('loading="lazy"');
+    // No line holds both `lightboxIdx` and `<img` any more (the lightbox renders
+    // <FamilyMediaImg> over several lines), so the line above is the empty
+    // string. Find the element that shows photos[lightboxIdx] and read all of it.
+    const opening = '<FamilyMediaImg src={photos[lightboxIdx].url}';
+    const start = src.indexOf(opening);
+    expect(start).toBeGreaterThan(-1);
+    expect(src.indexOf(opening, start + 1)).toBe(-1);
+    const element = src.slice(start).match(/^[\s\S]*?\n\s*\)\}/)?.[0] ?? '';
+    expect(element).toContain('className="max-h-[80vh]');
+    expect(element).toContain('fallback={');
+    expect(element).not.toMatch(/\bloading=/);
   });
 });
