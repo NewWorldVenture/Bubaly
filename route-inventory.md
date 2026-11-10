@@ -1,18 +1,27 @@
 # Route Inventory
 
-Generated from the live repo (master-prompt Phase 1). Access column comes from the actual
-guard in each page (`requireUserContext` / `requireFeature` / admin layout / public).
-UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE UI/UX AUDIT").
+Originally generated from the live repo (master-prompt Phase 1); there is no generator script,
+so the table is maintained by hand. Row set reconciled on 2026-11-10 against every
+`app/**/page.tsx` (`git ls-files 'app/**/page.tsx' | wc -l` = 392): eight rows whose segment no
+longer exists were removed and 42 pages added since were listed. Access column comes from the
+actual guard in each page (`requireUserContext` / `requireFeature` / `requirePlanLevel` / admin
+layout / public); it was read from the code for the rows added on that date and was not
+re-derived for the older rows.
+The graded 136-page designer audit this file used to cite ("SITE-WIDE UI/UX AUDIT") is no longer
+in `todo.md`, and this table carries no UX-tier column.
 
 | Route | Segment | Access | Notes |
 |---|---|---|---|
 | `/admin/admins` | `app/(app)/admin/admins` | admin |  |
+| `/admin/ai-activity` | `app/(app)/admin/ai-activity` | admin |  |
 | `/admin/ai` | `app/(app)/admin/ai` | admin |  |
 | `/admin/audit-logs` | `app/(app)/admin/audit-logs` | admin |  |
 | `/admin/audit` | `app/(app)/admin/audit` | admin |  |
 | `/admin/backup` | `app/(app)/admin/backup` | admin |  |
+| `/admin/benchmarks` | `app/(app)/admin/benchmarks` | admin |  |
 | `/admin/billing` | `app/(app)/admin/billing` | admin |  |
 | `/admin/content` | `app/(app)/admin/content` | admin |  |
+| `/admin/feedback` | `app/(app)/admin/feedback` | admin |  |
 | `/admin/integrations` | `app/(app)/admin/integrations` | admin |  |
 | `/admin/marketing/ads` | `app/(app)/admin/marketing/ads` | admin |  |
 | `/admin/marketing/aeo` | `app/(app)/admin/marketing/aeo` | admin |  |
@@ -43,6 +52,7 @@ UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE U
 | `/admin/marketing` | `app/(app)/admin/marketing` | admin |  |
 | `/admin/marketing/personalization` | `app/(app)/admin/marketing/personalization` | admin |  |
 | `/admin/marketing/pipeline` | `app/(app)/admin/marketing/pipeline` | admin |  |
+| `/admin/marketing/platform` | `app/(app)/admin/marketing/platform` | admin |  |
 | `/admin/marketing/proposals` | `app/(app)/admin/marketing/proposals` | admin |  |
 | `/admin/marketing/push` | `app/(app)/admin/marketing/push` | admin |  |
 | `/admin/marketing/referrals` | `app/(app)/admin/marketing/referrals` | admin |  |
@@ -53,15 +63,20 @@ UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE U
 | `/admin/marketing/settings` | `app/(app)/admin/marketing/settings` | admin |  |
 | `/admin/marketing/sms` | `app/(app)/admin/marketing/sms` | admin |  |
 | `/admin/marketing/social` | `app/(app)/admin/marketing/social` | admin |  |
+| `/admin/marketing/social/recurring` | `app/(app)/admin/marketing/social/recurring` | admin |  |
 | `/admin/marketing/surveys/[id]` | `app/(app)/admin/marketing/surveys/[id]` | admin |  |
 | `/admin/marketing/surveys` | `app/(app)/admin/marketing/surveys` | admin |  |
 | `/admin/marketing/video` | `app/(app)/admin/marketing/video` | admin |  |
 | `/admin/marketing/visitor-intelligence` | `app/(app)/admin/marketing/visitor-intelligence` | admin |  |
+| `/admin/marketplace/reports` | `app/(app)/admin/marketplace/reports` | admin |  |
+| `/admin/notifications` | `app/(app)/admin/notifications` | admin |  |
 | `/admin/onboarding` | `app/(app)/admin/onboarding` | admin |  |
 | `/admin` | `app/(app)/admin` | admin |  |
 | `/admin/reports` | `app/(app)/admin/reports` | admin |  |
 | `/admin/security` | `app/(app)/admin/security` | admin |  |
+| `/admin/services` | `app/(app)/admin/services` | admin |  |
 | `/admin/settings` | `app/(app)/admin/settings` | admin |  |
+| `/admin/settings/social-links` | `app/(app)/admin/settings/social-links` | admin |  |
 | `/admin/social/audit` | `app/(app)/admin/social/audit` | admin |  |
 | `/admin/social` | `app/(app)/admin/social` | admin |  |
 | `/admin/social/providers` | `app/(app)/admin/social/providers` | admin |  |
@@ -73,16 +88,19 @@ UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE U
 | `/admin/sync` | `app/(app)/admin/sync` | admin |  |
 | `/admin/system` | `app/(app)/admin/system` | admin |  |
 | `/admin/tier-features` | `app/(app)/admin/tier-features` | admin |  |
-| `/admin/tiers` | `app/(app)/admin/tiers` | redirect |  |
 | `/admin/users` | `app/(app)/admin/users` | admin |  |
 | `/admin/wallet` | `app/(app)/admin/wallet` | admin |  |
 | `/admin/wallet/reconciliation` | `app/(app)/admin/wallet/reconciliation` | admin |  |
+| `/auth/step-up` | `app/(app)/auth/step-up` | auth | MFA step-up; signed-in user, sent back when no code is needed |
+| `/capture/link` | `app/(app)/capture/link` | auth |  |
 | `/capture` | `app/(app)/capture` | auth |  |
 | `/dashboard/activity` | `app/(app)/dashboard/activity` | auth |  |
 | `/dashboard/agents` | `app/(app)/dashboard/agents` | auth |  |
 | `/dashboard/announcements` | `app/(app)/dashboard/announcements` | auth |  |
 | `/dashboard/app-store` | `app/(app)/dashboard/app-store` | auth |  |
 | `/dashboard/assistant` | `app/(app)/dashboard/assistant` | auth |  |
+| `/dashboard/assistant/purchases/[approvalId]` | `app/(app)/dashboard/assistant/purchases/[approvalId]` | auth |  |
+| `/dashboard/assistants` | `app/(app)/dashboard/assistants` | auth |  |
 | `/dashboard/auto/accident` | `app/(app)/dashboard/auto/accident` | auth |  |
 | `/dashboard/auto/insurance` | `app/(app)/dashboard/auto/insurance` | auth |  |
 | `/dashboard/auto/licenses` | `app/(app)/dashboard/auto/licenses` | auth |  |
@@ -111,8 +129,10 @@ UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE U
 | `/dashboard/concierge-calls` | `app/(app)/dashboard/concierge-calls` | auth |  |
 | `/dashboard/concierge` | `app/(app)/dashboard/concierge` | auth |  |
 | `/dashboard/concierge/runs/[id]` | `app/(app)/dashboard/concierge/runs/[id]` | auth | Run detail (§17): objective, reasoning summary, timeline, controls, approval and clarification cards; cross-family ids 404. Reached from Ask Bubaly, the home sections and the assistant's run cards — not the sidebar |
+| `/dashboard/concierge/runs` | `app/(app)/dashboard/concierge/runs` | auth | plan-gated |
 | `/dashboard/conflicts` | `app/(app)/dashboard/conflicts` | auth | plan-gated |
 | `/dashboard/connections` | `app/(app)/dashboard/connections` | auth |  |
+| `/dashboard/contact-center` | `app/(app)/dashboard/contact-center` | auth | plan-gated |
 | `/dashboard/contacts/[id]` | `app/(app)/dashboard/contacts/[id]` | auth |  |
 | `/dashboard/contacts` | `app/(app)/dashboard/contacts` | auth |  |
 | `/dashboard/decisions` | `app/(app)/dashboard/decisions` | auth |  |
@@ -125,15 +145,12 @@ UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE U
 | `/dashboard/expenses` | `app/(app)/dashboard/expenses` | auth | plan-gated |
 | `/dashboard/experience` | `app/(app)/dashboard/experience` | auth |  |
 | `/dashboard/family-access` | `app/(app)/dashboard/family-access` | auth |  |
-| `/dashboard/family-ai-assistant` | `app/(app)/dashboard/family-ai-assistant` | redirect |  |
 | `/dashboard/family-automation` | `app/(app)/dashboard/family-automation` | auth |  |
 | `/dashboard/family-cfo` | `app/(app)/dashboard/family-cfo` | auth |  |
 | `/dashboard/family-coo` | `app/(app)/dashboard/family-coo` | auth |  |
 | `/dashboard/family-digital-twin` | `app/(app)/dashboard/family-digital-twin` | auth |  |
 | `/dashboard/family-emergency` | `app/(app)/dashboard/family-emergency` | auth |  |
 | `/dashboard/family-health` | `app/(app)/dashboard/family-health` | auth |  |
-| `/dashboard/family-knowledge-graph` | `app/(app)/dashboard/family-knowledge-graph` | redirect |  |
-| `/dashboard/family-memory` | `app/(app)/dashboard/family-memory` | redirect |  |
 | `/dashboard/family-operating-index` | `app/(app)/dashboard/family-operating-index` | auth |  |
 | `/dashboard/family-operations` | `app/(app)/dashboard/family-operations` | auth |  |
 | `/dashboard/family-school` | `app/(app)/dashboard/family-school` | auth |  |
@@ -152,6 +169,7 @@ UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE U
 | `/dashboard/files/vault` | `app/(app)/dashboard/files/vault` | auth | plan-gated |
 | `/dashboard/focus` | `app/(app)/dashboard/focus` | auth | plan-gated |
 | `/dashboard/food` | `app/(app)/dashboard/food` | auth |  |
+| `/dashboard/fridge-chef` | `app/(app)/dashboard/fridge-chef` | auth | plan-gated |
 | `/dashboard/front-desk` | `app/(app)/dashboard/front-desk` | auth | plan-gated |
 | `/dashboard/goals` | `app/(app)/dashboard/goals` | auth | plan-gated |
 | `/dashboard/grandparent-portal` | `app/(app)/dashboard/grandparent-portal` | auth |  |
@@ -159,6 +177,7 @@ UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE U
 | `/dashboard/grocery` | `app/(app)/dashboard/grocery` | auth |  |
 | `/dashboard/habits` | `app/(app)/dashboard/habits` | auth | plan-gated |
 | `/dashboard/health` | `app/(app)/dashboard/health` | auth | plan-gated |
+| `/dashboard/home/assets/[id]` | `app/(app)/dashboard/home/assets/[id]` | auth | plan-gated |
 | `/dashboard/home/diagnose` | `app/(app)/dashboard/home/diagnose` | auth |  |
 | `/dashboard/home/maintenance` | `app/(app)/dashboard/home/maintenance` | auth |  |
 | `/dashboard/home` | `app/(app)/dashboard/home` | auth |  |
@@ -175,8 +194,8 @@ UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE U
 | `/dashboard/journeys` | `app/(app)/dashboard/journeys` | auth |  |
 | `/dashboard/kitchen` | `app/(app)/dashboard/kitchen` | auth |  |
 | `/dashboard/knowledge` | `app/(app)/dashboard/knowledge` | auth |  |
-| `/dashboard/knowledge/seed` | `app/(app)/dashboard/knowledge/seed` | auth |  |
 | `/dashboard/language` | `app/(app)/dashboard/language` | auth |  |
+| `/dashboard/library` | `app/(app)/dashboard/library` | auth |  |
 | `/dashboard/life-events` | `app/(app)/dashboard/life-events` | auth |  |
 | `/dashboard/locator` | `app/(app)/dashboard/locator` | auth | plan-gated |
 | `/dashboard/meals` | `app/(app)/dashboard/meals` | auth | plan-gated |
@@ -190,6 +209,7 @@ UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE U
 | `/dashboard/money-timeline` | `app/(app)/dashboard/money-timeline` | auth |  |
 | `/dashboard/more` | `app/(app)/dashboard/more` | auth |  |
 | `/dashboard/moving` | `app/(app)/dashboard/moving` | auth |  |
+| `/dashboard/needs-you` | `app/(app)/dashboard/needs-you` | auth |  |
 | `/dashboard/next-best-actions` | `app/(app)/dashboard/next-best-actions` | auth |  |
 | `/dashboard/notes` | `app/(app)/dashboard/notes` | auth |  |
 | `/dashboard/notifications` | `app/(app)/dashboard/notifications` | auth | plan-gated |
@@ -222,6 +242,7 @@ UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE U
 | `/dashboard/scan` | `app/(app)/dashboard/scan` | auth | plan-gated |
 | `/dashboard/school` | `app/(app)/dashboard/school` | auth | plan-gated |
 | `/dashboard/screen-time` | `app/(app)/dashboard/screen-time` | auth | plan-gated |
+| `/dashboard/search` | `app/(app)/dashboard/search` | auth |  |
 | `/dashboard/security` | `app/(app)/dashboard/security` | auth | plan-gated |
 | `/dashboard/settings` | `app/(app)/dashboard/settings` | auth |  |
 | `/dashboard/setup` | `app/(app)/dashboard/setup` | auth |  |
@@ -285,6 +306,7 @@ UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE U
 | `/dashboard/wishlists` | `app/(app)/dashboard/wishlists` | auth |  |
 | `/dashboard/workload` | `app/(app)/dashboard/workload` | auth |  |
 | `/display` | `app/(app)/display` | auth | plan-gated |
+| `/display/setup` | `app/(app)/display/setup` | auth | plan-gated |
 | `/economy` | `app/(app)/economy` | auth |  |
 | `/family/activity` | `app/(app)/family/activity` | auth |  |
 | `/family/members` | `app/(app)/family/members` | auth |  |
@@ -292,6 +314,7 @@ UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE U
 | `/family/permissions` | `app/(app)/family/permissions` | auth |  |
 | `/family/reports` | `app/(app)/family/reports` | auth |  |
 | `/family/settings` | `app/(app)/family/settings` | auth |  |
+| `/feedback` | `app/(app)/feedback` | auth |  |
 | `/guardian/contacts` | `app/(app)/guardian/contacts` | auth |  |
 | `/guardian/history` | `app/(app)/guardian/history` | auth |  |
 | `/guardian` | `app/(app)/guardian` | auth |  |
@@ -301,24 +324,26 @@ UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE U
 | `/kids` | `app/(app)/kids` | auth |  |
 | `/kids/submit/[assignmentId]` | `app/(app)/kids/submit/[assignmentId]` | auth |  |
 | `/marketplace/alerts` | `app/(app)/marketplace/alerts` | auth |  |
+| `/marketplace/auctions` | `app/(app)/marketplace/auctions` | auth |  |
 | `/marketplace/browse` | `app/(app)/marketplace/browse` | auth |  |
 | `/marketplace/collections` | `app/(app)/marketplace/collections` | auth |  |
 | `/marketplace/community` | `app/(app)/marketplace/community` | auth |  |
 | `/marketplace/creators/[id]` | `app/(app)/marketplace/creators/[id]` | auth |  |
 | `/marketplace/creators` | `app/(app)/marketplace/creators` | auth |  |
+| `/marketplace/deals` | `app/(app)/marketplace/deals` | auth |  |
 | `/marketplace/following` | `app/(app)/marketplace/following` | auth |  |
 | `/marketplace/insights` | `app/(app)/marketplace/insights` | auth |  |
 | `/marketplace/item/[id]` | `app/(app)/marketplace/item/[id]` | auth |  |
+| `/marketplace/negotiations` | `app/(app)/marketplace/negotiations` | auth |  |
 | `/marketplace/orders` | `app/(app)/marketplace/orders` | auth |  |
 | `/marketplace` | `app/(app)/marketplace` | auth |  |
 | `/marketplace/questions` | `app/(app)/marketplace/questions` | auth |  |
 | `/marketplace/reviews` | `app/(app)/marketplace/reviews` | auth |  |
 | `/marketplace/saved` | `app/(app)/marketplace/saved` | auth |  |
-| `/marketplace/seed` | `app/(app)/marketplace/seed` | auth |  |
+| `/marketplace/selling` | `app/(app)/marketplace/selling` | auth |  |
 | `/marketplace/store` | `app/(app)/marketplace/store` | auth |  |
 | `/missions/new` | `app/(app)/missions/new` | auth |  |
 | `/missions` | `app/(app)/missions` | auth |  |
-| `/parent` | `app/(app)/parent` | redirect |  |
 | `/referrals` | `app/(app)/referrals` | auth |  |
 | `/services/[category]` | `app/(app)/services/[category]` | auth |  |
 | `/services` | `app/(app)/services` | auth |  |
@@ -334,28 +359,43 @@ UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE U
 | `/wallet/send` | `app/(app)/wallet/send` | auth |  |
 | `/wallet/settings` | `app/(app)/wallet/settings` | auth |  |
 | `/wallet/treasury` | `app/(app)/wallet/treasury` | auth |  |
+| `/auth/complete` | `app/(auth)/auth/complete` | public |  |
+| `/auth/recovery` | `app/(auth)/auth/recovery` | public |  |
+| `/auth/signout/complete` | `app/(auth)/auth/signout/complete` | public |  |
 | `/kid-login` | `app/(auth)/kid-login` | public |  |
 | `/login` | `app/(auth)/login` | public |  |
 | `/signup` | `app/(auth)/signup` | public |  |
 | `/welcome` | `app/(auth)/welcome` | public |  |
 | `/acceptable-use` | `app/(marketing)/acceptable-use` | public |  |
 | `/ai` | `app/(marketing)/ai` | public |  |
+| `/alternatives/[slug]` | `app/(marketing)/alternatives/[slug]` | public |  |
+| `/audiences/[slug]` | `app/(marketing)/audiences/[slug]` | public |  |
 | `/blog/[slug]` | `app/(marketing)/blog/[slug]` | public |  |
 | `/blog` | `app/(marketing)/blog` | public |  |
+| `/compare/[slug]` | `app/(marketing)/compare/[slug]` | public |  |
 | `/contact` | `app/(marketing)/contact` | public |  |
 | `/cookies` | `app/(marketing)/cookies` | public |  |
-| `/demo/upgrade` | `app/(marketing)/demo/upgrade` | public |  |
+| `/customers/[slug]` | `app/(marketing)/customers/[slug]` | public |  |
 | `/f/[id]` | `app/(marketing)/f/[id]` | public |  |
+| `/family-display` | `app/(marketing)/family-display` | public |  |
 | `/faq` | `app/(marketing)/faq` | public |  |
+| `/features/[slug]` | `app/(marketing)/features/[slug]` | public |  |
 | `/features` | `app/(marketing)/features` | public |  |
+| `/glossary/[slug]` | `app/(marketing)/glossary/[slug]` | public |  |
+| `/guides/[slug]` | `app/(marketing)/guides/[slug]` | public |  |
 | `/how-it-works` | `app/(marketing)/how-it-works` | public |  |
 | `/lp/[slug]` | `app/(marketing)/lp/[slug]` | public |  |
 | `/mobile` | `app/(marketing)/mobile` | public |  |
+| `/p/[slug]` | `app/(marketing)/p/[slug]` | public |  |
 | `/` | `app/(marketing)` | public |  |
 | `/pricing` | `app/(marketing)/pricing` | public |  |
 | `/privacy` | `app/(marketing)/privacy` | public |  |
+| `/questions/[slug]` | `app/(marketing)/questions/[slug]` | public |  |
+| `/resources/[slug]` | `app/(marketing)/resources/[slug]` | public |  |
+| `/resources/benchmarks` | `app/(marketing)/resources/benchmarks` | public |  |
 | `/security` | `app/(marketing)/security` | public |  |
 | `/terms` | `app/(marketing)/terms` | public |  |
+| `/app-lock` | `app/app-lock` | auth | App Lock screen; signed-out visitor is sent to `/login` |
 | `/gift/[token]` | `app/gift/[token]` | public |  |
 | `/join` | `app/join` | public |  |
 | `/offline` | `app/offline` | public |  |
@@ -365,4 +405,4 @@ UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE U
 | `/reviews` | `app/reviews` | public |  |
 | `/s/[slug]` | `app/s/[slug]` | public |  |
 
-**349 page routes.** API routes: see `app/api/**/route.ts` (100+ routes; auth audit + fixes recorded in todo.md "Full stone-turn pass"). The Ask Bubaly edge added in Phase 2: `POST /api/ai/requests` (file a request → 202 with the run page), `GET /api/ai/runs/[id]` (run detail) and `POST /api/ai/runs/[id]/{pause,resume,cancel,rerun,answer}` (controls and clarification answers) — cookie or bearer auth, `ai-requests` feature gate, durable rate limit.
+**392 page routes** (as of 2026-11-10). API routes: see `app/api/**/route.ts` (149 routes as of 2026-11-10; the 2026-07 auth audit and its fixes are summarised in `security-review.md` — the "Full stone-turn pass" section is no longer in `todo.md`). The Ask Bubaly edge added in Phase 2: `POST /api/ai/requests` (file a request → 202 with the run page), `GET /api/ai/runs/[id]` (run detail) and `POST /api/ai/runs/[id]/{pause,resume,cancel,rerun,answer}` (controls and clarification answers) — cookie or bearer auth, `ai-requests` feature gate, durable rate limit.
