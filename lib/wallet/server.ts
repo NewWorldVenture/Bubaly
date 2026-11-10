@@ -5,7 +5,7 @@
 // path is identical and auditable.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json, WalletTxnType } from '@/lib/database.types';
-import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
+import { allocate, normalizeSplit, spendableFromLedger, type Split } from '@/lib/wallet/ledger';
 import { describeActionError } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { readAll } from '@/lib/supabase/read-all';
@@ -413,10 +413,11 @@ export async function creditChildWallet(supabase: DB, params: {
 }
 
 /**
- * Available (completed) balance in a single bucket for a child wallet, derived
- * straight from the ledger. Pending / requires_parent_approval rows do NOT count
- * — only `completed` moves a balance. Used to validate spend + transfers so a
- * wallet can never overdraw.
+ * Available balance in a single bucket for a child wallet, derived straight
+ * from the ledger: completed rows and live card holds (`processing`), as every
+ * money-moving function counts them (spendableFromLedger). Pending /
+ * requires_parent_approval rows do NOT count. A spend request is checked
+ * against it and prints it, so it may not offer what a live hold already took.
  */
 export async function bucketBalanceCents(supabase: DB, params: {
   familyId: string; childWalletId: string; kind: 'spend' | 'save' | 'give' | 'invest';
@@ -434,16 +435,14 @@ export async function bucketBalanceCents(supabase: DB, params: {
   // could not see it: it looks for `.limit(n)` where n exceeds the cap, and this
   // read had no `.limit()` at all. Its own header even names the consequence —
   // "wallet balances totalled from part of the ledger".
-  const { rows: txns, error: transactionError } = await readAll<{ direction: string; amount_cents: number; status: string }>(
+  const { rows: txns, error: transactionError } = await readAll<{ direction: 'credit' | 'debit'; amount_cents: number; status: string }>(
     (from, to) => supabase.from('wallet_transactions')
       .select('direction, amount_cents, status')
       .eq('family_id', params.familyId).eq('bucket_id', bucket.id)
       .order('id').range(from, to),
   );
   if (transactionError) return { bucketId: bucket.id, available: 0, error: walletFailure(transactionError, 'Could not load the wallet balance.') };
-  const available = (txns ?? []).reduce(
-    (s, t) => s + (t.status === 'completed' ? (t.direction === 'credit' ? t.amount_cents : -t.amount_cents) : 0), 0,
-  );
+  const available = spendableFromLedger(txns ?? []);
   return { bucketId: bucket.id, available };
 }
 

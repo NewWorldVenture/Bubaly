@@ -5,7 +5,7 @@ import { refuseGuest } from '@/lib/auth/guest-scope';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
-import { balanceFromLedger, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
+import { balanceFromLedger, spendableFromLedger, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
 import { WalletActivation } from '@/components/wallet/wallet-activation';
 import { readFamilyWalletIsActive } from '@/lib/wallet/family-wallet-status';
 import { inWalletScope, ownMemberOnly, readWalletScope } from '@/lib/wallet/own-wallets';
@@ -76,7 +76,9 @@ export default async function SendMoneyPage() {
       id: cw.id,
       name: member?.display_name ?? 'Child',
       color: member?.color ?? null,
-      spendBalance: balanceFromLedger(entries.filter((e) => e.bucket_kind === 'spend')),
+      // Offered as available to send: Spend less a live card hold, as the
+      // transfer itself counts it (wallet_spendable_cents).
+      spendBalance: spendableFromLedger(entries.filter((e) => e.bucket_kind === 'spend')),
       total: balanceFromLedger(entries),
     };
   });

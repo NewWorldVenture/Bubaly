@@ -94,6 +94,24 @@ export function bucketBalances(entries: LedgerEntry[]): Record<BucketKind, numbe
   return out;
 }
 
+const COUNTS_TOWARD_SPENDABLE = new Set(['completed', 'processing']);
+
+/**
+ * What can still be spent or sent from these entries: completed rows AND live
+ * card holds (`processing`), the rule every function that moves a child's money
+ * decides by (wallet_reserve_card_auth 0155, wallet_debit_spend_bucket 0342,
+ * wallet_spendable_cents 0483). A figure shown as AVAILABLE is this one, or the
+ * family is offered money the ledger then refuses; `balanceFromLedger` stays
+ * the money the wallet holds, holds and all. Pass one bucket's entries.
+ */
+export function spendableFromLedger(entries: LedgerEntry[]): number {
+  return entries.reduce((sum, e) => {
+    if (!COUNTS_TOWARD_SPENDABLE.has(e.status)) return sum;
+    const amt = Math.max(0, Math.trunc(e.amount_cents));
+    return sum + (e.direction === 'credit' ? amt : -amt);
+  }, 0);
+}
+
 /** Build the reversal counterpart of a transaction (flips direction). */
 export function reversalOf(txn: { id: string; direction: Direction; amount_cents: number; bucket_id?: string | null }): {
   reverses_id: string; direction: Direction; amount_cents: number; type: 'reversal'; status: 'completed'; bucket_id: string | null;
