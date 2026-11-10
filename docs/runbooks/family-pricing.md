@@ -72,11 +72,13 @@ older deployed checkout remains usable during the transition.
    page, including the annual total and monthly equivalent. Verify all supported
    locales and that checkout uses the selected current ID and interval. Do not
    complete a live payment merely to validate configuration.
-   Confirm the admin-selected checkout key and the environment key used by plan
-   changes, cancellation and the customer portal reach the same Stripe account.
-   Check the actual first-invoice total: the existing checkout can add a separately
-   configured one-time service fee, while the plan-change checkout fallback does
-   not. This change updates recurring plan prices and does not alter that fee
+   Confirm the key that checkout, plan changes, cancellation and the customer
+   portal all resolve (Super Admin → Stripe Setup first, then the environment)
+   reaches the intended Stripe account.
+   Check the actual first-invoice total: checkout and the plan-change checkout
+   fallback both add the separately configured one-time service fee when it is
+   enabled. This change
+   updates recurring plan prices and does not alter that fee
    policy. The portal uses its Stripe-side configuration.
 3. Recheck old-price references for changes since the initial audit. Once the
    current production code and checkout mapping are confirmed, archive the four
@@ -119,15 +121,17 @@ commit and timestamp.
 3. Verify `STRIPE_SECRET_KEY` and `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` belong to
    the live Stripe account containing these prices. Also inspect **Super Admin →
    Stripe Setup**: nonempty `stripe_settings.secret_key` and `publishable_key`
-   override their environment fallbacks. `/api/billing/checkout` uses the
-   effective admin/env secret; change-plan, cancellation and portal routes use
-   the environment secret. Both paths must reach the same account. Record the
-   verified account ID, never key values.
+   override their environment fallbacks. `/api/billing/checkout`, change-plan,
+   cancellation, portal and the billing webhook all use that effective
+   admin-then-environment secret, so a stale `stripe_settings.secret_key` wins
+   over a correct environment value. The effective key must reach that account.
+   Record the verified account ID, never key values.
 4. In that Stripe account, verify Bubaly's billing webhook endpoint is
    `https://www.bubaly.com/api/webhooks/stripe`. Set Vercel's Production
    `STRIPE_WEBHOOK_SECRET` to the signing secret for **that endpoint**. The route
-   reads this environment value directly; an admin `stripe_settings.webhook_secret`
-   does not override it. A signing secret for another application's endpoint
+   uses a nonempty admin `stripe_settings.webhook_secret` (Super Admin → Stripe
+   Setup) first and this environment value only as the fallback, so a saved
+   admin value must be that same endpoint's secret. A signing secret for another application's endpoint
    cannot configure Bubaly's webhook. Subscribe that endpoint to
    `checkout.session.completed`, `customer.subscription.created`,
    `customer.subscription.updated` and `customer.subscription.deleted`, matching
@@ -154,8 +158,9 @@ commit and timestamp.
    signup/login and onboarding retain the selected plan through to explicit
    Billing review, with no payment request until confirmation.
 7. Verify the first-invoice total for the actual entry point, including any tax
-   or promotion: `/api/billing/checkout` can add the configured one-time service
-   fee; `/api/billing/change-plan` checkout fallback does not. The portal follows
+   or promotion: `/api/billing/checkout` and the `/api/billing/change-plan`
+   checkout fallback both add the configured one-time service fee when it is
+   enabled. The portal follows
    its Stripe-side configuration. Preserve this existing fee policy. Recheck all
    references to the four previous IDs, including subscriptions, payment links
    and portal configurations, exhausting pagination. Only after production code
