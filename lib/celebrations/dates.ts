@@ -79,7 +79,8 @@ export function upcomingCelebrations(
     const turning = p.y != null ? next.getFullYear() - p.y : null;
     out.push({
       ...it,
-      nextDate: `${next.getFullYear()}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`,
+      // From `next` itself: 29 Feb in a common year is 1 Mar, and `daysUntil` counts to that.
+      nextDate: `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`,
       daysUntil: days,
       turning: turning != null && turning > 0 ? turning : null,
     });
