@@ -101,6 +101,7 @@ describe('seed write failure safety', () => {
     // the normal case. That is a decision, and it is narrow: it still throws on
     // anything else. Asserted so it cannot widen into "cleanup errors are fine".
     const medical = scripts.find((s) => s.name === 'seed-medical.mjs');
+    expect(medical, 'scripts/seed-medical.mjs is the one script allowed a tolerated error').toBeDefined();
     if (!medical) return;
     expect(medical.source).toMatch(/if\s*\(error\s*&&\s*!\/does not exist\/i\.test\(error\.message\)\)/);
     expect(medical.source).toMatch(/throw new Error\(`Seed cleanup failed/);

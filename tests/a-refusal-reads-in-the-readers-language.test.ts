@@ -168,6 +168,8 @@ describe('a sentence written on the server is shown in the reader’s language',
   });
 
   it('a form field shows it in German', () => {
+    // Field takes its control as a render function (children: (id) => ReactNode), which is a prop, not a child.
+    // eslint-disable-next-line react/no-children-prop
     const html = renderTranslated(createElement(Field, { label: 'Titel', error: english, children: () => null }), 'de-DE');
     expect(html).toContain(escape(de['dbError.permission']));
     expect(html).not.toContain(escape(english));
