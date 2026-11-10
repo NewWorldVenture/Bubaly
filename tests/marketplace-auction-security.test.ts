@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { at } from './helpers/source-order';
 import { readFileSync, readdirSync } from 'node:fs';
 
 const migration = readFileSync('supabase/migrations/0184_marketplace_auction_authorization.sql', 'utf8');
@@ -65,8 +66,8 @@ describe('marketplace auction security contract', () => {
     expect(bid.body).toContain('where id = p_bidder_member_id and user_id = auth.uid() and is_active;');
     expect(bid.body).toContain('v_member_family is null or v_member_family is distinct from p_bidder_family_id');
     // The checks come before the hand-off to the unchecked writer.
-    const handOff = bid.body.indexOf('return public.marketplace_place_bid_unchecked(');
-    expect(handOff).toBeGreaterThan(bid.body.indexOf('v_member_family is distinct from p_bidder_family_id'));
+    const handOff = at(bid.body, 'return public.marketplace_place_bid_unchecked(');
+    expect(handOff).toBeGreaterThan(at(bid.body, 'v_member_family is distinct from p_bidder_family_id'));
     expect(bid.after).toContain('revoke all on function public.marketplace_place_bid(uuid, uuid, uuid, bigint) from public, anon;');
 
     // The writer it hands off to is the server's alone.

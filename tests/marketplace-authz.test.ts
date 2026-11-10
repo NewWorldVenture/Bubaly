@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { at } from './helpers/source-order';
 
 // A-14 marketplace trust invariants. These SECURITY DEFINER RPCs move ownership
 // and money between families, so they must gate on the caller: only a listing's
@@ -46,7 +47,7 @@ describe('A-14 marketplace offer RPCs are owner-gated', () => {
       expect(body).toContain('if v_caller is null or v_listing.member_id is distinct from v_caller then');
       expect(body).toContain("raise exception 'Only the listing owner can change this listing';");
       // refused before the row is written
-      expect(body.indexOf('Only the listing owner can change this listing')).toBeLessThan(body.indexOf('update public.marketplace_listings'));
+      expect(at(body, 'Only the listing owner can change this listing')).toBeLessThan(at(body, 'update public.marketplace_listings'));
     }
   });
 });

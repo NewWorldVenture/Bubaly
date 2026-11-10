@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { expectTranslates } from './helpers/translated';
 import { describe, expect, it } from 'vitest';
+import { at } from './helpers/source-order';
 
 const actionFiles = [
   'app/(app)/feedback/actions.ts',
@@ -72,10 +73,9 @@ describe('Marketplace and Feedback action boundaries', () => {
     expect(live).toContain("return jsonb_build_object('ok', false, 'reason', 'forbidden');");
     expect(live).not.toContain('is_family_member(');
     // the caller is refused before either row is written, and both rows are locked
-    const forbidden = live.indexOf("'forbidden'");
-    expect(forbidden).toBeGreaterThan(-1);
-    expect(forbidden).toBeLessThan(live.indexOf('update public.marketplace_handoffs'));
-    expect(forbidden).toBeLessThan(live.indexOf('update public.marketplace_orders'));
+    const forbidden = at(live, "'forbidden'");
+    expect(forbidden).toBeLessThan(at(live, 'update public.marketplace_handoffs'));
+    expect(forbidden).toBeLessThan(at(live, 'update public.marketplace_orders'));
     expect(live.match(/for update/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
     expect(live.match(/set status = 'completed'/g)?.length ?? 0).toBe(2);
     expect(liveHandoffMigration).toContain('revoke all on function public.marketplace_complete_handoff(uuid, text) from public, anon;');
