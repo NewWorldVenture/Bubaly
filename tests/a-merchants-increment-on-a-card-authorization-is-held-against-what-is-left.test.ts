@@ -17,6 +17,11 @@
 // earlier holds left, and the capture or the authorization's end releases them
 // all.
 //
+// Each request's decision is recorded under that same key. The table is
+// UNIQUE (stripe_authorization_id), and an increment recorded under the
+// authorization's own id was refused, so a declined increment never reached
+// the parents (review item CMS-REV-3).
+//
 // Finding N4 (child-money-scope). The route and the handlers are real; the
 // database is in-memory, and the reserve RPC is modelled on 0155 line for line,
 // its idempotency shortcut included; Stripe's API is the one seam. Nothing here
@@ -62,6 +67,8 @@ const signed = (r: Row) => (r.direction === 'credit' ? Number(r.amount_cents) : 
 const spendable = () => db.table('wallet_transactions').filter(inSpend).reduce((sum, r) => sum + signed(r), 0);
 const liveHolds = () => db.table('wallet_transactions').filter((r) => r.type === 'card_spend' && r.status === 'processing');
 const heldCents = () => liveHolds().reduce((sum, r) => sum + Number(r.amount_cents), 0);
+/** The decisions recorded for the parents (the admin Stripe page reads these columns). */
+const recorded = () => db.table('stripe_authorizations').map((r) => ({ outcome: r.outcome, decline_reason: r.decline_reason, amount_cents: r.amount_cents }));
 
 /**
  * PostgREST's LIKE: `*` is its spelling of `%`, a backslash escapes the next
@@ -123,7 +130,8 @@ beforeEach(() => {
   harness.decline.mockReset().mockResolvedValue({});
   harness.retrieve.mockReset();
   db = createInMemorySupabase({
-    uniques: { stripe_webhook_events: [['stripe_event_id']] },
+    // stripe_authorizations: UNIQUE (stripe_authorization_id), 00901_stripe_money.sql.
+    uniques: { stripe_webhook_events: [['stripe_event_id']], stripe_authorizations: [['stripe_authorization_id']] },
     rpc: {
       // 0155, in order: nothing to hold approves; the spend bucket (its lock);
       // an existing live hold under this key approves without holding again;
@@ -203,6 +211,29 @@ describe('a merchant\'s increment on a card authorization is held against what i
 
     expect(liveHolds()).toHaveLength(2);
     expect(heldCents()).toBe(1000);
+  });
+
+  it('an increment\'s decision is recorded as a row of its own: a decline with its reason, for the parents to read', async () => {
+    await checkIn();
+
+    await deliver('issuing_authorization.request', request('iauth_hotel', 800, FIRST));
+
+    expect(recorded()).toEqual([
+      { outcome: 'approved', decline_reason: null, amount_cents: 800 },
+      { outcome: 'declined', decline_reason: 'insufficient_spend_balance', amount_cents: 800 },
+    ]);
+  });
+
+  it('an approved increment is recorded too, and an increment delivered twice is recorded once', async () => {
+    await checkIn();
+
+    await deliver('issuing_authorization.request', request('iauth_hotel', 200, FIRST));
+    await deliver('issuing_authorization.request', request('iauth_hotel', 200, FIRST));
+
+    expect(recorded()).toEqual([
+      { outcome: 'approved', decline_reason: null, amount_cents: 800 },
+      { outcome: 'approved', decline_reason: null, amount_cents: 200 },
+    ]);
   });
 
   it('a first request delivered twice is still held once, under the authorization\'s own id', async () => {

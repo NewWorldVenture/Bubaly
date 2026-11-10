@@ -212,6 +212,9 @@ export async function handleAuthorizationRequest(
   const amount = auth.pending_request?.amount ?? auth.amount ?? 0;
   const merchantCategory = auth.merchant_data?.category ?? null;
   const merchantName = auth.merchant_data?.name ?? null;
+  // Which request on this authorization this is: 0 for the first, n for the
+  // n-th increment (Stripe lists the requests it has already decided).
+  const request = auth.request_history?.length ?? 0;
 
   let decision: AuthDecision;
   if (!card) {
@@ -228,7 +231,7 @@ export async function handleAuthorizationRequest(
       // approved holds its own amount, against what the earlier holds left.
       const reserved = await reserveCardAuth(supabase, {
         familyId: card.family_id, childWalletId: card.child_wallet_id,
-        amountCents: amount, authId: cardHoldKey(auth.id, auth.request_history?.length ?? 0),
+        amountCents: amount, authId: cardHoldKey(auth.id, request),
         description: merchantName ?? 'Card hold',
       });
       decision = reserved ? { approve: true, reason: 'approved' } : { approve: false, reason: 'insufficient_spend_balance' };
@@ -268,10 +271,15 @@ export async function handleAuthorizationRequest(
   // exposes the table to the assistant as "card authorisations". A parent asking
   // why their child's card was declined is answered from rows that quietly may
   // not exist.
+  //
+  // One row per REQUEST, keyed as its hold is (cardHoldKey). The table is
+  // UNIQUE (stripe_authorization_id), so an increment keyed by the
+  // authorization's own id was refused, and an increment declined for want of
+  // Spend never reached the parents. A redelivery of a request is still refused.
   if (card) {
     const { error: auditError } = await supabase.from('stripe_authorizations').insert({
       family_id: card.family_id, card_id: card.id, child_wallet_id: card.child_wallet_id,
-      stripe_authorization_id: auth.id, amount_cents: amount,
+      stripe_authorization_id: cardHoldKey(auth.id, request), amount_cents: amount,
       merchant_name: merchantName, merchant_category: merchantCategory,
       outcome: decision.approve ? 'approved' : 'declined',
       decline_reason: decision.approve ? null : decision.reason,
