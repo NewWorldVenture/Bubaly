@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import ts from 'typescript';
 import { autoFamilyName, autoOwnerName, DEFAULT_OWNER_DISPLAY_NAME } from '@/lib/onboarding/family';
 
 const SKIP_DIRS = new Set(['node_modules', '.next', '.git', 'dist', 'build', 'coverage', 'supabase']);
@@ -46,6 +47,33 @@ export function codeLines(source: string): string[] {
   });
 }
 
+/**
+ * The 1-based lines of every template literal in a .ts source whose TEXT holds
+ * a translation call.
+ *
+ * The line-by-line pattern below needs the opening backtick on the same line as
+ * the call, so an email body written across several lines — the usual way to
+ * write one — passed it. The parser has no such limit: an interpolated call is
+ * an expression and never part of a literal's text, so a call found in the text
+ * is the defect, on whichever line of the literal it sits.
+ */
+const CALL_AS_TEXT = /(?<!\$)\{t\(\s*['"][\w.]+['"]/;
+function templateTextOffenders(file: string, source: string): number[] {
+  if (!CALL_AS_TEXT.test(source)) return []; // parse only the few files that could offend
+  const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS);
+  const lines: number[] = [];
+  const visit = (node: ts.Node): void => {
+    const isTemplateText =
+      ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node);
+    if (isTemplateText && CALL_AS_TEXT.test(node.text)) {
+      lines.push(parsed.getLineAndCharacterOfPosition(node.getStart(parsed)).line + 1);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(parsed);
+  return lines;
+}
+
 describe('a translation call inside a template literal is not a translation call', () => {
   // The onboarding wizard's invite email shipped this for months, as the body
   // of every invite a brand-new family sent:
@@ -65,15 +93,46 @@ describe('a translation call inside a template literal is not a translation call
 
   it('no .ts source builds a string with an uninterpolated translation call', () => {
     const offenders: string[] = [];
+    let scanned = 0;
     for (const [file, source] of SOURCES) {
       if (!file.endsWith('.ts') || file.endsWith('.tsx')) continue;
       if (file.endsWith(FIXTURE_FILE)) continue; // its fixtures are the shape, on purpose
+      scanned += 1;
       for (const [index, line] of source.split('\n').entries()) {
         if (codeLines(line).length === 0) continue;
         if (OFFENDER.test(line)) offenders.push(`${file.replace(process.cwd() + '/', '')}:${index + 1}`);
       }
     }
     expect(offenders).toEqual([]);
+    expect(scanned).toBeGreaterThan(0);
+  });
+
+  it('no .ts source carries one on a later line of a multi-line template literal', () => {
+    const offenders: string[] = [];
+    const scanned: string[] = [];
+    for (const [file, source] of SOURCES) {
+      if (!file.endsWith('.ts') || file.endsWith('.tsx')) continue;
+      const relative = file.replace(process.cwd() + '/', '');
+      scanned.push(relative);
+      for (const line of templateTextOffenders(file, source)) offenders.push(`${relative}:${line}`);
+    }
+    expect(offenders).toEqual([]);
+    // The file the defect shipped in is among the files read.
+    expect(scanned).toContain('app/onboarding/actions.ts');
+  });
+
+  it('the template scan recognises the shape on any line, and only inside a template literal', () => {
+    // Built from pieces, so this file does not hold the shape it is policing.
+    const tick = String.fromCharCode(96);
+    const call = ['{t(', "'actions.youVeBeenInvitedTo'", ')}'].join('');
+    const broken = ['const body = ' + tick, '  <h1>Hi</h1>', `  <p>${call}</p>`, tick + ';'].join('\n');
+    expect(templateTextOffenders('fixture.ts', `const first = 1;\n${broken}`)).toEqual([2]);
+    expect(templateTextOffenders('fixture.ts', broken.replace('{t(', '${t('))).toEqual([]);
+    // After an interpolation the literal's text continues, and is still policed.
+    expect(templateTextOffenders('fixture.ts', broken.replace('<h1>Hi</h1>', '<h1>${name}</h1>'))).toHaveLength(1);
+    // A block that calls t() after a closed literal, and a comment, are not template text.
+    expect(templateTextOffenders('fixture.ts', `const a = ${tick}x${tick};\nrun(() => ${call.slice(0, -1)};});`)).toEqual([]);
+    expect(templateTextOffenders('fixture.ts', `// ${broken.split('\n').join(' ')}`)).toEqual([]);
   });
 
   it('the pattern actually recognises the shape it is policing', () => {
