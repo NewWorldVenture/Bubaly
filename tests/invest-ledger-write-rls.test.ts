@@ -24,6 +24,11 @@ describe('0219 invest ledger write lockdown', () => {
     expect(h).toContain('for insert to authenticated with check (public.can_manage_family(family_id))');
     expect(sql).toContain('create policy invest_holdings_mng_update');
     expect(sql).toContain('create policy invest_holdings_mng_delete');
+    // The name alone is also in the `drop policy if exists` lines: pin each
+    // create statement with its manager predicate.
+    expect(sql).toContain('create policy invest_holdings_mng_insert on public.invest_holdings\n      for insert to authenticated with check (public.can_manage_family(family_id));');
+    expect(sql).toContain('create policy invest_holdings_mng_update on public.invest_holdings\n      for update to authenticated using (public.can_manage_family(family_id)) with check (public.can_manage_family(family_id));');
+    expect(sql).toContain('create policy invest_holdings_mng_delete on public.invest_holdings\n      for delete to authenticated using (public.can_manage_family(family_id));');
   });
 
   it('keeps invest_holdings SELECT open to members (child views portfolio)', () => {
@@ -37,5 +42,15 @@ describe('0219 invest ledger write lockdown', () => {
   it('restricts invest_orders UPDATE/DELETE (approve/cancel) to managers', () => {
     expect(sql).toContain('invest_orders_mng_update');
     expect(sql).toContain('invest_orders_mng_delete');
+    // The names alone are also in the `drop policy if exists` lines: pin each
+    // create statement with its manager predicate.
+    expect(sql).toContain('create policy invest_orders_mng_update on public.invest_orders\n      for update to authenticated using (public.can_manage_family(family_id)) with check (public.can_manage_family(family_id));');
+    expect(sql).toContain('create policy invest_orders_mng_delete on public.invest_orders\n      for delete to authenticated using (public.can_manage_family(family_id));');
+  });
+
+  it('leaves no write policy on either invest table open to every member except the order INSERT', () => {
+    const memberWrites = sql.match(/for (?:insert|update|delete|all) to authenticated[^;]*is_family_member[^;]*;/g) ?? [];
+    expect(memberWrites).toEqual(['for insert to authenticated with check (public.is_family_member(family_id));']);
+    expect(sql.match(/^\s*create policy /gm)).toHaveLength(8);
   });
 });
