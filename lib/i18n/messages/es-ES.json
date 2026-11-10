@@ -17248,5 +17248,6 @@
   "socialActions.couldNotConfirmYourPlan": "Bubaly no ha podido confirmar tu plan en este momento. Inténtalo de nuevo dentro de un momento.",
   "socialLeftConnected.title": "Las herramientas de redes sociales no están disponibles para tu familia en este momento",
   "socialLeftConnected.body": "Estas cuentas siguen conectadas a Bubaly. Sea cual sea tu plan, puedes desconectarlas: al desconectar una, se quita y se borra el inicio de sesión que Bubaly guarda para ella.",
-  "socialLeftConnected.seePlans": "Ver planes"
+  "socialLeftConnected.seePlans": "Ver planes",
+  "actions.onlyAParentOrAdultCanScheduleMaintenance": "Solo un progenitor o adulto puede programar el mantenimiento del hogar."
 }

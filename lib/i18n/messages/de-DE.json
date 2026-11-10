@@ -17248,5 +17248,6 @@
   "socialActions.couldNotConfirmYourPlan": "Bubaly konnte Ihren Tarif gerade nicht bestätigen. Versuchen Sie es gleich noch einmal.",
   "socialLeftConnected.title": "Die Social-Media-Tools sind für Ihre Familie gerade nicht verfügbar",
   "socialLeftConnected.body": "Diese Konten sind noch mit Bubaly verbunden. Sie können sie unabhängig von Ihrem Tarif trennen: Beim Trennen wird das Konto entfernt und die Anmeldung gelöscht, die Bubaly dafür speichert.",
-  "socialLeftConnected.seePlans": "Tarife ansehen"
+  "socialLeftConnected.seePlans": "Tarife ansehen",
+  "actions.onlyAParentOrAdultCanScheduleMaintenance": "Nur ein Elternteil oder Erwachsener kann die Wartung im Haus planen."
 }

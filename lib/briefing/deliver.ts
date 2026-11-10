@@ -48,6 +48,7 @@ import { briefingCalendarBounds } from './calendar-window';
 import { projectCalendarWindow } from '@/lib/calendar/consumer-spans';
 import { readDisplayCalendarOccurrences } from '@/lib/calendar/display-occurrences';
 import { settleAll } from '@/lib/supabase/settle';
+import { tripNotOverFilter } from '@/lib/vacations/dates';
 
 type DB = SupabaseClient<Database>;
 
@@ -148,10 +149,16 @@ export async function readMorningBrief(scope: ServiceScope, target: MorningTarge
       .eq('family_id', familyId).in('status', ['todo', 'in_progress'])
       .not('due_at', 'is', null).lte('due_at', `${horizon}T23:59:59.999Z`).order('due_at').limit(20),
     // A deleted warranty is soft-deleted (`deleted_at`), like on every other reader of this table.
+    // From today: lapsed ones are not in the brief, and oldest-first they filled the limit.
+    // A cancelled one has nothing left to renew.
     db.from('home_warranties').select('name, expires_on')
-      .eq('family_id', familyId).is('deleted_at', null).not('expires_on', 'is', null).lte('expires_on', horizon).order('expires_on').limit(20),
+      .eq('family_id', familyId).is('deleted_at', null).neq('status', 'cancelled').not('expires_on', 'is', null).gte('expires_on', dayKey).lte('expires_on', horizon).order('expires_on').limit(20),
+    // Trips still to come, soonest first. Nothing moves a trip past 'planning',
+    // so by status alone a trip that ended reached the digest as OVERDUE every
+    // morning, and twenty old ones could push this week's out of the read.
     db.from('vacations').select('title, destination, start_date, end_date, status')
-      .eq('family_id', familyId).not('status', 'in', '("completed","cancelled")').not('start_date', 'is', null).limit(20),
+      .eq('family_id', familyId).not('status', 'in', '("completed","cancelled")').not('start_date', 'is', null)
+      .or(tripNotOverFilter(dayKey)).order('start_date').order('id').limit(20),
     db.from('pantry_items').select('name, expires_at')
       .eq('family_id', familyId).not('expires_at', 'is', null).lte('expires_at', horizon).order('expires_at').limit(25),
     db.from('family_automation_runs').select('id, summary, state, progress, completed_at, updated_at')

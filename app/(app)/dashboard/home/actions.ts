@@ -8,6 +8,7 @@ import { createServer } from '@/lib/supabase/server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { refusalError, refusalForError } from '@/lib/actions/refusal';
 import { DEFAULT_CADENCES } from '@/lib/home/maintenance';
+import { isManager } from '@/lib/constants/roles';
 import { alreadyOnOrAfter, isDayKey, onlyForward } from '@/lib/home/service-dates';
 
 async function ctx() {
@@ -15,6 +16,7 @@ async function ctx() {
   return {
     familyId: c.active.familyId,
     userId: c.user.id,
+    role: c.active.role,
     supabase: await createServer(),
     // The family's day, for defaulting a date column. `new Date()` formatted as
     // a day key is the HOST's day, so a record logged at 6pm in California was
@@ -245,7 +247,11 @@ async function restoreLastServiced(supabase: Awaited<ReturnType<typeof createSer
 // ── Deterministic forecast → schedule recommended maintenance for an asset ────
 export async function scheduleRecommendedTasksAction(assetId: string): Promise<{ ok: boolean; created: number; error?: string }> {
   const tr = await getTranslations();
-  const { familyId, userId, supabase } = await ctx();
+  const { familyId, userId, role, supabase } = await ctx();
+  // The Home page offers "Add task" to a parent or adult only, and this writes a
+  // year of recurring tasks: a child, caregiver or guest is refused before
+  // anything is read (maintenance_tasks itself takes any member's insert).
+  if (!isManager(role)) return { ok: false, created: 0, error: tr('actions.onlyAParentOrAdultCanScheduleMaintenance') };
   const { data: asset, error: assetReadError } = await supabase
     .from('home_assets')
     .select('id, name, category, last_serviced_on')
@@ -277,7 +283,10 @@ export async function scheduleRecommendedTasksAction(assetId: string): Promise<{
   }
   const have = new Set((existing ?? []).map((t) => t.title.toLowerCase()));
 
-  const base = asset.last_serviced_on ? new Date(asset.last_serviced_on) : new Date();
+  // Noon UTC on the day last serviced, as the assistant's `scheduleRecommendedTasks`
+  // does, so both write the same rows. `new Date(<DATE>)` is UTC midnight: the
+  // evening before west of Greenwich, so every task there fell due a day early.
+  const base = asset.last_serviced_on ? Date.parse(`${asset.last_serviced_on}T12:00:00Z`) : Date.now();
   const rows = cadences
     .filter((c) => !have.has(c.task.toLowerCase()))
     .map((c) => ({
@@ -286,7 +295,7 @@ export async function scheduleRecommendedTasksAction(assetId: string): Promise<{
       title: c.task,
       description: `Recommended every ${c.intervalDays} days for ${asset.name}.`,
       interval_days: c.intervalDays,
-      due_at: new Date(base.getTime() + c.intervalDays * 86_400_000).toISOString(),
+      due_at: new Date(base + c.intervalDays * 86_400_000).toISOString(),
       created_by: userId,
     }));
 

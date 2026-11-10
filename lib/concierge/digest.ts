@@ -256,10 +256,13 @@ export function buildConciergeDigest(snapshot: ConciergeSnapshot): ConciergeDige
   }
 
   // ── Warranties expiring ───────────────────────────────────────────────────
+  // A heads-up from 30 days before the end through the end day. A warranty
+  // that has run out leaves nothing to do: as "overdue" it topped every brief
+  // and titled the pushed one "N overdue" for good.
   for (const w of snapshot.warranties ?? []) {
     if (!w.expiresOn) continue;
     const off = dayOffset(w.expiresOn, now);
-    if (off === null) continue;
+    if (off === null || off < 0) continue;
     const urgency = classify(off, SOON_WINDOW_DAYS.warranty);
     if (!urgency) continue;
     const display: ConciergeItemDisplay = { version: 1, kind: 'warranty', name: w.name, dayOffset: off };

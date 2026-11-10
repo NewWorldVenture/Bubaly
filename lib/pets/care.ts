@@ -93,10 +93,43 @@ export interface UpcomingCareItem {
   daysUntil: number;
 }
 
-/** All records that have a next-due date, soonest first, with urgency tags. */
+/** One repeating care item: the same pet, kind and title (case and spacing aside). */
+function careSeries(r: CareRecordLike): string {
+  return `${r.pet_id}\u0000${r.kind}\u0000${r.title.trim().replace(/\s+/g, ' ').toLowerCase()}`;
+}
+
+/** `a` is a later entry of its series than `b`: by date, then next-due, then id. */
+function laterEntry(a: CareRecordLike, b: CareRecordLike): boolean {
+  const ad = a.record_date.slice(0, 10);
+  const bd = b.record_date.slice(0, 10);
+  if (ad !== bd) return ad > bd;
+  const an = a.next_due?.slice(0, 10) ?? '';
+  const bn = b.next_due?.slice(0, 10) ?? '';
+  if (an !== bn) return an > bn;
+  return a.id > b.id;
+}
+
+/**
+ * Records a later entry of the same series has replaced. Logging this year's
+ * "Rabies booster" answers last year's "next due": that one is history now,
+ * and its date must not keep the pet "overdue" for good.
+ */
+export function supersededCareIds(records: readonly CareRecordLike[]): Set<string> {
+  const latest = new Map<string, CareRecordLike>();
+  for (const r of records) {
+    const key = careSeries(r);
+    const current = latest.get(key);
+    if (!current || laterEntry(r, current)) latest.set(key, r);
+  }
+  return new Set(records.filter((r) => latest.get(careSeries(r))?.id !== r.id).map((r) => r.id));
+}
+
+/** Records that have a next-due date, soonest first, with urgency tags. Only
+ *  the latest record of each series counts (see `supersededCareIds`). */
 export function upcomingCare(records: readonly CareRecordLike[], today: Date = new Date()): UpcomingCareItem[] {
+  const replaced = supersededCareIds(records);
   return records
-    .filter((r) => r.next_due)
+    .filter((r) => r.next_due && !replaced.has(r.id))
     .map((r) => ({
       id: r.id, petId: r.pet_id, kind: r.kind, title: r.title,
       nextDue: r.next_due as string,
