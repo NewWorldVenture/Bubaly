@@ -32,6 +32,23 @@ function classifierSource(): string {
   return sql.slice(sql.indexOf(MARKER));
 }
 
+/**
+ * The same rule for anything else a later migration replaced: the text of the
+ * NEWEST migration carrying `marker`, from the marker on. The three storage
+ * policies were dropped and recreated by 0303, so reading them from 0266 by
+ * name guarded text the database no longer runs.
+ */
+function liveDefinition(marker: string): string {
+  const dir = 'supabase/migrations';
+  const defining = readdirSync(dir)
+    .filter((f) => f.endsWith('.sql'))
+    .sort()
+    .filter((f) => readFileSync(`${dir}/${f}`, 'utf8').includes(marker));
+  expect(defining.length, `no migration carries: ${marker}`).toBeGreaterThan(0);
+  const sql = readFileSync(`${dir}/${defining[defining.length - 1]}`, 'utf8');
+  return sql.slice(sql.indexOf(marker));
+}
+
 /** The vocabulary inside `is_sensitive_document`, in SQL's own words. */
 function sqlCategories(): string[] {
   const fn = classifierSource();
@@ -112,6 +129,28 @@ describe('the bytes are covered too, not just the row', () => {
     const body = policy.slice(0, policy.indexOf(';\n'));
     expect(body).toContain('d.storage_path = storage.objects.name');
     expect(body).toContain('is_sensitive_document');
+    // That is 0266's text. The policy in force is the newest one of that name,
+    // and it asks the question through document_object_is_restricted(name).
+    const live = liveDefinition(`create policy "Family members can ${verb} their documents"`);
+    const liveBody = live.slice(0, live.indexOf(';\n'));
+    expect(liveBody).toContain("bucket_id = 'documents'");
+    expect(liveBody).toContain('and not public.document_object_is_restricted(name)');
+    if (verb === 'update') {
+      // Both halves: the object it finds and the path it would be renamed to.
+      expect(liveBody).toContain('with check (');
+      expect((liveBody.match(/and not public\.document_object_is_restricted\(name\)/g) ?? []).length).toBe(2);
+    }
+  });
+
+  it('the check those policies call looks up the document behind the object', () => {
+    const fn = liveDefinition('create or replace function public.document_object_is_restricted');
+    const body = fn.slice(0, fn.indexOf('$$;'));
+    expect(body).toContain('d.storage_path = p_object_name');
+    expect(body).toContain('public.is_sensitive_document(d.is_secure, d.category)');
+    expect(body).toContain('and not public.can_manage_family(d.family_id)');
+    // `exists`, so an object with no row is not restricted and an upload still
+    // does not race its own policy.
+    expect(body).toContain('select exists (');
   });
 
   it('lets an object with no row through, so an upload does not race its own policy', () => {
