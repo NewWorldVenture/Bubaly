@@ -1,5 +1,12 @@
 # INTEGRATION_QUEUE
 
+> **Historical record — last updated 2026-07-18; note added 2026-11-10.** This is the queue as the
+> July 2026 audit session left it. It is not a current queue and not current guidance. The row
+> below still marked `pending` with commit "this publication" was published the same day as commit
+> `87c52ca58` ("fix(reasoning): surface degraded source reads"); the contract it describes is in the
+> tree (`lib/reasoning/engine.ts`, `lib/reasoning/engine-server.ts`). The validation counts are
+> the ones recorded then.
+
 Repo policy: validated increments are rebased on latest `main` and pushed
 directly to `main` (no long-lived integration branch). So this queue tracks
 recent validated increments and their integration state rather than a staging
