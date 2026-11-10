@@ -2,14 +2,19 @@
 
 ## Current automated coverage
 
-- **Vitest:** 292 files / 2,530 tests covering pure engines, auth decisions,
+Counts below were re-read from the repository on 2026-11-10; they grow with every
+change, so `npm test` and `npm run test:e2e` are the source of the live totals.
+
+- **Vitest:** 2,827 test files (`tests/**/*.test.ts`) covering pure engines, auth decisions,
   sync/conflict/crypto, calendar logic, workload, independence, reasoning,
   marketplace, onboarding, offline behavior, and contract checks. Run with
   `npm test`.
-- **Browser E2E:** 52 Playwright tests. The always-on suite covers 12 public
-  routes, four responsive widths, anonymous route protection, and serious or
-  critical WCAG findings in dark and light themes. CI also enables the isolated
-  authenticated journey described below. Run with `npm run test:e2e`.
+- **Browser E2E:** 143 Playwright spec files in `tests/e2e`. The always-on suite
+  covers the 15 public routes in `tests/e2e/public-routes.ts`, four responsive
+  widths, anonymous route protection, and serious or critical WCAG findings in
+  dark and light themes. CI also enables the isolated authenticated journey
+  described below and the other specs gated on `E2E_AUTHENTICATED=1`. Run with
+  `npm run test:e2e`.
 - **Authenticated first-value journey:** CI boots local Supabase, creates a
   disposable confirmed user, signs in through the real UI, completes onboarding,
   saves a task through Quick Capture and RLS, verifies the row with the service
