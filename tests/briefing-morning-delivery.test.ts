@@ -185,8 +185,12 @@ describe('deliverMorningBriefs', () => {
   it('files the brief for the family’s 7am, not the cron’s', async () => {
     const db = createInMemorySupabase<DB>();
     household(db, 'America/Los_Angeles');
-    await deliverMorningBriefs(db, TICK); // 4am there
-    for (const row of notifications(db)) {
+    // 4am there. The brief is FILED at this tick, for later: a run that filed
+    // nothing would leave the loop below with no row to check.
+    expect(await deliverMorningBriefs(db, TICK)).toEqual({ delivered: 1, families: 1, skipped: 0, failed: 0 });
+    const rows = notifications(db);
+    expect(rows.map((r) => r.user_id).sort()).toEqual(['auth-adult', 'auth-parent']);
+    for (const row of rows) {
       expect(row.related_id).toBe('brief:2026-09-07');
       expect(row.send_at).toBe('2026-09-07T14:00:00.000Z');
     }
