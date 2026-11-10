@@ -22,6 +22,13 @@ export type SendChild = {
 
 type Step = 'from' | 'to' | 'amount' | 'confirm';
 
+/**
+ * What a transfer can take from this wallet: its Spend less live card holds,
+ * which is all wallet_transfer (0483) debits. Never the wallet's total (Save,
+ * Give and Invest are not sent from here), and never below zero.
+ */
+const availableToSend = (child: SendChild) => Math.max(0, child.spendBalance);
+
 export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; canManage: boolean }) {
   const locale = useLocale();
   // Money follows the reader; the currency stays the money's own.
@@ -39,7 +46,7 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
   const [sending, setSending] = useState(false);
 
   const amountCents = Math.round(parseFloat(amountDisplay) * 100) || 0;
-  const isValidAmount = amountCents > 0 && fromChild != null && amountCents <= (fromChild.spendBalance > 0 ? fromChild.spendBalance : fromChild.total);
+  const isValidAmount = amountCents > 0 && fromChild != null && amountCents <= availableToSend(fromChild);
 
   // Numpad input
   const pressKey = useCallback((key: string) => {
@@ -103,7 +110,7 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
                   <Avatar name={c.name} color={c.color ?? undefined} size={44} className="rounded-full flex-shrink-0" />
                   <div className="flex-1">
                     <p className="font-semibold">{c.name}</p>
-                    <p className="text-sm text-muted">{formatCents(c.spendBalance > 0 ? c.spendBalance : c.total)} available</p>
+                    <p className="text-sm text-muted">{formatCents(availableToSend(c))} available</p>
                   </div>
                   <ChevronRight className="h-4 w-4 text-muted" />
                 </button>
@@ -124,7 +131,7 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
             <Avatar name={fromChild.name} color={fromChild.color ?? undefined} size={32} className="rounded-full" />
             <div>
               <p className="text-xs text-muted">{t('sendMoney.from')}</p>
-              <p className="text-sm font-semibold">{fromChild.name} · {formatCents(fromChild.spendBalance > 0 ? fromChild.spendBalance : fromChild.total)}</p>
+              <p className="text-sm font-semibold">{fromChild.name} · {formatCents(availableToSend(fromChild))}</p>
             </div>
           </div>
           <div className="space-y-2">
