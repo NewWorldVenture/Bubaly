@@ -23,12 +23,15 @@ calendar events + the durable `onboarding_imports` TTFV record → age/PIN/flag 
 if the caller already belongs to a family, an auto-provisioned space is
 *adopted* (renamed to the wizard's name) and anything else short-circuits as an
 idempotent re-submit — a double-click or replayed request can never mint a
-second family. Both completion paths also send the branded **welcome email**
-(`lib/emails/welcome.tsx`, best-effort).
+second family. It also sends the branded **welcome email**
+(`lib/emails/welcome.tsx`, best-effort, once per account).
 
-The lightweight `completeProfileOnboardingAction` (profile + PIN only) and
-`saveFamilyDetailsAction` (used by `/dashboard/setup`) remain available and are
-wired to the same marketing + lifecycle plumbing.
+`saveFamilyDetailsAction` (used by `/dashboard/setup`) remains available and is
+wired to the same marketing plumbing (CRM contact + `onboarding_completed`); it
+does not send the branded welcome email. The older lightweight
+`completeProfileOnboardingAction` (profile + PIN only) no longer exists: it had
+no caller and was removed from `app/onboarding/actions.ts`, along with the other
+step-by-step actions.
 
 ## Lifecycle + re-onboarding (migration 0159)
 Every completion records a durable **`onboarding_progress`** row (one per
@@ -51,9 +54,10 @@ Every completed onboarding now **feeds the marketing engine**:
   `family_id`, and marketing attributes (role=parent, age, goals, referral
   source, household makeup) as JSON in `notes`. So the account holder is
   immediately segmentable/targetable.
-- **`fireAutomationEvent('onboarding_completed')`** now fires from the **active**
-  lightweight flow (`completeProfileOnboardingAction`) — previously only the
-  fuller flow fired it — so the welcome automation runs for everyone.
+- **`fireAutomationEvent('onboarding_completed')`** fires from both actions that
+  exist today — `finalizeOnboardingAction` (the wizard) and
+  `saveFamilyDetailsAction` (`/dashboard/setup`) — so the welcome automation
+  runs for every completed onboarding.
 Both are best-effort (wrapped in try/catch; never block finishing onboarding),
 run through the service-role client, and are idempotent (dedup by contact +
 `marketing_automation_runs` unique `(workflow_id, subject_key)`).
@@ -69,13 +73,13 @@ to it — so once signed in they ARE their member (chores, rewards, `/kids`).
 **Files**
 | File | Role |
 |---|---|
-| `supabase/migrations/0105_child_logins.sql` | `child_logins` map (family/member/user/username) + RLS + indexes |
+| `supabase/migrations/01051_child_logins.sql` | `child_logins` map (family/member/user/username) + RLS + indexes |
 | `lib/onboarding/child-login.ts` | pure, client-safe helpers (username, synthetic email) |
 | `lib/onboarding/child-password.ts` | **server-only** PIN→password derivation (node:crypto) |
-| `app/(app)/family/child-login-actions.ts` | `createChildLoginAction`, `resetChildPinAction` (manager-guarded, service role) |
+| `app/(app)/family/child-login-actions.ts` | `createChildLoginAction`, `resetChildPinAction`, `removeChildLoginAction` (manager-guarded, service role) |
 | `app/(auth)/actions.ts` → `childSignInAction` | public username+PIN sign-in (sets the session) |
 | `app/(auth)/kid-login/page.tsx` + `components/auth/kid-login-form.tsx` | the Kid sign-in screen (`/kid-login`) |
-| `app/(app)/dashboard/family-access/page.tsx` + `components/family/child-access-manager.tsx` | parent management: create / reset (also in All Services → "Kid Logins") |
+| `app/(app)/dashboard/family-access/page.tsx` + `components/family/child-access-manager.tsx` | parent management: create / reset / remove (also in All Services → "Kid Logins") |
 
 **Security**
 - `deriveChildPassword(secret, username, pin)` = `sha256(secret::username::pin)`,
@@ -91,7 +95,7 @@ to it — so once signed in they ARE their member (chores, rewards, `/kids`).
 **Login link:** `/login` now shows "Kid logging in? Use your username & PIN" → `/kid-login`.
 
 ## Setup / run
-1. Apply migrations: `supabase db push` (adds `0105_child_logins.sql`).
+1. Apply migrations: `supabase db push` (adds `01051_child_logins.sql`).
 2. Set env: **`CHILD_LOGIN_SECRET`** (a long random string) in the server
    environment (Vercel project env). Without it, child logins are disabled with a
    visible notice.
@@ -110,8 +114,8 @@ to it — so once signed in they ARE their member (chores, rewards, `/kids`).
 
 ## Known limitations
 - Child sign-in is throttled app-side per username (`child_login_throttle`,
-  migration 0137 — lockout after repeated failures) on top of Supabase Auth's
+  migration `01371_child_login_throttle.sql` — lockout after repeated failures) on top of Supabase Auth's
   own rate limiting.
-- The lightweight `completeProfileOnboardingAction` path doesn't collect
-  goals/referral; those accounts show the home "finish setting up" nudge and can
+- Accounts that never ran the wizard (the auto-provisioned cohort) have no
+  goals/referral on record; they show the home "finish setting up" nudge and can
   complete the questionnaire at `/dashboard/setup`.
