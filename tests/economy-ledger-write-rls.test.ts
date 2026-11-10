@@ -15,6 +15,26 @@ function migration(): string {
   return readFileSync(`supabase/migrations/${files[0]}`, 'utf8');
 }
 
+// 0218 is not the last word on economy_redemptions_insert: a later migration
+// dropped and recreated it. The policy the database enforces is the LAST
+// `create policy` of that name, so that is the statement to read.
+function liveRedemptionInsertPolicy(): { file: string; statement: string; lastDrop: string } {
+  const opening = 'create policy economy_redemptions_insert on public.economy_redemptions';
+  const files = readdirSync('supabase/migrations').filter((f) => f.endsWith('.sql')).sort();
+  let file = '';
+  let statement = '';
+  let lastDrop = '';
+  for (const candidate of files) {
+    const text = readFileSync(`supabase/migrations/${candidate}`, 'utf8');
+    if (text.includes('drop policy if exists economy_redemptions_insert on public.economy_redemptions')) lastDrop = candidate;
+    const start = text.lastIndexOf(opening);
+    if (start < 0) continue;
+    file = candidate;
+    statement = text.slice(start, text.indexOf(';', start)).replace(/\s+/g, ' ');
+  }
+  return { file, statement, lastDrop };
+}
+
 describe('0218 economy ledger write lockdown', () => {
   const sql = migration();
 
@@ -26,6 +46,19 @@ describe('0218 economy ledger write lockdown', () => {
   it('keeps economy_redemptions INSERT open to members (child requests a redemption)', () => {
     const block = sql.slice(sql.indexOf('economy_redemptions'));
     expect(block).toContain('create policy economy_redemptions_insert on public.economy_redemptions\n      for insert to authenticated with check (public.is_family_member(family_id))');
+  });
+
+  it('keeps the live economy_redemptions INSERT policy open to a member asking for themselves', () => {
+    const live = liveRedemptionInsertPolicy();
+    expect(live.file, 'a migration must define economy_redemptions_insert').not.toBe('');
+    // Recreated after 0218, and not dropped again by anything later.
+    expect(live.file > '0218_economy_ledger_write_lockdown.sql').toBe(true);
+    expect(live.lastDrop <= live.file, `${live.lastDrop} drops the policy after ${live.file} created it`).toBe(true);
+    expect(live.statement).toBe(
+      'create policy economy_redemptions_insert on public.economy_redemptions for insert to authenticated '
+        + 'with check (public.is_family_member(family_id) '
+        + 'and (public.is_self_member(member_id) or public.can_manage_family(family_id)))',
+    );
   });
 
   it('restricts economy_redemptions UPDATE/DELETE (approve/deny) to managers', () => {
