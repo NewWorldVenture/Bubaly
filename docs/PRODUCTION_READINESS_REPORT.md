@@ -1,5 +1,14 @@
 # Production Readiness Report
 
+> **Historical record (note added 2026-11-10).** This is the 2026-07-18 audit
+> snapshot with its 2026-07-19 checkpoint. It is not current guidance: the test
+> counts, route counts and migration numbers below are as they were then, and
+> `supabase/migrations/` has moved well past both figures given here. The
+> "Current verified gates" list is the 2026-07-18 snapshot and was not revised
+> when the 2026-07-19 checkpoint paragraph was added above it. For the present
+> state of production migrations see `docs/PENDING_PROD_MIGRATIONS.md`; for
+> release gates see `docs/LAUNCH_BLOCKERS.md`.
+
 Audit snapshot: 2026-07-18 08:20 America/New_York
 Decision: **NO-GO**
 
@@ -32,6 +41,7 @@ Bubaly has a strong local engineering baseline but is not yet launch-ready. Curr
 - Typecheck passes and lint exits successfully with two pre-existing `messages-module` hook-dependency warnings. The latest fresh-directory production build generated all 489 static routes and passed; it emitted only the existing webpack cache and Supabase Edge-runtime warnings.
 - The closed-loop marketing audit added Super Admin AEO/SEO/content/landing edit-publish-archive controls, published landing sitemap entries, explicit public AEO/consent/attribution degradation, atomic email send-state transitions, and asset deletion rollback. These are locally verified; live Super Admin, provider, RLS, browser, and deployment evidence remains open.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
+  (As of the 2026-07-18 snapshot; the 2026-07-19 checkpoint above records migrations through `0233`.)
 - All 11 required live schema probes pass.
 - The independent production-readiness seed invariant passes for 600 realistic records.
 - Autonomous Family Management now preserves required family signal, recommendation, rule, and automation-run
