@@ -38,7 +38,9 @@ export default async function FamilySportsPage() {
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     supabase.from('teams').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at'),
     supabase.from('game_results').select('*').eq('family_id', familyId).order('date', { ascending: false }).limit(6),
-    supabase.from('sports_events').select('*').eq('family_id', familyId).gte('starts_at', now).lte('starts_at', in14).order('starts_at').limit(8),
+    // The preview lists eight; the exact count is the whole fortnight, which
+    // is what the Upcoming (14d) tile says it is (it printed the eight).
+    supabase.from('sports_events').select('*', { count: 'exact' }).eq('family_id', familyId).gte('starts_at', now).lte('starts_at', in14).order('starts_at').limit(8),
   ]);
 
   // Teams, game results, and sports events are source-of-truth: a dropped error
@@ -69,7 +71,7 @@ export default async function FamilySportsPage() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile href="/dashboard/sports" label={tr('dashboardFamilySports.activeTeams')} value={teams?.length ?? 0} icon={Users} accent="bg-teal-600" sublabel="Teams" />
-        <StatTile href="/dashboard/sports" label={tr('dashboardFamilySports.upcoming14d')} value={events?.length ?? 0} icon={CalendarClock} accent="bg-violet-600" sublabel="Schedule" />
+        <StatTile href="/dashboard/sports" label={tr('dashboardFamilySports.upcoming14d')} value={eventsRes.count ?? events?.length ?? 0} icon={CalendarClock} accent="bg-violet-600" sublabel="Schedule" />
         <StatTile label={tr('dashboardFamilySports.record')} value={`${record.win ?? 0}-${record.loss ?? 0}-${record.tie ?? 0}`} icon={Trophy} accent="bg-amber-500" />
         <StatTile href="/dashboard/sports" label={tr('dashboardFamilySports.recentGames')} value={games?.length ?? 0} icon={Flag} accent="bg-rose-500" sublabel="Results" />
       </div>

@@ -68,12 +68,17 @@ export function ScreenTimeModule() {
   const all = useMemo(() => entries ?? [], [entries]);
   const limitByMember = useMemo(() => new Map((limits ?? []).map((l) => [l.member_id, l.daily_minutes])), [limits]);
 
+  // A card for each member on the roster. Removal is a soft `is_active =
+  // false` that leaves the removed child's entries and limit behind, and the
+  // roster is the active one: a card built from an entry's member id kept a
+  // removed child on screen for good, headed "Member", with their minutes and
+  // a limit to set. Their entries stay in the list below.
   const memberIds = useMemo(() => {
     const ids = new Set<string>();
-    for (const e of all) if (e.member_id) ids.add(e.member_id);
+    for (const e of all) if (e.member_id && memberById.has(e.member_id)) ids.add(e.member_id);
     for (const m of members) ids.add(m.id);
     return [...ids];
-  }, [all, members]);
+  }, [all, members, memberById]);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -103,6 +108,12 @@ export function ScreenTimeModule() {
         : await supabase.from('screen_time_entries').insert({ ...row, family_id: familyId, logged_by: userId }).select('id');
       if (error) return toastError(describeDbError(error));
       if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
+      // screen_time_entries and screen_time_limits are in no realtime
+      // publication: nothing tells this page about its own writes, so each
+      // confirmed one re-reads what it changed. Without it the logged time
+      // never appeared, the child's "today" stayed where it was, and the
+      // natural second try logged the same time twice.
+      void refreshEntries();
       success(form.id ? 'Updated' : 'Logged');
       setForm(null);
     } finally {
@@ -115,7 +126,7 @@ export function ScreenTimeModule() {
     const { data, error } = await createClient().from('screen_time_entries').delete().eq('id', id).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error));
     else if (!data?.length) toastError(t('errors.thatChangeWasNotSaved'));
-    else success(t('screenTimeModule.deleted'));
+    else { void refreshEntries(); success(t('screenTimeModule.deleted')); }
   }
 
   async function saveLimit(e: React.FormEvent) {
@@ -136,6 +147,7 @@ export function ScreenTimeModule() {
         .from('screen_time_limits')
         .upsert({ family_id: familyId, member_id: limitFor.memberId, daily_minutes: minutes, created_by: userId }, { onConflict: 'family_id,member_id' });
       if (error) return toastError(describeDbError(error));
+      void refreshLimits();
       success(t('screenTimeModule.dailyLimitSaved'));
       setLimitFor(null);
     } finally {

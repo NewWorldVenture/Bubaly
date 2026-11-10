@@ -93,6 +93,9 @@ export function LifeEventsModule({
 
   const loading = factsLoading || plansLoading || itemsLoading;
   const error = factsError || plansError || itemsError;
+  // None of these three tables is in the realtime publication, and the
+  // actions' revalidatePath does not re-run these reads, so each confirmed
+  // write below re-reads the list it changed; nothing else would.
   const refresh = () => { void refreshFacts(); void refreshPlans(); void refreshItems(); };
 
   const [factModal, setFactModal] = useState<{ open: true; editing: Fact | null } | null>(null);
@@ -117,6 +120,10 @@ export function LifeEventsModule({
     return m;
   }, [items]);
   const activePlans = (plans ?? []).filter((p) => p.status !== 'archived');
+  // The server leaves out a transition whose playbook is already running
+  // (detectLifeEvents' activePlanKeys), but it worked that out before this
+  // page started one: the same rule, over the plans as this page now has them.
+  const offered = suggestions.filter((s) => !(plans ?? []).some((p) => p.status === 'active' && p.template_key === s.templateKey));
   // A guest views the household and does not plan in it: launchLifeEventAction
   // refuses one, so Start is not offered (household-roles N4-R1); nor, since
   // the plan status, the checklist tick and the facts' actions refuse one too,
@@ -130,6 +137,7 @@ export function LifeEventsModule({
     const res = await launchLifeEventAction(startTemplate, eventDate);
     setLaunching(false);
     if (!res.ok) { toastError(res.error ?? tr('lifeEventsModule.couldNotStartThatPlaybook')); return; }
+    void refreshPlans(); void refreshItems();
     // Say what was actually written, from the server's own count — never a
     // generic "done" for work that may have been partly skipped.
     //
@@ -155,20 +163,22 @@ export function LifeEventsModule({
     // A server action, so the guest refusal is the server's (household-roles
     // N4-R1-SIBLING); it confirms the row it changed (Audit C1-S9-86).
     const res = await setLifeEventItemDoneAction(it.id, !it.is_done);
-    if (!res.ok) toastError(res.error ?? tr('errors.thatChangeWasNotSaved'));
+    if (!res.ok) toastError(res.error ?? tr('errors.thatChangeWasNotSaved')); else void refreshItems();
   }
   async function setPlanStatus(planId: string, status: 'active' | 'completed' | 'archived') {
     const res = await setLifeEventStatusAction(planId, status);
-    if (!res.ok) toastError(res.error ?? 'Could not update'); else success(status === 'archived' ? 'Archived' : status === 'completed' ? 'Marked complete' : 'Reopened');
+    if (!res.ok) toastError(res.error ?? 'Could not update');
+    else { success(status === 'archived' ? 'Archived' : status === 'completed' ? 'Marked complete' : 'Reopened'); void refreshPlans(); }
   }
   async function togglePin(f: Fact) {
     const res = await setFactPinnedAction(f.id, !f.is_pinned);
-    if (!res.ok) toastError(res.error);
+    if (!res.ok) { toastError(res.error); return; }
+    void refreshFacts();
   }
   async function removeFact(f: Fact) {
     if (!confirm(tr('lifeEventsModule.removeThis'))) return;
     const res = await forgetFactAction(f.id);
-    if (!res.ok) toastError(res.error); else success(tr('lifeEventsModule.removed'));
+    if (!res.ok) toastError(res.error); else { success(tr('lifeEventsModule.removed')); void refreshFacts(); }
   }
 
   if (loading) return <SkeletonList count={5} />;
@@ -231,7 +241,7 @@ export function LifeEventsModule({
           Proposals derived on the server from the family's OWN rows — a term
           date, a pet added this week, a project still at the planning stage.
           Each one says why, so it reads as an offer rather than a guess. */}
-      {(suggestionsUnavailable || suggestions.length > 0) && (
+      {(suggestionsUnavailable || offered.length > 0) && (
         <section className="space-y-3">
           <h2 className="flex items-center gap-2 text-sm font-semibold">
             <CalendarClock className="h-4 w-4 text-brand-text" /> {tr('lifeEvents.comingUp')}
@@ -242,7 +252,7 @@ export function LifeEventsModule({
             <ErrorState message={tr('lifeEventsModule.couldNotWorkOutWhatIsComingUp')} onRetry={() => window.location.reload()} />
           ) : (
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {suggestions.map((s) => {
+              {offered.map((s) => {
                 const template = LIFE_EVENT_TEMPLATES.find((t) => t.key === s.templateKey);
                 const Icon = TEMPLATE_ICON[template?.icon ?? ''] ?? Sparkles;
                 return (
@@ -369,7 +379,7 @@ export function LifeEventsModule({
         <FactModal
           familyId={familyId} userId={userId} editing={factModal.editing}
           onClose={() => setFactModal(null)}
-          onSaved={() => { setFactModal(null); success(factModal.editing ? 'Updated' : 'Saved'); }}
+          onSaved={() => { setFactModal(null); success(factModal.editing ? 'Updated' : 'Saved'); void refreshFacts(); }}
           onError={toastError}
         />
       )}

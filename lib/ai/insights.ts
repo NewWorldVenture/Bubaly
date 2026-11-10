@@ -997,7 +997,10 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     buildUser: (d) => {
       const events = r(d, 'sports_events').slice(0, 10);
       const teams = r(d, 'teams').slice(0, 5);
-      const eList = events.map((e) => `- ${e.title || 'Game'} (${String(e.starts_at || e.event_date || '').slice(0, 10)}, ${e.home_away || ''} at ${e.location || 'TBD'})`).join('\n') || 'No events.';
+      // The day and time on the family's clock: `starts_at` sliced is
+      // Greenwich's day, and a 5:30 pm Saturday game in Los Angeles is Sunday
+      // there.
+      const eList = events.map((e) => `- ${e.title || 'Game'} (${familyDue(e.starts_at, d.timeZone)}, ${e.home_away || ''} at ${e.location || 'TBD'})`).join('\n') || 'No events.';
       // `teams` keeps no win/loss columns — asking for them produced "W:0 L:0"
       // for every team, which reads as a record rather than as no data.
       const tList = teams.map((t) => `- ${t.team_name || 'Team'} (${t.sport || 'sport'}${t.season ? `, ${t.season}` : ''}${t.coach ? `, coach ${t.coach}` : ''})`).join('\n') || 'No teams.';
@@ -1186,10 +1189,18 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a supportive family behavior coach grounded in positive psychology. Analyze behavior log patterns and suggest constructive strategies. Always be encouraging, non-judgmental, and focus on growth. ' + SHARED_RULES,
     buildUser: (d) => {
+      // A note's tone is its `kind` — positive, concern or neutral (00730's
+      // behavior_kind) — counted the way the Behavior page's own cards count
+      // it (summarizeMember, lib/behavior/insights.ts). behavior_logs never had
+      // the `sentiment` or `score` this counted, so every family's coach was
+      // told "0 positive, 0 challenging" over the notes it had been handed, and
+      // each sampled note named a member id the coach could not tell apart
+      // from a sibling's.
+      const who = nameMap(d.members);
       const logs = r(d, 'behavior_logs').slice(0, 30);
-      const positive = logs.filter((l) => l.sentiment === 'positive' || (l.score as number) > 0).length;
-      const negative = logs.filter((l) => l.sentiment === 'negative' || (l.score as number) < 0).length;
-      return `Family: ${d.familyName}. Now: ${d.now}. Members: ${d.members.map((m) => m.name).join(', ')}.\n\nBehavior logs (recent ${logs.length}): ${positive} positive, ${negative} challenging. Sample: ${JSON.stringify(logs.slice(0, 5).map((l) => ({ member: l.member_id, note: l.note, sentiment: l.sentiment })))}.\n\nGive: (1) one positive pattern to celebrate, (2) one gentle strategy for any recurring challenge, (3) one family activity to reinforce positive behavior.${q(d)}`;
+      const positive = logs.filter((l) => l.kind === 'positive').length;
+      const concern = logs.filter((l) => l.kind === 'concern').length;
+      return `Family: ${d.familyName}. Now: ${d.now}. Members: ${d.members.map((m) => m.name).join(', ')}.\n\nBehavior logs (recent ${logs.length}): ${positive} positive, ${concern} challenging. Sample: ${JSON.stringify(logs.slice(0, 5).map((l) => ({ member: who(l.member_id), kind: l.kind, category: l.category, note: l.note })))}.\n\nGive: (1) one positive pattern to celebrate, (2) one gentle strategy for any recurring challenge, (3) one family activity to reinforce positive behavior.${q(d)}`;
     },
   },
 

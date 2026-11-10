@@ -639,10 +639,16 @@ async function fetchRows(
       return { homework_assignments: hw.data ?? [], grades: grades.data ?? [] };
     }
     case 'sports': {
+      // What is still ahead, soonest first: the Sports page's own "upcoming"
+      // (starts_at from now). Oldest-first with no lower bound, a family with
+      // fifteen past practices on file was handed only those, as "Upcoming
+      // events", and the coach prepared them for a game already played. A
+      // failed read is not "No events." or "No teams." at HTTP 200.
       const [events, teams] = await Promise.all([
-        eq(sb, 'sports_events', familyId).order('starts_at', { ascending: true, nullsFirst: false }).limit(15),
+        eq(sb, 'sports_events', familyId).gte('starts_at', nowIso).order('starts_at', { ascending: true }).order('id').limit(15),
         eq(sb, 'teams', familyId).eq('is_active', true).limit(10),
       ]);
+      required([['sports_events', events.error], ['teams', teams.error]]);
       return { sports_events: events.data ?? [], teams: teams.data ?? [] };
     }
     case 'pantry': {

@@ -9,7 +9,7 @@ import 'server-only';
 import { z } from 'zod';
 import { findHomeProject, listProjectQuotes, listProjectsWithQuotes } from '@/lib/services/home';
 import { compareQuotes } from '@/lib/services/providers/compare';
-import { scopeNow } from '@/lib/services/scope';
+import { dayKeyInTz, scopeNow } from '@/lib/services/scope';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import { defineTool, plural, type ToolDefinition } from './types';
 
@@ -59,7 +59,11 @@ export const providerTools: ToolDefinition[] = [
       return `${output.project.title}: ${output.summary}`;
     },
     execute: async (scope, input) => {
-      const today = scopeNow(scope);
+      // The family's day, as the Projects page ranks on it. The instant itself
+      // was keyed by its UTC date: from late afternoon in the Americas a quote
+      // valid until today was "expired", and in the morning in Asia one that
+      // ran out yesterday was still on offer.
+      const today = dayKeyInTz(scopeNow(scope), scope.tz);
       let project: { id: string; title: string; status: string } | null = null;
 
       if (input.project_id || input.project) {

@@ -81,7 +81,17 @@ export function SportsModule() {
   const activeTeams = useMemo(() => teams.filter((t) => t.is_active), [teams]);
 
   // --- Derived data ---
-  const upcoming = useMemo(() => events.filter((e) => e.starts_at >= now).slice(0, 5), [events, now]);
+  // Every event still ahead (the read is in start order). The Overview
+  // previews the next five; the Schedule tab, where "View full schedule"
+  // goes, lists them all. Both used to show the same five, so a sixth
+  // practice could not be seen, or deleted, anywhere on the page.
+  const ahead = useMemo(() => events.filter((e) => e.starts_at >= now), [events, now]);
+  const upcoming = tab === 'sportsModule.schedule' ? ahead : ahead.slice(0, 5);
+  // The tile says "Next 14 days": every event in that window, uncapped.
+  const nextFortnight = useMemo(() => {
+    const end = Date.parse(now) + 14 * 86_400_000;
+    return ahead.filter((e) => Date.parse(e.starts_at) <= end).length;
+  }, [ahead, now]);
   const upcomingGames = useMemo(() => events.filter((e) => e.starts_at >= now && (e.event_type === 'game' || e.event_type === 'tournament')).slice(0, 3), [events, now]);
   const gamesThisMonth = useMemo(() => gameResults.filter((g) => !!g.date && clock.dayKeyOf(g.date).slice(0, 7) === monthKey), [gameResults, monthKey, clock]);
   const activeSports = useMemo(() => [...new Set(activeTeams.map((t) => t.sport).filter(Boolean))], [activeTeams]);
@@ -237,7 +247,7 @@ export function SportsModule() {
         {tab === 'sportsModule.overview' && <div className="grid-stats gap-3">
           {[
             { icon: Trophy, label: tr('sports.statActiveSports'), value: activeSports.length, sub: tr('sports.statThisSeason'), bg: 'bg-violet-600/20 text-violet-300' },
-            { icon: Calendar, label: tr('sports.upcomingEvents'), value: upcoming.length, sub: tr('familySports.next14Days'), bg: 'bg-blue-600/20 text-blue-300' },
+            { icon: Calendar, label: tr('sports.upcomingEvents'), value: nextFortnight, sub: tr('familySports.next14Days'), bg: 'bg-blue-600/20 text-blue-300' },
             { icon: Zap, label: tr('sports.statGamesThisMonth'), value: gamesThisMonth.length, sub: tr('sports.statAcrossAllSports'), bg: 'bg-emerald-600/20 text-emerald-300' },
             { icon: Users, label: tr('sports.statActiveTeams'), value: activeTeams.length, sub: tr('sports.statThisSeason'), bg: 'bg-orange-600/20 text-orange-300' },
           ].map(({ icon: Icon, label, value, sub, bg }) => (

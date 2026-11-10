@@ -393,7 +393,11 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
   const qc = compareQuotes(quotes, project.id, today);
   // The ranked comparison is pure over the persisted rows this detail already
   // holds — the same function the assistant's services.compareQuotes reads.
-  const ranking = rankQuotes(quotes, { today });
+  // Handed the family's day as a key: `today` is local midnight on the device,
+  // and the comparison keys a Date by its UTC date, which east of Greenwich
+  // is yesterday, so it ranked a quote that ran out yesterday as live while
+  // `qc` above, reading the local fields, called it expired.
+  const ranking = rankQuotes(quotes, { today: isoDate(today) });
   const sc = schedule(project, today);
   const templates = suggestScope(`${project.title} ${project.description ?? ''}`).slice(0, 1);
   const contractorOf = (id: string | null) => contractors.find((c) => c.id === id) ?? null;

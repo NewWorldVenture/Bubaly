@@ -122,6 +122,9 @@ export function WishlistsModule() {
     ).eq('id', w.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(updated)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+    // wishlist_items is not in the realtime publication, so nothing else
+    // re-reads this list: without this the card kept "Claim gift" after a claim.
+    void refresh();
     success(mine ? 'Released' : 'You claimed this gift 🎁');
   }
 
@@ -130,6 +133,7 @@ export function WishlistsModule() {
     const { data: updated2, error: err } = await sb.from('wishlist_items').update({ is_purchased: !w.is_purchased }).eq('id', w.id).eq('family_id', familyId).select('id');
     if (err) toastError(describeDbError(err));
     else if (wroteNoRows(updated2)) toastError(t('errors.thatChangeWasNotSaved'));
+    else void refresh();
   }
 
   if (loading) return <SkeletonList count={5} />;
@@ -178,6 +182,10 @@ export function WishlistsModule() {
             const cs = claimState(w as WishLike, selfId);
             const badge = CLAIM_BADGE[cs];
             const canClaim = canToggleClaim(w as WishLike, selfId);
+            // The claimer's controls follow their claim, not the badge: a gift
+            // they bought reads "Purchased", and its button still lets the claim
+            // go (un-buying it), so it must not be offered as "Claim gift".
+            const claimedByMe = cs === 'claimed_by_you' || (cs === 'purchased' && w.claimed_by === selfId);
             return (
               <div key={w.id} className={cn('rounded-2xl border p-4 flex flex-col', w.is_purchased && !isOwnList ? 'border-border bg-surface/30' : 'border-border bg-surface/50')}>
                 <div className="flex items-start justify-between gap-2">
@@ -218,14 +226,14 @@ export function WishlistsModule() {
                     <div className="mt-3 pt-3 border-t border-border flex items-center justify-between gap-2">
                       {badge && <span className={cn('text-[11px] rounded border px-1.5 py-0.5', badge.cls)}>{badge.label}</span>}
                       <div className="flex items-center gap-1.5 ml-auto">
-                        {cs === 'claimed_by_you' && (
+                        {claimedByMe && (
                           <button onClick={() => togglePurchased(w)} className={cn('text-xs font-medium inline-flex items-center gap-1', w.is_purchased ? 'text-blue-300' : 'text-muted hover:text-blue-300')}>
                             <ShoppingBag className="h-3.5 w-3.5" />{w.is_purchased ? 'Bought' : 'Mark bought'}
                           </button>
                         )}
                         {canClaim && (
-                          <Button size="sm" variant={cs === 'claimed_by_you' ? 'outline' : 'primary'} onClick={() => toggleClaim(w)} className="gap-1 h-7 text-xs">
-                            {cs === 'claimed_by_you' ? <><Check className="h-3.5 w-3.5" /> {t('wishlists.claimed')}</> : <><HandHeart className="h-3.5 w-3.5" /> {t('wishlists.claimGift')}</>}
+                          <Button size="sm" variant={claimedByMe ? 'outline' : 'primary'} onClick={() => toggleClaim(w)} className="gap-1 h-7 text-xs">
+                            {claimedByMe ? <><Check className="h-3.5 w-3.5" /> {t('wishlists.claimed')}</> : <><HandHeart className="h-3.5 w-3.5" /> {t('wishlists.claimGift')}</>}
                           </Button>
                         )}
                       </div>
