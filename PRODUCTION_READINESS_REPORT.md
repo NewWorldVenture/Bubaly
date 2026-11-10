@@ -1,5 +1,17 @@
 # Production Readiness Report
 
+> **Historical record, not current guidance (note added 2026-11-10).** This report was written
+> during the July 2026 audit; its entries are dated 2026-07-13 to 2026-07-15 and nothing below
+> has been updated since. Its figures were recorded at different increments and were never
+> reconciled with each other: the Executive Summary's 3,061 unit tests is a later count than
+> the 2,943 tests / 385 files in Scope and Inventory and in Validation Results; the migration
+> count appears as 219 and as 224; and the next migration version appears as `0204` and as
+> `0209`, both older than the `0211_family_members_update_rls.sql` the summary names. None of
+> these describes the tree today, which holds 461 files in `supabase/migrations`, through
+> `0486_an_autopilot_card_is_read_by_its_audience.sql`, and runs Next.js 16 (`package.json`).
+> For the present state read `finalaudit.md`, and run `npm run db:audit:migrations` for the
+> current migration count and next version.
+
 ## Executive Summary
 
 Bubaly is in a strong local validation state, but it is not proven production-ready. The current
