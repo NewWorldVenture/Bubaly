@@ -15,19 +15,27 @@ production-ready until the remote checks below pass.
    supabase link --project-ref <production-project-ref>
    ```
 
-3. Reconcile the migration ledger, then apply the ordered migrations:
+3. Reconcile the migration ledger. Applying the ordered migrations with
+   `db:push` is on hold (see below), so stop after the two read-only commands:
 
    ```powershell
    npm.cmd run db:audit:migrations
    supabase migration list --linked
-   npm.cmd run db:push
    ```
+
+   **Hold in force:** `supabase/config.toml` sets `[db.migrations] enabled = false`
+   while the production backlog needs a separately reviewed release. Do not run
+   `npm.cmd run db:push` against production: the production workflow's own
+   comment records that a held `db push` can succeed without applying SQL. A
+   production apply goes only through a separately reviewed forward release;
+   `docs/PRODUCTION_FORWARD_RELEASE.md` describes the one reviewed so far, and
+   it does not cover `0237`.
 
    Migration `0237_marketing_platform_spine.sql` must be included. Do not run
    an isolated marketing migration against a production database whose earlier
    migration history has not been reconciled. The production workflow performs
-   the same ledger preflight and fails closed before `db push` when the remote
-   history cannot be read. If a migration was applied manually, use the
+   the same ledger preflight and fails closed when the remote history cannot
+   be read. If a migration was applied manually, use the
    reviewed `supabase migration repair --status applied <version>` command only
    after confirming that migration's schema changes are already present.
 
@@ -68,11 +76,15 @@ production-ready until the remote checks below pass.
 
 For repeatable production releases, configure the GitHub `production`
 environment with `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`,
-`SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_ANON_KEY`. The `Supabase production
-migrations` workflow then applies the ordered ledger on `main` migration
-changes, runs the provenance and coverage backfills, and blocks completion
-until the schema, public/private access-boundary, canonical-content, media
-provenance, and SEO/AEO coverage gates pass.
+`SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_ANON_KEY`. On `main` migration
+changes the `Supabase production migrations` workflow
+(`.github/workflows/supabase-production-migrations.yml`) applies nothing and
+runs no backfill: it audits the local and remote ledgers and the schema, and
+fails unless the schema, public/private access-boundary, media provenance, and
+SEO/AEO coverage gates pass. Its apply path, and the backfills that follow it,
+run only on a manual dispatch with `apply` set, and while the hold above is in
+force that dispatch is refused at its first step. Until the hold is lifted,
+no workflow runs the backfills in steps 4 to 7.
 
 ## Verify
 
