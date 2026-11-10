@@ -24,5 +24,19 @@ describe('blog engagement CTAs meet the 44px touch-target minimum (M-024)', () =
     expect(btnIdx).toBeGreaterThan(-1);
     const block = subscribe.slice(btnIdx, btnIdx + 400);
     expect(block).toContain('coarse:min-h-11');
+    // That window also holds the comment explaining the class, and ends before
+    // the class itself. The token has to be in the button's own unconditional
+    // class string (cn's first argument), so both variants get it: read the
+    // element, drop its comments, and look inside the quotes.
+    const open = subscribe.lastIndexOf('<button', btnIdx);
+    const close = subscribe.indexOf('</button>', btnIdx);
+    expect(open).toBeGreaterThan(-1);
+    expect(close).toBeGreaterThan(btnIdx);
+    const element = subscribe.slice(open, close);
+    expect(element.match(/type="submit"/g)).toHaveLength(1);
+    const code = element.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+    const base = code.match(/className=\{cn\(\s*'([^'\n]*)',/);
+    expect(base).not.toBeNull();
+    expect(base?.[1].split(' ')).toContain('coarse:min-h-11');
   });
 });
