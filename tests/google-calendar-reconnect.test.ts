@@ -76,6 +76,10 @@ describe('a revoked Google grant is a reconnect, not a server error', () => {
   // A 400 that is NOT invalid_grant is still an ordinary failure.
   it('does not treat every 400 as a dead grant', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => tokenResponse(400, '{"error":"invalid_request"}')));
+    // It has to REJECT first: the check below lives in a catch, and a refresh
+    // that resolved on this 400 would otherwise pass without asserting anything.
+    expect.hasAssertions();
+    await expect(refreshGoogleToken('t')).rejects.toThrow(/token refresh failed: 400/i);
     await refreshGoogleToken('t').catch((err) => {
       expect(isGoogleReconnectRequired(err)).toBe(false);
     });
