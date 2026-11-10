@@ -22,6 +22,12 @@
 // authorization's own id was refused, so a declined increment never reached
 // the parents (review item CMS-REV-3).
 //
+// When our approval of an increment does not land, Stripe decides it by its
+// timeout setting while the authorization goes on, pending on its earlier
+// amounts. An increment Stripe declined that way has its own hold released,
+// and only that one; before, it stayed held until the capture or the close,
+// days for a hotel (review item CMS-REV-4).
+//
 // Finding N4 (child-money-scope). The route and the handlers are real; the
 // database is in-memory, and the reserve RPC is modelled on 0155 line for line,
 // its idempotency shortcut included; Stripe's API is the one seam. Nothing here
@@ -261,6 +267,33 @@ describe('a merchant\'s increment on a card authorization is held against what i
 
     expect(liveHolds()).toHaveLength(0);
     expect(spendable()).toBe(1000);
+  });
+
+  it('an increment Stripe declined after our approval failed to land has its own hold released, and the first hold kept', async () => {
+    await checkIn();
+    harness.approve.mockRejectedValueOnce(new Error('Request timed out'));
+    // Stripe decided the increment by its timeout setting and declined it; the
+    // authorization goes on, on the first $8.
+    harness.retrieve.mockResolvedValue({ ...request('iauth_hotel', 0, [...FIRST, { amount: 200, approved: false }]), pending_request: null });
+
+    await expect(deliver('issuing_authorization.request', request('iauth_hotel', 200, FIRST))).rejects.toThrow('Stripe authorization response failed');
+
+    expect(liveHolds()).toEqual([expect.objectContaining({ stripe_ref: 'iauth_hotel', amount_cents: 800 })]);
+    expect(spendable()).toBe(200);
+  });
+
+  it('an increment Stripe approved, or has not decided yet, keeps its hold when our approval failed to land', async () => {
+    await checkIn();
+    harness.approve.mockRejectedValue(new Error('Request timed out'));
+    const SECOND: Decided[] = [...FIRST, { amount: 100, approved: true }];
+
+    harness.retrieve.mockResolvedValueOnce({ ...request('iauth_hotel', 0, SECOND), pending_request: null });
+    await expect(deliver('issuing_authorization.request', request('iauth_hotel', 100, FIRST))).rejects.toThrow('Stripe authorization response failed');
+    // Not decided yet: the history ends before this increment, still pending.
+    harness.retrieve.mockResolvedValueOnce(request('iauth_hotel', 100, SECOND));
+    await expect(deliver('issuing_authorization.request', request('iauth_hotel', 100, SECOND))).rejects.toThrow('Stripe authorization response failed');
+
+    expect(liveHolds().map((r) => [r.stripe_ref, r.amount_cents])).toEqual([['iauth_hotel', 800], ['iauth_hotel-1', 100], ['iauth_hotel-2', 100]]);
   });
 
   it('releasing one authorization leaves another\'s holds alone, one whose id begins with the same letters too', async () => {

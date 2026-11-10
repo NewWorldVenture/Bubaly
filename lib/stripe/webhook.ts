@@ -181,15 +181,24 @@ const TERMINAL_AUTHORIZATION = ['reversed', 'expired', 'closed'];
  * because Stripe cannot be asked: the hold stays for the authorization's own
  * events (.created, .updated, the capture) to settle. Money held, never money
  * freed on a guess. Nothing here may replace the caller's error.
+ *
+ * An increment (`request` > 0) is the one exception to "still pending": Stripe
+ * may decline it while the authorization goes on, on its earlier amounts. Its
+ * decision is then in `request_history[request]`, and a declined one has only
+ * its own hold released, by its exact key (a key with a `-` is released as
+ * itself, never as a prefix).
  */
 async function releaseHoldIfStripeDeclined(
-  supabase: DB, stripe: ReturnType<typeof getStripe>, authId: string, opts: Stripe.RequestOptions,
+  supabase: DB, stripe: ReturnType<typeof getStripe>, authId: string, request: number, opts: Stripe.RequestOptions,
 ): Promise<void> {
   try {
     const current = await stripe.issuing.authorizations.retrieve(authId, {}, opts);
     if (TERMINAL_AUTHORIZATION.includes(current.status)) {
       await releaseCardHold(supabase, authId);
       console.warn('[money] Stripe did not approve an authorization we had reserved for; its hold is released', { authorizationId: authId });
+    } else if (request > 0 && current.request_history?.[request]?.approved === false) {
+      await releaseCardHold(supabase, cardHoldKey(authId, request));
+      console.warn('[money] Stripe declined an increment we had reserved for; its hold is released', { authorizationId: authId, request });
     }
   } catch (e) {
     console.error('[money] could not settle the hold of an authorization whose response failed; it stays held', { authorizationId: authId }, e);
@@ -254,7 +263,7 @@ export async function handleAuthorizationRequest(
     // declined the purchase (its timeout setting, or the authorization is
     // already over), nothing will ever capture that hold, and it went on
     // reducing the child's spendable balance for good.
-    if (decision.approve) await releaseHoldIfStripeDeclined(supabase, stripe, auth.id, opts);
+    if (decision.approve) await releaseHoldIfStripeDeclined(supabase, stripe, auth.id, request, opts);
     throw new Error('Stripe authorization response failed');
   }
 
