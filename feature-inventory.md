@@ -1,8 +1,15 @@
 # Feature Inventory
 
-Every dashboard feature and the Supabase tables its page/actions/module touch directly
+Each top-level `/dashboard/*` page and the Supabase tables its page/actions/module touch directly
 (engine-driven pages may reach further via `lib/*` helpers). UX tier per feature:
 `todo.md` UI/UX matrix. Seed coverage: `supabase/SEED_ALL.sql`.
+
+Scope, checked 2026-11-10 against `app/(app)/dashboard/**/page.tsx`: all 148 top-level
+pages are listed, plus one nested page (`/dashboard/concierge/runs/[id]`). The `/dashboard`
+home page and the other 61 nested sub-pages (for example `/dashboard/auto/insurance`) have no
+row of their own. Every table named below exists in `lib/database.types.ts`; the table
+lists of rows that predate that check were not re-derived, so treat them as a starting
+point and confirm against the page's own `.from(...)` calls.
 
 | Feature | Direct tables |
 |---|---|
@@ -11,6 +18,7 @@ Every dashboard feature and the Supabase tables its page/actions/module touch di
 | `/dashboard/announcements` | `announcement_reads`, `family_announcements` |
 | `/dashboard/app-store` | `family_app_installs`, `family_apps` |
 | `/dashboard/assistant` | `ai_conversations`, `ai_messages`, `calendar_events`, `chore_assignments`, `medications`, `reminders` |
+| `/dashboard/assistants` | `assistant_links` |
 | `/dashboard/auto` | `auto_insurance_policies`, `auto_service_records`, `driver_licenses`, `rental_cars`, `vehicle_inspections`, `vehicle_registrations`, `vehicles` |
 | `/dashboard/autonomous-family-management` | `family_ai_recommendations`, `family_automation_rules`, `family_automation_runs` |
 | `/dashboard/autopay` | `bills` |
@@ -34,6 +42,7 @@ Every dashboard feature and the Supabase tables its page/actions/module touch di
 | `/dashboard/concierge/runs/[id]` | `family_automation_runs`, `ai_requests`, `ai_plans`, `ai_plan_steps`, `ai_run_events`, `approval_requests`, `family_members` |
 | `/dashboard/conflicts` | `calendar_events`, `family_members` |
 | `/dashboard/connections` | `family_connections` |
+| `/dashboard/contact-center` | `family_contact_channels`, `family_inbox_messages` |
 | `/dashboard/contacts` | `family_contacts` |
 | `/dashboard/decisions` | `decision_options`, `family_decisions` |
 | `/dashboard/declutter` | `declutter_missions`, `declutter_sessions`, `declutter_zones` |
@@ -62,6 +71,7 @@ Every dashboard feature and the Supabase tables its page/actions/module touch di
 | `/dashboard/favorites` | `family_favorites` |
 | `/dashboard/focus` | `calendar_events`, `chore_assignments`, `family_members`, `todo_items` |
 | `/dashboard/food` | `dining_out`, `family_food_scores`, `family_recipes`, `grocery_items`, `meal_plans`, `meals`, `pantry_items` |
+| `/dashboard/fridge-chef` | (via lib/* engines) |
 | `/dashboard/front-desk` | `call_logs`, `family_contacts`, `family_reminders`, `front_desk_settings` |
 | `/dashboard/goals` | `goals` |
 | `/dashboard/grandparent-portal` | `families`, `family_announcements`, `family_dates`, `family_members`, `family_milestones`, `family_photos` |
@@ -81,6 +91,7 @@ Every dashboard feature and the Supabase tables its page/actions/module touch di
 | `/dashboard/kitchen` | `family_food_scores`, `family_recipes`, `grocery_items`, `leftover_inventory`, `meal_nutrition`, `meal_plans`, `pantry_items` |
 | `/dashboard/knowledge` | `family_facts` |
 | `/dashboard/language` | `language_goals`, `language_sessions`, `vocab_cards` |
+| `/dashboard/library` | `library_feeds`, `library_items`, `library_progress` |
 | `/dashboard/life-events` | `family_facts`, `life_event_plan_items`, `life_event_plans` |
 | `/dashboard/locator` | `family_members`, `family_places`, `location_events`, `member_locations`, `notifications` |
 | `/dashboard/meals` | `family_recipes`, `grocery_items`, `meal_plans`, `meal_vote_ballots`, `meal_vote_options`, `meal_votes`, `meals` |
@@ -93,6 +104,7 @@ Every dashboard feature and the Supabase tables its page/actions/module touch di
 | `/dashboard/money-timeline` | `money_timeline_insights` |
 | `/dashboard/more` | (via lib/* engines) |
 | `/dashboard/moving` | `move_boxes`, `move_tasks`, `moves` |
+| `/dashboard/needs-you` | `approval_requests`, `chore_assignments`, `family_ai_recommendations`, `family_automation_runs`, `family_inbox_messages`, `family_playbook_suggestions`, `family_reminders`, `paperwork_items` +1 more |
 | `/dashboard/next-best-actions` | `calendar_events`, `opportunities`, `todo_items` |
 | `/dashboard/notes` | `notes` |
 | `/dashboard/notifications` | `notifications` |
@@ -122,6 +134,7 @@ Every dashboard feature and the Supabase tables its page/actions/module touch di
 | `/dashboard/scan` | (via lib/* engines) |
 | `/dashboard/school` | `grades`, `school_classes`, `school_events` |
 | `/dashboard/screen-time` | `screen_time_entries`, `screen_time_limits` |
+| `/dashboard/search` | (via lib/* engines) |
 | `/dashboard/security` | `home_security_events` |
 | `/dashboard/settings` | `crm_contact_profile`, `crm_contacts`, `families`, `family_members`, `invites`, `profiles` |
 | `/dashboard/setup` | `family_onboarding` |
@@ -150,5 +163,5 @@ Every dashboard feature and the Supabase tables its page/actions/module touch di
 | `/dashboard/wishlists` | `wishlist_items` |
 | `/dashboard/workload` | `calendar_events`, `chore_assignments`, `chores`, `family_members`, `todo_items`, `workload_snapshots` |
 
-**134 features.** Cross-feature intelligence (capture→task, concierge
+**149 rows (148 top-level pages and one nested page).** Cross-feature intelligence (capture→task, concierge
 write-back, autopilot, knowledge graph) documented in `architecture.md`.
