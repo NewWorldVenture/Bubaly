@@ -14,7 +14,7 @@ import type { Database } from '@/lib/database.types';
 import type Stripe from 'stripe';
 import { randomUUID } from 'node:crypto';
 import { getStripe } from '@/lib/stripe';
-import { reserveCardAuth, releaseCardHold, debitCardSpend, creditCardRefund } from '@/lib/wallet/server';
+import { reserveCardAuth, releaseCardHold, debitCardSpend, creditCardRefund, cardHoldKey } from '@/lib/wallet/server';
 
 type DB = SupabaseClient<Database>;
 const STALE_EVENT_MS = 10 * 60 * 1000;
@@ -224,9 +224,12 @@ export async function handleAuthorizationRequest(
     if (pre) {
       decision = pre;
     } else {
+      // Held under this REQUEST's key: an increment on an authorization already
+      // approved holds its own amount, against what the earlier holds left.
       const reserved = await reserveCardAuth(supabase, {
         familyId: card.family_id, childWalletId: card.child_wallet_id,
-        amountCents: amount, authId: auth.id, description: merchantName ?? 'Card hold',
+        amountCents: amount, authId: cardHoldKey(auth.id, auth.request_history?.length ?? 0),
+        description: merchantName ?? 'Card hold',
       });
       decision = reserved ? { approve: true, reason: 'approved' } : { approve: false, reason: 'insufficient_spend_balance' };
     }
