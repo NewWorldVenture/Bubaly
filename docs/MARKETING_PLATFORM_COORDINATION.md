@@ -1,5 +1,12 @@
 # Marketing Platform — Coordination & Production-Readiness Handoff
 
+> **Historical record (note added 2026-11-10).** This file records the marketing
+> platform hand-off as of 2026-07-18 and is not current guidance: its counts,
+> "next migration" numbers, ownership claims and deploy notes describe that day.
+> The release steps in force are in `docs/MARKETING_PLATFORM_PRODUCTION_RUNBOOK.md`.
+> One correction was made to the record itself: section 7 named the hero-photo
+> migration by the number of a different file (see the note there).
+
 **Purpose:** a single authoritative coordination file for the Bubaly (Bubaly)
 **marketing platform**, so the Codex bot building the marketing *engine* and the
 supporting Claude agent can work **non-overlappingly**. Deliberately separate from
@@ -323,7 +330,7 @@ accurate**.
   rows *client-side* after a single ≤1000-row PostgREST query, so categories past
   the window read 0 ("Recipes & Food (0)" vs a 56-article section). Now paginate
   via `.range()` (`fetchAllPublishedRows`). Guard: `blog-category-counts-pagination`.
-- **Images (migration `0231_blog_hero_photos.sql`):** all **525** published
+- **Images (migration ~~`0231_blog_hero_photos.sql`~~ `0232_blog_hero_photos.sql`):** all **525** published
   articles get a **unique, load-verified** hero photo — subject-matched
   Creative-Commons photos from the keyless **Wikimedia Commons** search (~301) +
   **Lorem Picsum** CC0 fallback (~224) in non-overlapping per-category bands, so
@@ -333,8 +340,11 @@ accurate**.
 - **Hero spacing:** tightened so the article grid sits higher.
 - Commit `fee9fab2`. tsc + 25 blog tests green.
 - **⚠️ Deploy note:** the counts + spacing are code (live on next deploy); the
-  **images require migration `0231` to be applied to the DB** (dev/preview
+  **images require migration ~~`0231`~~ `0232` to be applied to the DB** (dev/preview
   auto-apply; prod is the owner's migration step, per `docs/PENDING_PROD_MIGRATIONS.md`).
+  _Corrected 2026-11-10: this section first gave the number as `0231`. In the
+  repository `0231` is `0231_blog_drop_loremflickr_covers.sql` (§6c, §6h), which
+  nulls cover URLs; the hero photos are `0232_blog_hero_photos.sql`._
 - Note for `agent-05` (BlogCover author): this supersedes covers-as-primary per the
   owner's explicit instruction; covers are now the fallback only. No revert intended.
 
