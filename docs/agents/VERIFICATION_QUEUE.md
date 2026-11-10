@@ -1,5 +1,12 @@
 # VERIFICATION_QUEUE
 
+> **Historical record — last updated 2026-07-18; note added 2026-11-10.** This is the queue as the
+> July 2026 audit session left it. It is not a current queue and not current guidance. The
+> "Unified reasoning source-failure contract" row below (commit "this publication") was published
+> the same day as commit `87c52ca58` ("fix(reasoning): surface degraded source reads") and the
+> contract is in the tree (`lib/reasoning/engine.ts`, `lib/reasoning/engine-server.ts`); nothing
+> listed here is awaiting verification today.
+
 Work that is code-complete but awaiting retest/verification. QA-01's increments
 are verified-on-push (test+lint+tsc before each push), so nothing from QA-01 sits
 here. Other agents' items marked "Code complete" in `docs/PRODUCT_LAUNCH_AUDIT.md`
