@@ -42,5 +42,32 @@ describe('metadata titles are real text, never catalogue keys', () => {
     for (const title of ['Admin Dashboard', 'System Overview', 'Welcome to Bubaly', 'A/B Testing']) {
       expect(CATALOGUE_KEY.test(title)).toBe(false);
     }
+    // ...and the pages that shipped them no longer do. The fix moved each page
+    // from a static `metadata` export to `generateMetadata`, which the scan
+    // above does not read: handing the key back there
+    // (`return { title: 'dashboard.home' }`) ships it exactly as before. So pin
+    // the three pages themselves, and what the catalogue says.
+    const messages: Record<string, string> = JSON.parse(readFileSync('lib/i18n/messages/en-US.json', 'utf8'));
+    const shipped = [
+      { file: 'app/(app)/admin/system/page.tsx', key: 'system.systemOverview', english: 'System Overview' },
+      { file: 'app/(app)/dashboard/page.tsx', key: 'dashboard.home', english: 'Home' },
+      { file: 'app/(app)/dashboard/more/page.tsx', key: 'more.more', english: 'More' },
+    ];
+    for (const { file, key, english } of shipped) {
+      const source = readFileSync(file, 'utf8');
+      // however the page declares its metadata, the title is not a quoted key
+      const quotedTitles = [...source.matchAll(/\btitle:\s*(['"`])([^'"`\n]*)\1/g)].map((m) => m[2]);
+      expect(quotedTitles.filter((title) => CATALOGUE_KEY.test(title)), file).toEqual([]);
+      expect(source, file).not.toMatch(/export const metadata\b/);
+      const start = source.indexOf('export async function generateMetadata(): Promise<Metadata> {');
+      expect(start, file).toBeGreaterThan(-1);
+      const end = source.indexOf('\n}', start);
+      expect(end, file).toBeGreaterThan(start);
+      const body = source.slice(start, end);
+      expect(body, file).toContain('const t = await getTranslations();');
+      expect(body, file).toContain(`title: t('${key}')`);
+      expect(messages[key], key).toBe(english);
+      expect(CATALOGUE_KEY.test(messages[key]), key).toBe(false);
+    }
   });
 });
