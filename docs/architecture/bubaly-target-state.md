@@ -7,7 +7,7 @@ The revised production blueprint has SHA-256 `9d279dd1d614ffd6376492b6f8d3b3d44f
 - Keep the existing Next.js/Expo experiences, authentication, household identity, domain records, design system, and deployment providers.
 - Extend `lib/ai/tools/registry.ts`, the shared tool executor, and `lib/ai/runs/` instead of building a second agent framework.
 - Retain the existing central approvals and `family_automation_runs` concepts. Document schema-equivalent implementations rather than creating duplicate tables to match example names in the blueprint.
-- Use `docs/traceability/blueprint-requirements.json` as the machine-readable requirement artifact described conceptually in blueprint sections 30 and 40. Its validator distinguishes honest unfinished work from unsupported completion claims.
+- The machine-readable requirement artifact described conceptually in blueprint sections 30 and 40 is planned as `docs/traceability/blueprint-requirements.json`. Neither that file nor its validator exists in the repository yet; `docs/traceability/README.md` lists both as required artifacts still missing. Once written, the validator must distinguish honest unfinished work from unsupported completion claims. Until then, use the bounded capability audits listed in that README and do not infer requirement-level traceability from them.
 - Keep shared navigation intact. Capabilities belong in existing contextual surfaces and the Chief of Staff experience, not 29 new top-level navigation entries.
 
 ## Shared execution boundary
