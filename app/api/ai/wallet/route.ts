@@ -109,7 +109,10 @@ export async function POST() {
       supabase.from('wallet_buckets').select('id, kind').eq('family_id', familyId),
       // Money, so a quietly truncated read is a wrong balance, not a short
       // list. `.limit(3000)` never was 3,000 — PostgREST caps at db-max-rows.
-      readAllAsQuery((from, to) => supabase.from('wallet_transactions').select('child_wallet_id, bucket_id, status, direction, amount_cents, created_at').eq('family_id', familyId).order('id').range(from, to), { max: 3000 }),
+      // The ceiling is the child wallet page's: at 3,000 a family on weekly
+      // allowances (a ledger row per bucket per credit) passed it in a few
+      // years, and the coach refused every call from then on.
+      readAllAsQuery((from, to) => supabase.from('wallet_transactions').select('child_wallet_id, bucket_id, status, direction, amount_cents, created_at').eq('family_id', familyId).order('id').range(from, to), { max: 50_000 }),
       supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
       supabase.from('wallet_goals').select('child_wallet_id, title, saved_cents, target_cents').eq('family_id', familyId).eq('status', 'active').limit(50),
     ]);

@@ -120,7 +120,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
       supabase.from('wallet_buckets').select('id, kind').eq('child_wallet_id', childId),
       // Money, so a quietly truncated read is a wrong balance, not a short
       // list. `.limit(2000)` never was 2,000 — PostgREST caps at db-max-rows.
-      readAllAsQuery((from, to) => supabase.from('wallet_transactions').select('bucket_id, status, direction, amount_cents, created_at').eq('child_wallet_id', childId).order('id').range(from, to), { max: 2000 }),
+      // The ceiling is the child wallet page's, which sums this same ledger:
+      // at 2,000 the coach refused a child the page still showed a balance for.
+      readAllAsQuery((from, to) => supabase.from('wallet_transactions').select('bucket_id, status, direction, amount_cents, created_at').eq('child_wallet_id', childId).order('id').range(from, to), { max: 50_000 }),
       supabase.from('wallet_goals').select('title, saved_cents, target_cents').eq('child_wallet_id', childId).neq('status', 'cancelled').limit(20),
     ]);
 
