@@ -6,6 +6,15 @@ const source = readFileSync('app/api/cron/wallet-allowance/route.ts', 'utf8');
 describe('cron wallet allowance persistence boundaries', () => {
   it('loads the prior schedule needed for recovery', () => {
     expect(source).toContain('next_run_on, last_run_on');
+    // That substring is also the rollback's own `.update({ next_run_on: …,
+    // last_run_on: … })`, so on its own it stays green with either column
+    // dropped from the read. The read is the only `.from('allowance_rules')`
+    // followed directly by a `.select(`; its column list is what is checked.
+    const rulesSelect = /\.from\('allowance_rules'\)\s*\.select\('([^']*)'\)/.exec(source);
+    expect(rulesSelect, 'the allowance_rules read was not found').not.toBeNull();
+    const columns = (rulesSelect?.[1] ?? '').split(',').map((column) => column.trim());
+    expect(columns).toContain('next_run_on');
+    expect(columns).toContain('last_run_on');
   });
 
   it('fails the run when plan gating cannot be read', () => {
