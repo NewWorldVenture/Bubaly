@@ -12,6 +12,8 @@ const actionFiles = [
   'app/(app)/marketplace/negotiations/actions.ts',
 ];
 const handoffMigration = readFileSync('supabase/migrations/0199_marketplace_handoff_completion.sql', 'utf8');
+// 0483 replaced the function 0199 created; it is the definition that runs today.
+const liveHandoffMigration = readFileSync('supabase/migrations/0483_a_live_hold_counts_and_an_order_names_both_families.sql', 'utf8');
 
 describe('Marketplace and Feedback action boundaries', () => {
   it('does not return raw database messages to callers', () => {
@@ -54,5 +56,29 @@ describe('Marketplace and Feedback action boundaries', () => {
     expect(handoffMigration).toContain("revoke all on function public.marketplace_complete_handoff(uuid, text) from public;");
     expect(handoffMigration).toContain("grant execute on function public.marketplace_complete_handoff(uuid, text) to authenticated;");
     expect(handoffMigration).toContain("set status = 'completed'");
+    // 0199's membership check is what 0483 replaced: under it any sibling who
+    // could read the code closed someone else's pickup. The authorization that
+    // counts is the live function's, so read its own body.
+    const header = 'CREATE OR REPLACE FUNCTION public.marketplace_complete_handoff(p_order_id uuid, p_code text)';
+    const start = liveHandoffMigration.indexOf(header);
+    expect(start).toBeGreaterThan(-1);
+    const end = liveHandoffMigration.indexOf('$function$;', start);
+    expect(end).toBeGreaterThan(start);
+    const live = liveHandoffMigration.slice(start, end);
+    expect(live).toContain('v_seller_side := public.marketplace_member_id(v_order.family_id);');
+    expect(live).toContain('v_buyer_side  := public.marketplace_member_id(coalesce(v_order.buyer_family_id, v_order.family_id));');
+    expect(live).toContain('if not ((v_seller_side is not null and v_seller_side in (v_order.buyer_member, v_order.seller_member))');
+    expect(live).toContain('or (v_buyer_side is not null and v_buyer_side = v_order.buyer_member)) then');
+    expect(live).toContain("return jsonb_build_object('ok', false, 'reason', 'forbidden');");
+    expect(live).not.toContain('is_family_member(');
+    // the caller is refused before either row is written, and both rows are locked
+    const forbidden = live.indexOf("'forbidden'");
+    expect(forbidden).toBeGreaterThan(-1);
+    expect(forbidden).toBeLessThan(live.indexOf('update public.marketplace_handoffs'));
+    expect(forbidden).toBeLessThan(live.indexOf('update public.marketplace_orders'));
+    expect(live.match(/for update/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(live.match(/set status = 'completed'/g)?.length ?? 0).toBe(2);
+    expect(liveHandoffMigration).toContain('revoke all on function public.marketplace_complete_handoff(uuid, text) from public, anon;');
+    expect(liveHandoffMigration.slice(end)).toContain('grant execute on function public.marketplace_complete_handoff(uuid, text) to authenticated;');
   });
 });
