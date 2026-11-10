@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { renderToStaticMarkup as renderRaw } from 'react-dom/server';
@@ -209,6 +209,32 @@ describe('the server read behind the tile', () => {
     ].join('\n');
     for (const column of ['summary', 'state', 'completed_at', 'family_id']) {
       expect(migrations, column).toContain(column);
+    }
+    // The loop above only finds four words somewhere in two files that also
+    // define other tables. What the case is named for is the QUERY: every
+    // column loadHandledToday selects, filters or orders by must be one the
+    // table has today — 0022's create table, plus every `add column` and minus
+    // every `drop column` any later migration applies to it.
+    const dir = 'supabase/migrations';
+    const sql = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()
+      .map((f) => readFileSync(`${dir}/${f}`, 'utf8')).join('\n');
+    const created = /create table if not exists (?:public\.)?family_automation_runs \(([\s\S]*?)\n\);/i.exec(sql);
+    expect(created, 'no migration creates family_automation_runs').not.toBeNull();
+    const live = new Set((created?.[1] ?? '').split('\n').flatMap((line) => /^\s*([a-z_]+)\s/.exec(line)?.[1] ?? []));
+    for (const [, changes] of sql.matchAll(/alter table (?:if exists )?(?:public\.)?family_automation_runs\b([^;]*);/gi)) {
+      for (const [, column] of changes.matchAll(/add column (?:if not exists )?([a-z_]+)/gi)) live.add(column);
+      for (const [, column] of changes.matchAll(/drop column (?:if exists )?([a-z_]+)/gi)) live.delete(column);
+    }
+
+    const read = new Set([
+      ...[...handledQuery.matchAll(/\.select\('([^']*)'/g)].flatMap(([, list]) => list.split(',').map((c) => c.trim())),
+      ...[...handledQuery.matchAll(/\.(?:eq|gte|lt|order)\('([a-z_]+)'/g)].map(([, column]) => column),
+    ]);
+    for (const column of ['id', 'summary', 'state', 'completed_at', 'family_id']) {
+      expect(read, `the query no longer reads ${column}`).toContain(column);
+    }
+    for (const column of read) {
+      expect(live.has(column), `family_automation_runs has no column "${column}"`).toBe(true);
     }
   });
 });
