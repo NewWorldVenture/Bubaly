@@ -205,8 +205,14 @@ describe('reviewed production forward release', () => {
 
     it('still refuses a filename that could escape supabase/migrations', () => {
       for (const file of ['../../etc/passwd', '0240_a.sql/../../x', '0240-a.sql', '0240_A.sql']) {
+        // The name itself must be what is refused. A bare toThrow() was also met
+        // by the missing file or the checksum, which is after the path was read.
+        const read = vi.fn(() => '');
+        expect(() => readReleaseFiles({ ...manifest, migrations: [{ file, sha256: 'x' }] }, read))
+          .toThrow('Invalid release filename');
+        expect(read).not.toHaveBeenCalled();
         expect(() => readReleaseFiles({ ...manifest, migrations: [{ file, sha256: 'x' }] }))
-          .toThrow();
+          .toThrow('Invalid release filename');
       }
     });
   });

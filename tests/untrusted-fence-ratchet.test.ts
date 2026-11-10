@@ -33,10 +33,18 @@ function localImports(src: string): string[] {
     .filter((path) => { try { return statSync(path).isFile(); } catch { return false; } });
 }
 
+const PROVIDER_TRANSPORT = 'lib/ai/provider.ts';
+
 function reachesFence(path: string): boolean {
   const src = readFileSync(path, 'utf8');
   if (src.includes('lib/ai/safety/untrusted')) return true;
-  return localImports(src).some((dep) => readFileSync(dep, 'utf8').includes('lib/ai/safety/untrusted'));
+  // The provider transport imports the fence for its own use, and every
+  // tool-calling module imports the provider — so reaching the fence THROUGH it
+  // says nothing about the caller's prompt. Only the module itself or a prompt
+  // module it imports counts.
+  return localImports(src)
+    .filter((dep) => dep !== PROVIDER_TRANSPORT)
+    .some((dep) => readFileSync(dep, 'utf8').includes('lib/ai/safety/untrusted'));
 }
 
 /** Files that hand a model a tool set that is not literally empty. */
@@ -57,6 +65,13 @@ describe('the untrusted-content fence reaches every tool-calling prompt', () => 
     const found = toolCallingModules();
     expect(found).toContain('app/api/ai/import/route.ts');
     expect(found.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('does not count the provider transport as a prompt module that fences', () => {
+    // If this stops holding, the exclusion in reachesFence is dead weight; while
+    // it holds, a walk that accepted the transport would pass every caller.
+    expect(readFileSync(PROVIDER_TRANSPORT, 'utf8')).toContain('lib/ai/safety/untrusted');
+    expect(localImports(readFileSync('app/api/ai/import/route.ts', 'utf8'))).toContain(PROVIDER_TRANSPORT);
   });
 
   it('every one of them reaches lib/ai/safety/untrusted', () => {

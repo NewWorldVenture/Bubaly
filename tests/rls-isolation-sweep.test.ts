@@ -40,6 +40,24 @@ describe('A-03 tenant-isolation RLS probe is present and encodes its invariants'
     expect(sql).toContain('cross-user caller');
   });
 
+  it('fails the run on each invariant with RAISE EXCEPTION, not a notice that scrolls past', () => {
+    // The cases above find each message anywhere in the file, so a probe whose
+    // failures were downgraded to RAISE NOTICE kept every one of them green
+    // while psql exited 0. Each message must be what its own check raises.
+    const failures = [
+      "if n <> 0 then raise exception 'A-03 FAIL: % family-scoped table(s) have RLS DISABLED'",
+      "if leaked <> 0 then raise exception 'A-03 FAIL: user B read % rows from family A table %'",
+      "if not blocked then raise exception 'A-03 FAIL: user B INSERTed into family A'",
+      "if affected <> 0 then raise exception 'A-03 FAIL: user B UPDATEd % family-A rows'",
+      "if affected <> 0 then raise exception 'A-03 FAIL: user B DELETEd % family-A rows'",
+      "if not rejected then raise exception 'A-03 FAIL: marketplace_create_circle accepted a cross-family caller'",
+      "if not (a and b) then raise exception 'A-03 FAIL: a provisioning RPC accepted a cross-user caller",
+    ];
+    expect(failures.filter((statement) => !sql.includes(statement))).toEqual([]);
+    // …and none of them survives anywhere as a mere notice.
+    expect(sql).not.toMatch(/raise\s+(notice|warning|info)\s+'A-03 FAIL/i);
+  });
+
   it('is wired to the shared harness runner', () => {
     // The shim + migrate + seed logic moved into pg-bootstrap.sh so CI and the
     // by-hand harness bootstrap from one definition; verify-pg.sh now starts a

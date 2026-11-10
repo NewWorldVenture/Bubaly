@@ -28,11 +28,25 @@ describe('blog share bar meets the 44px touch-target minimum (M-019)', () => {
       expect(m[0]).toContain('coarse:min-h-11');
       expect(m[0]).toContain('coarse:min-w-11');
     }
+    // That lazy match can open at an earlier className and borrow the Copy-link
+    // button's escape, so each icon's own class string is read as well: the
+    // quoted literal that holds `h-8 w-8`, one per icon target.
+    const iconClasses = [...share.matchAll(/(['"])([^'"\n]*\bh-8 w-8\b[^'"\n]*)\1/g)].map((m) => m[2]);
+    expect(iconClasses).toHaveLength(iconButtons.length);
+    for (const classes of iconClasses) {
+      expect(classes).toMatch(/(?:^| )coarse:min-h-11(?: |$)/);
+      expect(classes).toMatch(/(?:^| )coarse:min-w-11(?: |$)/);
+    }
   });
 
   it('the Copy-link button is >=44px tall on touch', () => {
     // The text button uses py-1.5/text-xs (~28px); coarse:min-h-11 lifts it to 44px.
     const copyBlock = share.slice(share.indexOf('onClick={copyLink}'));
     expect(copyBlock).toContain('coarse:min-h-11');
+    // Up to its own closing tag only: the icon targets after it carry the same
+    // class and would answer for it.
+    const end = copyBlock.indexOf('</button>');
+    expect(end).toBeGreaterThan(-1);
+    expect(copyBlock.slice(0, end)).toMatch(/'[^'\n]*(?:^| )coarse:min-h-11(?: |')/);
   });
 });

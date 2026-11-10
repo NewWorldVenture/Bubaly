@@ -285,6 +285,27 @@ describe('useTranslations never runs on the server', () => {
       `The i18n module graph has no indexed source for ${relative(ROOT, missing)}. `
         + 'Add its directory to SOURCE_DIRS so the server/client audit can inspect it.',
     );
+
+    // The lookup explaining itself is not the AUDIT explaining itself: both
+    // walks have to go through it. Asked about the node directly, the client
+    // walk must refuse it rather than answer "not client"...
+    const explanation = `The i18n module graph has no indexed source for ${relative(ROOT, missing)}. `
+      + 'Add its directory to SOURCE_DIRS so the server/client audit can inspect it.';
+    expect(() => isClientModule(missing)).toThrow(explanation);
+
+    // ...and the server walk must refuse it when a REAL server root reaches it.
+    // The edge is grafted onto the marketing layout exactly as an import from a
+    // new source root would create it, and removed again whatever happens.
+    const layout = sourceEntry(resolve(ROOT, 'app/(marketing)/layout.tsx'));
+    expect(layout.declaresClient, 'the layout is a server root').toBe(false);
+    expect(() => serverRenderedModules(), 'the real graph walks cleanly').not.toThrow();
+    layout.imports.push(missing);
+    try {
+      expect(() => serverRenderedModules()).toThrow(explanation);
+    } finally {
+      layout.imports.pop();
+    }
+    expect(layout.imports).not.toContain(missing);
   });
 
   it('is called only from modules the server render cannot reach', () => {

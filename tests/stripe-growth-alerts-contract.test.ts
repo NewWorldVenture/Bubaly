@@ -1,4 +1,4 @@
-import { at } from './helpers/source-order';
+import { at, bodyOf } from './helpers/source-order';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -36,5 +36,14 @@ describe('Stripe growth-alert contract', () => {
   it('reads the prior subscription state before upserting (to diff transitions)', () => {
     expect(route).toContain('priorSub');
     expect(at(route, 'priorSub')).toBeLessThan(at(route, '.upsert('));
+    // Inside persistSubscription itself: the read that yields priorSub comes
+    // before every write to the subscriptions row. The write is update-then-
+    // insert now, so `.upsert(` above belongs to another handler.
+    const persist = bodyOf(route, 'async function persistSubscription(', '\n}\n');
+    const priorRead = at(persist, 'data: priorSub');
+    expect(persist.slice(priorRead)).toMatch(/^data: priorSub[^\n]*\n[^\n]*\n[^\n]*readFamilySubscription[^\n]*\.from\('subscriptions'\)\.select\(/);
+    expect(priorRead).toBeLessThan(at(persist, ".from('subscriptions').update("));
+    expect(priorRead).toBeLessThan(at(persist, ".from('subscriptions').update(fields)"));
+    expect(priorRead).toBeLessThan(at(persist, ".from('subscriptions').insert("));
   });
 });

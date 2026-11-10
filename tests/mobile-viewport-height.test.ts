@@ -22,6 +22,10 @@ describe('full-height mobile surfaces use dynamic viewport units (dvh)', () => {
     const src = fs.readFileSync(files.messages, 'utf8');
     expect(src).toContain('h-[calc(100dvh-var(--topbar-height)-1rem)]');
     expect(src).not.toContain('h-[calc(100vh-var(--topbar-height)-1rem)]');
+    // That dvh string is now only the lg: class. The phone's class also clears
+    // the bottom nav, and it is the one a bare 100vh would break.
+    expect(src).toMatch(/className="flex h-\[calc\(100dvh-var\(--topbar-height\)-1rem-4rem-var\(--safe-bottom\)\)\] /);
+    expect(src).not.toMatch(/100vh/);
   });
 
   it('the concierge panel is sized with dvh, not 100vh', () => {

@@ -33,6 +33,12 @@ describe('0263 dead-letter reconcile', () => {
     const steps = sql.slice(sql.indexOf('update public.ai_plan_steps'));
     expect(steps).toContain("set status = 'failed'");
     expect(steps).toMatch(/and s\.status in \('executing', 'verifying', 'queued', 'ready'\)/);
+    // The slice above runs on into the ai_requests update, which sets the same
+    // status, so the steps statement is also read alone, up to its own semicolon.
+    const statement = steps.slice(0, steps.indexOf(';'));
+    expect(statement).not.toContain('public.ai_requests');
+    expect(statement).toContain("set status = 'failed'");
+    expect(statement).toMatch(/and s\.status in \('executing', 'verifying', 'queued', 'ready'\)/);
   });
 
   it('resolves the request ledger without overwriting a request that already ended', () => {

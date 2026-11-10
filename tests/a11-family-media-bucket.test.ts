@@ -28,6 +28,44 @@ describe('A-11 family-media storage bucket is defined + write-isolated', () => {
     expect(sql).toContain("bucket_id = 'family-media'");
     expect(sql).toContain('public.is_family_member(((storage.foldername(name))[1])::uuid)');
   });
+
+  it('keeps the four policies family-scoped in 0475, which re-creates them on media_access', async () => {
+    // 0475 drops the four policies above and re-creates them under the same
+    // names, so its statements are the ones a database has today. A migration
+    // that creates one again has to be pinned here before this passes.
+    const { readdirSync } = await import('node:fs');
+    const read = (file: string) => readFileSync(`supabase/migrations/${file}`, 'utf8');
+    const live = '0475_messaging_conversation_privacy_and_delivery.sql';
+    const writing = (pattern: RegExp) => readdirSync('supabase/migrations')
+      .filter((file) => file.endsWith('.sql'))
+      .sort()
+      .filter((file) => read(file).split('\n').some((line) => !line.trimStart().startsWith('--') && pattern.test(line)));
+    expect(writing(/create\s+policy\s+"Family members can \w+ their media"/i)).toEqual(['0216_family_media_bucket.sql', live]);
+    expect(writing(/function\s+messaging_private\.media_access\s*\(/i)).toEqual([live]);
+
+    const m0475 = read(live);
+    for (const policy of [
+      'create policy "Family members can read their media" on storage.objects for select to authenticated\n'
+        + "  using (bucket_id = 'family-media' and messaging_private.media_access(name, false));",
+      'create policy "Family members can upload their media" on storage.objects for insert to authenticated\n'
+        + "  with check (bucket_id = 'family-media' and messaging_private.media_access(name, true));",
+      'create policy "Family members can update their media" on storage.objects for update to authenticated\n'
+        + "  using (bucket_id = 'family-media' and messaging_private.media_access(name, true))\n"
+        + "  with check (bucket_id = 'family-media' and messaging_private.media_access(name, true));",
+      'create policy "Family members can delete their media" on storage.objects for delete to authenticated\n'
+        + "  using (bucket_id = 'family-media' and messaging_private.media_access(name, true));",
+    ]) {
+      expect(m0475).toContain(policy);
+    }
+    // The helper refuses anyone outside the family named by the first path
+    // segment before it looks at anything else.
+    const opening = 'create or replace function messaging_private.media_access(p_name text, p_write boolean default false)';
+    expect(m0475).toContain(opening);
+    const helper = m0475.slice(m0475.indexOf(opening));
+    const body = helper.slice(0, helper.indexOf('$$;'));
+    expect(body).toContain("declare parts text[] := string_to_array(p_name, '/'); fam uuid; conv uuid;\nbegin\n  if auth.uid() is null or parts[1] !~*");
+    expect(body).toContain("then return false; end if;\n  fam := parts[1]::uuid;\n  if not public.is_family_member(fam) then return false; end if;\n  if parts[2] is distinct from 'messages' then return true; end if;");
+  });
 });
 
 // Making family-media private is 0459's decision, and the owner has deferred it

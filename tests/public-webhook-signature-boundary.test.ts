@@ -29,18 +29,27 @@ const TWILIO_INBOUND = /(inbound|screen|status|twiml)/;
 // different door, and F-E07 was open on both sets at once. Listing them here
 // rather than only under app/api/guardian is what makes this guard cover the
 // whole surface instead of two thirds of it.
-const CONTACT_CENTER_TWILIO = [
+const CONTACT_CENTER_TWILIO_NAMED = [
   'app/api/contact-center/voice/route.ts',
   'app/api/contact-center/voice/transcription/route.ts',
   'app/api/contact-center/sms/route.ts',
   'app/api/contact-center/sms/status/route.ts',
-].filter((f) => existsSync(f));
+];
+const CONTACT_CENTER_TWILIO = CONTACT_CENTER_TWILIO_NAMED.filter((f) => existsSync(f));
 
 const TWILIO_FACING = [...guardianRoutes.filter((f) => TWILIO_INBOUND.test(f)), ...CONTACT_CENTER_TWILIO];
 
 describe('guardian public webhook signature boundary', () => {
   it('finds the guardian routes on disk (glob is not silently empty)', () => {
     expect(guardianRoutes.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it('finds every named Contact Center Twilio route on disk (a moved route is not silently dropped)', () => {
+    // The list is filtered by existsSync, so a route that is renamed leaves the
+    // loops below without it and green. A move has to be made here as well.
+    expect(CONTACT_CENTER_TWILIO_NAMED.filter((f) => !existsSync(f))).toEqual([]);
+    expect(CONTACT_CENTER_TWILIO).toHaveLength(4);
+    expect(TWILIO_FACING.length).toBeGreaterThanOrEqual(10);
   });
 
   it('every provider-facing guardian route verifies the Twilio signature and rejects', () => {
@@ -100,6 +109,8 @@ describe('guardian public webhook signature boundary', () => {
     // (|| CRON_SECRET) check rather than the shared helper — what matters is the
     // fail-closed shape: an unset secret -> 401, never an open endpoint.
     const escalate = 'app/api/guardian/escalate/route.ts';
+    // The early return below must never be the reason this case is green.
+    expect(existsSync(escalate), `${escalate} is missing: the trigger moved and this guard no longer reads it`).toBe(true);
     if (!existsSync(escalate)) return;
     const src = readFileSync(escalate, 'utf8');
     expect(src).toMatch(/GUARDIAN_INTERNAL_SECRET|hasCronAuthorization|hasInternalSecret|CRON_SECRET/);

@@ -4,6 +4,13 @@ import { describe, expect, it } from 'vitest';
 
 const source = () => readFileSync(resolve(process.cwd(), 'app/(app)/missions/actions.ts'), 'utf8');
 
+// The cleanup call is written three times in the action, once in each failure
+// branch. Asking only whether the file contains it is answered by any one of
+// them, so each branch is read on its own: the condition, the cleanup as its
+// first statement, and the error that branch returns.
+const CLEANUP = 'await cleanupSubmission(supabase, familyId, submission.id, mediaPaths, claims);';
+const squeezed = () => source().replace(/\s+/g, ' ');
+
 describe('chore proof persistence boundaries', () => {
   it('uses collision-resistant server-side proof paths and stable upload errors', () => {
     const code = source();
@@ -33,6 +40,8 @@ describe('chore proof persistence boundaries', () => {
     expect(code).toContain('const { data: updatedAssignment, error: assignmentError }');
     expect(code).toContain('if (assignmentError || !updatedAssignment)');
     expect(code).toContain('await cleanupSubmission(supabase, familyId, submission.id, mediaPaths, claims);');
+    expect(squeezed()).toContain(`if (validationError) { ${CLEANUP} return { ok: false, error: t('actions.couldNotSaveTheProof') }; }`);
+    expect(squeezed()).toContain(`if (assignmentError || !updatedAssignment) { ${CLEANUP} return { ok: false, error: t('actions.couldNotUpdateTheChore') }; }`);
   });
 
   it('cleans up after an unexpected validator exception', () => {
@@ -41,5 +50,10 @@ describe('chore proof persistence boundaries', () => {
     expect(code).toContain('catch {');
     expect(code).toContain("return { ok: false, error: t('actions.couldNotReviewYourProof') }");
     expect(code).toContain('await cleanupSubmission(supabase, familyId, submission.id, mediaPaths, claims);');
+    expect(squeezed()).toContain(`} catch { ${CLEANUP} return { ok: false, error: t('actions.couldNotReviewYourProof') }; }`);
+  });
+
+  it('cleans the submission in each of its three failure branches, not in one of them', () => {
+    expect(source().split(CLEANUP)).toHaveLength(4);
   });
 });

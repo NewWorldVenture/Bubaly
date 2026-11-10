@@ -33,6 +33,10 @@ describe('shared Modal is a mobile-correct bottom sheet (Phase 11)', () => {
     expect(modal).toContain('aria-modal="true"');
     // Behaviour lives in the shared hook; Modal must delegate to it.
     expect(modal).toContain('useDialogBehavior');
+    // The doc comment above the component quotes both strings, so they are also
+    // pinned where they act: on the dialog element, and as the hook's call.
+    expect(modal).toMatch(/role="dialog"\s+aria-modal="true"/);
+    expect(modal).toMatch(/^\s*useDialogBehavior\(dialogRef, shown, \{ onClose \}\);$/m);
     const hook = fs.readFileSync('lib/a11y/use-dialog-behavior.ts', 'utf8');
     expect(hook).toContain("e.key === 'Escape'");
     expect(hook).toContain("document.body.style.overflow = 'hidden'");
@@ -47,5 +51,8 @@ describe('app-shell reserves space for the mobile bottom nav + safe areas (Phase
   });
   it('the mobile bottom nav clears the home indicator', () => {
     expect(shell).toMatch(/safe-bottom[\s\S]*fixed inset-x-0 bottom-0[\s\S]*lg:hidden/);
+    // On the nav's own class list: the drawer above it pads var(--safe-bottom)
+    // too, and a match that may start there says nothing about the tab bar.
+    expect(shell).toMatch(/<nav className="(?:[^"]* )?safe-bottom [^"]*\bfixed inset-x-0 bottom-0\b[^"]*\blg:hidden\b[^"]*"/);
   });
 });

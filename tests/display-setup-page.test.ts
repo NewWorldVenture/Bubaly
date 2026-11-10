@@ -1,4 +1,4 @@
-import { at } from './helpers/source-order';
+import { at, bodyOf } from './helpers/source-order';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -189,6 +189,13 @@ describe('the first-run card persists its dismissal in display_layouts.settings'
     // The error path logs, toasts and RETURNS before setSetupDismissed(true).
     expect(dismiss).toContain("console.error('[display] setup card dismissal write failed'");
     expect(at(dismiss, 'return;')).toBeLessThan(at(dismiss, 'setSetupDismissed(true)'));
+    // The first `return;` in the function is the re-entry guard on its second
+    // line, so the ordering above holds with the error path's return deleted.
+    // The return that matters is the one inside `if (error) { … }`, after the
+    // toast.
+    const errorPath = bodyOf(dismiss, 'if (error) {', '}');
+    expect(at(errorPath, 'toastError(describeDbError(error));')).toBeLessThan(at(errorPath, 'return;'));
+    expect(at(dismiss, 'if (error) {')).toBeLessThan(at(dismiss, 'setSetupDismissed(true)'));
   });
 
   it('targets a column that exists', () => {

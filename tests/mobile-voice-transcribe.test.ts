@@ -73,7 +73,12 @@ describe('parseTranscribeResponse', () => {
       expect(unauthorized.code).toBe('invalid_token');
     }
     const forbidden = parseTranscribeResponse(403, { code: 'needs_family' });
-    if (!forbidden.ok) expect(forbidden.error).toMatch(/family/i);
+    expect(forbidden.ok).toBe(false);
+    if (!forbidden.ok) {
+      expect(forbidden.error).toMatch(/family/i);
+      expect(forbidden.code).toBe('needs_family');
+      expect(forbidden.status).toBe(403);
+    }
   });
 
   it('falls back to the server’s own message for an unmapped failure', () => {

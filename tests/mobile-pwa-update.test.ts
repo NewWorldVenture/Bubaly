@@ -33,6 +33,36 @@ describe('service worker + manifest are production-safe', () => {
   it('never caches authenticated Supabase/API responses', () => {
     expect(sw.toLowerCase()).toContain('never cache');
     expect(sw).toMatch(/skipWaiting/);
+    // Those two read a comment and the install step. This runs the worker's own
+    // fetch handler: a request it never answers with respondWith is one it can
+    // neither serve from Cache Storage nor write into it.
+    const origin = 'https://worker-fetch.invalid';
+    const listeners = new Map<string, (event: unknown) => void>();
+    new Function('self', 'fetch', 'caches', sw)(
+      { location: { origin }, addEventListener: (type: string, fn: (event: unknown) => void) => listeners.set(type, fn) },
+      () => Promise.reject(new Error('offline')),
+      { open: () => Promise.reject(new Error('no cache storage')) },
+    );
+    const onFetch = listeners.get('fetch');
+    expect(onFetch).toBeTypeOf('function');
+    const answered = (path: string, mode: string, destination: string) => {
+      let calls = 0;
+      onFetch?.({
+        request: { method: 'GET', url: origin + path, mode, destination, headers: new Headers() },
+        respondWith: (answer: Promise<unknown>) => { calls += 1; answer.catch(() => undefined); },
+      });
+      return calls;
+    };
+    // The handler does answer an ordinary page navigation, so the silence below
+    // is the /api and /auth guard and not a handler that answers nothing.
+    expect(answered('/home', 'navigate', 'document')).toBe(1);
+    for (const path of ['/api', '/api/family-media?path=synthetic', '/api/wallet/balance', '/auth', '/auth/callback?code=synthetic', '/auth/confirm']) {
+      for (const mode of ['navigate', 'same-origin', 'cors', 'no-cors']) {
+        for (const destination of ['', 'document', 'image', 'script', 'style', 'audio', 'video']) {
+          expect(answered(path, mode, destination), `${mode} ${destination || 'fetch'} ${path}`).toBe(0);
+        }
+      }
+    }
   });
   it('manifest is installable (standalone, maskable icon, scope)', () => {
     expect(manifest).toContain("display: 'standalone'");

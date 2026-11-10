@@ -87,6 +87,20 @@ const BASELINE = new Set<string>([
 describe('silent-empty read ratchet (PLA-0624/0625)', () => {
   const offenders = offendingFiles();
 
+  it('scans both source roots — a moved folder must not turn the ban into a pass', () => {
+    // offendingFiles() drops a root it cannot find, and an unscanned tree has no
+    // offenders: every case below would pass while checking nothing.
+    for (const root of ['components', 'app']) expect(statSync(root, { throwIfNoEntry: false })?.isDirectory(), `${root}/ is scanned`).toBe(true);
+    const scanned = ['components', 'app'].flatMap((root) => tsxFiles(root)).map((f) => f.replace(/\\/g, '/'));
+    expect(scanned.filter((f) => f.startsWith('components/')).length).toBeGreaterThan(100);
+    expect(scanned.filter((f) => f.startsWith('app/')).length).toBeGreaterThan(100);
+    expect(scanned).toContain('components/modules/messages-module.tsx');
+    // The file the A-11 lock names still reads Supabase, so "not an offender" says something.
+    expect(readFileSync('components/modules/messages-module.tsx', 'utf8')).toMatch(/\.from\(|createClient|supabase/);
+    expect(SHAPE.test("const { data } = await supabase.from('family_messages').select('*');")).toBe(true);
+    expect(SHAPE.test("const { data, error } = await supabase.from('family_messages').select('*');")).toBe(false);
+  });
+
   it('introduces NO new silent-empty read site beyond the known baseline', () => {
     const novel = offenders.filter((f) => !BASELINE.has(f));
     expect(
@@ -105,5 +119,9 @@ describe('silent-empty read ratchet (PLA-0624/0625)', () => {
     // slide into. Prune fixed files from BASELINE.
     const stale = [...BASELINE].filter((f) => !offenders.includes(f));
     expect(stale, `BASELINE lists files that no longer have the pattern — remove them:\n${stale.join('\n')}`).toEqual([]);
+    // BASELINE reached [] (C1-S9-71) and entries are only ever removed: an entry
+    // here now is the class growing back with a slot made for it.
+    expect([...BASELINE], 'BASELINE is empty and stays empty — fix the read, do not list the file').toEqual([]);
+    expect(offenders).toEqual([]);
   });
 });

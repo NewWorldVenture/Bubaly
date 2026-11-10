@@ -30,6 +30,18 @@ describe('family media persistence boundaries', () => {
     // namer the family-media callers now share.
     const marketplaceUpload = read('components/marketplace/photo-upload.tsx');
     expect(marketplaceUpload).toContain('crypto.randomUUID');
+    // In the marketplace uploader that literal now survives only in a comment:
+    // the object name comes from the shared namer. So pin the code that builds
+    // the uploaded path, with the prose masked out, and refuse a clock or
+    // Math.random name beside it.
+    const marketplaceCode = marketplaceUpload
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    expect(marketplaceCode).toContain("import { unguessableObjectName } from '@/lib/storage/object-name';");
+    expect(marketplaceCode).toMatch(/const path = `\$\{userId\}\/\$\{unguessableObjectName\([^`]*`;/);
+    expect(marketplaceCode).toMatch(/\.upload\(path, file, /);
+    expect(marketplaceCode).not.toContain('Date.now()');
+    expect(marketplaceCode).not.toContain('Math.random()');
     expect(read('lib/storage/object-name.ts')).toContain('crypto.randomUUID');
   });
 

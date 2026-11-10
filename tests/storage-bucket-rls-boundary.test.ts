@@ -23,6 +23,47 @@ const flat = allSql.replace(/\s+/g, ' ');
 const PRIVATE_BUCKETS = ['documents', 'chore-proof'];
 const FAMILY_SCOPED_BUCKETS = ['documents', 'chore-proof', 'family-media'];
 
+// The LIVE policy set. The concatenation above still contains every policy a
+// later migration dropped or replaced, so a positive match over it cannot see a
+// regression. Replay the migrations in the order they apply (file name order),
+// honouring `drop policy` and `create policy`, and keep what is left standing.
+const liveSql = readdirSync(migDir)
+  .filter((f) => f.endsWith('.sql'))
+  .sort()
+  .map((f) => readFileSync(`${migDir}/${f}`, 'utf8').replace(/--.*$/gm, ''))
+  .join('\n')
+  .replace(/\s+/g, ' ')
+  .toLowerCase();
+
+function liveStoragePolicies(): Map<string, string> {
+  const live = new Map<string, string>();
+  const statement = /(drop policy if exists|create policy) "([^"]+)" on storage\.objects([^;]*);/g;
+  for (const m of liveSql.matchAll(statement)) {
+    if (m[1] === 'create policy') live.set(m[2], m[3]);
+    else live.delete(m[2]);
+  }
+  return live;
+}
+
+// The body of the latest definition of a SQL helper a policy delegates to.
+function liveFunctionBody(name: string): string {
+  const escaped = name.replace(/[.]/g, '\\.');
+  const defs = [...liveSql.matchAll(new RegExp(`create or replace function ${escaped}\\(.*?\\$\\$(.*?)\\$\\$`, 'g'))];
+  return defs.length > 0 ? defs[defs.length - 1][1] : '';
+}
+
+const DIRECT_FOLDER_GATE = /^ and (?:public\.)?is_family_member\(\(\(storage\.foldername\(name\)\)\[1\]\)::uuid\)/;
+const HELPER_GATE = /^ and ([a-z_]+\.[a-z_]+)\(name[,)]/;
+
+// True when the live helper reads the family from the FIRST path segment and
+// refuses a caller who is not a member of that family.
+function helperGatesOnFolderMembership(name: string): boolean {
+  const body = liveFunctionBody(name);
+  const family = body.match(/([a-z_]+) := (?:\(\(storage\.foldername\(p_name\)\)\[1\]\)|parts\[1\])::uuid/);
+  if (!family) return false;
+  return body.includes(`public.is_family_member(${family[1]})`);
+}
+
 describe('A-11 storage bucket RLS boundary', () => {
   it('creates the sensitive buckets as PRIVATE (public=false)', () => {
     for (const b of PRIVATE_BUCKETS) {
@@ -50,6 +91,28 @@ describe('A-11 storage bucket RLS boundary', () => {
         'i',
       );
       expect(flat, `${b} writes must be folder-scoped to is_family_member`).toMatch(scoped);
+    }
+
+    // …and every write policy still standing after the last migration must
+    // carry that check itself, or hand the object name to a helper that does.
+    const live = [...liveStoragePolicies()];
+    for (const b of FAMILY_SCOPED_BUCKETS) {
+      const bucket = `bucket_id = '${b}'`;
+      const writes = live.filter(([, body]) => body.includes(bucket) && !/\bfor select\b/.test(body));
+      const names = writes.map(([name]) => name);
+      expect(
+        writes.some(([, body]) => /\bfor (?:insert|all)\b/.test(body)),
+        `${b} must keep a live upload policy (found: ${names.join(', ')})`,
+      ).toBe(true);
+      for (const [name, body] of writes) {
+        const predicates = body.split(bucket).slice(1);
+        expect(predicates.length, `"${name}" must name the ${b} bucket`).toBeGreaterThan(0);
+        for (const predicate of predicates) {
+          const helper = predicate.match(HELPER_GATE);
+          const gated = DIRECT_FOLDER_GATE.test(predicate) || (helper !== null && helperGatesOnFolderMembership(helper[1]));
+          expect(gated, `live policy "${name}" must gate ${b} writes to is_family_member of the folder`).toBe(true);
+        }
+      }
     }
   });
 

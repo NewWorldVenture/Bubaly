@@ -22,6 +22,9 @@ describe('0257 family AI settings', () => {
   it('defaults to what families already experience, so applying it changes nobody’s behaviour', () => {
     expect(sql).toMatch(/behavior\s+text not null default 'execute'/);
     expect(sql).toMatch(/enabled\s+boolean not null default true/);
+    // `memory_enabled` satisfies the pattern above too, so the master switch is
+    // pinned at the start of its own column line.
+    expect(sql).toMatch(/^\s*enabled\s+boolean not null default true,$/m);
     expect(sql).toMatch(/memory_enabled\s+boolean not null default true/);
   });
 

@@ -95,12 +95,21 @@ beforeEach(() => {
 });
 
 describe('the server-side LIKE model is faithful', () => {
-  it('reads an escaped star as a literal percent sign and an escaped percent the same way', () => {
+  it('reads an escaped star as a literal percent sign and an escaped percent the same way', async () => {
     expect(serverLike('p%q+news@example.com', 'p\\*q%@example.com%')).toBe(true);
     expect(serverLike('p*q+news@example.com', 'p\\*q%@example.com%')).toBe(false);
     expect(serverLike('p%q+news@example.com', 'p\\%q%@example.com%')).toBe(true);
     expect(serverLike('pxq+news@example.com', 'p\\%q%@example.com%')).toBe(false);
     expect(serverLike('p*q+news@example.com', 'p_q%@example.com%')).toBe(true);
+    // The literals above are the app's own: the first is what the shared
+    // escapeLike writes for the starred inbox (the defect), and the pattern the
+    // sender really sends has to be one the model reads as reaching the row.
+    const { escapeLike } = await import('@/lib/supabase/escape-like');
+    expect(`${escapeLike('p*q')}%@${escapeLike('example.com')}%`).toBe('p\\*q%@example.com%');
+    expect(`${escapeLike('p%q')}%@${escapeLike('example.com')}%`).toBe('p\\%q%@example.com%');
+    await run('p*q@example.com');
+    expect(patterns).toHaveLength(1);
+    expect(serverLike('p*q+news@example.com', patterns[0])).toBe(true);
   });
 });
 
