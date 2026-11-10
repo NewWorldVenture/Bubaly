@@ -139,6 +139,8 @@ describe('loadRunAction', () => {
     const { loadRunAction } = await import('@/app/(app)/dashboard/concierge/run-actions');
     const result = await loadRunAction('run-1');
     expect(result.ok).toBe(true);
+    // A found run answers a view: an { ok: true, data: null } here would skip every check below.
+    expect(result).toHaveProperty('data.id', 'run-1');
     if (!result.ok || !result.data) return;
     expect(loadRunDetail.mock.calls[0].slice(1)).toEqual(['fam-1', 'run-1', { viewerRole: 'parent' }]);
     expect(result.data).toMatchObject({ id: 'run-1', familyId: 'fam-1', state: 'executing', objective: 'Weekend', reasoningSummary: 'Two free slots.', requestText: 'Organize our weekend' });
