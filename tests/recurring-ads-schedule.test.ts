@@ -291,6 +291,10 @@ describe('message rotation', () => {
 
   it('is deterministic, so re-running an occurrence reproduces its text', () => {
     expect(variantForOccurrence(['A', 'B'], 7)).toBe(variantForOccurrence(['A', 'B'], 7));
+    // Equal to itself is true of any pure function, right or wrong. The text
+    // the seventh occurrence of a two-line pool reproduces is the second line.
+    expect(variantForOccurrence(['A', 'B'], 7)).toBe('B');
+    expect([7, 7, 8, 7].map((n) => variantForOccurrence(['A', 'B'], n))).toEqual(['B', 'B', 'A', 'B']);
   });
 
   it('ignores blank entries rather than posting an empty ad', () => {
