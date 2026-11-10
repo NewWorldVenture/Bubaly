@@ -220,6 +220,16 @@ function countsAsFailure(src: string, name: string): boolean {
   return new RegExp(`if\\s*\\(\\s*${name}\\s*\\)[\\s\\S]{0,300}?failed\\+\\+`).test(src);
 }
 
+/** Every read error a route captures: `error: someError` in a destructuring. */
+function capturedReadErrors(src: string): string[] {
+  return [...new Set([...src.matchAll(/\berror:\s*(\w+Error)\b/g)].map((m) => m[1]))];
+}
+
+/** `const combined = a ?? name ?? b;` — the name the route then branches on. */
+function branchedName(src: string, name: string): string {
+  return new RegExp(`const (\\w+Error) = [^;\\n]*\\b${name}\\b`).exec(src)?.[1] ?? name;
+}
+
 describe('scheduled digest read boundaries, read off the source', () => {
   for (const [name, { src, abort, count }] of Object.entries(routes)) {
     it(`${name} aborts with a 5xx when the read feeding the whole run fails`, () => {
@@ -233,6 +243,18 @@ describe('scheduled digest read boundaries, read off the source', () => {
       for (const err of count) {
         expect(src, `${name} captures ${err} but never counts it as a failure`)
           .toSatisfy(() => countsAsFailure(src, err));
+      }
+      // chore-reminders lists no per-family read, so the loop above runs zero
+      // times for it and this case used to pass without asserting anything.
+      // What it is named for is a read failure being dropped silently, and
+      // that is checked against the route rather than against the list: every
+      // read error the route captures must land in one tier or the other.
+      const captured = capturedReadErrors(src);
+      expect(captured.length, `${name} captures no read error at all`).toBeGreaterThan(0);
+      for (const err of captured) {
+        const branched = branchedName(src, err);
+        expect(src, `${name} captures ${err} and neither aborts on it nor counts it`)
+          .toSatisfy(() => abortsWith5xx(src, branched) || countsAsFailure(src, branched));
       }
     });
 
