@@ -10,6 +10,7 @@
 // "clear", and it never invents a conflict that isn't there.
 
 import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+import { localPartsAt } from '@/lib/time/zoned';
 
 /** A timed event on a member's calendar (subset of calendar_events). */
 export interface SimEvent {
@@ -74,6 +75,13 @@ export interface SimContext {
    * a model prompt) leaves it off and gets DEFAULT_LOCALE.
    */
   locale?: LocaleCode;
+  /**
+   * The family's IANA zone. A session's hour, weekday and week are read on the
+   * family's wall clock: "a school night", "over dinner" and "that week" are
+   * facts about their evening, not Greenwich's. Every caller that serves a
+   * family passes it; without it the reading is UTC.
+   */
+  timeZone?: string;
 }
 
 const MIN = 60_000;
@@ -94,8 +102,25 @@ function moneyIn(locale: LocaleCode) {
       .format(Math.abs(cents) / 100);
 }
 
-/** ISO week key so "this week" load is counted per distinct week. */
-function isoWeekKey(d: Date): string {
+/**
+ * An instant as the family's wall reading, carried in a Date's UTC fields (so
+ * `getUTCHours()` is the family's hour and `getUTCDay()` the family's weekday).
+ * With no zone, or one Intl cannot read, the reading is Greenwich's.
+ */
+function wallReading(instant: Date, timeZone?: string): Date {
+  if (!timeZone) return instant;
+  try {
+    const p = localPartsAt(instant, timeZone);
+    const wall = new Date(Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute));
+    return Number.isNaN(wall.getTime()) ? instant : wall;
+  } catch {
+    return instant;
+  }
+}
+
+/** ISO week key so "this week" load is counted per distinct week — the family's week when given their zone. */
+function isoWeekKey(instant: Date, timeZone?: string): string {
+  const d = wallReading(instant, timeZone);
   const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
   const day = (t.getUTCDay() + 6) % 7;
   t.setUTCDate(t.getUTCDate() - day + 3);
@@ -142,8 +167,8 @@ function simulateCommitment(d: Extract<SimDecision, { kind: 'commitment' }>, ctx
 
   // Weekly load: how full is that member's week already?
   const heavy = ctx.heavyWeek ?? 8;
-  const wk = isoWeekKey(new Date(start));
-  const sameWeek = timed.filter((e) => isoWeekKey(new Date(Date.parse(e.startsAt))) === wk).length;
+  const wk = isoWeekKey(new Date(start), ctx.timeZone);
+  const sameWeek = timed.filter((e) => isoWeekKey(new Date(Date.parse(e.startsAt)), ctx.timeZone) === wk).length;
   const after = sameWeek + 1;
   if (after >= heavy) {
     impacts.push({ severity: 'caution', title: `${d.memberName}'s week would hit ${after} commitments`, detail: 'That’s a heavy week — consider what to trim.' });
@@ -253,8 +278,10 @@ export function projectActivity(d: ActivityDecision, ctx: SimContext): Projectio
   const weeklyMin = perSessionMin * sessions;
   const weeklyHours = HRS(weeklyMin);
   const startDate = new Date(start);
-  const hour = startDate.getUTCHours();
-  const dow = startDate.getUTCDay(); // 0=Sun
+  // The family's hour and weekday, not Greenwich's: 6pm in New York is 22:00 UTC.
+  const wall = wallReading(startDate, ctx.timeZone);
+  const hour = wall.getUTCHours();
+  const dow = wall.getUTCDay(); // 0=Sun
   const dims: ProjectionDimension[] = [];
 
   // 1. Schedule — first-session conflicts + resulting weekly load.
@@ -264,7 +291,7 @@ export function projectActivity(d: ActivityDecision, ctx: SimContext): Projectio
   );
   const heavy = ctx.heavyWeek ?? 8;
   const sameWeek = ctx.memberEvents.filter((e) => !e.allDay && !Number.isNaN(Date.parse(e.startsAt))
-    && isoWeekKey(new Date(Date.parse(e.startsAt))) === isoWeekKey(startDate)).length;
+    && isoWeekKey(new Date(Date.parse(e.startsAt)), ctx.timeZone) === isoWeekKey(startDate, ctx.timeZone)).length;
   const projected = sameWeek + sessions;
   const schedBlocker = first.impacts.some((i) => i.severity === 'blocker');
   dims.push({
