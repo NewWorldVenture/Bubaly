@@ -113,12 +113,13 @@ describe('paperworkActionsToNeeds', () => {
 
   it('carries the amount and due date into the title, and the due date into the urgency', () => {
     const [sign, pay] = paperworkActionsToNeeds(item, now, EN);
-    // The item's own due date (12 whole days out — a date-only due_on parses
-    // as UTC midnight, the same floor the renewal and document mappers use)
-    // is not urgent; the payment's own due date (a day and a half out) is.
-    expect(sign.title).toBe('Sign and return — Field trip permission slip · due in 12d');
+    // The item's own due date (the 20th, 13 days after the 7th — a due_on is
+    // a DATE, counted day to day like the renewal and document mappers, never
+    // floored against the clock) is not urgent; the payment's own due date
+    // (the 9th, two days out) is.
+    expect(sign.title).toBe('Sign and return — Field trip permission slip · due in 13d');
     expect(sign.urgency).toBe('normal');
-    expect(pay.title).toBe('Make the payment — Field trip permission slip · $45 · due in 1d');
+    expect(pay.title).toBe('Make the payment — Field trip permission slip · $45 · due in 2d');
     expect(pay.urgency).toBe('urgent');
   });
 
@@ -126,8 +127,10 @@ describe('paperworkActionsToNeeds', () => {
     // Whole titles, not stringContaining('overdue'): a missing catalogue key
     // prints as 'needsSources.overdue', which contains the word and would pass.
     expect(paperworkActionsToNeeds({ ...item, due_on: '2026-09-01', actions: [item.actions[0]] }, now, EN)[0]).toMatchObject({ urgency: 'urgent', title: 'Sign and return — Field trip permission slip · overdue' });
-    // Half a day out floors to 0 whole days: due today, and urgent.
-    expect(paperworkActionsToNeeds({ ...item, due_on: '2026-09-08', actions: [item.actions[0]] }, now, EN)[0]).toMatchObject({ urgency: 'urgent', title: 'Sign and return — Field trip permission slip · due today' });
+    // Due on the day itself is due today all day (at noon it used to floor to
+    // -1, "overdue"); due the next day is tomorrow, not "today". Both urgent.
+    expect(paperworkActionsToNeeds({ ...item, due_on: '2026-09-07', actions: [item.actions[0]] }, now, EN)[0]).toMatchObject({ urgency: 'urgent', title: 'Sign and return — Field trip permission slip · due today' });
+    expect(paperworkActionsToNeeds({ ...item, due_on: '2026-09-08', actions: [item.actions[0]] }, now, EN)[0]).toMatchObject({ urgency: 'urgent', title: 'Sign and return — Field trip permission slip · due in 1d' });
     expect(paperworkActionsToNeeds({ ...item, due_on: null, urgency: 'urgent', actions: [item.actions[0]] }, now, EN)[0]).toMatchObject({ urgency: 'urgent', title: 'Sign and return — Field trip permission slip' });
   });
 

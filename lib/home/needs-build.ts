@@ -26,9 +26,10 @@ export type HomeNeedsInput = {
   openTodos: number;
   now: Date;
   /**
-   * The family's today (`dayKeyInTz(now, tz)`). A document's expiry is a DATE,
-   * counted against this day — see `documentExpiryToNeed`. Pass it whenever
-   * `documents` is not empty; without it the day is Greenwich's.
+   * The family's today (`dayKeyInTz(now, tz)`). A document's expiry, a
+   * renewal's expiry and a paperwork due date are DATEs, counted against this
+   * day — see `documentExpiryToNeed`. Pass it whenever `documents`, `renewals`
+   * or `paperwork` is not empty; without it the day is Greenwich's.
    */
   todayKey?: string;
   /**
@@ -85,8 +86,8 @@ export function buildHomeNeeds(data: HomeNeedsInput): NeedItem[] {
   // they come off the table.
   for (const r of data.factSuggestions ?? []) { const n = factSuggestionToNeed(r, data.now); if (n) items.push(n); }
   for (const r of data.inboxMessages ?? []) { const n = inboxMessageToNeed(r); if (n) items.push(n); }
-  for (const r of data.paperwork ?? []) items.push(...paperworkActionsToNeeds(r, data.now, data.reader));
-  for (const r of data.renewals) { const n = renewalToNeed(r, data.now); if (n) items.push(n); }
+  for (const r of data.paperwork ?? []) items.push(...paperworkActionsToNeeds(r, data.todayKey ?? data.now, data.reader));
+  for (const r of data.renewals) { const n = renewalToNeed(r, data.todayKey ?? data.now); if (n) items.push(n); }
   for (const d of data.documents) { const n = documentExpiryToNeed(d, data.todayKey ?? data.now); if (n) items.push(n); }
   for (const c of data.conflicts)
     items.push({
