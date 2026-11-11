@@ -40,12 +40,17 @@ describe('the household trail names who changed what', () => {
     expect(line.byAssistant).toBe(false);
   });
 
-  it('credits Bubaly when Bubaly acted, not the signed-in user it acted for', () => {
+  it('credits Bubaly when Bubaly acted, and names the signed-in user it acted for', () => {
     // The assistant runs inside a person's session, so `actor_id` is that
     // person. Only the recorded actor kind separates "Dad added it" from
     // "Bubaly added it" — which is the whole distinction the trail exists for.
+    //
+    // This case used to assert plain 'Bubaly', with Dad's name dropped. A
+    // member can write the same row by hand (0380 pins actor_id, not the
+    // metadata), so that was an anonymous line in a member's own words
+    // (LIBRARY-7BB2226AB6FF). The line is still Bubaly's, and now says for whom.
     const line = describeTrailRow(row({ metadata: { actor: 'ai', title: 'Added "Dentist" to the calendar' } }), NAMES);
-    expect(line.who).toBe('Bubaly');
+    expect(line.who).toBe('Bubaly, for Dad');
     expect(line.byAssistant).toBe(true);
   });
 
