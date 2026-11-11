@@ -28,8 +28,8 @@ export function resolveServiceFeeCents(settings: ServiceFeeConfig): number {
  * not defaulted, so a new caller cannot quietly print American money to everyone.
  *
  * The currency is the plan catalogue's: the fee rides the subscription's first
- * invoice (serviceFeeAddInvoiceItems below), and Stripe charges an invoice item
- * in its subscription's currency. stripe_settings has no currency column.
+ * invoice (serviceFeeAddInvoiceItems below), and Stripe charges that line in
+ * its subscription's currency. stripe_settings has no currency column.
  */
 export function formatServiceFee(cents: number, locale: LocaleCode): string {
   return formatCents(Math.max(0, Math.trunc(cents)), FAMILY_PRICES.currency.toUpperCase(), locale);
@@ -41,11 +41,14 @@ export function serviceFeeEnabled(settings: ServiceFeeConfig): boolean {
 }
 
 /**
- * `subscription_data.add_invoice_items` for Stripe Checkout: adds the service
- * fee as a one-time charge on the subscription's first invoice using a Price in
- * the Bubaly account, so the fee is collected to Bubaly without touching the
- * recurring plan item (keeps webhook plan-mapping correct). Returns `undefined`
- * when the fee is off or no Price is configured.
+ * The service fee as a one-time Price line: a charge on the subscription's
+ * first invoice only, using a Price in the Bubaly account, so the fee is
+ * collected to Bubaly without touching the recurring plan item (keeps webhook
+ * plan-mapping correct). A subscription-mode Checkout Session takes it as an
+ * extra `line_items` entry; `subscription_data.add_invoice_items` is not a
+ * Checkout parameter (it belongs to the Subscriptions API) and Stripe refuses
+ * a session that carries it. Returns `undefined` when the fee is off or no
+ * Price is configured.
  */
 export function serviceFeeAddInvoiceItems(
   settings: ServiceFeeConfig,
