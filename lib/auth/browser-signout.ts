@@ -61,9 +61,13 @@ export function signOutBrowserSession(
     // next person on a shared device receives this account's notifications.
     // Revocation waits for it, because a revoked token cannot remove the row.
     const accessToken = current?.accessToken;
+    // Finishing a sign-out the server already carried out (revoke: false), or
+    // one with no token left, revokes nothing here, but the device still has to
+    // leave the account: with no usable token it closes its own push channel.
+    const settled: SessionRevocation = options.revocation ?? (current ? 'unconfirmed' : 'confirmed');
     const revocation = accessToken && options.revoke !== false
       ? (detachPushDevice(accessToken)?.then(() => revokeSessionToken(accessToken)) ?? revokeSessionToken(accessToken))
-      : Promise.resolve<SessionRevocation>(options.revocation ?? (current ? 'unconfirmed' : 'confirmed'));
+      : (detachPushDevice(accessToken)?.then(() => settled) ?? Promise.resolve(settled));
     return { status: 'signed-out', revocation };
   } catch { return { status: 'unavailable' }; }
 }
