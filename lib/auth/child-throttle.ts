@@ -7,7 +7,7 @@
 
 /** Persisted throttle state for one login key (a normalized username). */
 export interface ThrottleRow {
-  fails: number;            // consecutive failures in the current window
+  fails: number;            // failures since the last success, in the current window
   window_start: string;     // ISO — when the current counting window began
   locked_until: string | null; // ISO — locked out until this instant, or null
 }
@@ -15,7 +15,12 @@ export interface ThrottleRow {
 export interface ThrottlePolicy {
   /** Failures allowed within the window before a lockout. */
   maxFails: number;
-  /** Counting window length (ms). Failures older than this reset the counter. */
+  /**
+   * Counting window length (ms). Failures older than this reset the counter;
+   * so does a successful sign-in. It is the long-horizon cap on one username:
+   * a short window forgets a guesser who stays just under `maxFails` in each
+   * one, and such a row never locks, so nothing else remembered it either.
+   */
   windowMs: number;
   /** Base lockout length (ms). Escalates with repeated lockouts. */
   lockMs: number;
@@ -29,7 +34,7 @@ export interface ThrottlePolicy {
 
 export const DEFAULT_POLICY: ThrottlePolicy = {
   maxFails: 5,
-  windowMs: 15 * 60_000, // 15 minutes
+  windowMs: 24 * 60 * 60_000, // a day: the fifth wrong PIN in a day locks
   lockMs: 15 * 60_000,   // 15 minutes
   lockMemoryMs: 24 * 60 * 60_000, // a day
 };
@@ -70,6 +75,13 @@ export function evaluateThrottle(
  * count restarted at 1, and every lockout was the base 15 minutes. Measured
  * against a patient guesser: 96 lockouts a day, all 15 minutes, 480 guesses a
  * day — a 4-digit PIN in about ten days on average. A success clears all of it.
+ *
+ * The window itself was 15 minutes too, and a row that never reached
+ * `maxFails` has no lock to be remembered by: four guesses per window, 384 a
+ * day, were never locked and never escalated. The window is now a day, so
+ * failures that no sign-in has cleared add up to a lock however they are
+ * spaced, and the escalation above takes over from there. A child who mistypes
+ * and then gets in starts clean; one who does not waits 15 minutes on the fifth.
  */
 export function registerFailure(
   row: ThrottleRow | null | undefined,
