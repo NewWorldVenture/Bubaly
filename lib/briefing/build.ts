@@ -326,7 +326,7 @@ export function foldAlsoToday(
  */
 export function buildBrief(input: BriefInput, tz: string): Brief {
   const calendar = buildFirstBrief(input.events ?? [], input.now, input.dinnerCandidates ?? [], tz);
-  const digest = buildConciergeDigest({ ...input.snapshot, now: input.now });
+  const digest = buildConciergeDigest({ ...input.snapshot, now: input.now, timezone: tz });
   const handled = mergeCompletedByBubaly(input.completedRuns ?? [], input.activity ?? [], { evidence: input.evidence });
   // Ranked the way Home ranks them (urgency, then newest) so the brief and the
   // Command Center never disagree about which decision comes first.
