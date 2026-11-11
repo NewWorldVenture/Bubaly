@@ -93,6 +93,12 @@ export interface OnboardingDraft {
   adults: number;
   children: number;
   childAges: number[];
+  /**
+   * Whether the About step was ANSWERED: left with Continue, not with "Skip for
+   * now". The step opens on 1 adult and its stepper cannot go below 1, so the
+   * counts alone cannot say whether anyone answered.
+   */
+  aboutAnswered: boolean;
   goals: string[];
   referralSource: string;
   referralDetail: string;
@@ -111,7 +117,7 @@ export function emptyDraft(overrides: Partial<OnboardingDraft> = {}): Onboarding
   return {
     name: '', lastName: '', age: '', avatarUrl: '', color: '',
     familyName: '', timezone: 'UTC',
-    adults: 1, children: 0, childAges: [],
+    adults: 1, children: 0, childAges: [], aboutAnswered: false,
     goals: [], referralSource: '', referralDetail: '',
     members: [], pin: '', confirmPin: '',
     importedEvents: [], importSource: '',
@@ -181,6 +187,7 @@ export function parseDraftState(raw: string | null | undefined): PersistedDraftS
       ...d,
       members: Array.isArray(d.members) ? d.members : [],
       childAges: Array.isArray(d.childAges) ? d.childAges : [],
+      aboutAnswered: d.aboutAnswered === true,
       goals: Array.isArray(d.goals) ? d.goals : [],
       importedEvents: [], importSource: '', calendarReceipt: undefined,
       pin: '', confirmPin: '',
@@ -197,6 +204,8 @@ export interface FinalizePayload {
   family: { name: string; timezone: string };
   details: {
     householdAdults: number; householdChildren: number; childAges: number[];
+    /** False when the About step was skipped: the counts are then the wizard's defaults, not an answer. */
+    householdAnswered: boolean;
     region?: string; postalCode?: string; country?: string;
     goals: string[]; referralSource?: string; referralDetail?: string;
   };
@@ -232,6 +241,7 @@ export function buildFinalizePayload(draft: OnboardingDraft): FinalizePayload {
     details: {
       householdAdults: Math.max(0, draft.adults),
       householdChildren: Math.max(0, draft.children),
+      householdAnswered: draft.aboutAnswered === true,
       childAges,
       goals: draft.goals,
       referralSource: draft.referralSource || undefined,

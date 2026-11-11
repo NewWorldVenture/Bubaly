@@ -210,6 +210,9 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
   function advance() {
     if (!canGo) return;
     if (isLastFormStep(step)) { void finish(); return; }
+    // Continue on About is the family answering it, the "1 adult" it opens on
+    // included; "Skip for now" below is not, and nothing is remembered from it.
+    if (step === 'about') update({ aboutAnswered: true });
     const next = nextStep(step);
     trackOnboarding(next, 'step', telemetryUser);
     setStep(next);
@@ -287,6 +290,7 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
                 // Skip bypasses the step's advance gate. On PIN, finish directly —
                 // buildFinalizePayload already drops any partial/invalid PIN.
                 if (step === 'pin') { void finish(); return; }
+                if (step === 'about') update({ aboutAnswered: false });
                 const next = nextStep(step); trackOnboarding(next, 'step', telemetryUser); setStep(next);
               }}
               className="mt-3 w-full text-center text-sm font-medium text-muted transition hover:text-fg disabled:opacity-50">

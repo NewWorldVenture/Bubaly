@@ -54,6 +54,13 @@ export const ONBOARDING_FACT_SOURCE = 'user' as const;
 export type OnboardingAnswers = {
   householdAdults: number;
   householdChildren: number;
+  /**
+   * False when the household question was not answered. The wizard's About step
+   * opens on 1 adult and cannot go below it, so a skipped step still arrives as
+   * "1 adult, 0 children"; only this says nobody said so. Absent means the
+   * caller sends answered counts only.
+   */
+  householdAnswered?: boolean;
   childAges: number[];
   region?: string | null;
   country?: string | null;
@@ -90,7 +97,7 @@ export function onboardingFacts(answers: OnboardingAnswers): OnboardingFact[] {
 
   const adults = Math.max(0, Math.trunc(answers.householdAdults || 0));
   const children = Math.max(0, Math.trunc(answers.householdChildren || 0));
-  if (adults > 0 || children > 0) {
+  if (answers.householdAnswered !== false && (adults > 0 || children > 0)) {
     const parts = [
       adults > 0 ? plural(adults, 'adult') : '',
       children > 0 ? (children === 1 ? '1 child' : `${children} children`) : '',

@@ -95,6 +95,9 @@ export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
 export const familyDetailsBaseSchema = z.object({
   householdAdults: z.coerce.number().int().min(0).max(20).default(1),
   householdChildren: z.coerce.number().int().min(0).max(20).default(0),
+  // False when the wizard's About step was skipped: the counts beside it are
+  // then the step's defaults (1 adult), not something the family said.
+  householdAnswered: z.boolean().optional(),
   childAges: z.array(z.number().int().min(0).max(21)).max(20).default([]),
   region: z.string().trim().max(80).optional().default(''),
   postalCode: z.string().trim().max(16).optional().default(''),
