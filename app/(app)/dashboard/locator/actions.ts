@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { createServer } from '@/lib/supabase/server';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { placeForPoint, classifyTransition, type PlaceLike } from '@/lib/location/geo';
 import { notify } from '@/lib/services/notifications';
@@ -139,7 +139,15 @@ export async function updateMyLocation(input: {
       // receive at 7am. Daytime arrivals are outside the window anyway, so
       // marking this urgent costs a family nothing and protects the one case
       // that matters.
-      const scope = await systemScopeForFamily(supabase, familyId);
+      //
+      // On the SERVICE client. Every row here is addressed to someone other
+      // than the mover, and a member's session may insert a notification only
+      // for itself (0388). notify() writes a system scope's rows through the
+      // client the scope carries, so a scope built around the mover's own
+      // session had the whole batch refused and the alert was never written.
+      // The recipients above were read under the mover's own RLS, and the text
+      // is built here, so the service role writes nothing the mover chose.
+      const scope = await systemScopeForFamily(createServiceClient(), familyId);
       if (!scope) {
         console.error('[locator] could not build a scope for place alerts', { familyId });
       } else {
