@@ -246,6 +246,8 @@ export function dryRunGate(tool: ToolDefinition, input: unknown, inputs: Validat
       confidence,
       tags: [`op:${tool.capability}`, `risk:${tool.risk}`, `domain:${tool.domain}`],
       now: inputs.now.getTime(),
+      // A rule's time window is read on the family's clock (lib/trust/engine.ts).
+      timeZone: inputs.tz,
       ...(amountCents !== null ? { amountCents } : {}),
     },
     policies: inputs.policies,

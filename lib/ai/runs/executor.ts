@@ -1622,6 +1622,8 @@ async function approvalRuleFor(
     capability,
     context: {
       confidence: HELD_STEP_CONFIDENCE,
+      // A rule's time window is read on the family's clock (lib/trust/engine.ts).
+      timeZone: scope.tz,
       tags: tool ? [...toolTags(tool.name), `op:${tool.capability}`, `risk:${tool.risk}`, `domain:${tool.domain}`] : [`domain:${domain}`],
       ...(amountCents !== null ? { amountCents } : {}),
     },
@@ -1673,7 +1675,7 @@ async function ownNoticeCleared(db: SupabaseClient<Database>, scope: ServiceScop
     actor,
     domain: tool.domain,
     capability: 'automate',
-    context: { confidence: 0.85, tags: [...toolTags(tool.name), `op:${tool.capability}`, `risk:${risk}`, `domain:${tool.domain}`] },
+    context: { confidence: 0.85, timeZone: scope.tz, tags: [...toolTags(tool.name), `op:${tool.capability}`, `risk:${risk}`, `domain:${tool.domain}`] },
     policies: trust.policies,
     grants: trust.grants,
     delegations: trust.delegations,

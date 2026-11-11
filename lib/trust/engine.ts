@@ -15,6 +15,8 @@
 //   6. Fallback: deny (nothing executes without a granted path)
 // ════════════════════════════════════════════════════════════════════════════
 
+import { localPartsAt } from '@/lib/time/zoned';
+
 export const TRUST_DOMAINS = [
   'medical', 'dental', 'vision', 'mental_health',
   'education', 'school_forms', 'homework',
@@ -190,8 +192,14 @@ export type ActionContext = {
   tags?: string[];
   /** epoch ms; defaults to Date.now() at call site */
   now?: number;
-  /** "HH:MM" local time of the action; derived if omitted */
+  /**
+   * "HH:MM" local time of the action. When omitted it is derived from `now`
+   * in `timeZone`; with neither, the hour is unknown and a policy that names a
+   * time window does not match.
+   */
   localTime?: string;
+  /** The family's IANA zone (`families.timezone`), for deriving `localTime`. */
+  timeZone?: string;
 };
 
 export type EvaluateInput = {
@@ -259,6 +267,22 @@ function timeToMinutes(hhmm: string): number | null {
   const h = Number(m[1]); const min = Number(m[2]);
   if (h > 23 || min > 59) return null;
   return h * 60 + min;
+}
+
+/**
+ * The wall clock a family in `timeZone` reads at `now`, as "HH:MM". Undefined
+ * when there is no zone or it is not one: an hour nobody can compute is not an
+ * hour inside (or outside) anybody's window.
+ */
+export function localTimeIn(now: number, timeZone: string | null | undefined): string | undefined {
+  if (!timeZone) return undefined;
+  try {
+    const { hour, minute } = localPartsAt(new Date(now), timeZone);
+    if (!Number.isInteger(hour) || !Number.isInteger(minute)) return undefined;
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  } catch {
+    return undefined;
+  }
 }
 
 function withinTimeWindow(localTime: string | undefined, start?: string, end?: string): boolean {
@@ -354,8 +378,12 @@ function activeDelegationCoversDomain(dels: Delegation[], memberId: string, doma
 // ── The core evaluator ───────────────────────────────────────────────────────
 export function evaluateAction(input: EvaluateInput): Decision {
   const { actor, domain, capability } = input;
-  const ctx: ActionContext = input.context ?? {};
-  const now = ctx.now ?? Date.now();
+  const given: ActionContext = input.context ?? {};
+  const now = given.now ?? Date.now();
+  // A policy's time window is read against the FAMILY's clock at the instant
+  // being evaluated. No caller names the hour, so without this a time-windowed
+  // deny or require-approval rule was shown as active and never matched.
+  const ctx: ActionContext = given.localTime ? given : { ...given, localTime: localTimeIn(now, given.timeZone) };
   const policies = (input.policies ?? []).filter((p) => p.enabled);
   const grants = input.grants ?? [];
   const delegations = input.delegations ?? [];
