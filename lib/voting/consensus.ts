@@ -59,6 +59,8 @@ export type ConsensusResult = {
 };
 
 const DEFAULT_VOTE_WEIGHT = 0.55;
+/** The fit of an option nothing can be judged on: neither good nor bad. */
+const NEUTRAL_FIT = 50;
 
 const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
 const round = (n: number) => Math.round(n);
@@ -109,9 +111,33 @@ export function facilitateConsensus(
   const fitById = new Map(engine.ranked.map((r) => [r.id, r]));
   const required = constraints.requiredTags ?? [];
 
+  // The fit SCORE counts a metric only where the options differ on it. The
+  // engine answers 0, the worst fit, for an option with no cost and no travel
+  // time, and also for a cost that is the only one in the poll or the same on
+  // every option: there is nothing to compare either with, and neither is
+  // evidence that an option fits badly. Scored as 0, an option whose cost was
+  // left blank lost 45 blended points to any option with a number typed in.
+  // Such an option is neutral instead. The hard limits above still read every
+  // number: a lone cost over the budget is over the budget.
+  const differs = (pick: (o: ConsensusOption) => number | undefined) =>
+    new Set(options.map(pick).filter((v): v is number => typeof v === 'number')).size > 1;
+  const costDiffers = differs((o) => o.costCents);
+  const travelDiffers = differs((o) => o.travelMinutes);
+  const comparable = evaluateDecision(options.map((o) => ({
+    id: o.id,
+    label: o.label,
+    costCents: costDiffers ? o.costCents : undefined,
+    travelMinutes: travelDiffers ? o.travelMinutes : undefined,
+  })), {}, locale, t);
+  const comparableScoreById = new Map(comparable.ranked.map((r) => [r.id, r.score]));
+  const fitScoreOf = (o: ConsensusOption): number => {
+    const judged = (costDiffers && typeof o.costCents === 'number') || (travelDiffers && typeof o.travelMinutes === 'number');
+    return judged ? comparableScoreById.get(o.id) ?? NEUTRAL_FIT : NEUTRAL_FIT;
+  };
+
   const ranked: ConsensusRanked[] = options.map((o) => {
     const fit = fitById.get(o.id);
-    const fitScore = fit?.score ?? 50;
+    const fitScore = fitScoreOf(o);
     const votePct = totalVotes ? round((o.votes / totalVotes) * 100) : 0;
     const voteNorm = maxVotes ? o.votes / maxVotes : 0; // relative to best-voted
     const blended = voteWeight * voteNorm + (1 - voteWeight) * (fitScore / 100);
