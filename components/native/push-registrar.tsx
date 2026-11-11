@@ -59,10 +59,13 @@ export function PushRegistrar() {
         return;
       }
 
-      // Web: only re-sync if the user already granted notifications.
+      // Web: only re-sync a subscription this browser still holds. Permission
+      // outlives "turn off", so it must never be the reason to subscribe.
       if (webPushSupported() && VAPID_PUBLIC_KEY && Notification.permission === 'granted') {
-        const payload = await subscribeWebPush();
-        if (payload) await persist(payload);
+        try {
+          const payload = await subscribeWebPush({ existingOnly: true });
+          if (payload) await persist(payload);
+        } catch { /* no service worker answer: the next mount tries again */ }
       }
     })();
 

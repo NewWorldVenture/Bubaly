@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Bell, BellOff, BellRing, Loader2, Send } from 'lucide-react';
 import { isNative } from '@/lib/native/capacitor';
 import {
-  webPushSupported, subscribeWebPush, unsubscribeWebPush, VAPID_PUBLIC_KEY,
+  webPushSupported, subscribeWebPush, unsubscribeWebPush, hasWebPushSubscription, VAPID_PUBLIC_KEY,
 } from '@/lib/push/web-client';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { forgetPushDevice, rememberPushDevice } from '@/lib/push/device-registration';
@@ -50,8 +50,14 @@ export function EnablePushButton() {
     if (!webPushSupported()) { setState('unsupported'); return; }
     if (!VAPID_PUBLIC_KEY) { setState('unconfigured'); return; }
     if (Notification.permission === 'denied') { setState('denied'); return; }
-    if (Notification.permission === 'granted') { setState('on'); return; }
-    setState('idle');
+    if (Notification.permission !== 'granted') { setState('idle'); return; }
+    // Permission outlives "turn off": "on" is a subscription this browser holds.
+    let current = true;
+    hasWebPushSubscription().then(
+      (held) => { if (current) setState(held ? 'on' : 'idle'); },
+      () => { if (current) setState('idle'); },
+    );
+    return () => { current = false; };
   }, []);
 
   /** The route's own (translated) error, or ours when it sent none. */
