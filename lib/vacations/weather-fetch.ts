@@ -9,7 +9,10 @@ export type GeoResult = { name: string; latitude: number; longitude: number; cou
 export async function geocode(place: string): Promise<GeoResult | null> {
   const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(place)}&count=1&language=en&format=json`;
   const res = await fetchWithDeadline(url, { headers: { accept: 'application/json' } });
-  if (!res.ok) return null;
+  // Null means "the provider answered and knows no such place". A response
+  // that is not OK is the provider failing, and the route must say that
+  // rather than tell a family their destination could not be found.
+  if (!res.ok) throw new Error(`Open-Meteo geocoding error ${res.status}`);
   const data = await readBoundedResponseJson<{ results?: Array<{ name: string; latitude: number; longitude: number; country?: string }> }>(res, 512 * 1024);
   const r = data?.results?.[0];
   if (!r) return null;
@@ -42,6 +45,9 @@ export const FORECAST_HORIZON_DAYS = 15;
  * horizon check and the date range here, so this week was fetched, written,
  * deleted again by the cleanup, and reported to the family as a successful
  * fetch. Only an undated trip asks for the default week.
+ *
+ * A trip that starts inside the horizon and ends beyond it gets the days that
+ * are in range: the end of the request is clamped to the last forecast day.
  */
 export async function fetchForecast(lat: number, lon: number, start?: string | null, end?: string | null, now: Date = new Date()): Promise<ForecastDay[]> {
   const params = new URLSearchParams({
@@ -54,8 +60,15 @@ export async function fetchForecast(lat: number, lon: number, start?: string | n
     const last = end ?? start;
     const within = new Date(start).getTime() <= now.getTime() + 1000 * 60 * 60 * 24 * FORECAST_HORIZON_DAYS;
     if (!within) return [];
+    // The provider refuses (HTTP 400) a range that runs past the last day it
+    // forecasts, so a trip that starts in range and ends beyond it is asked
+    // for up to that day and no further. Its days are counted where the PLACE
+    // is (`timezone: 'auto'`), which can still be on yesterday's date by UTC,
+    // so the last day is taken from twelve hours ago: in range everywhere.
+    const lastForecastDay = new Date(now.getTime() + 1000 * 60 * 60 * (24 * FORECAST_HORIZON_DAYS - 12)).toISOString().slice(0, 10);
+    const lastAsked = last > lastForecastDay ? lastForecastDay : last;
     params.set('start_date', start);
-    params.set('end_date', last);
+    params.set('end_date', lastAsked < start ? start : lastAsked);
   }
   const res = await fetchWithDeadline(`https://api.open-meteo.com/v1/forecast?${params}`, { headers: { accept: 'application/json' } });
   if (!res.ok) throw new Error(`Open-Meteo error ${res.status}`);

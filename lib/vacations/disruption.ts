@@ -128,7 +128,8 @@ function anchorMinutes(input: DisruptionInput): number {
  * Delay: every timed itinerary item on the anchor day at or after the moment
  * the booking was due to clear moves forward by the delay, rolling onto the
  * next day when it crosses midnight. Reservations that fall inside the delay
- * window are missed — a person has to call them.
+ * window are missed — a person has to call them. So is an itinerary item marked
+ * `booked` that falls inside it: it moves with the day and is named in `toRebook`.
  *
  * Cancellation: nothing is moved, because there is nothing to move it to. A
  * cancelled flight strands the rest of that day (those plans need a person);
@@ -192,6 +193,14 @@ export function replanDisruption(
 
   for (const item of afterAnchor) {
     const start = toMin(item.start_time)!;
+    // A BOOKED item is a time a third party holds (a ticketed tour, a timed
+    // entry). When it starts before the family can now get there it is missed,
+    // the same test a reservation gets below. The row still moves with the day,
+    // but never silently: a person is told to rebook it, at the time the
+    // ticket says.
+    if (item.booked === true && start < anchor + delay) {
+      toRebook.push({ kind: 'itinerary_item', id: item.id, title: item.title, reason: 'missed_window', when: item.start_time });
+    }
     const end = toMin(item.end_time);
     const newStart = start + delay;
     const dayOffset = Math.floor(newStart / MINUTES_PER_DAY);

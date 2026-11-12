@@ -23,6 +23,16 @@ function fenceList(label: string, items: string[]): string {
   return joinNatural(items.map((item) => fenceUntrusted(label, item)));
 }
 
+/**
+ * Every item, none folded into "(+N more)". For allergies and diets: the cap
+ * in `joinNatural` protects the budget from a long list of tastes, but the
+ * ninth allergen is exactly as dangerous as the first, and a household-level
+ * allergy appears on no other line of the prompt.
+ */
+function fenceWholeList(label: string, items: string[]): string {
+  return joinNatural(items.map((item) => fenceUntrusted(label, item)), items.length);
+}
+
 export const foodSlice: SliceDefinition = {
   name: 'food',
   title: 'Food',
@@ -58,12 +68,12 @@ export const foodSlice: SliceDefinition = {
     };
 
     const lines: string[] = [];
-    if (data.household.allergies.length) lines.push(`- ALLERGIES (never serve): ${fenceList('allergy', data.household.allergies)}`);
-    if (data.household.diet.length) lines.push(`- Diet: ${fenceList('diet', data.household.diet)}`);
+    if (data.household.allergies.length) lines.push(`- ALLERGIES (never serve): ${fenceWholeList('allergy', data.household.allergies)}`);
+    if (data.household.diet.length) lines.push(`- Diet: ${fenceWholeList('diet', data.household.diet)}`);
     for (const m of data.members) {
       const bits: string[] = [];
-      if (m.allergies.length) bits.push(`allergic to ${fenceList('allergy', m.allergies)}`);
-      if (m.diet.length) bits.push(`diet ${fenceList('diet', m.diet)}`);
+      if (m.allergies.length) bits.push(`allergic to ${fenceWholeList('allergy', m.allergies)}`);
+      if (m.diet.length) bits.push(`diet ${fenceWholeList('diet', m.diet)}`);
       if (m.dislikes.length) bits.push(`dislikes ${fenceList('dislike', m.dislikes)}`);
       if (m.favorites.length) bits.push(`likes ${fenceList('favorite', m.favorites)}`);
       lines.push(`- ${sanitizeUntrusted(m.name, 40)}: ${bits.join('; ')}`);

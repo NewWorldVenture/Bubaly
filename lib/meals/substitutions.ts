@@ -333,15 +333,38 @@ function triggerTerm(rule: AllergenRule, allergies: string[]): string {
 
 interface AllergyHit { rule: AllergenRule; ingredient: string; replacement: string | null }
 
-/** The longest allergen ingredient this item name mentions, across active rules. */
+/**
+ * The longest allergen this item name mentions, across active rules.
+ *
+ * Matched as runs of words with EACH word's plural dropped (`wordsOf`), the way
+ * `allergenConflict` below reads food text. `mentions` drops a plural only from
+ * the last word of the whole name, so "Peanuts, salted" and "Eggs, large" named
+ * no allergen under it and went on the list.
+ *
+ * A rule's TRIGGERS are screened as well as its swap-table ingredients: "mixed
+ * nuts", "fish fillets" and "sesame bagel" name the allergy itself and no
+ * ingredient the table can swap. Such a hit carries no replacement, so the line
+ * is dropped with its reason. An ingredient wins a tie with a trigger, so
+ * "wheat bread" is still swapped for gluten-free bread rather than dropped.
+ */
 function findAllergyHit(name: string, rules: AllergenRule[]): AllergyHit | null {
+  const words = wordsOf(name);
   let best: AllergyHit | null = null;
   for (const rule of rules) {
     if (rule.exempt?.test(name)) continue;
     for (const swap of rule.swaps) {
-      if (!mentions(name, swap.ingredient)) continue;
+      if (!containsRun(words, wordsOf(swap.ingredient))) continue;
       if (!best || swap.ingredient.length > best.ingredient.length) {
         best = { rule, ingredient: swap.ingredient, replacement: swap.replacement };
+      }
+    }
+  }
+  for (const rule of rules) {
+    if (rule.exempt?.test(name)) continue;
+    for (const trigger of rule.triggers) {
+      if (!containsRun(words, wordsOf(trigger))) continue;
+      if (!best || trigger.length > best.ingredient.length) {
+        best = { rule, ingredient: trigger, replacement: null };
       }
     }
   }
@@ -579,6 +602,18 @@ export function applySubstitutions(
         continue;
       }
       const swapped = rewriteSafely(original, hit, hit.replacement);
+      // The swap answered ONE allergy. What it left standing may name another
+      // ("sesame spaghetti" under gluten and sesame became "sesame gluten-free
+      // spaghetti"), and that line must not reach the list either.
+      const residue = findAllergyHit(swapped, rules);
+      if (residue) {
+        const residueTrigger = triggerTerm(residue.rule, allergies);
+        substitutions.push({
+          from: original, to: null, kind: 'allergy', trigger: residueTrigger, reasonKey: 'allergyDropped',
+          reason: `Left off the list: ${original} contains ${residue.ingredient}, and the family records a ${residueTrigger} allergy. No safe swap.`,
+        });
+        continue;
+      }
       substitutions.push({
         from: original, to: swapped, kind: 'allergy', trigger, reasonKey: 'allergySwap',
         reason: `Swapped for ${swapped}: ${original} contains ${hit.ingredient}, and the family records a ${trigger} allergy.`,
