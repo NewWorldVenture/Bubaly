@@ -43,4 +43,16 @@ release is not evidence that every historical schema or data migration ran.
 
 `node scripts/apply-production-forward-release.mjs` previews the pinned release.
 `node scripts/apply-production-forward-release.mjs --apply` applies it using
-the existing GitHub Production credentials. Never place private tokens in files.
+the existing GitHub Production credentials (`SUPABASE_PROJECT_REF` and
+`SUPABASE_ACCESS_TOKEN` in the environment). Never place private tokens in files.
+`node scripts/apply-production-forward-release.mjs --require-applied` is a
+read-only proof that the exact baseline plus the pinned release is in the ledger;
+it cannot be combined with `--apply`.
+
+Every mode, preview included, first refuses with "Production forward release is
+held" while `supabase/migrations/` holds any version above the range pinned in
+`supabase/production-forward-release.json` (0240-0254). The repository now holds
+migrations above 0254, so today each command stops there, before production is
+read, and prints no preview. That is the guard working, not a fault: do not edit
+it out. Re-pinning the manifest is a reviewed change; see
+`docs/PENDING_PROD_MIGRATIONS.md`.

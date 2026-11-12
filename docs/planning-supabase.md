@@ -8,8 +8,8 @@ banner + a responsive **8-card grid**. Each card is **live-wired to Supabase**
 | File | Role |
 |---|---|
 | `app/(app)/dashboard/planning/page.tsx` | Server component, `force-dynamic`: one parallel batch of 8 family-scoped reads → the card grid. |
-| `app/(app)/dashboard/planning/layout.tsx` | Wraps `<AppFrame>` for the standard chrome. |
-| `lib/constants/navigation.ts` | Adds **Planning** to `PRIMARY_NAV` (after Home). |
+| `app/(app)/dashboard/layout.tsx` | The shared dashboard layout; wraps `<AppFrame>` for the standard chrome. The hub has no `layout.tsx` of its own. |
+| `lib/constants/navigation.ts` | Does **not** list Planning: it is in neither `PRIMARY_NAV` nor any other nav group, and no page links to the hub, so it is reached by typing `/dashboard/planning`. |
 | `supabase/seed_planning.sql` | 500-row seed for the planning-specific tables. |
 
 ## The 8 cards → table + destination
@@ -26,7 +26,9 @@ banner + a responsive **8-card grid**. Each card is **live-wired to Supabase**
 
 All reads are scoped to the signed-in user's active `family_id`; RLS on each
 table already enforces family membership. **No migration needed** — every table
-exists. Empty tables render calm empty states (the page never errors).
+exists. Empty tables render calm empty states, and a card whose read failed
+says it could not be read instead of showing an empty one (the page never
+errors).
 
 ## Seed: `supabase/seed_planning.sql` (500 rows)
 Fills the four planning-specific tables `seed_home.sql` doesn't:
@@ -48,8 +50,8 @@ run migration `0103_enum_backfill.sql` (or its ALTER TYPE block) once first.
 
 ## Local QA checklist
 1. `npm run seed:planning` against a dev DB.
-2. Sign in as a demo-family member; open `/dashboard/planning` (or the **Planning**
-   sidebar entry).
+2. Sign in as a demo-family member; open `/dashboard/planning` by URL (there is
+   no sidebar entry).
 3. Each of the 8 cards shows live preview rows + a count, and "Open" links to the
    real page.
 4. A family with no data shows per-card empty hints (no errors).

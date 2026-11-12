@@ -1,35 +1,53 @@
 # Database Map
 
-Generated from `supabase/migrations/*.sql` — **445 tables**.
+Generated from `supabase/migrations/*.sql` on 2026-11-10 — **496 tables**. Each row is the first
+migration, in filename order, that contains a `create table` for that name; a table a later
+migration dropped or renamed is still listed. Nothing regenerates this file automatically, so
+check a row against `supabase/migrations/` before relying on it.
 
 **RLS model:** `0118_rls_drift_repair.sql` dynamically enables Row-Level Security on EVERY
-public base table (information_schema loop), re-asserts the strict 0004 policies on the
-identity/billing tables verbatim, and heals family-scoped policies on any drifted table that
-lost its SELECT policy — without weakening intentionally stricter custom policies. Individual
-migrations additionally declare explicit per-table policies (`is_family_member(family_id)`
-convention). Every migration is additive + idempotent and PG16-validated before merge.
+public base table that existed when it ran (information_schema loop), re-asserts the strict
+0004 policies on the identity/billing tables verbatim, and heals family-scoped policies on any
+drifted table that lost its SELECT policy — without weakening intentionally stricter custom
+policies. Individual migrations additionally declare explicit per-table policies
+(`is_family_member(family_id)` convention); a table created after 0118 depends on the RLS its
+own migration, or a later one, declares. Every migration is additive + idempotent and
+PG16-validated before merge.
 
-**Prod apply order/status:** `docs/PENDING_PROD_MIGRATIONS.md` (single-paste bundle available).
-**Seeds:** `supabase/SEED_ALL.sql` (50+ seeds, 500 rows per feature, idempotent, tagged).
+**Prod apply order/status:** `docs/PENDING_PROD_MIGRATIONS.md`. That document forbids
+reconciling production by pasting historical SQL bundles or replaying migrations or seeds.
+**Seeds:** `supabase/SEED_ALL.sql` is frozen; newer seeds are the standalone
+`supabase/seed_*.sql` files.
 
 | Table | First migration |
 |---|---|
 | `ab_events` | `0049_ab_experiments.sql` |
 | `ab_experiments` | `0049_ab_experiments.sql` |
 | `activation_events` | `0146_activation_events.sql` |
+| `admin_digest_deliveries` | `0471_an_admin_digest_reaches_each_admin_once.sql` |
+| `admin_digest_occurrences` | `0471_an_admin_digest_reaches_each_admin_once.sql` |
 | `admin_integrations` | `0023_admin_console.sql` |
-| `admin_users` | `0010_support_tickets_admin_users.sql` |
+| `admin_notifications` | `0206_feedback_github_tracker.sql` |
+| `admin_users` | `00101_support_tickets_admin_users.sql` |
 | `affiliate_referrals` | `0065_affiliates.sql` |
 | `affiliates` | `0065_affiliates.sql` |
 | `agent_activity` | `0127_agent_activity.sql` |
 | `ai_conversations` | `0002_tables.sql` |
 | `ai_feedback` | `0143_ai_feedback.sql` |
 | `ai_messages` | `0002_tables.sql` |
+| `ai_plan_steps` | `0250_ai_runtime_core.sql` |
+| `ai_plans` | `0250_ai_runtime_core.sql` |
+| `ai_request_context` | `0250_ai_runtime_core.sql` |
+| `ai_requests` | `0250_ai_runtime_core.sql` |
+| `ai_run_events` | `0250_ai_runtime_core.sql` |
+| `ai_tool_calls` | `0250_ai_runtime_core.sql` |
 | `allowance_rules` | `0088_family_wallet.sql` |
 | `announcement_reads` | `0046_announcements.sql` |
 | `app_settings` | `0023_admin_console.sql` |
 | `appointments` | `0002_tables.sql` |
 | `approval_requests` | `0093_trust_engine.sql` |
+| `assistant_link_events` | `0283_assistant_links.sql` |
+| `assistant_links` | `0283_assistant_links.sql` |
 | `audit_logs` | `0002_tables.sql` |
 | `auto_ai_logs` | `0037_auto.sql` |
 | `auto_insurance_policies` | `0037_auto.sql` |
@@ -38,12 +56,15 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `babysitter_payments` | `0088_family_wallet.sql` |
 | `babysitter_profiles` | `0088_family_wallet.sql` |
 | `backlinks` | `0066_competitive_intel.sql` |
-| `badges` | `0043_chore_missions.sql` |
+| `badges` | `00430_chore_missions.sql` |
 | `bedtime_routines` | `0243_sleep_coach.sql` |
-| `behavior_logs` | `0073_behavior_tracking.sql` |
+| `behavior_logs` | `00730_behavior_tracking.sql` |
 | `billing_customers` | `0002_tables.sql` |
 | `bills` | `0006_financial_health_school_sports.sql` |
-| `blog_posts` | `0010_blog_posts.sql` |
+| `blog_post_likes` | `0201_blog_engagement.sql` |
+| `blog_post_saves` | `0227_blog_post_saves.sql` |
+| `blog_posts` | `00100_blog_posts.sql` |
+| `blog_subscribers` | `0201_blog_engagement.sql` |
 | `budgets` | `0006_financial_health_school_sports.sql` |
 | `calendar_events` | `0002_tables.sql` |
 | `calendar_feeds` | `0045_calendar_feeds.sql` |
@@ -52,18 +73,18 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `career_profiles` | `0247_career_hub.sql` |
 | `case_studies` | `0059_reputation.sql` |
 | `checkout_sessions` | `0051_checkout_sessions.sql` |
-| `child_login_throttle` | `0137_child_login_throttle.sql` |
-| `child_logins` | `0105_child_logins.sql` |
+| `child_login_throttle` | `01371_child_login_throttle.sql` |
+| `child_logins` | `01051_child_logins.sql` |
 | `child_wallets` | `0088_family_wallet.sql` |
-| `chore_ai_validations` | `0043_chore_missions.sql` |
-| `chore_approval_events` | `0043_chore_missions.sql` |
+| `chore_ai_validations` | `00430_chore_missions.sql` |
+| `chore_approval_events` | `00430_chore_missions.sql` |
 | `chore_assignments` | `0002_tables.sql` |
-| `chore_disputes` | `0043_chore_missions.sql` |
-| `chore_submissions` | `0043_chore_missions.sql` |
+| `chore_disputes` | `00430_chore_missions.sql` |
+| `chore_submissions` | `00430_chore_missions.sql` |
 | `chores` | `0002_tables.sql` |
 | `competitors` | `0066_competitive_intel.sql` |
 | `compliance_disclosures` | `0088_family_wallet.sql` |
-| `concierge_calls` | `0165_concierge_calls.sql` |
+| `concierge_calls` | `0173_concierge_calls.sql` |
 | `concierge_plan_actions` | `0158_concierge_plan_actions.sql` |
 | `concierge_plans` | `0091_concierge.sql` |
 | `concierge_sessions` | `0091_concierge.sql` |
@@ -75,17 +96,17 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `crm_quotes` | `0057_crm_quotes.sql` |
 | `currency_transactions` | `0096_family_economy.sql` |
 | `daily_insights` | `0141_daily_insights.sql` |
-| `dashboard_layout_events` | `0089_dashboard_layouts.sql` |
-| `dashboard_layouts` | `0089_dashboard_layouts.sql` |
+| `dashboard_layout_events` | `00891_dashboard_layouts.sql` |
+| `dashboard_layouts` | `00891_dashboard_layouts.sql` |
 | `decision_options` | `0130_family_decisions.sql` |
 | `declutter_missions` | `0244_declutter.sql` |
 | `declutter_sessions` | `0244_declutter.sql` |
 | `declutter_zones` | `0244_declutter.sql` |
 | `demo_email_uses` | `0162_demo_email_uses.sql` |
-| `demo_sessions` | `0138_demo_sessions.sql` |
-| `departure_plans` | `0098_trip_intelligence.sql` |
+| `demo_sessions` | `01380_demo_sessions.sql` |
+| `departure_plans` | `00981_trip_intelligence.sql` |
 | `dining_out` | `0104_dining_out.sql` |
-| `display_layouts` | `0026_display_layouts.sql` |
+| `display_layouts` | `00260_display_layouts.sql` |
 | `documents` | `0002_tables.sql` |
 | `driver_licenses` | `0037_auto.sql` |
 | `driving_trips` | `0114_family_safety.sql` |
@@ -98,15 +119,18 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `experience_audits` | `0144_experience_audits.sql` |
 | `families` | `0002_tables.sql` |
 | `family_ai_recommendations` | `0022_family_os.sql` |
+| `family_ai_settings` | `0257_family_ai_settings.sql` |
 | `family_albums` | `0014_core_platform.sql` |
 | `family_announcements` | `0046_announcements.sql` |
 | `family_app_installs` | `0165_family_app_store.sql` |
 | `family_apps` | `0165_family_app_store.sql` |
 | `family_automation_rules` | `0022_family_os.sql` |
 | `family_automation_runs` | `0022_family_os.sql` |
-| `family_communications` | `0090_communications_hub.sql` |
+| `family_communications` | `00900_communications_hub.sql` |
 | `family_connections` | `0128_family_connections.sql` |
+| `family_contact_channels` | `0214_family_contact_center.sql` |
 | `family_contacts` | `0014_core_platform.sql` |
+| `family_conversation_preferences` | `0476_messaging_notifications_preferences.sql` |
 | `family_conversations` | `0014_core_platform.sql` |
 | `family_credentials` | `0119_family_credentials.sql` |
 | `family_currencies` | `0096_family_economy.sql` |
@@ -119,6 +143,7 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `family_facts` | `0123_family_facts.sql` |
 | `family_favorites` | `0115_meals_hub.sql` |
 | `family_food_scores` | `0102_food_os.sql` |
+| `family_inbox_messages` | `0214_family_contact_center.sql` |
 | `family_insurance_policies` | `0084_insurance.sql` |
 | `family_knowledge_edges` | `0022_family_os.sql` |
 | `family_knowledge_nodes` | `0022_family_os.sql` |
@@ -130,7 +155,7 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `family_onboarding` | `0052_family_onboarding.sql` |
 | `family_operating_index` | `0125_family_operating_index.sql` |
 | `family_photos` | `0014_core_platform.sql` |
-| `family_places` | `0042_family_location.sql` |
+| `family_places` | `00420_family_location.sql` |
 | `family_playbook_suggestions` | `0126_family_playbook.sql` |
 | `family_poll_options` | `0078_family_polls.sql` |
 | `family_poll_votes` | `0078_family_polls.sql` |
@@ -138,12 +163,16 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `family_recipes` | `0014_core_platform.sql` |
 | `family_reminders` | `0014_core_platform.sql` |
 | `family_routines` | `0022_family_os.sql` |
-| `family_signals` | `0142_family_signals.sql` |
+| `family_signals` | `01420_family_signals.sql` |
 | `family_stress_predictions` | `0022_family_os.sql` |
 | `family_stress_signals` | `0022_family_os.sql` |
 | `family_tree_nodes` | `0082_family_tree.sql` |
 | `family_wallets` | `0088_family_wallet.sql` |
 | `feature_flags` | `0088_family_wallet.sql` |
+| `feedback_comments` | `0197_feedback_ideas.sql` |
+| `feedback_ideas` | `0197_feedback_ideas.sql` |
+| `feedback_votes` | `0197_feedback_ideas.sql` |
+| `finance_transaction_operation_receipts` | `0274_finance_transaction_operation_receipts.sql` |
 | `financial_accounts` | `0006_financial_health_school_sports.sql` |
 | `front_desk_settings` | `0092_front_desk.sql` |
 | `game_results` | `0006_financial_health_school_sports.sql` |
@@ -155,17 +184,18 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `graph_entities` | `0129_family_graph.sql` |
 | `grocery_items` | `0002_tables.sql` |
 | `grocery_lists` | `0002_tables.sql` |
-| `guardian_audit_log` | `0137_ai_call_guardian.sql` |
-| `guardian_communications` | `0137_ai_call_guardian.sql` |
-| `guardian_contacts` | `0137_ai_call_guardian.sql` |
-| `guardian_escalations` | `0137_ai_call_guardian.sql` |
-| `guardian_member_profiles` | `0137_ai_call_guardian.sql` |
-| `guardian_routing_rules` | `0137_ai_call_guardian.sql` |
-| `guardian_screening_sessions` | `0137_ai_call_guardian.sql` |
-| `guardian_suggestions` | `0137_ai_call_guardian.sql` |
-| `habit_logs` | `0073_habits.sql` |
-| `habits` | `0073_habits.sql` |
-| `health_goals` | `0080_health_wellness.sql` |
+| `guardian_audit_log` | `01370_ai_call_guardian.sql` |
+| `guardian_callback_events` | `0181_guardian_callback_replay.sql` |
+| `guardian_communications` | `01370_ai_call_guardian.sql` |
+| `guardian_contacts` | `01370_ai_call_guardian.sql` |
+| `guardian_escalations` | `01370_ai_call_guardian.sql` |
+| `guardian_member_profiles` | `01370_ai_call_guardian.sql` |
+| `guardian_routing_rules` | `01370_ai_call_guardian.sql` |
+| `guardian_screening_sessions` | `01370_ai_call_guardian.sql` |
+| `guardian_suggestions` | `01370_ai_call_guardian.sql` |
+| `habit_logs` | `00731_habits.sql` |
+| `habits` | `00731_habits.sql` |
+| `health_goals` | `00801_health_wellness.sql` |
 | `health_metrics` | `0006_financial_health_school_sports.sql` |
 | `health_providers` | `0009_medical_dental.sql` |
 | `health_visits` | `0068_health_visits.sql` |
@@ -182,7 +212,7 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `homework_assignments` | `0030_homework.sql` |
 | `household_info` | `0081_home_management.sql` |
 | `immunizations` | `0069_immunizations.sql` |
-| `independence_milestones` | `0167_independence_milestones.sql` |
+| `independence_milestones` | `0175_independence_milestones.sql` |
 | `insurance_policies` | `0009_medical_dental.sql` |
 | `inventory_items` | `0242_home_inventory.sql` |
 | `inventory_moves` | `0242_home_inventory.sql` |
@@ -194,35 +224,50 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `journal_entries` | `0087_journal.sql` |
 | `journey_events` | `0124_journey_events.sql` |
 | `keyword_intel` | `0066_competitive_intel.sql` |
-| `kid_progress` | `0043_chore_missions.sql` |
+| `kid_progress` | `00430_chore_missions.sql` |
 | `language_goals` | `0248_language_practice.sql` |
 | `language_sessions` | `0248_language_practice.sql` |
 | `leftover_inventory` | `0102_food_os.sql` |
+| `library_feeds` | `0284_library_books_podcasts.sql` |
+| `library_items` | `0284_library_books_podcasts.sql` |
+| `library_progress` | `0284_library_books_podcasts.sql` |
 | `life_event_plan_items` | `0145_life_event_plans.sql` |
 | `life_event_plans` | `0145_life_event_plans.sql` |
-| `location_events` | `0042_family_location.sql` |
-| `loyalty_accounts` | `0042_loyalty.sql` |
-| `loyalty_redemptions` | `0042_loyalty.sql` |
-| `loyalty_rewards` | `0042_loyalty.sql` |
-| `loyalty_settings` | `0042_loyalty.sql` |
-| `loyalty_transactions` | `0042_loyalty.sql` |
+| `location_events` | `00420_family_location.sql` |
+| `loyalty_accounts` | `00421_loyalty.sql` |
+| `loyalty_redemptions` | `00421_loyalty.sql` |
+| `loyalty_rewards` | `00421_loyalty.sql` |
+| `loyalty_settings` | `00421_loyalty.sql` |
+| `loyalty_transactions` | `00421_loyalty.sql` |
 | `maintenance_tasks` | `0002_tables.sql` |
 | `marketing_ad_campaigns` | `0020_marketing_channels.sql` |
+| `marketing_aeo_question_translations` | `0277_marketing_aeo_translations.sql` |
 | `marketing_aeo_questions` | `0013_marketing.sql` |
 | `marketing_assets` | `0060_marketing_assets.sql` |
 | `marketing_audit_logs` | `0013_marketing.sql` |
 | `marketing_automation_runs` | `0020_marketing_channels.sql` |
 | `marketing_automation_workflows` | `0020_marketing_channels.sql` |
+| `marketing_brand_rules` | `0237_marketing_platform_spine.sql` |
 | `marketing_campaigns` | `0013_marketing.sql` |
 | `marketing_content_items` | `0013_marketing.sql` |
+| `marketing_content_templates` | `0237_marketing_platform_spine.sql` |
 | `marketing_email_campaigns` | `0013_marketing.sql` |
+| `marketing_embeddings` | `0237_marketing_platform_spine.sql` |
 | `marketing_exit_intent` | `0064_exit_intent.sql` |
 | `marketing_form_submissions` | `0020_marketing_channels.sql` |
 | `marketing_forms` | `0020_marketing_channels.sql` |
 | `marketing_funnels` | `0020_marketing_channels.sql` |
+| `marketing_generation_jobs` | `0237_marketing_platform_spine.sql` |
 | `marketing_landing_pages` | `0020_marketing_channels.sql` |
+| `marketing_page_relationships` | `0237_marketing_platform_spine.sql` |
+| `marketing_page_versions` | `0237_marketing_platform_spine.sql` |
+| `marketing_pages` | `0237_marketing_platform_spine.sql` |
 | `marketing_personalization_rules` | `0062_personalization.sql` |
+| `marketing_provider_observations` | `0237_marketing_platform_spine.sql` |
+| `marketing_provider_syncs` | `0237_marketing_platform_spine.sql` |
 | `marketing_push_campaigns` | `0063_marketing_push.sql` |
+| `marketing_recurring_ad_runs` | `0282_marketing_recurring_ads.sql` |
+| `marketing_recurring_ads` | `0282_marketing_recurring_ads.sql` |
 | `marketing_segments` | `0013_marketing.sql` |
 | `marketing_seo_keywords` | `0013_marketing.sql` |
 | `marketing_seo_pages` | `0013_marketing.sql` |
@@ -231,34 +276,41 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `marketing_social_posts` | `0020_marketing_channels.sql` |
 | `marketing_suppressions` | `0021_marketing_suppressions.sql` |
 | `marketing_videos` | `0061_marketing_videos.sql` |
-| `marketplace_circle_members` | `0173_marketplace_circles.sql` |
-| `marketplace_circles` | `0173_marketplace_circles.sql` |
+| `marketplace_bids` | `0183_marketplace_auctions.sql` |
+| `marketplace_circle_blocks` | `0483_a_live_hold_counts_and_an_order_names_both_families.sql` |
+| `marketplace_circle_members` | `0176_marketplace_circles.sql` |
+| `marketplace_circles` | `0176_marketplace_circles.sql` |
 | `marketplace_collection_items` | `0151_marketplace_v2.sql` |
 | `marketplace_collections` | `0151_marketplace_v2.sql` |
 | `marketplace_follows` | `0151_marketplace_v2.sql` |
-| `marketplace_listing_shares` | `0173_marketplace_circles.sql` |
+| `marketplace_handoffs` | `0190_marketplace_handoffs.sql` |
+| `marketplace_listing_shares` | `0176_marketplace_circles.sql` |
 | `marketplace_listings` | `0120_marketplace.sql` |
 | `marketplace_matches` | `0150_marketplace_matches.sql` |
+| `marketplace_negotiation_rounds` | `0186_marketplace_negotiations.sql` |
+| `marketplace_negotiations` | `0186_marketplace_negotiations.sql` |
 | `marketplace_offers` | `0120_marketplace.sql` |
 | `marketplace_orders` | `0151_marketplace_v2.sql` |
+| `marketplace_price_history` | `0191_marketplace_price_history.sql` |
 | `marketplace_questions` | `0153_marketplace_questions.sql` |
+| `marketplace_reports` | `0193_marketplace_reports.sql` |
 | `marketplace_reviews` | `0151_marketplace_v2.sql` |
 | `marketplace_saved_searches` | `0152_marketplace_saved_searches.sql` |
 | `marketplace_saves` | `0151_marketplace_v2.sql` |
 | `marketplace_stores` | `0151_marketplace_v2.sql` |
 | `meal_ideas` | `0139_meal_ideas.sql` |
-| `meal_nutrition` | `0080_food_household.sql` |
+| `meal_nutrition` | `00800_food_household.sql` |
 | `meal_plans` | `0002_tables.sql` |
 | `meal_vote_ballots` | `0055_meal_votes.sql` |
 | `meal_vote_options` | `0055_meal_votes.sql` |
 | `meal_votes` | `0055_meal_votes.sql` |
 | `meals` | `0002_tables.sql` |
 | `medical_profiles` | `0009_medical_dental.sql` |
-| `medication_doses` | `0026_medication_doses.sql` |
+| `medication_doses` | `00261_medication_doses.sql` |
 | `medication_schedules` | `0002_tables.sql` |
 | `medications` | `0002_tables.sql` |
-| `member_badges` | `0043_chore_missions.sql` |
-| `member_locations` | `0042_family_location.sql` |
+| `member_badges` | `00430_chore_missions.sql` |
+| `member_locations` | `00420_family_location.sql` |
 | `mkt_consent_events` | `0160_visitor_consent.sql` |
 | `mkt_sessions` | `0058_visitor_intelligence.sql` |
 | `mkt_touchpoints` | `0058_visitor_intelligence.sql` |
@@ -266,6 +318,7 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `moment_activations` | `0148_moment_activations.sql` |
 | `money_timeline_insights` | `0168_money_timeline_insights.sql` |
 | `move_boxes` | `0245_move_planner.sql` |
+| `move_date_recalculations` | `0271_move_date_recalculation.sql` |
 | `move_tasks` | `0245_move_planner.sql` |
 | `moves` | `0245_move_planner.sql` |
 | `network_aggregates` | `0135_network_aggregates.sql` |
@@ -275,15 +328,15 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `notifications` | `0002_tables.sql` |
 | `nutrition_logs` | `0115_meals_hub.sql` |
 | `onboarding_events` | `0133_onboarding_events.sql` |
-| `onboarding_imports` | `0138_onboarding_imports.sql` |
+| `onboarding_imports` | `01381_onboarding_imports.sql` |
 | `onboarding_progress` | `0159_onboarding_progress.sql` |
 | `opportunities` | `0031_opportunities.sql` |
 | `outfit_logs` | `0240_closet_outfits.sql` |
 | `outfits` | `0240_closet_outfits.sql` |
-| `pantry_items` | `0080_food_household.sql` |
+| `pantry_items` | `00800_food_household.sql` |
 | `paperwork_items` | `0169_paperwork_items.sql` |
 | `parent_approvals` | `0088_family_wallet.sql` |
-| `pay_handles` | `0095_pay_handles.sql` |
+| `pay_handles` | `00950_pay_handles.sql` |
 | `permission_grants` | `0093_trust_engine.sql` |
 | `permissions` | `0002_tables.sql` |
 | `pet_care_records` | `0083_pets.sql` |
@@ -294,25 +347,28 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `profiles` | `0002_tables.sql` |
 | `project_materials` | `0246_home_projects.sql` |
 | `project_quotes` | `0246_home_projects.sql` |
+| `push_deliveries` | `0440_a_device_is_buzzed_once_per_notification.sql` |
 | `push_devices` | `0035_push_devices.sql` |
 | `rate_limits` | `0156_rate_limits.sql` |
 | `reasoning_snapshots` | `0149_reasoning_snapshots.sql` |
 | `referral_codes` | `0039_referral_program.sql` |
 | `referrals` | `0039_referral_program.sql` |
-| `relationship_dates` | `0098_relationship_helper.sql` |
-| `relationship_gift_ideas` | `0098_relationship_helper.sql` |
-| `relationship_profile` | `0098_relationship_helper.sql` |
+| `relationship_dates` | `00980_relationship_helper.sql` |
+| `relationship_gift_ideas` | `00980_relationship_helper.sql` |
+| `relationship_profile` | `00980_relationship_helper.sql` |
 | `reminder_lists` | `0100_reminder_details.sql` |
 | `reminders` | `0002_tables.sql` |
 | `renewals` | `0033_renewals.sql` |
 | `rental_cars` | `0037_auto.sql` |
 | `reputation_settings` | `0041_reviews.sql` |
+| `resend_webhook_events` | `0180_resend_webhook_dedup.sql` |
 | `resume_versions` | `0247_career_hub.sql` |
 | `reviews` | `0041_reviews.sql` |
 | `reward_redemptions` | `0028_reward_redemptions.sql` |
 | `rewards` | `0002_tables.sql` |
 | `rides` | `0027_rides.sql` |
 | `roles` | `0002_tables.sql` |
+| `routine_runs` | `0259_routine_schedules.sql` |
 | `routine_template_items` | `0122_routine_templates.sql` |
 | `routine_templates` | `0122_routine_templates.sql` |
 | `safety_check_ins` | `0114_family_safety.sql` |
@@ -321,6 +377,7 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `school_events` | `0002_tables.sql` |
 | `screen_time_entries` | `0074_screen_time.sql` |
 | `screen_time_limits` | `0074_screen_time.sql` |
+| `service_descriptions` | `0203_service_descriptions.sql` |
 | `sleep_checkins` | `0243_sleep_coach.sql` |
 | `sleep_logs` | `0243_sleep_coach.sql` |
 | `smart_devices` | `0081_home_management.sql` |
@@ -352,21 +409,21 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `social_usage_events` | `0034_social_command_center.sql` |
 | `social_webhook_events` | `0034_social_command_center.sql` |
 | `sports_events` | `0002_tables.sql` |
-| `stripe_authorizations` | `0090_stripe_money.sql` |
-| `stripe_card_designs` | `0090_stripe_money.sql` |
-| `stripe_cardholders` | `0090_stripe_money.sql` |
-| `stripe_connected_accounts` | `0090_stripe_money.sql` |
-| `stripe_financial_accounts` | `0090_stripe_money.sql` |
-| `stripe_issuing_cards` | `0090_stripe_money.sql` |
+| `stripe_authorizations` | `00901_stripe_money.sql` |
+| `stripe_card_designs` | `00901_stripe_money.sql` |
+| `stripe_cardholders` | `00901_stripe_money.sql` |
+| `stripe_connected_accounts` | `00901_stripe_money.sql` |
+| `stripe_financial_accounts` | `00901_stripe_money.sql` |
+| `stripe_issuing_cards` | `00901_stripe_money.sql` |
 | `stripe_settings` | `0099_stripe_settings.sql` |
-| `stripe_webhook_events` | `0090_stripe_money.sql` |
+| `stripe_webhook_events` | `00901_stripe_money.sql` |
 | `subscriptions` | `0002_tables.sql` |
 | `subscriptions_tracked` | `0076_subscriptions_tracked.sql` |
 | `super_admins` | `0008_super_admins.sql` |
-| `support_tickets` | `0010_support_tickets_admin_users.sql` |
+| `support_tickets` | `00101_support_tickets_admin_users.sql` |
 | `survey_responses` | `0040_surveys.sql` |
 | `surveys` | `0040_surveys.sql` |
-| `symptom_logs` | `0080_health_wellness.sql` |
+| `symptom_logs` | `00801_health_wellness.sql` |
 | `sync_accounts` | `0018_sync_platform.sql` |
 | `sync_audit_logs` | `0018_sync_platform.sql` |
 | `sync_calendar_events` | `0018_sync_platform.sql` |
@@ -398,7 +455,7 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `transactions` | `0006_financial_health_school_sports.sql` |
 | `trip_items` | `0029_trips.sql` |
 | `trip_memories` | `0079_trip_memories.sql` |
-| `trip_plans` | `0098_trip_intelligence.sql` |
+| `trip_plans` | `00981_trip_intelligence.sql` |
 | `trips` | `0029_trips.sql` |
 | `trust_audit_logs` | `0093_trust_engine.sql` |
 | `trust_delegations` | `0093_trust_engine.sql` |
@@ -416,6 +473,7 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `vacation_audit_logs` | `0070_vacations.sql` |
 | `vacation_budgets` | `0070_vacations.sql` |
 | `vacation_checklists` | `0070_vacations.sql` |
+| `vacation_confirmation_imports` | `0270_travel_confirmation_import.sql` |
 | `vacation_destinations` | `0070_vacations.sql` |
 | `vacation_documents` | `0070_vacations.sql` |
 | `vacation_emergency_contacts` | `0070_vacations.sql` |
@@ -456,6 +514,6 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `weekend_feeds` | `0072_weekend_feeds.sql` |
 | `weekend_plans` | `0071_weekend_planner.sql` |
 | `weekend_searches` | `0071_weekend_planner.sql` |
-| `wishlist_items` | `0043_wishlists.sql` |
-| `workload_snapshots` | `0166_workload_snapshots.sql` |
+| `wishlist_items` | `00431_wishlists.sql` |
+| `workload_snapshots` | `0174_workload_snapshots.sql` |
 | `workout_logs` | `0006_financial_health_school_sports.sql` |

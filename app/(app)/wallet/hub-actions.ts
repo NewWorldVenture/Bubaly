@@ -217,12 +217,19 @@ export async function deleteWalletRowAction(input: { table: string; id: string }
   // card or transaction was deleted while it was still there, and only a
   // refresh contradicted it. On `financial_accounts` and `transactions` that is
   // a household's money records.
+  //
+  // A parent or adult tidies any of the household's cards, passes and rewards;
+  // anyone else only the ones filed on them, which is all the hub shows them
+  // and where what they add is filed (ownerOfNew). The household's rows, filed
+  // on nobody, and a sibling's then match nothing and are answered below as a
+  // delete that matched no row: the id alone used to remove them.
+  const ownRows = isManager(ctx.active.role) ? {} : { member_id: ctx.active.member.id };
   const result = input.table === 'wallet_cards'
-    ? await supabase.from('wallet_cards').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id')
+    ? await supabase.from('wallet_cards').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).match(ownRows).select('id')
     : input.table === 'wallet_passes'
-      ? await supabase.from('wallet_passes').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id')
+      ? await supabase.from('wallet_passes').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).match(ownRows).select('id')
       : input.table === 'wallet_rewards'
-        ? await supabase.from('wallet_rewards').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id')
+        ? await supabase.from('wallet_rewards').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).match(ownRows).select('id')
         : await supabase.from('financial_accounts').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   const { data: deleted, error } = result;
   if (error) return actionFailure('delete the wallet item', t('hubActions.couldNotDeleteTheWalletItem'), error);

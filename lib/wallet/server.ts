@@ -5,10 +5,11 @@
 // path is identical and auditable.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json, WalletTxnType } from '@/lib/database.types';
-import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
+import { allocate, normalizeSplit, spendableFromLedger, type Split } from '@/lib/wallet/ledger';
 import { describeActionError } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { readAll } from '@/lib/supabase/read-all';
+import { escapeOrValue } from '@/lib/supabase/escape-like';
 import { logWalletAudit } from '@/lib/server/audit';
 
 type DB = SupabaseClient<Database>;
@@ -174,20 +175,51 @@ export async function reserveCardAuth(supabase: DB, params: {
 }
 
 /**
- * Release a card authorization hold (status → 'cancelled') so it stops reducing
- * the spendable balance. Called on capture (the real debit replaces it) and on
+ * The ledger key of the hold one card authorization REQUEST places.
+ *
+ * A merchant that increments an authorization (a hotel, a pump, a restaurant)
+ * sends a further `issuing_authorization.request` on the SAME authorization:
+ * its `pending_request.amount` is the ADDITIONAL amount, and `request_history`
+ * lists the requests already decided. wallet_reserve_card_auth (0155) answers
+ * `true` for a key that already has a live hold without holding anything, so an
+ * increment keyed by the authorization's id was approved against no hold at
+ * all, and its capture took the child's Spend ledger below zero.
+ *
+ * The first request keeps the authorization's own id, so its redelivery is
+ * still the RPC's idempotent repeat. The n-th increment is `<id>-<n>`: a key of
+ * its own, decided against what the earlier holds left, and repeated by a
+ * redelivery of the same increment. `releaseCardHold` releases them together.
+ */
+export function cardHoldKey(authId: string, decidedRequests: number): string {
+  return decidedRequests > 0 ? `${authId}-${decidedRequests}` : authId;
+}
+
+/** A Stripe object id: letters, digits and `_`, nothing PostgREST's filter grammar reads. */
+const STRIPE_ID = /^[A-Za-z0-9_]+$/;
+
+/**
+ * Release a card authorization's holds (status → 'cancelled') so they stop
+ * reducing the spendable balance: the first request's and every increment's
+ * (`cardHoldKey`). Called on capture (the real debit replaces them) and on
  * authorization reversal/expiry. Idempotent: only `processing` holds are touched.
  */
 export async function releaseCardHold(supabase: DB, authId: string): Promise<void> {
+  // One statement for the first request's hold and every increment's
+  // (`<id>-<n>`, cardHoldKey). The id is matched as text, its `_` escaped, and
+  // the `-` keeps an authorization whose id merely begins with this one's out.
+  // An id that could not stand in that filter as it is releases its own hold.
+  //
   // Rows deliberately not checked: capture and reversal can both call this, and
   // the `status = 'processing'` filter is what makes the second call a no-op.
   // Zero rows means the hold is already released. Audit C1-S9-64.
-  const { error } = await supabase
+  const holds = supabase
     .from('wallet_transactions')
     .update({ status: 'cancelled' })
-    .eq('stripe_ref', authId)
     .eq('type', 'card_spend')
     .eq('status', 'processing');
+  const { error } = await (STRIPE_ID.test(authId)
+    ? holds.or(`stripe_ref.eq.${authId},stripe_ref.like.${escapeOrValue(authId)}-*`)
+    : holds.eq('stripe_ref', authId));
   if (error) throw new Error(walletFailure(error, 'Could not release the card authorization hold.'));
 }
 
@@ -381,10 +413,11 @@ export async function creditChildWallet(supabase: DB, params: {
 }
 
 /**
- * Available (completed) balance in a single bucket for a child wallet, derived
- * straight from the ledger. Pending / requires_parent_approval rows do NOT count
- * — only `completed` moves a balance. Used to validate spend + transfers so a
- * wallet can never overdraw.
+ * Available balance in a single bucket for a child wallet, derived straight
+ * from the ledger: completed rows and live card holds (`processing`), as every
+ * money-moving function counts them (spendableFromLedger). Pending /
+ * requires_parent_approval rows do NOT count. A spend request is checked
+ * against it and prints it, so it may not offer what a live hold already took.
  */
 export async function bucketBalanceCents(supabase: DB, params: {
   familyId: string; childWalletId: string; kind: 'spend' | 'save' | 'give' | 'invest';
@@ -402,16 +435,14 @@ export async function bucketBalanceCents(supabase: DB, params: {
   // could not see it: it looks for `.limit(n)` where n exceeds the cap, and this
   // read had no `.limit()` at all. Its own header even names the consequence —
   // "wallet balances totalled from part of the ledger".
-  const { rows: txns, error: transactionError } = await readAll<{ direction: string; amount_cents: number; status: string }>(
+  const { rows: txns, error: transactionError } = await readAll<{ direction: 'credit' | 'debit'; amount_cents: number; status: string }>(
     (from, to) => supabase.from('wallet_transactions')
       .select('direction, amount_cents, status')
       .eq('family_id', params.familyId).eq('bucket_id', bucket.id)
       .order('id').range(from, to),
   );
   if (transactionError) return { bucketId: bucket.id, available: 0, error: walletFailure(transactionError, 'Could not load the wallet balance.') };
-  const available = (txns ?? []).reduce(
-    (s, t) => s + (t.status === 'completed' ? (t.direction === 'credit' ? t.amount_cents : -t.amount_cents) : 0), 0,
-  );
+  const available = spendableFromLedger(txns ?? []);
   return { bucketId: bucket.id, available };
 }
 

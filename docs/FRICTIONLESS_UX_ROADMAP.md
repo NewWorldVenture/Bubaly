@@ -6,6 +6,10 @@
 >
 > Sequenced so a parallel agent can pick up a phase and ship it **without breaking the live app**.
 > Each item lists concrete files/tables so work can start immediately.
+>
+> **Status checked 2026-11-10.** This plan is undated and was written before most of it was built.
+> The items marked "checked 2026-11-10" below were compared with the code on that date. The
+> unmarked items were not re-verified: check the code before picking one up.
 
 ---
 
@@ -42,11 +46,13 @@ Start top-left, move right; do high-effort behind flags.
 ### Phase B — Home = Family Mission Control (high impact)
 - **✅ Ranking core shipped:** `lib/home/needs-attention.ts` (PURE + 11 tests) — `NeedItem`,
   `rankNeedsAttention` (urgency→recency, deterministic), `summarizeNeeds`, `needsHeadline`, `topNeeds`.
-  **To wire:** add a server reader mapping each domain's pending rows → `NeedItem[]` (wrap each query
-  with `isMissingRelationError` so un-migrated tables degrade to empty), then render a "Needs you"
-  section in `AiHomeDashboard` via `topNeeds` + `needsHeadline`. Read-only links first; add inline
-  Approve/Snooze/Delegate after.
-- New `components/home/mission-control.tsx` rendered by `/dashboard`. Ranked cards from a single
+  **✅ Wired (checked 2026-11-10):** `lib/home/needs-sources.ts` maps each domain's pending rows →
+  `NeedItem`, `lib/home/needs-build.ts` (`buildHomeNeeds`) assembles the list, and
+  `components/dashboard/ai-home-dashboard.tsx` renders the "Needs you" section via `topNeeds` +
+  `needsHeadline`. Decisions are made in place (Approve / Decline in
+  `components/concierge/needs-attention.tsx`); Snooze and Delegate are not in that component.
+- New `components/home/mission-control.tsx` rendered by `/dashboard` (not built under that name as
+  of 2026-11-10; the "Needs you" section above lives in `AiHomeDashboard`). Ranked cards from a single
   server aggregator that unions cross-domain "needs me" items (wallet approvals, trust approvals,
   chore sign-offs, renewals due, calendar conflicts, concierge outcomes).
 - Each card: **Approve / Snooze / Delegate / Ask Bubaly / Automate / Dismiss / Undo** (server actions;
@@ -62,10 +68,14 @@ Start top-left, move right; do high-effort behind flags.
 ### Phase D — Assistant as the operating layer
 - Global invoke: a FAB + ⌘K palette mounted in `app/(app)/layout.tsx`; pass current route/context so
   the assistant can "explain this screen" and act. Every action returns an **undo** affordance.
+  **✅ ⌘K command bar shipped (checked 2026-11-10):** `components/app/command-bar.tsx` +
+  `lib/command-bar/route.ts`, mounted in `components/app/app-shell.tsx` rather than the layout.
 - Reuse existing `/api/ai/*` + Trust `evaluateTrust` for governed execution + audit.
 
 ### Phase E — Universal Capture
 - One `/capture` (+ FAB) accepting voice/text/photo/screenshot/PDF/email/receipt/calendar/voicemail.
+  **✅ Route exists (checked 2026-11-10):** `app/(app)/capture/page.tsx`; which input types it
+  accepts was not re-verified.
 - Pipeline: extract → classify → route → create records/reminders → ask approval only when policy
   requires. Extend the existing NL parser (`lib/capture/parse.ts`) + Scan + document AI.
 
@@ -120,5 +130,8 @@ tsc clean · eslint clean · `next build` ✓ · vitest green (logic in `lib/*`)
 dark/light checked · RLS/tier preserved · Trust-gated where it acts · audit-logged · handoff updated.
 
 ## Ops gap (not code)
-Apply prod Supabase migrations **0085–0097** to make the built features live. Until then the app
-degrades safely (missing-relation guard, #163) but the value isn't switched on in production.
+When this plan was written: apply prod Supabase migrations **0085–0097** to make the built features
+live; until then the app degrades safely (missing-relation guard, #163) but the value isn't switched
+on in production. **As of 2026-11-10 do not act on that range from this note:** production apply
+order and status live in `docs/PENDING_PROD_MIGRATIONS.md`, and several files in the range have been
+renumbered since (for example `00890_avatars_bucket.sql`, `00900_communications_hub.sql`).

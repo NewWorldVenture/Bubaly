@@ -1,5 +1,15 @@
 # Mobile Production-Readiness — Route & Screen Inventory
 
+> **Historical record (note added 2026-11-10).** This inventory was seeded during
+> the mobile mission that started 2026-07-18 (`MOBILE_PROGRESS.md`) and has not
+> been kept in step with the code. It is not current guidance: the routes, the
+> `group-hover:<line>` numbers and the module counts below are as they were then.
+> For example there is no `/dashboard/shopping` route today (the lists screen is
+> `/dashboard/grocery`, which renders `components/modules/shopping-module.tsx`),
+> there is no separate grocery module for `grocery:244` to point at, and M-005 is
+> recorded as done in `MOBILE_TODO.md` (guard: `tests/mobile-hover-reveal.test.ts`).
+> Check any row against the code before acting on it.
+
 Phase 1/3 inventory. **This is a SKELETON** — the app has **200+ `(app)/dashboard`
 routes** and **104 module components**, so it is seeded with the schema, the risk
 heuristic, and the highest-priority rows. A resuming bot expands it route-by-route

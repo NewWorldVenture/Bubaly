@@ -14,7 +14,7 @@ import type { Database } from '@/lib/database.types';
 import type Stripe from 'stripe';
 import { randomUUID } from 'node:crypto';
 import { getStripe } from '@/lib/stripe';
-import { reserveCardAuth, releaseCardHold, debitCardSpend, creditCardRefund } from '@/lib/wallet/server';
+import { reserveCardAuth, releaseCardHold, debitCardSpend, creditCardRefund, cardHoldKey } from '@/lib/wallet/server';
 
 type DB = SupabaseClient<Database>;
 const STALE_EVENT_MS = 10 * 60 * 1000;
@@ -181,15 +181,24 @@ const TERMINAL_AUTHORIZATION = ['reversed', 'expired', 'closed'];
  * because Stripe cannot be asked: the hold stays for the authorization's own
  * events (.created, .updated, the capture) to settle. Money held, never money
  * freed on a guess. Nothing here may replace the caller's error.
+ *
+ * An increment (`request` > 0) is the one exception to "still pending": Stripe
+ * may decline it while the authorization goes on, on its earlier amounts. Its
+ * decision is then in `request_history[request]`, and a declined one has only
+ * its own hold released, by its exact key (a key with a `-` is released as
+ * itself, never as a prefix).
  */
 async function releaseHoldIfStripeDeclined(
-  supabase: DB, stripe: ReturnType<typeof getStripe>, authId: string, opts: Stripe.RequestOptions,
+  supabase: DB, stripe: ReturnType<typeof getStripe>, authId: string, request: number, opts: Stripe.RequestOptions,
 ): Promise<void> {
   try {
     const current = await stripe.issuing.authorizations.retrieve(authId, {}, opts);
     if (TERMINAL_AUTHORIZATION.includes(current.status)) {
       await releaseCardHold(supabase, authId);
       console.warn('[money] Stripe did not approve an authorization we had reserved for; its hold is released', { authorizationId: authId });
+    } else if (request > 0 && current.request_history?.[request]?.approved === false) {
+      await releaseCardHold(supabase, cardHoldKey(authId, request));
+      console.warn('[money] Stripe declined an increment we had reserved for; its hold is released', { authorizationId: authId, request });
     }
   } catch (e) {
     console.error('[money] could not settle the hold of an authorization whose response failed; it stays held', { authorizationId: authId }, e);
@@ -212,6 +221,9 @@ export async function handleAuthorizationRequest(
   const amount = auth.pending_request?.amount ?? auth.amount ?? 0;
   const merchantCategory = auth.merchant_data?.category ?? null;
   const merchantName = auth.merchant_data?.name ?? null;
+  // Which request on this authorization this is: 0 for the first, n for the
+  // n-th increment (Stripe lists the requests it has already decided).
+  const request = auth.request_history?.length ?? 0;
 
   let decision: AuthDecision;
   if (!card) {
@@ -224,9 +236,12 @@ export async function handleAuthorizationRequest(
     if (pre) {
       decision = pre;
     } else {
+      // Held under this REQUEST's key: an increment on an authorization already
+      // approved holds its own amount, against what the earlier holds left.
       const reserved = await reserveCardAuth(supabase, {
         familyId: card.family_id, childWalletId: card.child_wallet_id,
-        amountCents: amount, authId: auth.id, description: merchantName ?? 'Card hold',
+        amountCents: amount, authId: cardHoldKey(auth.id, request),
+        description: merchantName ?? 'Card hold',
       });
       decision = reserved ? { approve: true, reason: 'approved' } : { approve: false, reason: 'insufficient_spend_balance' };
     }
@@ -248,7 +263,7 @@ export async function handleAuthorizationRequest(
     // declined the purchase (its timeout setting, or the authorization is
     // already over), nothing will ever capture that hold, and it went on
     // reducing the child's spendable balance for good.
-    if (decision.approve) await releaseHoldIfStripeDeclined(supabase, stripe, auth.id, opts);
+    if (decision.approve) await releaseHoldIfStripeDeclined(supabase, stripe, auth.id, request, opts);
     throw new Error('Stripe authorization response failed');
   }
 
@@ -265,10 +280,15 @@ export async function handleAuthorizationRequest(
   // exposes the table to the assistant as "card authorisations". A parent asking
   // why their child's card was declined is answered from rows that quietly may
   // not exist.
+  //
+  // One row per REQUEST, keyed as its hold is (cardHoldKey). The table is
+  // UNIQUE (stripe_authorization_id), so an increment keyed by the
+  // authorization's own id was refused, and an increment declined for want of
+  // Spend never reached the parents. A redelivery of a request is still refused.
   if (card) {
     const { error: auditError } = await supabase.from('stripe_authorizations').insert({
       family_id: card.family_id, card_id: card.id, child_wallet_id: card.child_wallet_id,
-      stripe_authorization_id: auth.id, amount_cents: amount,
+      stripe_authorization_id: cardHoldKey(auth.id, request), amount_cents: amount,
       merchant_name: merchantName, merchant_category: merchantCategory,
       outcome: decision.approve ? 'approved' : 'declined',
       decline_reason: decision.approve ? null : decision.reason,
