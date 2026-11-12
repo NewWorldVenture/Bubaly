@@ -103,7 +103,8 @@ const TITLES = [
   'Card purchase to approve · $12', 'Allowance request to approve',
   '3 chores awaiting approval', '1 reminder overdue',
   'Reply to Dr. Patel — Can we move the dentist to Thursday?', 'Reply to grandma@example.com — Playdate Saturday?',
-  'Sign and return — Field trip permission slip · due in 12d', 'Make the payment — Field trip permission slip · $45 · due in 12d',
+  // Due the 20th, read on the 7th: 13 days, counted day to day on the family's (UTC) calendar.
+  'Sign and return — Field trip permission slip · due in 13d', 'Make the payment — Field trip permission slip · $45 · due in 13d',
 ];
 
 function healthyReplies(): Record<string, Reply> {

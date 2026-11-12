@@ -270,6 +270,7 @@ export async function POST(req: NextRequest) {
 
     const conciergeSnapshot: ConciergeSnapshot = {
       now,
+      timezone: tz,
       bills: (bills ?? []).map(b => ({ name: b.name, amount: b.amount, dueDate: b.due_date, status: b.status })),
       medications: medsDueToday,
       maintenance: (maintenance ?? []).map(m => ({ title: m.title, dueAt: m.due_at })),

@@ -47,10 +47,13 @@ function addDayKeys(key: string, n: number): string {
  * `entry_date` is written in. Anchored on Greenwich's midnight, the week
  * dropped the oldest family day every Los Angeles evening and added an eighth
  * every Tokyo morning.
+ *
+ * The window also ENDS on `todayKey`: an entry dated after the family's today
+ * has not happened, and is in no week yet.
  */
 export function minutesInWindow(entries: ScreenEntryLike[], days: number, todayKey: string): number {
   const from = addDayKeys(todayKey, -(days - 1));
-  return entries.reduce((sum, e) => (e.entry_date >= from ? sum + (e.minutes ?? 0) : sum), 0);
+  return entries.reduce((sum, e) => (e.entry_date >= from && e.entry_date <= todayKey ? sum + (e.minutes ?? 0) : sum), 0);
 }
 
 /** Minutes per category (descending). */
@@ -83,17 +86,29 @@ export function limitProgress(usedToday: number, limit: number): LimitProgress {
 }
 
 /** Consecutive days (ending on the family's `todayKey`) at or under the daily
- *  limit. Days with no logged time count as under-limit. Stops at the first
- *  over-limit day. Stepped in calendar day keys from the family's day: from
- *  Greenwich's, a Los Angeles evening started on an empty "tomorrow" and a
- *  Tokyo morning skipped today's entries altogether. */
+ *  limit. A day with no logged time counts as under-limit, but only from the
+ *  member's EARLIEST logged day on: before anything was logged there is no
+ *  record to be under, so a member with a limit and no entries has no streak
+ *  (it read "366d under" the moment a limit was set). Entries dated after
+ *  today are not part of it. Stops at the first over-limit day, and at a year.
+ *  Stepped in calendar day keys from the family's day: from Greenwich's, a Los
+ *  Angeles evening started on an empty "tomorrow" and a Tokyo morning skipped
+ *  today's entries altogether. */
 export function underLimitStreak(entries: ScreenEntryLike[], limit: number, todayKey: string): number {
   if (!limit || limit <= 0) return 0;
   const byDay = new Map<string, number>();
-  for (const e of entries) byDay.set(e.entry_date, (byDay.get(e.entry_date) ?? 0) + (e.minutes ?? 0));
+  let earliest: string | null = null;
+  for (const e of entries) {
+    if (e.entry_date > todayKey) continue;
+    byDay.set(e.entry_date, (byDay.get(e.entry_date) ?? 0) + (e.minutes ?? 0));
+    if (earliest === null || e.entry_date < earliest) earliest = e.entry_date;
+  }
+  if (earliest === null) return 0;
   let streak = 0;
   for (let i = 0; i < 366; i++) {
-    if ((byDay.get(addDayKeys(todayKey, -i)) ?? 0) > limit) break;
+    const day = addDayKeys(todayKey, -i);
+    if (day < earliest) break;
+    if ((byDay.get(day) ?? 0) > limit) break;
     streak++;
   }
   return streak;

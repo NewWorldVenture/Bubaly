@@ -32,7 +32,7 @@ import {
 } from '@/lib/home/needs-sources';
 import { listPending } from '@/lib/services/approvals';
 import { listMemories, PENDING_SUGGESTION_LIMIT, SENSITIVE_MEMORY_CATEGORIES } from '@/lib/services/memory';
-import { scopeFromUserContext } from '@/lib/services/scope';
+import { scopeFromUserContext, todayKeyFor } from '@/lib/services/scope';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { settle } from '@/lib/supabase/settle';
 import { readsHouseholdMoney } from '@/lib/finance/household-money';
@@ -150,6 +150,8 @@ export default async function NeedsYouPage() {
     dueTodayReminders: 0,
     pendingChores: 0, lowGrocery: false, openTodos: 0,
     now,
+    // A paperwork due date is a DATE, counted against the family's day.
+    todayKey: todayKeyFor(ctx, now),
     // A money approval's or a paperwork payment's amount and the words around
     // it, in this reader's locale.
     reader: { locale: locale.code, t },

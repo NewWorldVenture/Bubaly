@@ -104,12 +104,18 @@ export type RenewalRow = { id: string; title: string; expires_at: string; remind
  * A renewal → a "needs you" item, but only once it's inside its reminder window
  * (or already expired). Returns null when it's not yet due, already renewed, or
  * cancelled. Urgency escalates to 'urgent' within 3 days / past due.
+ *
+ * `renewals.expires_at` is a DATE (0033_renewals.sql): the day it runs out, on
+ * the family's wall. Days are counted between DAY KEYS, the expiry's and the
+ * family's today (`today`, a `YYYY-MM-DD` key), exactly as
+ * `documentExpiryToNeed` does. Flooring (UTC midnight of that DATE - now) read
+ * a renewal as expired all of its due day, and in Los Angeles from 17:00 the
+ * evening before. A `Date` is read at Greenwich, right only for a UTC family.
  */
-export function renewalToNeed(r: RenewalRow, now: Date): NeedItem | null {
+export function renewalToNeed(r: RenewalRow, today: Date | string): NeedItem | null {
   if (r.status === 'renewed' || r.status === 'cancelled') return null;
-  const expires = Date.parse(r.expires_at);
-  if (!Number.isFinite(expires)) return null;
-  const days = Math.floor((expires - now.getTime()) / 86_400_000);
+  const days = daysFromToday(r.expires_at, today);
+  if (days === null) return null;
   const window = r.reminder_days ?? 14;
   if (days > window) return null; // not in the reminder window yet
   const when = days < 0 ? 'expired' : days === 0 ? 'due today' : `due in ${days}d`;
@@ -217,6 +223,17 @@ function daysUntil(iso: string, now: Date): number | null {
   return Number.isFinite(t) ? Math.floor((t - now.getTime()) / 86_400_000) : null;
 }
 
+/**
+ * Whole days from the family's today to a DATE column's day (0 = that day,
+ * negative = past). `today` is the family's `YYYY-MM-DD` key; a `Date` is read
+ * at Greenwich. A DATE is a day on the family's wall, never an instant, so it
+ * is compared day to day and never against the clock.
+ */
+function daysFromToday(date: string, today: Date | string): number | null {
+  const todayKey = typeof today === 'string' ? today : today.toISOString().slice(0, 10);
+  return daysBetweenDayKeys(todayKey, date.slice(0, 10));
+}
+
 /** The columns of a `family_playbook_suggestions` row (status 'suggested') the card needs. */
 export type FactSuggestionRow = { id: string; label: string; value: string; expires_at?: string | null; created_at: string };
 
@@ -311,13 +328,14 @@ type StoredPaperworkAction = { kind?: unknown; label?: unknown; due_on?: unknown
  * materialised into a reminder or event (those already show up through the
  * reminders and calendar sources — a second card would be the same task
  * twice). Urgent within 3 days of the due date, past due, or when the triage
- * marked the whole item urgent.
+ * marked the whole item urgent. A due date is a DATE, counted from the family's
+ * today (`today`, a `YYYY-MM-DD` key; a `Date` is read at Greenwich).
  *
  * The title is the action's own label and the item's own title (both data, in
  * whatever language the paperwork was in), then the amount in the reader's
  * format and the due date in the reader's words.
  */
-export function paperworkActionsToNeeds(r: PaperworkRow, now: Date, reader: NeedsReader): NeedItem[] {
+export function paperworkActionsToNeeds(r: PaperworkRow, today: Date | string, reader: NeedsReader): NeedItem[] {
   if (!PAPERWORK_OPEN_STATUSES.includes(r.status)) return [];
   if (!Array.isArray(r.actions)) return [];
   const out: NeedItem[] = [];
@@ -329,7 +347,7 @@ export function paperworkActionsToNeeds(r: PaperworkRow, now: Date, reader: Need
     const label = typeof a.label === 'string' && a.label.trim() ? a.label.trim() : kind.toUpperCase();
     const amount = typeof a.amount === 'number' && a.amount > 0 ? usdFromDollars(a.amount, reader.locale) : null;
     const dueOn = typeof a.due_on === 'string' && a.due_on ? a.due_on : r.due_on;
-    const days = dueOn ? daysUntil(dueOn, now) : null;
+    const days = dueOn ? daysFromToday(dueOn, today) : null;
     const when = days === null
       ? null
       : days < 0 ? reader.t('needsSources.overdue')

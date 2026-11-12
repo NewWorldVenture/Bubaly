@@ -91,8 +91,10 @@ describe('the "Needs you" titles that carry money', () => {
     expect(item.title).toBe('Card purchase to approve · $2,768.50');
   });
 
+  // Due the 10th, three days after NOW's 7th: a due_on is a DATE, counted day
+  // to day (the 11th only read "3d" while days were floored against the clock).
   const paperwork = {
-    id: 'pw-1', title: 'Klassenfahrt', status: 'needs_action', urgency: 'soon', due_on: '2026-09-11', created_at: '2026-09-05T08:00:00Z',
+    id: 'pw-1', title: 'Klassenfahrt', status: 'needs_action', urgency: 'soon', due_on: '2026-09-10', created_at: '2026-09-05T08:00:00Z',
     actions: [{ kind: 'pay', label: 'Zahlung leisten', due_on: null, amount: 2768, materialized_id: null }],
   };
 

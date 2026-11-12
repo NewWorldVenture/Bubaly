@@ -97,7 +97,7 @@ export async function simulateDecisionAction(input: SimFormInput): Promise<SimRe
     }));
     return simulateDecision(
       { kind: 'commitment', memberName: input.memberName, title: input.title.trim(), startsAt: input.startsAt, durationMin: input.durationMin, weeks: input.weeks },
-      { memberEvents, budgets: [], locale: locale.code },
+      { memberEvents, budgets: [], locale: locale.code, timeZone: ctx.active.family.timezone || 'UTC' },
     );
   }
 
@@ -217,7 +217,7 @@ async function runActivityProjection(ctx: TwinContext, tr: Translate, input: Act
     travelMinEach: input.travelMinEach,
     costCents: seesCost && costCents > 0 ? costCents : undefined, costCategory: seesCost ? input.costCategory : undefined,
   };
-  return { ok: true, data: projectActivity(decision, { memberEvents, budgets, vacationWindows }) };
+  return { ok: true, data: projectActivity(decision, { memberEvents, budgets, vacationWindows, timeZone: tz }) };
 }
 
 /**

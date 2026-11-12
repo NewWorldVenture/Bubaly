@@ -28,7 +28,7 @@ import {
 import { upcomingBirthdayEvents } from '@/lib/moments/birthdays';
 import { findOverlaps } from '@/lib/moments/conflicts';
 import { reminderTimeFor } from '@/lib/moments/reminders';
-import { groupMoments } from '@/lib/moments/grouping';
+import { groupMoments, type MomentBucket } from '@/lib/moments/grouping';
 import { summarizeMoments } from '@/lib/moments/summary';
 import {
   setMomentPrepDoneAction, createMomentReminderAction, addMomentGroceryAction,
@@ -130,6 +130,15 @@ export function MomentsView({ departures, departuresFailed = false, savedTicks, 
 
   // Real double-bookings among the upcoming timed events (before they surprise you).
   const clashes = useMemo(() => findOverlaps(rows ?? []), [rows]);
+  // The timeline headers, in the reader's language. A moment is filed under the
+  // FAMILY's day (the zone the card's own "Today / Tomorrow" label uses), so a
+  // header and the card beneath it cannot disagree.
+  const bucketLabel: Record<MomentBucket, string> = {
+    today: t('calendar.today'),
+    tomorrow: t('quickCapture.tomorrow'),
+    'this-week': t('care.thisWeek'),
+    later: t('registerSw.later'),
+  };
   // One-glance tally for the summary strip.
   const summary = useMemo(() => summarizeMoments(moments, done, clashes), [moments, done, clashes]);
 
@@ -245,10 +254,10 @@ export function MomentsView({ departures, departuresFailed = false, savedTicks, 
         />
       ) : (
         <div className="space-y-6">
-          {groupMoments(moments, (m) => m.event.starts_at).map((group) => (
+          {groupMoments(moments, (m) => m.event.starts_at, new Date(), { timeZone: clock.timeZone, allDay: (m) => m.event.all_day }).map((group) => (
           <section key={group.bucket}>
             <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-muted">
-              {group.label}
+              {bucketLabel[group.bucket]}
               <span className="rounded-full bg-elevated px-1.5 text-[11px] font-semibold text-muted">{group.items.length}</span>
             </h2>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

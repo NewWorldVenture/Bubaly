@@ -13,6 +13,7 @@
 // guaranteed, never-fabricated answer when AI is unconfigured.
 
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { dayKeyIn } from '@/lib/time/zoned';
 
 export type ConciergeDomain =
   | 'bill'
@@ -48,6 +49,13 @@ export interface ConciergeItem {
 
 export interface ConciergeSnapshot {
   now: string | Date;
+  /**
+   * The family's IANA zone. "Today" is the family's day: a bill's `due_date` is
+   * a DATE on their wall, so it is counted against the family-local date of
+   * `now`, not the UTC date of that instant. Every caller that serves a family
+   * passes it; without it the day is Greenwich's.
+   */
+  timezone?: string;
   bills?: { name: string; amount?: number | null; dueDate: string | null; status?: string | null }[];
   /** Medications already filtered by the caller to those scheduled *today*. */
   medications?: { name: string; member?: string | null; timeOfDay?: string | null }[];
@@ -85,13 +93,30 @@ const DOMAIN_RANK: Record<ConciergeDomain, number> = {
   warranty: 5,
 };
 
-/** Calendar-day offset between an ISO date/datetime and `now` (date-only math). */
-export function dayOffset(target: string | Date, now: string | Date): number | null {
-  const t = typeof target === 'string' ? new Date(target) : target;
-  const n = typeof now === 'string' ? new Date(now) : now;
-  if (Number.isNaN(t.getTime()) || Number.isNaN(n.getTime())) return null;
-  const tUTC = Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate());
-  const nUTC = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate());
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** The calendar day a value falls on in `tz`: a DATE column is already that day; an instant is read on that wall. */
+function dayKeyOf(value: string | Date, tz: string): string | null {
+  if (typeof value === 'string' && DATE_ONLY.test(value)) return value;
+  const d = typeof value === 'string' ? new Date(value) : value;
+  return Number.isNaN(d.getTime()) ? null : dayKeyIn(d, tz);
+}
+
+/**
+ * Calendar-day offset between an ISO date/datetime and `now` (date-only math),
+ * counted in `tz` — the family's zone. A `YYYY-MM-DD` target is a day on the
+ * family's wall and is never shifted; `now` and a timestamp target are read as
+ * the day they fall on in `tz`. Without `tz` the day is Greenwich's.
+ */
+export function dayOffset(target: string | Date, now: string | Date, tz: string = 'UTC'): number | null {
+  const tKey = dayKeyOf(target, tz);
+  const nKey = dayKeyOf(now, tz);
+  const t = tKey ? DATE_ONLY.exec(tKey) : null;
+  const n = nKey ? DATE_ONLY.exec(nKey) : null;
+  if (!t || !n) return null;
+  const tUTC = Date.UTC(Number(t[1]), Number(t[2]) - 1, Number(t[3]));
+  const nUTC = Date.UTC(Number(n[1]), Number(n[2]) - 1, Number(n[3]));
+  if (Number.isNaN(tUTC) || Number.isNaN(nUTC)) return null;
   return Math.round((tUTC - nUTC) / 86_400_000);
 }
 
@@ -160,12 +185,13 @@ export function canonicalConciergeText(facts: ConciergeItemDisplay): Pick<Concie
  */
 export function buildConciergeDigest(snapshot: ConciergeSnapshot): ConciergeDigest {
   const { now } = snapshot;
+  const tz = snapshot.timezone ?? 'UTC';
   const items: ConciergeItem[] = [];
 
   // ── Bills (skip paid) ─────────────────────────────────────────────────────
   for (const b of snapshot.bills ?? []) {
     if (!b.dueDate || (b.status ?? '').toLowerCase() === 'paid') continue;
-    const off = dayOffset(b.dueDate, now);
+    const off = dayOffset(b.dueDate, now, tz);
     if (off === null) continue;
     const urgency = classify(off, SOON_WINDOW_DAYS.bill);
     if (!urgency) continue;
@@ -194,7 +220,7 @@ export function buildConciergeDigest(snapshot: ConciergeSnapshot): ConciergeDige
   // ── Home maintenance tasks ────────────────────────────────────────────────
   for (const t of snapshot.maintenance ?? []) {
     if (!t.dueAt) continue;
-    const off = dayOffset(t.dueAt, now);
+    const off = dayOffset(t.dueAt, now, tz);
     if (off === null) continue;
     const urgency = classify(off, SOON_WINDOW_DAYS.maintenance);
     if (!urgency) continue;
@@ -211,7 +237,7 @@ export function buildConciergeDigest(snapshot: ConciergeSnapshot): ConciergeDige
   // ── Pantry items about to expire ──────────────────────────────────────────
   for (const p of snapshot.pantry ?? []) {
     if (!p.expiresAt) continue;
-    const off = dayOffset(p.expiresAt, now);
+    const off = dayOffset(p.expiresAt, now, tz);
     if (off === null) continue;
     const urgency = classify(off, SOON_WINDOW_DAYS.pantry);
     if (!urgency) continue;
@@ -228,9 +254,9 @@ export function buildConciergeDigest(snapshot: ConciergeSnapshot): ConciergeDige
   // ── Upcoming / in-progress trips ──────────────────────────────────────────
   for (const tr of snapshot.trips ?? []) {
     if (!tr.startDate) continue;
-    const startOff = dayOffset(tr.startDate, now);
+    const startOff = dayOffset(tr.startDate, now, tz);
     if (startOff === null) continue;
-    const endOff = tr.endDate ? dayOffset(tr.endDate, now) : startOff;
+    const endOff = tr.endDate ? dayOffset(tr.endDate, now, tz) : startOff;
     // In progress: started but not yet ended.
     if (startOff <= 0 && endOff !== null && endOff >= 0) {
       const display: ConciergeItemDisplay = { version: 1, kind: 'trip', phase: 'ongoing', name: tr.title, destination: tr.destination ?? null, dayOffset: 0 };
@@ -261,7 +287,7 @@ export function buildConciergeDigest(snapshot: ConciergeSnapshot): ConciergeDige
   // and titled the pushed one "N overdue" for good.
   for (const w of snapshot.warranties ?? []) {
     if (!w.expiresOn) continue;
-    const off = dayOffset(w.expiresOn, now);
+    const off = dayOffset(w.expiresOn, now, tz);
     if (off === null || off < 0) continue;
     const urgency = classify(off, SOON_WINDOW_DAYS.warranty);
     if (!urgency) continue;
