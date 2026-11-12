@@ -44,6 +44,8 @@ type HistoryTxn = ActivityTxn & { bucket_kind?: BucketKind | null; metadata?: Re
 type Child = {
   id: string; name: string; color: string | null; total: number;
   buckets: Record<BucketKind, number>; split: Split; approvalThresholdCents: number;
+  /** What Spend can still spend or send: its balance less a live card hold. */
+  spendable: number;
 };
 
 type Coaching = { headline: string; insights: string[]; suggestion: string };
@@ -137,7 +139,7 @@ function SpendingCardPreview({ child }: { child: Child }) {
   const formatCents = (cents: number, currency?: string) =>
     formatCentsIn(cents, currency, locale.code);
   const t = useTranslations();
-  const spendable = child.buckets.spend ?? 0;
+  const spendable = child.spendable;
   return (
     <div className="relative overflow-hidden rounded-2xl p-5 text-white select-none"
       style={{ background: 'var(--color-brand-subtle, rgba(14, 116, 144, 0.12))' }}>
@@ -399,7 +401,7 @@ function RequestSpendModal({ child, onClose }: { child: Child; onClose: () => vo
   const [loading, setLoading] = useState(false);
   const [amount, setAmount] = useState('');
   const [desc, setDesc] = useState('');
-  const spendable = child.buckets.spend ?? 0;
+  const spendable = child.spendable;
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -461,7 +463,7 @@ function SendToSiblingModal({ child, siblings, onClose }: { child: Child; siblin
   const [to, setTo] = useState(siblings[0]?.id ?? '');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
-  const spendable = child.buckets.spend ?? 0;
+  const spendable = child.spendable;
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -682,7 +684,7 @@ export function ChildDetailView({
             <p className="text-sm font-semibold text-muted">{child.name}{t('childDetail.aposSWallet')}</p>
             <p className="text-4xl font-black tabular-nums">{formatCents(child.total)}</p>
             <p className="mt-0.5 text-xs text-muted">
-              {formatCents(child.buckets.spend ?? 0)} {t('childDetail.spendable')} {formatCents(child.buckets.save ?? 0)} {t('childDetail.saved')}
+              {formatCents(child.spendable)} {t('childDetail.spendable')} {formatCents(child.buckets.save ?? 0)} {t('childDetail.saved')}
             </p>
           </div>
         </div>

@@ -6,7 +6,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
-import { balanceFromLedger, bucketBalances, normalizeSplit, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
+import { balanceFromLedger, bucketBalances, normalizeSplit, spendableFromLedger, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
 import { ChildDetailView } from '@/components/wallet/child-detail-view';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
@@ -94,6 +94,10 @@ export default async function ChildWalletPage({ params }: { params: Promise<{ ch
     color: member?.color ?? null,
     total: balanceFromLedger(entries),
     buckets: bucketBalances(entries),
+    // What the Spend bucket can still spend or send: its balance less a live
+    // card hold, as every decision counts it. Offered as "available" on the
+    // page; the bucket's balance above stays the money it holds.
+    spendable: spendableFromLedger(entries.filter((e) => e.bucket_kind === 'spend')),
     split: normalizeSplit(rule?.split as Record<string, number> | null),
     approvalThresholdCents: rule?.require_approval_over_cents ?? 5000,
   };

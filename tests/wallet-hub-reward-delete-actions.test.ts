@@ -273,12 +273,24 @@ describe('deleteWalletRowAction', () => {
     });
   });
 
+  // A member who is not a parent or adult removes a record filed on them, where
+  // what they add is filed (ownerOfNew). The household's record, filed on
+  // nobody, is the parents' (finding N3, child-money-scope; a sibling's is in
+  // a-wallet-card-pass-or-reward-is-removed-by-a-parent-or-its-owner.test.ts).
   describe.each(['wallet_cards', 'wallet_passes', 'wallet_rewards'])('%s member writes', (table) => {
-    it.each(NON_MANAGERS)('allows a %s to remove a manually tracked family record', async (role) => {
+    it.each(NON_MANAGERS)('allows a %s to remove a manually tracked record filed on them', async (role) => {
       asRole(role);
+      db.replace(table, [{ ...TARGET, member_id: 'session-member' }, { ...KEEP }, { ...OTHER }]);
       expect(await deleteWalletRowAction({ table, id: TARGET.id })).toEqual({ ok: true });
       expect(db.log).toEqual([{ table }]);
       expectDeleteState(table);
+    });
+
+    it.each(NON_MANAGERS)('does not let a %s remove the household\'s record, filed on nobody', async (role) => {
+      asRole(role);
+      expect(await deleteWalletRowAction({ table, id: TARGET.id })).toEqual({ ok: false, error: 'hubActions.couldNotDeleteTheWalletItem' });
+      expect(db.log).toEqual([{ table }]);
+      expectDeleteState();
     });
   });
 });

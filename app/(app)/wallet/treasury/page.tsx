@@ -50,10 +50,12 @@ export default async function WalletTreasuryPage() {
     supabase.from('wallet_buckets').select('id, child_wallet_id, kind').eq('family_id', familyId),
     // Balances are summed from these rows, so a capped read is a wrong balance —
     // and `.limit(N)` above 1,000 never applied, because PostgREST caps a
-    // response at db-max-rows whatever the client asked for.
+    // response at db-max-rows whatever the client asked for. The ceiling is the
+    // child wallet page's: at 5,000 a family on weekly allowances passed it in a
+    // few years, and every child showed $0 under a warning from then on.
     readAllAsQuery((from, to) => supabase.from('wallet_transactions')
       .select('id, child_wallet_id, bucket_id, type, status, direction, amount_cents, created_at')
-      .eq('family_id', familyId).order('created_at', { ascending: false }).order('id').range(from, to), { max: 5000, failOnMax: true }),
+      .eq('family_id', familyId).order('created_at', { ascending: false }).order('id').range(from, to), { max: 50_000, failOnMax: true }),
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId),
     supabase.from('wallet_goals')
       .select('id, child_wallet_id, title, target_cents, saved_cents, status, kind')

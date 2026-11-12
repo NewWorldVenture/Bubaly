@@ -5,7 +5,7 @@ import { refuseGuest } from '@/lib/auth/guest-scope';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
-import { balanceFromLedger, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
+import { balanceFromLedger, spendableFromLedger, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
 import { WalletActivation } from '@/components/wallet/wallet-activation';
 import { readFamilyWalletIsActive } from '@/lib/wallet/family-wallet-status';
 import { inWalletScope, ownMemberOnly, readWalletScope } from '@/lib/wallet/own-wallets';
@@ -47,10 +47,12 @@ export default async function SendMoneyPage() {
     inWalletScope(supabase.from('wallet_buckets').select('id, child_wallet_id, kind').eq('family_id', familyId), scope),
     // Balances are summed from these rows, so a capped read is a wrong balance —
     // and `.limit(N)` above 1,000 never applied, because PostgREST caps a
-    // response at db-max-rows whatever the client asked for.
+    // response at db-max-rows whatever the client asked for. The ceiling is the
+    // child wallet page's: at 3,000 a family on weekly allowances passed it in a
+    // few years, and every child was offered as $0 from then on.
     readAllAsQuery((from, to) => inWalletScope(supabase.from('wallet_transactions')
       .select('child_wallet_id, bucket_id, direction, amount_cents, status')
-      .eq('family_id', familyId), scope).order('id').range(from, to), { max: 3000 }),
+      .eq('family_id', familyId), scope).order('id').range(from, to), { max: 50_000 }),
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId),
   ]);
   if (childWalletsError) { console.error('[wallet-send] Child wallets read failed', childWalletsError); dataWarnings.push('Child wallets'); }
@@ -76,7 +78,9 @@ export default async function SendMoneyPage() {
       id: cw.id,
       name: member?.display_name ?? 'Child',
       color: member?.color ?? null,
-      spendBalance: balanceFromLedger(entries.filter((e) => e.bucket_kind === 'spend')),
+      // Offered as available to send: Spend less a live card hold, as the
+      // transfer itself counts it (wallet_spendable_cents).
+      spendBalance: spendableFromLedger(entries.filter((e) => e.bucket_kind === 'spend')),
       total: balanceFromLedger(entries),
     };
   });
