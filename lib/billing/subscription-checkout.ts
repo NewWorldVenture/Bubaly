@@ -140,12 +140,18 @@ async function expireSession(stripe: Stripe, sessionId: string): Promise<boolean
   }
 }
 
-/** Is this session a Checkout for exactly this price (not merely this plan name)? */
-function sessionIsForPrice(session: Stripe.Checkout.Session, priceId: string): boolean {
+/**
+ * Is this session a Checkout for exactly these prices (not merely this plan
+ * name)? The plan's recurring price, and the service fee's one-off price when
+ * one is charged: a session opened under a different fee setting would bill a
+ * fee that is no longer disclosed, or skip the one that is.
+ */
+function sessionIsForPrices(session: Stripe.Checkout.Session, priceIds: string[]): boolean {
   const items = session.line_items?.data;
-  if (!items || items.length !== 1 || session.line_items?.has_more) return false;
-  const price = items[0].price;
-  return (typeof price === 'string' ? price : price?.id) === priceId;
+  if (!items || items.length !== priceIds.length || session.line_items?.has_more) return false;
+  const held = items.map((item) => (typeof item.price === 'string' ? item.price : item.price?.id) ?? '').sort();
+  const wanted = [...priceIds].sort();
+  return held.every((id, i) => id === wanted[i]);
 }
 
 export type SubscriptionCheckoutInput = {
@@ -168,6 +174,15 @@ export async function createSubscriptionCheckout(
   stripe: Stripe, admin: Admin, input: SubscriptionCheckoutInput,
 ): Promise<{ id: string; url: string | null; reused: boolean }> {
   const now = input.now ?? new Date();
+  // The Bubaly service fee, as a one-time Price beside the recurring plan
+  // (configured in Super Admin → Stripe Setup). A subscription-mode Checkout
+  // bills a one-time line item on the first invoice only, and it never becomes
+  // a subscription item, so webhook plan-mapping stays on the recurring price.
+  // It is NOT `subscription_data.add_invoice_items`: that parameter belongs to
+  // the Subscriptions API, Checkout does not have it, and Stripe refuses a
+  // create that carries it.
+  const feeItems = serviceFeeAddInvoiceItems(input.settings) ?? [];
+  const priceIds = [input.priceId, ...feeItems.map((item) => item.price)];
   const expired: string[] = [];
   for (const row of await pendingSessionIds(admin, input.familyId, now)) {
     const open = await trackedSession(stripe, row.session_id);
@@ -175,37 +190,31 @@ export async function createSubscriptionCheckout(
     // The plan name alone is not enough: a price replaced in the catalog (or in
     // Super Admin) keeps its plan key, and reusing the old session would bill
     // the old price.
-    if (row.plan === input.plan && sessionIsForPrice(open, input.priceId) && open.url) {
+    if (row.plan === input.plan && sessionIsForPrices(open, priceIds) && open.url) {
       return { id: open.id, url: open.url, reused: true };
     }
     if (await expireSession(stripe, open.id)) expired.push(open.id);
   }
 
-  const feeItems = serviceFeeAddInvoiceItems(input.settings);
   const params: Stripe.Checkout.SessionCreateParams = {
     customer: input.customerId,
     mode: 'subscription',
     payment_method_types: ['card'],
-    line_items: [{ price: input.priceId, quantity: 1 }],
+    line_items: [{ price: input.priceId, quantity: 1 }, ...feeItems],
     success_url: `${input.origin}/dashboard/billing?success=1`,
     cancel_url: `${input.origin}/dashboard/billing`,
     metadata: { family_id: input.familyId, plan: input.plan },
-    subscription_data: {
-      metadata: { family_id: input.familyId },
-      // The Bubaly service fee, added as a one-time charge on the first
-      // invoice (configured in Super Admin → Stripe Setup). Doesn't touch the
-      // recurring plan item, so webhook plan-mapping stays correct.
-      ...(feeItems ? { add_invoice_items: feeItems } : {}),
-    },
+    subscription_data: { metadata: { family_id: input.familyId } },
     allow_promotion_codes: true,
   };
   // Two concurrent requests that both found nothing open get ONE session from
   // Stripe. The sessions this call expired are part of the key, so a later
   // return to a plan whose session was expired starts a fresh one rather than
-  // replaying the expired one.
+  // replaying the expired one. So is the fee line: the same key with different
+  // parameters is an idempotency error from Stripe, not a session.
   const bucket = Math.floor(now.getTime() / IDEMPOTENCY_BUCKET_MS);
   const idempotencyKey = `bubaly-checkout-${createHash('sha256')
-    .update([input.familyId, input.customerId, input.plan, input.priceId, bucket, ...expired].join('|'))
+    .update([input.familyId, input.customerId, input.plan, input.priceId, bucket, ...expired, ...feeItems.map((item) => `fee:${item.price}`)].join('|'))
     .digest('hex').slice(0, 48)}`;
   const session = await stripe.checkout.sessions.create(params, { idempotencyKey });
   return { id: session.id, url: session.url, reused: false };

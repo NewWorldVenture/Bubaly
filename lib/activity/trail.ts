@@ -27,7 +27,7 @@ export type TrailRow = {
 
 export type TrailLine = {
   id: string;
-  /** Who acted, already resolved to a name: a member's, or Bubaly. */
+  /** Who acted, already resolved to a name: a member's, or Bubaly (and for whom). */
   who: string;
   /** What they did, in the service's own words where it left them. */
   what: string;
@@ -171,6 +171,24 @@ function personOf(row: TrailRow, vouched: boolean): string | null {
 }
 
 /**
+ * Who a line the row credits to Bubaly is by.
+ *
+ * Bubaly acts inside a person's session, so its row carries that person's id,
+ * and so does any row a member writes themselves: the insert policy (0380)
+ * pins `actor_id` to the writer and says nothing about `metadata`. A member
+ * can therefore write `{ actor: 'ai', title: <anything> }` straight through
+ * the API. Printed as plain "Bubaly", that was an anonymous line in the
+ * member's own words, credited to the assistant. So a row with an actor
+ * always names them: true of the assistant's real rows, and the author's name
+ * on a planted one. Only a row with no actor (a cron, which has no session) is
+ * Bubaly alone.
+ */
+function assistantCredit(row: TrailRow, nameByUserId: Map<string, string>): string {
+  if (!row.actor_id) return 'Bubaly';
+  return `Bubaly, for ${nameByUserId.get(row.actor_id) ?? 'someone'}`;
+}
+
+/**
  * Turn one stored row into a line.
  *
  * `nameByUserId` maps `auth.users` ids to member display names; a row whose
@@ -188,7 +206,7 @@ export function describeTrailRow(row: TrailRow, nameByUserId: Map<string, string
 
   return {
     id: row.id,
-    who: byAssistant ? 'Bubaly' : named ?? 'Someone',
+    who: byAssistant ? assistantCredit(row, nameByUserId) : named ?? 'Someone',
     what: title ?? `${TRAIL_VERBS[row.action as TrailAction] ?? row.action} ${row.resource.replace(/_/g, ' ')}`,
     at: row.created_at,
     byAssistant,

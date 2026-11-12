@@ -84,6 +84,13 @@ export async function loadTrustInputs(supabase: DB, familyId: string): Promise<{
    * an elevation, which fails closed on its own.
    */
   degraded: boolean;
+  /**
+   * The family's IANA zone, for the engine to read a policy's time window on
+   * the family's own clock. Read only when such a rule exists, so null for a
+   * family without one. Null when a rule needs it and it could not be read:
+   * that rule cannot be evaluated, and `degraded` is set for the reason above.
+   */
+  timeZone: string | null;
 }> {
   const nowIso = new Date().toISOString();
   const [
@@ -114,6 +121,25 @@ export async function loadTrustInputs(supabase: DB, familyId: string): Promise<{
       .is('ended_at', null).gt('expires_at', nowIso),
   ]);
 
+  const loaded = (policies ?? []).map(toPolicy);
+  // A policy may name hours ("not between 22:00 and 06:00"), and those are
+  // hours on the family's clock, not the server's. Read only for a family that
+  // has such a rule. Without the zone the rule matches nothing, which is the
+  // same loss as the rule not loading at all, so it degrades the same way.
+  let timeZone: string | null = null;
+  let windowUnreadable = false;
+  if (loaded.some((p) => p.conditions.timeStart || p.conditions.timeEnd)) {
+    const [{ data: family, error: familyError }] = await settleAll([
+      supabase.from('families').select('timezone').eq('id', familyId).maybeSingle(),
+    ]);
+    timeZone = family?.timezone || null;
+    windowUnreadable = !timeZone;
+    if (windowUnreadable) {
+      console.error('[trust] the family timezone could not be read for a time-windowed rule; decisions will degrade to approval',
+        { familyId, family: familyError?.message });
+    }
+  }
+
   const emergencyDomains = [...new Set((emergencies ?? []).flatMap((e: Record<string, unknown>) => (e.elevated_domains as string[]) ?? []))];
 
   if (policiesError || grantsError) {
@@ -122,8 +148,9 @@ export async function loadTrustInputs(supabase: DB, familyId: string): Promise<{
   }
 
   return {
-    degraded: Boolean(policiesError || grantsError),
-    policies: (policies ?? []).map(toPolicy),
+    degraded: Boolean(policiesError || grantsError || windowUnreadable),
+    timeZone,
+    policies: loaded,
     grants: (grants ?? []).map((g: Record<string, unknown>) => ({
       memberId: String(g.member_id), domain: String(g.domain),
       capability: g.capability as Capability, effect: g.effect as 'allow' | 'deny',
@@ -347,7 +374,10 @@ export async function evaluateTrust(supabase: DB, familyId: string, req: Evaluat
   // INSERT on trust_audit_logs entirely, so both go through the service role.
   const writer = await ledgerWriter(supabase);
   const engineDecision = evaluateAction({
-    actor: req.actor, domain: req.domain, capability: req.capability, context: req.context,
+    actor: req.actor, domain: req.domain, capability: req.capability,
+    // The family's zone rides with the context so the engine can read a
+    // policy's time window at this instant; a caller that named one keeps it.
+    context: { ...req.context, timeZone: req.context?.timeZone ?? inputs.timeZone ?? undefined },
     policies: inputs.policies, grants: inputs.grants, delegations: inputs.delegations,
     emergencyDomains: inputs.emergencyDomains,
   });

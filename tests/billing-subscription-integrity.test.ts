@@ -192,7 +192,8 @@ const alertKinds = () => alerts().map(a => (a.value as Row).kind);
 /** A Checkout Session Stripe holds, tracked in checkout_sessions with this status. */
 const trackedSession = (id: string, plan: string, status: string, stripeState: Row = {}) => {
   h.sessions[id] = { id, status: 'open', url: `https://checkout.example.test/${id}`,
-    line_items: { has_more: false, data: [{ price: { id: PRICES.stripePrices[plan as keyof typeof PRICES.stripePrices].id } }] }, ...stripeState };
+    // The plan and, the fee being ON, the fee's one-time line, as Bubaly opens it.
+    line_items: { has_more: false, data: [{ price: { id: PRICES.stripePrices[plan as keyof typeof PRICES.stripePrices].id } }, { price: { id: 'price_service_fee' } }] }, ...stripeState };
   h.tables.checkout_sessions.push({ session_id: id, family_id: 'family-a', plan, status, created_at: new Date().toISOString() });
 };
 
@@ -255,7 +256,12 @@ describe('a Checkout started from change-plan carries the service fee', () => {
     expect((await checkout(post('/api/billing/checkout', { plan: 'basic_monthly' }))).status).toBe(200);
     expect(h.created).toHaveLength(2);
     for (const { params } of h.created) {
-      expect(params.subscription_data).toMatchObject({ add_invoice_items: [{ price: 'price_service_fee', quantity: 1 }] });
+      // As a one-time line item beside the plan: Checkout has no
+      // subscription_data.add_invoice_items, and Stripe refuses a create that
+      // carries one (tests/the-service-fee-rides-checkout-as-a-line-item-stripe-accepts.test.ts).
+      expect(params.line_items).toHaveLength(2);
+      expect((params.line_items as Row[])[1]).toEqual({ price: 'price_service_fee', quantity: 1 });
+      expect(params.subscription_data).toEqual({ metadata: { family_id: 'family-a' } });
     }
   });
 });
@@ -426,7 +432,7 @@ describe('an open session is reused only for the same price, not just the same p
     expect(response.status).toBe(200);
     expect(h.expired).toEqual(['cs-old-price']);
     expect(h.created).toHaveLength(1);
-    expect(h.created[0].params.line_items).toEqual([{ price: PLUS, quantity: 1 }]);
+    expect(h.created[0].params.line_items).toEqual([{ price: PLUS, quantity: 1 }, { price: 'price_service_fee', quantity: 1 }]);
   });
 });
 

@@ -357,7 +357,7 @@ async function ruleFor(db: DB, request: ReleasedRequest): Promise<((amountCents:
     actor,
     domain: row.domain,
     capability,
-    context: { confidence, tags, ...(amountCents !== null ? { amountCents } : {}) },
+    context: { confidence, tags, timeZone: trust.timeZone ?? undefined, ...(amountCents !== null ? { amountCents } : {}) },
     policies: trust.policies,
     grants: trust.grants,
     delegations: trust.delegations,

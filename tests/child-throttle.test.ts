@@ -49,11 +49,25 @@ describe('registerFailure', () => {
     expect(Date.parse(r.locked_until!) - Date.parse(T0)).toBe(DEFAULT_POLICY.lockMs);
   });
 
-  it('forgets ordinary failures once the window has elapsed', () => {
-    // A child who mistypes a few times and comes back later starts fresh.
+  it('still counts ordinary failures sixteen minutes later: the fifth in a day locks', () => {
+    // This case used to assert that 16 minutes after four failures the count
+    // was back to 1. That was the defect (LIBRARY-000CF4D7F670): four guesses
+    // per 15-minute window were never locked and never escalated, 384 a day.
     let r = registerFailure(null, AT(T0));
     for (let i = 2; i <= 4; i++) r = registerFailure(r, AT(T0)); // fails=4, never locked
-    const later = new Date(Date.parse(T0) + 16 * 60_000).toISOString();
+    const later = new Date(Date.parse(T0) + 16 * 60_000);
+    const r2 = registerFailure(r, later);
+    expect(r2.fails).toBe(5);
+    expect(r2.window_start).toBe(T0);
+    expect(Date.parse(r2.locked_until!) - later.getTime()).toBe(DEFAULT_POLICY.lockMs);
+  });
+
+  it('forgets ordinary failures once the window has elapsed', () => {
+    // A child who mistypes a few times and comes back the next day starts
+    // fresh (and a successful sign-in clears the count at once: clearedState).
+    let r = registerFailure(null, AT(T0));
+    for (let i = 2; i <= 4; i++) r = registerFailure(r, AT(T0)); // fails=4, never locked
+    const later = new Date(Date.parse(T0) + DEFAULT_POLICY.windowMs + 60_000).toISOString();
     const r2 = registerFailure(r, new Date(later));
     expect(r2.fails).toBe(1);
     expect(r2.locked_until).toBeNull();
