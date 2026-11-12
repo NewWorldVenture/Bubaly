@@ -94,28 +94,57 @@ function splitContentLine(line: string): { name: string; isDateOnly: boolean; tz
   return { name: rawName.toUpperCase(), isDateOnly, tzid, value: line.slice(colon + 1).trim() };
 }
 
+/** What an .ics document held: the events read, and how many could not be. */
+export type IcsImportReport = {
+  events: ImportedEvent[];
+  /** VEVENTs left out because they carry no start the importer can read. */
+  skipped: number;
+};
+
 /** Parse an .ics document into events. Robust to line-folding and CRLF. */
 export function parseICS(text: string): ImportedEvent[] {
+  return parseICSReport(text).events;
+}
+
+/**
+ * parseICS, with a count of the events it had to leave out, so a caller can
+ * say so instead of importing fewer events than the file holds without a word.
+ */
+export function parseICSReport(text: string): IcsImportReport {
   // Unfold: a CRLF/LF followed by a space or tab continues the previous line.
   const unfolded = text.replace(/\r\n/g, '\n').replace(/\n[ \t]/g, '');
   const lines = unfolded.split('\n');
 
   const events: ImportedEvent[] = [];
+  let skipped = 0;
   let cur: Partial<ImportedEvent> & { _dtStartDateOnly?: boolean } | null = null;
+  // How deep the line is inside components nested in the VEVENT. Google, Apple
+  // and Outlook write each reminder as a VALARM there, with a DESCRIPTION
+  // ("This is an event reminder") and sometimes a SUMMARY ("Alarm
+  // notification") of its own: read as the event's, they replaced its notes
+  // and its title.
+  let nested = 0;
 
   for (const line of lines) {
     const trimmed = line.trim();
-    if (trimmed === 'BEGIN:VEVENT') { cur = {}; continue; }
+    if (trimmed === 'BEGIN:VEVENT') { cur = {}; nested = 0; continue; }
     if (trimmed === 'END:VEVENT') {
-      if (cur && cur.title && cur.startsAt) {
+      // SUMMARY is optional in RFC 5545: an event without one is untitled, as
+      // one with an empty SUMMARY already was, not dropped.
+      if (cur && cur.startsAt) {
         events.push({
-          title: cur.title, startsAt: cur.startsAt, endsAt: cur.endsAt ?? null,
+          title: cur.title ?? 'Untitled event', startsAt: cur.startsAt, endsAt: cur.endsAt ?? null,
           allDay: cur.allDay ?? false, location: cur.location ?? null, description: cur.description ?? null,
         });
-      }
-      cur = null; continue;
+      } else if (cur) skipped += 1;
+      cur = null; nested = 0; continue;
     }
     if (!cur) continue;
+    if (/^BEGIN:/i.test(trimmed)) { nested += 1; continue; }
+    if (nested > 0) {
+      if (/^END:/i.test(trimmed)) nested -= 1;
+      continue;
+    }
 
     const parsed = splitContentLine(line);
     if (!parsed) continue;
@@ -137,7 +166,7 @@ export function parseICS(text: string): ImportedEvent[] {
       }
     }
   }
-  return events;
+  return { events, skipped };
 }
 
 // ── CSV ────────────────────────────────────────────────────

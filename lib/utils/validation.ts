@@ -13,11 +13,13 @@ export function isValidEmail(value: string): boolean {
 /**
  * True for a plausible phone number. Accepts digits, spaces, and the common
  * separators ( ) + - . — requires at least 7 digits (shortest real numbers).
+ * A number may open with "+", a digit or "(": "(555) 123-4567" is the ordinary
+ * US form, and the contact form refused it.
  */
 export function isValidPhone(value: string): boolean {
   const v = value.trim();
   if (!v) return false;
-  if (!/^[+\d][\d\s().-]*$/.test(v)) return false;
+  if (!/^[+(\d][\d\s().-]*$/.test(v)) return false;
   const digits = v.replace(/\D/g, '');
   return digits.length >= 7 && digits.length <= 15;
 }

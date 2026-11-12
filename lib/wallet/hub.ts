@@ -7,7 +7,18 @@
 import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 
 export interface AccountLite { balance: number; type?: string | null } // dollars
-export interface CardLite { available_cents: number }
+// `kind` is wallet_cards.kind: credit | debit | gas | store | prepaid | other.
+export interface CardLite { available_cents: number; kind?: string | null }
+
+/**
+ * Whether a card's "available" is money the family HAS. On a debit or prepaid
+ * card it is. On a credit, store or gas card it is credit not yet used, which
+ * the family could borrow and does not own. A card that states no kind counts,
+ * as an account that states no type does.
+ */
+function cardHoldsCash(card: CardLite): boolean {
+  return card.kind == null || card.kind === 'debit' || card.kind === 'prepaid';
+}
 export interface RewardLite { unit: string; balance: number; value_cents: number }
 
 export function dollarsToCents(n: number): number {
@@ -34,6 +45,10 @@ export function walletOverview(
   // a $1,500 card balance raised "Total balance" by $1,500.
   const accountsCents = accounts.reduce((s, a) => s + (a.type === 'credit' ? -dollarsToCents(a.balance) : dollarsToCents(a.balance)), 0);
   const cardsCents = cards.reduce((s, c) => s + (c.available_cents ?? 0), 0);
+  // Unused credit is not cash. Added to the total, a credit card with $5,000
+  // available raised "Total balance" by $5,000. `cardsCents` stays what is
+  // available across every card, which is what the Cards figure shows.
+  const cardsCashCents = cards.reduce((s, c) => s + (cardHoldsCash(c) ? (c.available_cents ?? 0) : 0), 0);
   const rewardsValueCents = rewards.reduce((s, r) => s + (r.value_cents ?? 0), 0);
   const rewardsPoints = rewards
     .filter((r) => r.unit === 'points')
@@ -45,7 +60,7 @@ export function walletOverview(
     cardsCount: cards.length,
     rewardsValueCents,
     rewardsPoints,
-    totalCents: accountsCents + cardsCents + rewardsValueCents,
+    totalCents: accountsCents + cardsCashCents + rewardsValueCents,
   };
 }
 

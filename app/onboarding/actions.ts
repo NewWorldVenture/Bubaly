@@ -427,6 +427,7 @@ export async function finalizeOnboardingAction(input: {
   family: { name: string; timezone: string };
   details: {
     householdAdults: number; householdChildren: number; childAges: number[];
+    householdAnswered?: boolean;
     region?: string; postalCode?: string; country?: string;
     goals: string[]; referralSource?: string; referralDetail?: string;
   };
@@ -972,6 +973,7 @@ export async function finalizeOnboardingAction(input: {
     answers: {
       householdAdults: details.householdAdults,
       householdChildren: details.householdChildren,
+      householdAnswered: details.householdAnswered,
       childAges: details.childAges,
       region: details.region ?? null,
       country: details.country ?? null,

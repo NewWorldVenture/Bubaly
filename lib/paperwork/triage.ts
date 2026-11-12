@@ -111,6 +111,16 @@ function pad(n: number): string { return String(n).padStart(2, '0'); }
 function toYmd(y: number, m: number, d: number): string { return `${y}-${pad(m)}-${pad(d)}`; }
 
 /**
+ * Whether the calendar has this day. "Sept 31", "4/31" and a fraction like
+ * "2/30" all read as a month and a day, and `due_on` is a Postgres date, which
+ * refuses a day that does not exist: the capture then failed on every retry.
+ */
+function isRealDay(y: number, m: number, d: number): boolean {
+  const back = new Date(Date.UTC(y, m - 1, d));
+  return back.getUTCFullYear() === y && back.getUTCMonth() === m - 1 && back.getUTCDate() === d;
+}
+
+/**
  * THE FAMILY'S TODAY, as a `YYYY-MM-DD` day key.
  *
  * A slip's "by 10/13" has no year, so the year — and whether the date is
@@ -154,6 +164,7 @@ export function extractDates(text: string, today: TriageToday = new Date()): str
     if (mi < 1 || day < 1 || day > 31) continue;
     let y = m[3] ? parseInt(m[3], 10) : year;
     if (!m[3] && Date.UTC(y, mi - 1, day) < anchor) y += 1;
+    if (!isRealDay(y, mi, day)) continue;
     out.add(toYmd(y, mi, day));
   }
 
@@ -166,6 +177,7 @@ export function extractDates(text: string, today: TriageToday = new Date()): str
     let y = m[3] ? parseInt(m[3], 10) : year;
     if (y < 100) y += 2000;
     if (!m[3] && Date.UTC(y, mi - 1, day) < anchor) y += 1;
+    if (!isRealDay(y, mi, day)) continue;
     out.add(toYmd(y, mi, day));
   }
 
