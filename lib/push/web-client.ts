@@ -38,12 +38,18 @@ export type WebPushSubscriptionPayload = {
  * Subscribe this browser to Web Push and return the payload to persist. Requires
  * the service worker to be registered (RegisterSW handles that) and a VAPID key.
  * Returns null if unsupported, not permitted, or unconfigured.
+ *
+ * `existingOnly` is the re-sync that runs on every signed-in page: it reports
+ * the subscription this browser already holds and never makes one. Permission
+ * stays "granted" after push is turned off, so a re-sync that subscribed
+ * enrolled the device again on the next page.
  */
-export async function subscribeWebPush(): Promise<WebPushSubscriptionPayload | null> {
+export async function subscribeWebPush(options: { existingOnly?: boolean } = {}): Promise<WebPushSubscriptionPayload | null> {
   if (!webPushSupported() || !VAPID_PUBLIC_KEY) return null;
   const reg = await navigator.serviceWorker.ready;
   let sub = await reg.pushManager.getSubscription();
   if (!sub) {
+    if (options.existingOnly) return null;
     sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as BufferSource,
@@ -61,12 +67,24 @@ export async function subscribeWebPush(): Promise<WebPushSubscriptionPayload | n
   };
 }
 
+/** Whether this browser holds a push subscription right now. */
+export async function hasWebPushSubscription(): Promise<boolean> {
+  if (!webPushSupported()) return false;
+  const reg = await navigator.serviceWorker.ready;
+  return (await reg.pushManager.getSubscription()) !== null;
+}
+
+/**
+ * Let go of this browser's subscription and return the endpoint to remove from
+ * the server, or null when there was none. Rejects when the browser refuses or
+ * answers false: the subscription is still live, so it must not read as off.
+ */
 export async function unsubscribeWebPush(): Promise<string | null> {
   if (!webPushSupported()) return null;
   const reg = await navigator.serviceWorker.ready;
   const sub = await reg.pushManager.getSubscription();
   if (!sub) return null;
   const endpoint = sub.endpoint;
-  await sub.unsubscribe().catch(() => {});
+  if (!(await sub.unsubscribe())) throw new Error('The browser kept its push subscription');
   return endpoint;
 }
