@@ -1,5 +1,15 @@
 # SESSION_RECOVERY — read this first to resume the audit cold
 
+> **Historical record — as of 2026-07-18 / 2026-07-19; note added 2026-11-10.** This is the
+> handoff the July 2026 audit session left behind. It is not current guidance: the commit hashes,
+> test and route counts, branch names, lane owners and the "immediate next safe task" below are
+> as of those dates (the reasoning source-failure increment it says to publish was published as
+> commit `87c52ca58`). Do not run the bare `npx next build` under "Exact commands to run first":
+> the build is `npm run build`, which `package.json` defines as `next build --webpack` with the
+> heap set through `NODE_OPTIONS` (held by
+> `tests/the-build-gives-its-workers-their-own-heap.test.ts`; `next.config.mjs` configures a
+> `webpack` hook). Likewise `npm run typecheck` and `npm test`; see `README.md`.
+
 _Last updated: 2026-07-18 20:15 UTC by `CLAUDE-QA-01` (board handle `agent-02`)._
 
 ## Repository

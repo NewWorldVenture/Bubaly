@@ -1,5 +1,16 @@
 # Supabase Audit
 
+> **Historical record, not current guidance (note added 2026-11-10).** This audit was written
+> in July 2026; its entries are dated 2026-07-13 and 2026-07-14, with later increments through
+> migration `0211_family_members_update_rls.sql`, and nothing below has been updated since.
+> "Current Project" means the project as it stood then: the 227 migration files, 338 SQL files
+> and the static policy, function and trigger counts are that moment's figures, and the "next
+> available version" values further down (`0200`) are older still. The tree today holds 461
+> files in `supabase/migrations`, through `0486_an_autopilot_card_is_read_by_its_audience.sql`,
+> and 909 tracked SQL files. The Required Follow-up steps are the follow-up of that audit, not
+> a procedure to run now. For the present state read `finalaudit.md`, list `supabase/migrations`,
+> and run `npm run db:audit:migrations` for the current count and next version.
+
 ## Current Project
 
 - Configured host: live Supabase project loaded from `.env.local` (secret values omitted).

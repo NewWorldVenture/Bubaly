@@ -4,9 +4,10 @@
 or a person: you should be able to read this and start on a section without
 having seen the conversation any of it came from.
 
-- **Status as of:** 2026-09-07 23:45 UTC. main at `d88978f`; PR #421 merged; PR #424
-  (`claude/roadmap-implementation-ld8bon` at `452a297`) carries fourteen further
-  sections and is the integration head to branch from until it merges.
+- **Status as of:** written 2026-09-07 23:45 UTC with main at `d88978f`, then
+  updated in §5 and §7 as later PRs landed; the translation count in §7 was last
+  re-measured 2026-11-10. PR #421 and PR #424 are merged (§7), so branch from
+  `origin/main` as §3 says — not from `claude/roadmap-implementation-ld8bon`.
 - **The per-item evidence** — reachability, persistence, tests, mock risk, gap,
   build plan, file-and-line proof for each of the 60 items — is
   `docs/MARKET_DOMINATION_AUDIT.md`. That file is the authority on *what the
@@ -526,18 +527,20 @@ missing finding, the migrate copy, landed in #428).
 
 **What is genuinely left, and it is short:**
 
-1. **The translation pass.** 291 keys en-US has that the six other locales
-   lack — `pricingContent` (113), `security` (85), `visualMocks` (37), `ai`
-   (20), `aiShowcase` (15), `blog` (10). Roughly two thirds look like orphans
-   from copy that has since been retired: 106 of 115 `pricingContent.*` and
-   179 of 236 `security.*` keys have no literal `t('…')` reference. But this
-   repository does use dynamic `t(\`prefix.${x}\`)`, so prune by searching for
-   the key SEGMENT, never by literal match alone — deleting a key a template
-   builds at runtime renders the raw key to a family. Prune first, then
-   translate what survives.
-2. **Everything in §6.** Every remaining item — M12's lineage, M27, M32,
+1. **Everything in §6.** Every remaining item — M12's lineage, M27, M32,
    W7's second half, the twelve metric weeks — is blocked on DDL that only the
    owner may apply.
+
+**The translation pass that used to be item 1 here is done — do not start it.**
+This list once named 291 keys `en-US` had that the six other locales lacked
+(`pricingContent`, `security`, `visualMocks`, `ai`, `aiShowcase`, `blog`) and
+said to prune, then translate. §5 records the re-measurement that closed it,
+and it still holds: re-measured 2026-11-10, `en-US` has 17,250 keys and
+`de-DE`, `es-ES`, `fr-FR`, `it-IT`, `nl-NL` and `pt-PT` each carry all of them,
+0 missing and 0 extra. What stays true from the old item is the warning: this
+repository uses dynamic `t(\`prefix.${x}\`)`, so never delete a key by literal
+match alone — deleting a key a template builds at runtime renders the raw key
+to a family.
 
 **Three lessons the integrator paid for, so you do not have to.** First: when a
 review returns fixes, they are usually on a *different* branch than the one
